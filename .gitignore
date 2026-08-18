@@ -1,0 +1,13 @@
+# --- Self-install (dogfooding) instance — NEVER commit. ---
+# The canonical kit lives in skills/setup/; the paths below are the emitted
+# instance produced by running /setup on this repo itself. Re-runnable at any
+# time, so nothing here is source of truth.
+.claude/
+_goals/
+_loop/
+_research/
+orchestration-kit.manifest.json
+
+# OS / editor noise
+.DS_Store
+Thumbs.db

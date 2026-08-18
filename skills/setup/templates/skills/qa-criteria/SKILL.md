@@ -1,0 +1,41 @@
+---
+name: qa-criteria
+description: Criteria the qa-judge applies to user-facing behavioral evidence for {{PROJECT_NAME}}. Reference skill — not invoked directly.
+---
+
+# QA Judgment Criteria
+
+Judge observed behavior from the user's perspective. Evidence not provided = behavior
+not tested = an issue.
+
+## Per-surface criteria
+
+<!-- BOOTSTRAP: keep only the surfaces this project has; sharpen with project specifics. -->
+
+### CLI / command surfaces
+- Exact invocation shown; output is what a user would expect and understand.
+- Failure modes produce actionable messages (no raw tracebacks) and correct exit codes.
+- Machine-readable output modes (e.g. `--json`) emit valid, complete structures.
+
+### API surfaces
+- Every touched route responds; defined routes never 404/5xx under normal input.
+- Auth-required routes reject unauthenticated calls (401 is healthy there).
+- Response bodies are well-formed and match the documented shape.
+
+### Web UI surfaces
+- Screenshots show the affected views rendering correctly.
+- Browser console is free of errors; network log shows no failed requests.
+
+## Cross-cutting checks
+
+- **Effect verification**: an operation that reports success demonstrably had its effect.
+- **No secrets** in any output, log, or screenshot.
+- **Consistency**: the same information reported by two surfaces agrees.
+
+## Verdicts
+
+- **PASS**: all affected surfaces evidenced and clean.
+- **ISSUES FOUND**: numbered issues, each with observed vs expected and exact repro
+  steps — these become fix tasks for implementer.
+- **REJECT**: an auto-fail trigger fired (see `{{IDE_DIR}}/agents/qa-judge.md`) or the
+  evidence shows the feature fundamentally doesn't work.
