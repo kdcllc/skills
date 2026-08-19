@@ -1,0 +1,993 @@
+# Design: Bounded-Concurrency Dispatch for the Autonomous Loop
+
+**Status**: DESIGN ONLY — everything below marked *Proposed* is a proposal, not shipped
+behavior. No file under `skills/setup/templates/` or `_loop/` changes in this story
+(`_goals/backlog.md:109`). Implementation is a follow-up; see the Scope section for
+honest sizing.
+
+**Pattern source**: squad's WIP-limited self-refilling dispatch —
+`available-slots = max(0, 3 - active PRs)`, refill on merge
+(`docs/research-squad-ideas.md:125-127`). That line is the seed; almost none of this
+document is about slot arithmetic, because slot arithmetic is the easy part.
+
+**Citation convention (read this once)**: where a quoted current-behavior line contains
+a kit template placeholder, this document renders that placeholder with inner spaces —
+`{{ IDE_DIR }}`, `{{ PROJECT_NAME }}`, `{{ LOOP_MODEL_CHAIN }}` — so the kit's
+unresolved-placeholder scan never flags a design note that merely *quotes* the
+templates. This mirrors the precedent at `.claude/checks.sh:11-14`, where the checks
+script excludes itself from its own patterns because it necessarily contains them.
+Every quotation in this document is otherwise byte-faithful to the cited line.
+
+**Anti-invention rule applied here**: every "currently" claim below carries a
+`file:line` anchor that was read before it was cited. Where the design proposes
+something new, it says *Proposed*.
+
+---
+
+### The counter-position this design must answer
+
+`docs/research-designing-conflict-free-multi-agents.md` is not background for this
+design — it is a direct argument against the obvious implementation. Its decisive
+claims:
+
+- *":65"* — file locks / leases / CAS are "Overkill for a design-time-partitioned
+  system; keep as a last-resort fallback only."
+- *":67"* — "prevention lives in the planning layer (write-sets) and the prompt layer
+  (fences)… **You do not need locks, CRDTs, or worktrees if the plan guarantees
+  disjointness.**"
+- *":23"* — worktree-per-agent isolation (Copilot `/fleet`, Claude Code
+  `isolation: worktree`) is "precisely the after-the-fact reconciliation the user wants
+  to avoid."
+- *":113-118"* — Stage 5 sketches write-set admission aimed at *this* loop: story
+  sizing = one ownership boundary; a claimed-paths ledger where "the loop refuses to
+  dispatch a task whose `writes` intersect an unfinished task's claim."
+
+**Where this design lands (stated up front, argued in Rejected alternatives).** The
+counter-position is *adopted* for what it actually covers — write–write conflicts on
+source files — and *rebutted* on its sufficiency claim for this specific system. The
+rebuttal is one sentence long: **git's HEAD, index, and working tree are a shared
+non-file surface, and the loop's own rollback primitive operates on it globally.**
+`loop.sh:111-114` diffs `"$head_before" HEAD` and, on a violation, runs
+`git reset --hard "$head_before"` against the whole tree. Two iterations sharing one
+working tree do not need to touch the same *file* to destroy each other; slot B's commit
+merely has to land between slot A's `head_before` capture (`loop.sh:79`) and slot A's
+CB0 check. Disjoint write-sets do not make HEAD disjoint. The research doc's own
+vocabulary already names this case: ATM's rule that "physical disjointness remains
+necessary but not sufficient" — two intents writing physically disjoint regions are
+still blocked when they touch "a shared non-file surface"
+(`docs/research-designing-conflict-free-multi-agents.md:18`).
+
+So the chosen design is a **three-layer hybrid**, each layer justified separately:
+
+| Layer | Mechanism | Justification |
+|---|---|---|
+| Source files | Declared write-sets, checked at dispatch (planning-layer admission) | Adopted directly from `:59` / `:113-118`. |
+| Git state (HEAD, index, worktree) | One git worktree per slot | *Not* isolate-and-merge repair — it is the only way the existing `git reset --hard` rollback stays scoped to one slot. |
+| Shared loop memory (backlog / LEARNINGS / ESCALATIONS) | Single serialized integrator; slots never write these files | Adopted from the single-writer principle at `:4` and `:37`. |
+
+Locks appear exactly once, as `:65` permits: nowhere in the steady-state path. There is
+no backlog lockfile, no claim lease, no breaker mutex. Exclusivity is achieved by
+*single ownership of the resource* (`:64`) — the driver owns dispatch, the integrator
+owns shared memory, the driver owns breaker state.
+
+---
+
+## 1. Slot accounting
+
+**(c) Current behavior.** The driver is a strictly serial `for` loop:
+`for ((i = 1; i <= MAX_ITER; i++))` with `MAX_ITER="${1:-10}"` (`loop.sh:23,66`; twin at
+`loop.ps1:25,113`). One CLI invocation per iteration (`loop.sh:91`), one story per
+invocation — "You perform **exactly one iteration**: one story, one commit, then stop…
+Never start a second story" (`templates/loop/SKILL.md:8-9`). There is no concept of a
+slot anywhere in either driver.
+
+**(a) Proposed artifact.** A `LOOP_SLOTS` environment variable read by both drivers,
+default `2`, clamped to `[1, 3]`, echoed at startup next to the existing iteration
+banner (`loop.sh:67`):
+
+```
+available_slots = max(0, LOOP_SLOTS - active_slots)
+```
+
+`active_slots` = the number of live slot child processes the driver is supervising.
+**Refill trigger**: slot exit, not merge. squad refills "on merge"
+(`docs/research-squad-ideas.md:125-127`) because squad's WIP unit is an open PR; this
+loop has no merge event to key on — it "never pushes" (`loop.sh:12`;
+`templates/loop/SKILL.md:123`) and Phase 7 is "deferred to the end of the whole run"
+(`templates/loop/SKILL.md:96-97`). The kit's equivalent completion event is the slot
+child process exiting, so a slot is refilled the moment its integration (§6) is applied.
+`MAX_ITER` keeps its meaning as *total iterations dispatched across all slots*, so a
+default run is still 10 units of work — it just finishes sooner.
+
+**Why the default is 2, not 3 — capacity contention is a design input, not an open
+question.** Three independent contention facts bound N:
+
+1. **Subagent fan-out multiplies, not adds.** One iteration is not one agent. It runs
+   the seven-phase flow with "implementer/test-writer execute, `judge` verifies every
+   task and the final audit, fixes are always re-judged, 3 judge cycles max per task"
+   (`templates/loop/SKILL.md:101-103`), plus Phase 6 `align-docs` per story
+   (`templates/loop/SKILL.md:104-105`). The harness ceiling on orchestrator spawning is
+   documented as `tools: Agent(worker, judge)` spawn allowlists with a
+   **20 concurrent default** (`docs/research-multi-harness-upgrade.md:53`) — that row is
+   about *judge/agent* spawn capacity, which N slots share. The binding budget is therefore
+   `N × peak_concurrent_subagents_per_iteration ≤ 20`, and the slot count must be
+   *chosen in fan-out units, not story units*. At an **estimated** peak of 5–8 concurrent
+   subagents per iteration (an estimate — no file in the kit records a measured
+   per-iteration fan-out), N=2 sits comfortably inside the ceiling and N=3 begins to
+   crowd it.
+2. **One provider account, one rate-limit budget.** All N slots authenticate as the same
+   account through the same `LOOP_CLI` (`loop.sh:24`). Doubling N roughly doubles the
+   request rate against an unchanged quota, so throughput does *not* scale linearly with
+   N — past the quota knee, extra slots buy rate-limit errors rather than stories.
+3. **The breaker is provider-global, and its cooldown is global too.** There is exactly
+   one state file, `STATE_FILE="_goals/breaker-state.json"` (`loop.sh:28`), and its
+   cooldown is 600s (`breaker.sh:14`). A single OPEN trip stalls *all* N slots, and the
+   worst-case fully-rate-limited run already occupies "up to `MAX_ITER × 600s` (~100
+   minutes at the defaults of 10 iterations × 600s)"
+   (`templates/loop/SKILL.md:59-60`). Raising N raises the
+   probability of hitting that stall without shortening it.
+
+**(b) Failure mode prevented.** Unbounded fan-out that converts a bounded-cost serial
+run into a quota-exhausting stampede: N slots each spawning a full judge/worker tree
+against one account, tripping the shared breaker OPEN, and then all N sleeping the same
+600s cooldown — a run that is simultaneously more expensive and slower than the serial
+loop it replaced. Bounding N at the *fan-out* layer rather than the story layer is what
+prevents it.
+
+*Twin note*: `LOOP_SLOTS` is a plain environment variable, read identically as
+`${LOOP_SLOTS:-2}` (bash) and `$env:LOOP_SLOTS` (PowerShell), matching how `LOOP_CLI`
+and `LOOP_MODEL_FLAG` are already handled on both sides (`loop.sh:24-25`;
+`loop.ps1:41-51`). No twin divergence.
+
+---
+
+## 2. Isolation and integration of concurrent work
+
+**(c) Current behavior.** Every iteration runs in the driver's own working tree.
+`head_before="$(git rev-parse HEAD)"` (`loop.sh:79`; twin `loop.ps1:127`) captures a
+single global HEAD; CB0 diffs that range and, on a violation, executes
+`git reset --hard "$head_before"` (`loop.sh:111-114`; twin `loop.ps1:177-182`); CB1
+compares `"$(git rev-parse HEAD)" == "$head_before"` to decide whether progress happened
+(`loop.sh:121`; twin `loop.ps1:189-190`). All three assume HEAD moves only because of
+*this* iteration. The kit already advises running the loop "in a worktree/container with
+minimal credentials" (`skills/setup/templates/ORCHESTRATION.md:486`;
+`loop.sh:11`) — but as a *sandbox for the whole run*, not as per-slot isolation.
+
+**(a) Proposed artifact.** One git worktree per slot, created and destroyed by the
+driver:
+
+```
+git worktree add -b loop/<story-id> .loop-worktrees/slot-<n> HEAD
+  # … slot runs its whole iteration with cwd = .loop-worktrees/slot-<n> …
+git worktree remove .loop-worktrees/slot-<n>
+```
+
+Three constraints on the path, each load-bearing:
+
+- **Not under `_loop/`.** `_loop/**` is a protected path
+  (`templates/loop/SKILL.md:13-14`; enforced at `loop.sh:111-114`), so a worktree there
+  would make every slot's own scratch state look like a protected-path modification and
+  trip CB0 (exit 4) on the first iteration.
+- **Gitignored.** `.loop-worktrees/` must be appended to the project's `.gitignore` by
+  the emitter, following the existing precedent for `_goals/breaker-state.json`
+  (`skills/setup/SKILL.md:127-129`).
+- **Forward slashes, no colons.** Required by the kit's Windows rules —
+  "Generated filenames never contain colons… Paths in stories/tasks use forward slashes
+  (git and pwsh both accept them)" (`templates/loop/SKILL.md:27-30`). `slot-<n>` and
+  `loop/<story-id>` satisfy both.
+
+**Integration** is a fast-forward-or-rebase of `loop/<story-id>` onto the run branch,
+performed by the single integrator described in §6 — never by a slot, and never
+concurrently.
+
+**(b) Failure mode prevented.** Cross-slot destruction of committed work. Concretely:
+slot A captures `head_before` (`loop.sh:79`); slot B commits its story; slot A finishes
+and evaluates CB0 over `head_before..HEAD`, which now *contains slot B's diff*. If slot
+B legitimately touched nothing protected, slot A's CB1 also misreads B's commit as A's
+own progress and resets `no_progress=0` (`loop.sh:133`). If anything in the combined
+range trips CB0, slot A runs `git reset --hard "$head_before"` (`loop.sh:113`) and
+**silently deletes slot B's commit** before exiting 4. Neither failure is a write–write
+conflict on any file, so no write-set discipline prevents either; only giving each slot
+its own HEAD and index does.
+
+**A second failure mode, cheaper to state**: `git` serializes index mutations with
+`index.lock`, so two concurrent `git commit` calls in one tree do not corrupt the object
+store — they fail one of the two with a lock error, which the loop would surface as an
+opaque non-zero `status` (`loop.sh:92`) feeding CB2's error-signature counter
+(`loop.sh:137-152`). Isolation removes the contention rather than teaching the loop to
+interpret it.
+
+**Why this is not the "isolate-and-merge" pattern the research doc rejects.**
+`docs/research-designing-conflict-free-multi-agents.md:23` rejects worktrees *as the
+primary conflict-resolution mechanism* — as a substitute for planning-layer
+disjointness, where colliding edits are reconciled after the fact. This design does not
+use them that way: source-file collisions are prevented up front by §6's admission rule,
+and the worktree exists to isolate a resource that is not a file at all. If §6 admission
+is doing its job, integration is a fast-forward with **zero** merge conflicts, and the
+worktree never performs any reconciliation. Its job is to keep `git reset --hard`
+scoped. Stated plainly: this design agrees with `:67` that you do not need worktrees to
+solve *file* disjointness, and disagrees that file disjointness is the whole problem
+here.
+
+*Twin note*: `git worktree add/remove` is git, not shell — identical invocation on both
+twins. The only PowerShell-specific concern is worktree removal while a child process
+still holds a handle inside it (Windows locks open files); the twin must `Wait-Job`/wait
+for the slot process to exit before `git worktree remove`, and fall back to
+`git worktree remove --force` plus `git worktree prune`. Recorded as an implementation
+requirement, not an open question.
+
+---
+
+## 3. Breaker and counters under concurrency
+
+### 3.1 The verified race, named exactly
+
+Two independently verified facts combine into a silent-cooldown-erasure bug:
+
+1. **The write is a non-atomic truncate.** `_breaker_write` is "The ONE place that
+   serializes the schema" and its body is a brace group redirected with `>` into the
+   state file: eleven separate `printf` calls between `{` and `} > "$file"`
+   (`breaker.sh:103-119`). The `>` truncates the file to zero length *before* the first
+   `printf` runs, and there is no rename, no `fsync`, no temp file. Between truncation
+   and the final `printf '}\n'` there is a window in which the on-disk file is a
+   zero-length or partially-written prefix of a valid state. The PowerShell twin has the
+   same shape — a single `[System.IO.File]::WriteAllText(...)` at `breaker.ps1:127`,
+   which also truncates before writing.
+2. **An unparseable read reseeds a fresh CLOSED state.** `breaker_load`'s contract is
+   "Unparseable file -> rewrite fresh CLOSED (same seeding) + one stderr warning"
+   (`breaker.sh:169`), implemented as `echo "breaker: $state_file is unparseable —
+   resetting to fresh CLOSED state" >&2` followed by `_breaker_seed "$state_file"
+   "$chain"` (`breaker.sh:181-182`). `_breaker_seed` writes `CLOSED`, `fallbackIndex` 0,
+   `currentModel` = the *first* chain entry, `openedAt` 0 (`breaker.sh:123-127`). The
+   validity gate it fails is `_breaker_valid`, which requires all nine keys to be
+   present and typed (`breaker.sh:78-97`) — a truncated file fails it trivially. The
+   twin is identical: `Test-BreakerStateValid` false ⇒ `New-BreakerSeed`
+   (`breaker.ps1:195-199`).
+
+**The race**: with two drivers (or, before this design, any second process) touching
+`_goals/breaker-state.json` (`loop.sh:28`), a reader that greps the file
+(`_breaker_get`'s `grep -m1`, `breaker.sh:62`) *during* another process's truncate-write
+observes a torn file, declares it unparseable, and **reseeds a fresh CLOSED state that
+erases an OPEN cooldown**. The damage is not a lost counter: it resets `state` to CLOSED
+(so the loop immediately resumes full-rate calls against a provider that just rate-
+limited it), resets `openedAt` to 0 (so the 600s cooldown at `breaker.sh:14` never
+elapses because it never started), and resets `fallbackIndex` to 0 and `currentModel` to
+the chain's *preferred* entry — the exact model that was just rate-limited, undoing the
+fallback that `breaker_record` had just performed (`breaker.sh:248-256`). The observable
+symptom is a loop that hammers a limited provider on its most expensive model while
+printing a warning that looks like benign corruption recovery.
+
+**Therefore a write-side lock is insufficient.** Serializing writers still leaves the
+reader free to observe a torn file, because the torn file is a legal intermediate state
+that no writer-side mutual exclusion removes from the reader's view.
+
+### 3.2 Proposed mechanic — closing the READ side
+
+Four parts. Parts 2 and 3 are the read-side closure; part 1 alone is the tempting
+half-fix.
+
+1. *(write side, necessary but not sufficient)* **Write-temp-then-rename.**
+   `_breaker_write` writes to `"$file.tmp.$$"` and then `mv -f` onto the target. POSIX
+   `rename(2)` on the same filesystem is atomic, so no reader can ever observe a
+   partial file. Twin: `[System.IO.File]::WriteAllText` to the temp path, then
+   `[System.IO.File]::Move($tmp, $path, $true)` (overwrite variant, PowerShell 7+ /
+   .NET Core) — atomic on NTFS via `ReplaceFile` semantics. The temp name must stay
+   colon-free per `templates/loop/SKILL.md:27`.
+2. **A terminator-line integrity check on read.** The schema's last line is `}`
+   (`breaker.sh:117`; twin `breaker.ps1:124`). *Proposed*: `_breaker_valid` gains one
+   condition — the file's final non-empty line must be exactly `}`. A reader that does
+   not see the terminator knows it read a *torn* file rather than a *corrupt* one. This
+   costs one `tail -n1`-equivalent and adds no dependency, honoring the helper's
+   standing rule of "Zero runtime deps: no jq/python/other JSON library"
+   (`breaker.sh:41-46`).
+3. **Torn ⇒ retry; still-unparseable ⇒ fail SAFE, not fail OPEN-erasing.** *Proposed*:
+   `breaker_load` splits today's single unparseable branch (`breaker.sh:178-183`) into
+   three:
+   - file absent ⇒ seed fresh CLOSED (unchanged, `breaker.sh:174-177`);
+   - present but failing only the terminator check ⇒ re-read up to 3 times with a
+     ~50 ms backoff, then fall through;
+   - present and *still* invalid ⇒ **do not seed CLOSED**. Seed `OPEN` with
+     `openedAt = now` and the full cooldown, keeping any `chain`/`fallbackIndex` values
+     that did parse. This inverts the failure default: a lost read now costs one
+     cooldown, where today it erases one. Reseeding to CLOSED is the only branch of the
+     whole state machine that can *weaken* protection, and it is the branch a race can
+     force.
+4. **Single ownership makes the race unreachable in the steady state.** *Proposed*: the
+   breaker moves entirely into the driver process. Only the driver calls
+   `breaker_load` / `breaker_should_skip` / `breaker_record` (`loop.sh:32,72-77,101`);
+   slot children never open the state file. Because the driver is one process, the
+   breaker is single-writer *by construction* — the research doc's "Actor model / single
+   owner of a resource" row (`docs/research-designing-conflict-free-multi-agents.md:64`)
+   rather than its last-resort lock row (`:65`). Parts 1–3 remain as defense-in-depth
+   for the case a user runs two drivers against one repo.
+
+**(b) Failure mode prevented.** A cooldown-erasing torn read that silently returns the
+loop to full rate on its most expensive model mid-rate-limit — and, more generally, the
+class where a concurrency bug degrades safety *silently* because the recovery path looks
+like normal corruption handling.
+
+### 3.3 The iteration counters, which are a different problem
+
+`no_progress`, `same_error`, and `last_error_sig` are plain shell locals initialized once
+before the loop (`loop.sh:62-64`; twin `loop.ps1:77-79`). They are per-*driver*, and
+under N slots they are meaningless as written: CB1's `no_progress` increments on
+`"$(git rev-parse HEAD)" == "$head_before"` (`loop.sh:121`), which under a shared tree is
+answered by *other* slots' commits, and CB2 hashes "the last 5 lines of output"
+(`loop.sh:138`) from a single capture. *Proposed*: both become per-slot state carried in
+the driver's slot table, evaluated against that slot's own worktree HEAD and that slot's
+own captured output; the CB1 rate-limit carve-out (`loop.sh:122-125`) is likewise
+evaluated per slot against that slot's `detected` flag. Aggregation to a driver exit code
+is §7's job.
+
+*Twin note*: bash keeps the slot table as parallel indexed arrays keyed by slot number;
+PowerShell keeps an array of hashtables. Both are language-native; no new primitive.
+
+---
+
+## 4. Story admission and claiming
+
+**Delineation from §6 — the two sections share a word and must not share a meaning.**
+**This section (§4) answers: *which* story a given slot takes, and how exclusive
+ownership of that story is won** — a one-story-to-one-slot assignment question. **§6
+answers a strictly later question: given two stories that have already been claimed by
+different slots, may they be permitted to run *at the same time*** — a pairwise
+compatibility question. A story can pass §4 (it is free, eligible, unclaimed) and still
+be refused by §6 (its write-set collides with an in-flight story), in which case it stays
+unclaimed and the slot idles or takes the next candidate.
+
+**(c) Current behavior.** Story selection lives *inside* the iteration, not in the
+driver. The driver passes an unparameterized prompt — "Invoke the `auto-loop` skill and
+follow it for exactly ONE iteration: pick one story from `_goals/backlog.md`"
+(`templates/loop/PROMPT.md:1-2`), read fresh each iteration (`loop.sh:91`;
+`loop.ps1:144`) — and the skill instructs every iteration to "Pick the highest-priority
+story with `passes: false` and `attempts < 3`" (`templates/loop/SKILL.md:83-84`) and to
+"Increment the story's `attempts` counter in the backlog **now** (so a crashed iteration
+still counts)" (`templates/loop/SKILL.md:89-90`). The parsed fields are pinned by the
+backlog's format comment: `priority`, `passes`, `attempts`, `blocked`
+(`_goals/backlog.md:3-6`).
+
+That rule is *deterministic*, which is exactly what breaks under concurrency: N slots
+following it simultaneously all compute the same highest-priority story and all take it.
+
+**(a) Proposed artifact.** **Selection moves up into the driver, and the story id moves
+down into the prompt.** The driver:
+
+1. parses `_goals/backlog.md` for eligible stories using the pinned fields
+   (`_goals/backlog.md:3-6`): `blocked: false`, `passes: false`, `attempts < 3`, ordered
+   by `priority` ascending;
+2. filters that list through §6's pairwise admission test against currently in-flight
+   stories;
+3. takes the first survivor, records it in an in-memory claim table
+   `slot → story-id`, and increments that story's `attempts` **itself** (moving the
+   `templates/loop/SKILL.md:89-90` responsibility from the iteration to the driver, since
+   the driver is now the single writer of the backlog per §6);
+4. dispatches with the story pinned: `_loop/PROMPT.md` gains a substitution point so the
+   slot receives *"run story `<story-id>`"* rather than *"pick a story."*
+
+**No lockfile, no lease, no claim directory.** Steps 1–3 execute inside one
+single-threaded driver process, so mutual exclusion is a property of the program's
+control flow, not of a filesystem primitive. This is the research doc's "single owner of
+a resource" (`:64`) and is precisely why `:65`'s "locks are overkill / last-resort" verdict
+is honored rather than overridden.
+
+The corresponding change on the skill side is a guard, not a mechanism: `auto-loop` must
+refuse to select a story when one was supplied, and its existing "Never touch stories
+other than the one you picked" rule (`templates/loop/SKILL.md:123`) becomes
+enforceable — the driver validates that the `ITERATION: <story-id> …` line it receives
+(`templates/loop/SKILL.md:141-143`) names the story it dispatched, and quarantines the
+slot on a mismatch.
+
+**(b) Failure mode prevented.** Duplicate claim: N slots each selecting the same
+highest-priority story, each incrementing `attempts` on it (burning the 3-attempt cap in
+one round — `templates/loop/SKILL.md:131-132`), each producing a commit for it, and each
+racing to set `passes: true` (`templates/loop/SKILL.md:113`). Under today's rules this is
+not a rare interleaving; it is the *guaranteed* outcome of running two iterations at
+once.
+
+*Twin note*: the claim table is an in-process associative structure — a bash associative
+array (bash 4+) or parallel indexed arrays (bash 3.2-safe, matching the constraint the
+breaker already documents at `breaker.sh:130-132`), and a `[hashtable]` in PowerShell,
+consistent with `Read-BreakerState`'s existing use of one (`breaker.ps1:146-159`).
+**If** a future story ever permits two concurrent *drivers* (explicitly not this design),
+in-memory claims are insufficient and an on-disk claim becomes necessary; the twin
+primitives would be `set -o noclobber` with `> "$claim"` for bash and
+`[System.IO.File]::Open($claim, 'CreateNew', 'Write')` for PowerShell — both
+exclusive-create, both failing loudly on contention. Listed in Open questions, not
+adopted here.
+
+---
+
+## 5. Per-slot failure and rollback
+
+**(c) Current behavior.** Failure handling is entirely global. The driver's exit-code
+contract is "0 = backlog complete (sentinel found); 1 = max iterations reached without
+completion; 2 = circuit breaker — no commit for 3 consecutive iterations; 3 = circuit
+breaker — same failure signature 5 times consecutively; 4 = protected-path modification
+detected (iteration reverted)" (`loop.sh:17-20`; identical text at `loop.ps1:18-21`).
+CB0 reverts with `git reset --hard "$head_before"` and exits 4 (`loop.sh:111-115`); CB1
+exits 2 (`loop.sh:127-130`); CB2 exits 3 (`loop.sh:141-144`). Inside the iteration, the
+skill's own failure path is "Do NOT commit implementation work; leave the tree clean
+(`git checkout .` / `git clean -fd` limited to files you created for this story)"
+(`templates/loop/SKILL.md:129-130`).
+
+**(a) Proposed artifacts and disposition rules.**
+
+- **Rollback becomes worktree-local.** `git reset --hard "$head_before"` and the skill's
+  `git checkout . / git clean -fd` both execute with the slot's worktree as cwd, so
+  their blast radius is one slot's checkout. Note what this buys beyond safety: the
+  skill's "limited to files you created for this story" clause
+  (`templates/loop/SKILL.md:130`) is today a *prompt-level* fence — the research doc's
+  "allowed-paths write fence" row (`docs/research-designing-conflict-free-multi-agents.md:60`),
+  which it rates an excellent fit but explicitly "defense-in-depth, not the primary
+  guarantee" (`:61`). Under per-slot worktrees the fence acquires a filesystem boundary
+  behind it, which is the promotion `:61` describes as unavailable at the tool layer
+  today.
+- **CB0 stays fatal to the entire run.** *Proposed and argued*: a protected-path
+  modification means an iteration tried to edit the loop's own machinery —
+  `_loop/**`, `{{ IDE_DIR }}/agents/**`, `{{ IDE_DIR }}/skills/**`,
+  `orchestration-kit.manifest.json`, `.gitattributes` (`templates/loop/SKILL.md:13-14`;
+  enforced at `loop.sh:111-114`). That is a *global integrity* failure, not a per-story one:
+  the machinery is shared by every slot, so a slot that attempted to rewrite it has
+  invalidated the assumptions the other slots are running under. The driver kills all
+  slots, integrates nothing that has not already been integrated, and exits 4 —
+  preserving the meaning of exit 4 at `loop.sh:19-20` and the guard's stated behavior at
+  `skills/setup/templates/ORCHESTRATION.md:483`.
+- **CB1 and CB2 become per-slot with slot retirement.** A slot that hits 3 no-progress
+  iterations or 5 identical error signatures is *retired*, not run-fatal: the driver
+  stops refilling it and logs the reason. Other slots continue. Aggregation to a driver
+  exit code is §7.
+- **Quarantine instead of silent cleanup.** *Proposed*: a slot that exits abnormally
+  leaves its worktree in place with a `.loop-worktrees/slot-<n>/QUARANTINE` marker file
+  naming the story id and the exit code, and its branch `loop/<story-id>` is **not**
+  integrated. The driver refills the slot at a *new* path (`slot-<n+k>`). This converts
+  an invisible loss into a diagnosable artifact and matches the escalation posture the
+  skill already takes for exhausted attempts — "append an entry to
+  `_goals/ESCALATIONS.md` (story id, what failed, judge verdicts, what a human must
+  decide)" (`templates/loop/SKILL.md:131-133`), except the escalation append is
+  performed by the integrator (§6), never by the dying slot.
+
+**(b) Failure mode prevented.** Two distinct ones. First, a *global* revert triggered by
+one slot's misbehavior wiping other slots' healthy committed work — today's
+`git reset --hard "$head_before"` at `loop.sh:113` does exactly that if the tree is
+shared. Second, the inverse: one unhealthy slot (a story that cannot converge and burns
+5 identical failures) terminating an otherwise productive run, which is what
+per-slot-then-aggregate CB1/CB2 avoids.
+
+*Twin note — process supervision is the one place the twins genuinely diverge.* bash
+supervises with background jobs and `wait -n`; PowerShell uses `Start-ThreadJob` /
+`Start-Process` with `Wait-Job -Any`. The concrete portability hazard: `wait -n` requires
+bash 4.3+, and the kit already commits to bash 3.2 compatibility elsewhere — the breaker
+avoids `local -n` explicitly because "bash 3.2 on stock macOS has no `local -n`"
+(`breaker.sh:130-132`). *Proposed portable primitive*: a poll loop over recorded child
+PIDs using `kill -0 "$pid"` plus a short `sleep`, which is POSIX and works on bash 3.2;
+`wait -n` may be used as a fast path when `${BASH_VERSINFO[0]}` permits. The PowerShell
+twin's `Wait-Job -Any` has no such constraint, so parity is achieved by the bash side
+adopting the poll loop as its floor. This must be reflected in the parity heuristic at
+`.claude/checks.sh:26-35`, which today keys on the sentinel, the five exit codes, and the
+default iteration count.
+
+---
+
+## 6. Inter-story conflict admission and shared memory
+
+**Scope of this section (contrast with §4).** §4 assigned each slot a distinct story.
+This section decides whether two *already-claimed, distinct* stories are permitted to be
+in flight simultaneously, and how the state both of them must touch is written without
+conflict.
+
+### 6.1 Admission: how the dispatcher decides two claimed stories may run concurrently
+
+**(c) Current behavior.** Stories declare no write-set. The pinned parsed fields are
+`priority`, `passes`, `attempts`, `blocked` (`_goals/backlog.md:3-6`); the only
+ownership-adjacent guidance is prose — "Size every story to fit ONE context window:
+small, self-contained" (`_goals/backlog.md:7-8`) — and story descriptions carry an
+informal "Affected layer" note (e.g. `_goals/backlog.md:97-99`). Nothing is checkable.
+
+**(a) Proposed artifact.** A `writes:` field in the backlog story format, listed
+alongside the existing parsed fields in the format comment at `_goals/backlog.md:3-10`:
+
+```
+- priority: 4
+- passes: false
+- attempts: 1
+- blocked: false
+- writes: skills/setup/templates/loop/**, docs/design-parallel-dispatch.md
+```
+
+**Admission rule** (evaluated by the driver at step 2 of §4): two stories may be in
+flight concurrently iff their `writes:` globs do not intersect, **and** neither
+intersects the hotspot set defined in §6.3 while the other holds it. A story whose
+`writes:` is absent or empty is treated as intersecting everything — it runs alone.
+Failing admission does **not** block the story; it defers it until the conflicting story
+integrates, which is exactly the "refuses to dispatch a task whose `writes` intersect an
+unfinished task's claim" rule sketched at
+`docs/research-designing-conflict-free-multi-agents.md:116`, lifted from the task layer
+to the story layer.
+
+**Honest limitation, stated rather than hidden.** A story's true write-set is not fully
+known at dispatch time, because the goal — and its per-task write-sets — is *derived
+inside* the iteration by the seven-phase flow (`templates/loop/SKILL.md:94-97`). The
+declared `writes:` is therefore a human/authoring-time *upper bound*, not a computed
+fact. Two mitigations, both *proposed*: (i) the slot escalates loudly rather than
+silently widening if the derived goal needs a path outside the declared set — the
+fail-loud rule at `docs/research-designing-conflict-free-multi-agents.md:105`; and (ii)
+the integrator verifies at fold-back time that the branch's actual changed paths are a
+subset of the declared `writes:`, quarantining the branch (§5) if not. This is
+verification-after-the-fact for a *declaration*, not conflict repair for a *collision* —
+the collision itself was prevented at admission.
+
+**(b) Failure mode prevented.** Two concurrently running stories editing the same source
+file, where the second commit either loses the first's changes or produces a semantic
+mismatch that no test catches — the empirically large cost the research doc documents at
+`:14` ("a conflict rate of 27.67%" across 142K+ agentic PRs).
+
+### 6.2 Shared loop memory: the tracked-vs-gitignored split comes first
+
+This split is not a footnote — it determines which mechanism is even *available*, and
+getting it wrong means proposing git merge drivers for files git never sees.
+
+**In THIS repository**, `.gitignore:6` ignores `_goals/` wholesale (alongside `.claude/`
+at `:5` and `_loop/` at `:7`, all under the header "Self-install (dogfooding)
+instance — NEVER commit", `.gitignore:1`). `git ls-files` confirms neither
+`_goals/backlog.md` nor `_goals/LEARNINGS.md` is tracked. Consequences:
+
+- These files **cannot** collide as git merges here. There is no merge to drive and no
+  `.gitattributes` entry that would ever fire: a root `.gitattributes` does now exist in
+  this repository, but it carries only `*.sh text eol=lf` and `*.ps1 text eol=lf`
+  (`.gitattributes:2-3`) — no `merge=union` entries at all — so no merge driver applies
+  to anything under `_goals/` here.
+- They **can and do** collide as concurrent *filesystem* writes: two slots doing
+  read-modify-write on `_goals/backlog.md` last-writer-wins each other's field updates,
+  which is precisely Copilot `/fleet`'s failure mode — "If two agents write to the same
+  file, the last one to finish silently wins — no merge, no error"
+  (`docs/research-designing-conflict-free-multi-agents.md:23`).
+- `_goals/LEARNINGS.md` does not currently exist in this tree at all, though
+  `templates/loop/SKILL.md:114` requires appending to it every passing iteration.
+
+**In an EMITTED install**, `_goals/` is typically tracked, and the setup skill already
+appends merge drivers for exactly this reason: `_goals/LEARNINGS.md merge=union`,
+`_goals/ESCALATIONS.md merge=union`, `_goals/*/orchestration-log.md merge=union`
+(`skills/setup/SKILL.md:120-122`, under the rationale "so parallel/append-only state
+merges cleanly", `:115-117`). There, git *does* see these files and merge=union *is* a
+live mechanism — for appends only. Note that `_goals/backlog.md` is deliberately **not**
+in that merge=union list, even in installs.
+
+**Design consequence**: because merge=union is available in some installs and absent in
+others, this design does **not** depend on it. It makes the integrator the single writer
+so that union never has to fire in either environment, and treats the emitted
+`.gitattributes` lines as a safety net for hand-editing humans, not as the loop's
+mechanism.
+
+### 6.3 Per-file resolution rules
+
+The four files, each with its own rule — not one rule for the set.
+
+**`_goals/backlog.md`** — *gitignored here* (`.gitignore:6`); *not* merge=union even in
+installs. Currently mutated by every iteration in two places: `attempts` incremented at
+iteration start (`templates/loop/SKILL.md:89-90`) and `passes: true` set on success
+(`templates/loop/SKILL.md:113`). **Rule: slots never write it.** The driver already owns
+selection and the `attempts` increment (§4 step 3); the integrator applies the
+`passes`/`blocked` transitions from the slot's `ITERATION:` line
+(`templates/loop/SKILL.md:141-143`). Because writes are field-level transitions applied
+by one process, there is no merge and no last-writer-wins window. *Fold-back is
+unnecessary for this file: it is never modified on a slot branch.*
+
+**`_goals/LEARNINGS.md`** — *gitignored here* (`.gitignore:6`), absent from this tree;
+merge=union in installs (`skills/setup/SKILL.md:120`). Two distinct problems:
+- *Concurrent appends*: "Append one line to `_goals/LEARNINGS.md`… Keep it one line per
+  learning" (`templates/loop/SKILL.md:114-115`). **Rule**: the slot writes its learning
+  line to a per-slot outbox inside its own worktree
+  (`.loop-worktrees/slot-<n>/outbox/learnings.md`, gitignored, never committed); the
+  integrator appends outboxes to `_goals/LEARNINGS.md` in integration order. Single
+  writer ⇒ no interleaved append, in tracked and untracked installs alike.
+- *The compaction rewrite, which merge=union cannot survive*: "**Memory size gates**
+  (hard, check after appending): `_goals/LEARNINGS.md` ≥ 15 KB → compact now (merge
+  duplicates, summarize older entries; keep it one-read useful)"
+  (`templates/loop/SKILL.md:116-118`; restated at
+  `skills/setup/templates/ORCHESTRATION.md:484`). Compaction is a **wholesale rewrite**:
+  it deletes and rephrases existing lines. `merge=union` concatenates both sides' added
+  lines and resolves no deletions — so a branch that compacted 15 KB down to 4 KB and a
+  branch that appended one line to the original 15 KB union back into 15 KB *plus* the
+  new line *plus* the 4 KB summary. Union does not merely fail to help here; it actively
+  resurrects the content compaction removed. **Rule**: compaction is *forbidden inside a
+  slot* and is performed only by the integrator, after appends are applied, as a
+  single-threaded step. A whole-file rewrite is safe precisely when there is exactly one
+  writer — the same reasoning the research doc gives for whole-file rewrites under
+  single ownership (`docs/research-designing-conflict-free-multi-agents.md:47`).
+
+**`_goals/ESCALATIONS.md`** (in scope with LEARNINGS by the same gate) — *gitignored
+here*; merge=union in installs (`skills/setup/SKILL.md:121`). Appended on block —
+"append an entry to `_goals/ESCALATIONS.md`" (`templates/loop/SKILL.md:131-133`) — and
+gated at "≥ 20 KB → move resolved entries to `_goals/archive/`"
+(`templates/loop/SKILL.md:118`). **Rule**: identical to LEARNINGS — per-slot outbox,
+integrator-applied append, archival move performed only by the integrator. The archival
+move has the same whole-file/whole-tree character as compaction and the same
+single-writer answer.
+
+**`ORCHESTRATION.md`** (repository root) — **tracked** (`git ls-files`), 35 lines, a
+pointer to the canonical template ("Edit the template in the skill's `templates/`
+directory only; this file is just a pointer", `ORCHESTRATION.md:34-35`). It *does*
+collide as a real git merge, because Phase 6 `align-docs` "runs **per story**, so its doc
+updates land in the story's commit" (`templates/loop/SKILL.md:104-105`) and two stories
+can both have doc-alignment reasons to touch it. **Rule: hotspot serialization.** It is
+placed in the driver's hotspot set; at most one in-flight story may declare it in
+`writes:`, and a second story declaring it is deferred rather than run concurrently.
+This is the research doc's explicit prescription for hotspot files: "the answer is
+**serialization, not concurrency**" (`:39-41`). Serializing it is nearly free because it
+is a rarely-edited pointer file.
+
+**`skills/setup/emitters/*.md`** — **tracked** (four files: `claude-code.md`,
+`codex.md`, `copilot.md`, `cursor.md`). Also real merge collisions, and also touched by
+per-story doc alignment; they are additionally coupled by the checks suite, which
+requires `loop.ps1` and `breaker.ps1` to be mentioned in *all four*
+(`.claude/checks.sh:36-40`). **Rule: per-file hotspot serialization, not per-directory.**
+Each emitter file is independently ownable, so a story declaring
+`skills/setup/emitters/claude-code.md` and one declaring
+`skills/setup/emitters/codex.md` both admit and run concurrently; two stories declaring
+the same emitter file serialize. The coupling caveat is stated explicitly: a change to
+the *shared* emit contract (the row at `skills/setup/emitters/claude-code.md:14` and its
+three siblings) necessarily touches all four, so such a story declares all four and
+therefore runs alone — correctly, since a partial cross-emitter change fails
+`.claude/checks.sh` check H anyway.
+
+**Summary of what fold-back actually has to do.** For the two gitignored files, nothing:
+they are never on a branch. For the two tracked surfaces, nothing either, in the normal
+case: admission guarantees no two in-flight branches touched the same one, so
+integration is a fast-forward. Fold-back's only real job is the subset verification
+described in §6.1 and the sequencing of outbox appends.
+
+*Twin note*: outboxes are ordinary files and appends are ordinary redirects (`>>` /
+`Add-Content`); the integrator is a function inside the driver, so it is the same
+single-process construct on both twins. No new primitive, hence no twin divergence and
+no open question.
+
+---
+
+## 7. Completion and exit protocol
+
+### 7.1 Sentinel semantics: per-slot signal, global decision
+
+**(c) Current behavior.** The sentinel is a single pinned string,
+`SENTINEL='<promise>COMPLETE</promise>'` (`loop.sh:27`; twin `loop.ps1:47`), and finding
+it anywhere in one iteration's captured output terminates the entire driver:
+
+```
+if grep -qF "$SENTINEL" <<< "$output"; then
+  echo "=== backlog complete after $i iteration(s) ==="
+  exit 0
+fi
+```
+
+(`loop.sh:105-108`; twin `loop.ps1:169-172`). The skill emits it under one condition —
+"If none exists (all passed or blocked): print `<promise>COMPLETE</promise>` as your
+final output and stop" (`templates/loop/SKILL.md:84-85`) — and its output contract makes
+it one of four mutually exclusive terminal lines (`templates/loop/SKILL.md:137-144`).
+The guard table calls it an "Exit condition — explicit `<promise>COMPLETE</promise>`
+sentinel — never inferred from prose"
+(`skills/setup/templates/ORCHESTRATION.md:480`).
+
+**Why that becomes wrong under N slots.** The sentinel asserts *"no eligible story
+existed when I looked."* Under concurrency that is both **partial** (slot A cannot see
+that slot B is mid-story) and **non-monotonic** (a story slot B is running may fail and
+return to `passes: false, attempts < 3` — eligible again). One slot's true observation
+would therefore terminate a run with work still in flight and work still to do.
+
+**(a) Proposed artifact.** The sentinel is demoted from a **decision** to a **per-slot
+advisory signal**, and the exit decision moves to the driver:
+
+- A slot printing the sentinel is marked `drained` and is not refilled.
+- The driver exits 0 only when **all three** hold: (i) every slot is `drained` or idle;
+  (ii) the driver's *own* re-scan of `_goals/backlog.md` finds no eligible story under
+  the pinned fields (`_goals/backlog.md:3-6`); (iii) every integration has been applied
+  and no branch remains quarantined (§5).
+- The sentinel string itself does not change — it is checked by both twins and by the
+  parity heuristic at `.claude/checks.sh:26-28`, so changing it would be a gratuitous
+  compatibility break. Only its *interpretation* moves.
+
+**(b) Failure mode prevented.** Premature exit 0 — a run reporting "backlog complete"
+while N−1 slots still hold claimed stories, leaving committed-but-unintegrated branches
+and a backlog whose `passes` fields were never updated. Equally, the mirror failure: a
+driver that never exits because it waits for a sentinel that a drained slot already
+emitted and nobody recorded.
+
+### 7.2 Attribution of interleaved `ITERATION:` lines
+
+**(c) Current behavior.** One capture per iteration, `output="$($LOOP_CLI $model_arg
+"$(cat "$PROMPT_FILE")" 2>&1)"` (`loop.sh:91`; twin `loop.ps1:154`), tailed 25 lines to
+the console (`loop.sh:94`; `loop.ps1:164`). Because exactly one child runs at a time,
+every line in that capture unambiguously belongs to the current iteration. The output
+contract's terminal lines already carry a story id — `ITERATION: <story-id> passed`,
+`… failed (attempt N/3)`, `… blocked` (`templates/loop/SKILL.md:141-143`).
+
+**(a) Proposed artifact.** Attribution by **capture separation first, story id second**:
+
+- Each slot's stdout+stderr is captured to its own file,
+  `.loop-worktrees/slot-<n>/iteration-<i>.log`, and parsed independently — so
+  attribution never depends on parsing an interleaved stream at all. Console output is
+  a tee with a `[slot <n>]` prefix per line, for humans only.
+- The driver then **cross-checks** the story id on the `ITERATION:` line against the id
+  it dispatched to that slot (§4). A match is authoritative. A mismatch means the slot
+  ignored its pinned story — a contract violation — and the slot is quarantined (§5)
+  rather than believed.
+- A slot whose capture contains *no* terminal line (crash, kill, truncated output) is
+  recorded as `failed` for its dispatched story, matching the intent behind incrementing
+  `attempts` up front so "a crashed iteration still counts"
+  (`templates/loop/SKILL.md:89-90`).
+
+**(b) Failure mode prevented.** Misattributed outcomes: marking story X `passed` because
+slot 2's success line was read while parsing slot 1's stream — which would set
+`passes: true` on unfinished work and permanently retire a story that never ran.
+Prefix-tagging alone is insufficient (a subagent can emit a line containing a literal
+`[slot 1]`), which is why separate captures, not prefixes, carry the authority.
+
+### 7.3 Reducing N slot exit codes to one driver exit code
+
+**(c) Current behavior.** Five codes, one producer: "0 = backlog complete (sentinel
+found); 1 = max iterations reached without completion; 2 = circuit breaker — no commit
+for 3 consecutive iterations; 3 = circuit breaker — same failure signature 5 times
+consecutively; 4 = protected-path modification detected (iteration reverted)"
+(`loop.sh:17-20`; verbatim twin at `loop.ps1:18-21`). All five are `exit` statements in
+the single driver process (`loop.sh:107,114,129,143,156`). The parity heuristic asserts
+"all five exit codes (0-4)" are present in both twins (`.claude/checks.sh:26-28`), so
+the *set* must not change.
+
+**(a) Proposed artifact — an aggregation rule with a fixed precedence, preserving all
+five meanings.** Evaluated by the driver after all slots have terminated:
+
+| Driver exit | Aggregation condition | Rationale |
+|---|---|---|
+| **4** | ANY slot detected a protected-path modification | Integrity dominates (§5): the machinery is shared, so one violation invalidates the whole run. Short-circuits — the driver kills remaining slots immediately rather than waiting. |
+| **3** | No slot made progress AND the same error signature repeated 5× **within any single slot's** history | Preserves CB2's per-lineage meaning (`loop.sh:137-152`); a *global* 5-identical-errors rule would be a different, weaker assertion. |
+| **2** | Every slot has retired on no-progress, i.e. no slot has produced an integrated commit for 3 consecutive dispatch rounds | Generalizes CB1 (`loop.sh:121-134`) from "3 consecutive iterations" to "3 consecutive rounds across all slots" — a single stuck slot must not stop a productive run, but a wholly stuck *run* must still stop. |
+| **1** | Total iterations dispatched across all slots reached `MAX_ITER` with eligible stories remaining | Keeps `MAX_ITER` a budget over work units, not over rounds (`loop.sh:23,155-156`). |
+| **0** | The three-part drained condition in §7.1 | Strictly stronger than today's first-sentinel-wins. |
+
+Precedence is 4 > 3 > 2 > 1 > 0, checked in that order, so the most severe cause is
+always the one reported. Codes 2 and 3 are the only ones whose *definition* widens
+(iteration → round); 4, 1, and 0 keep their exact meanings, which is what keeps the
+documented contract at `loop.sh:17-20` honest rather than silently redefined.
+
+**(b) Failure mode prevented.** An unattended run whose exit code no longer means
+anything — the classic "aggregate the last child's status" bug, where a run that
+suffered a protected-path violation in slot 1 exits 0 because slot 3 happened to finish
+cleanly, and CI (or a human reading the exit code) treats a machinery-integrity breach
+as success.
+
+*Twin note*: both twins already `exit` with these codes from a single process
+(`loop.sh:107-156`; `loop.ps1:171-238`), and PowerShell's `exit <int>` maps to the same
+process exit status, so the aggregation table is expressible identically on both sides.
+The parity heuristic (`.claude/checks.sh:26-35`) continues to see all five literals in
+both twins.
+
+---
+
+## Open questions
+
+1. **bash 3.2 supervision floor.** Is the `kill -0` poll loop (§5) acceptable as the
+   bash primitive, or should the kit raise its bash floor to 4.3 and use `wait -n`? The
+   breaker currently accommodates 3.2 explicitly (`breaker.sh:130-132`), so raising the
+   floor is a kit-wide policy decision, not a loop-local one.
+2. **Windows worktree removal under a live handle.** `git worktree remove` can fail on
+   Windows when a child process still holds a file open. The §2 mitigation
+   (wait-then-`--force`-then-`prune`) is proposed but unvalidated on a real Windows
+   host; the checks suite's pwsh coverage is parse-only and skip-aware
+   (`.claude/checks.sh:22-25`), so it cannot verify this.
+3. **Multi-driver operation is explicitly out of this design.** All exclusivity here
+   rests on there being exactly one driver process (§4, §6). If two drivers on one repo
+   is ever wanted, on-disk exclusive-create claims and the full breaker hardening of
+   §3.2 parts 1–3 become load-bearing rather than defense-in-depth. Not designed here.
+4. **Accuracy of declared `writes:` sets.** §6.1 states the limitation; unresolved is
+   what the integrator should do on a *small* overrun (a story that also touched one
+   README). Quarantine may be too blunt; an escalation-and-admit path may be better.
+5. **Should `_goals/` become tracked in this repository?** Today it is ignored
+   (`.gitignore:6`) as a dogfooding artifact. Tracking it would make the install-side
+   merge=union guidance (`skills/setup/SKILL.md:120-122`) apply here too, changing which
+   of §6.3's rules are belt and which are braces. Orthogonal to this design, but it
+   changes the test surface for the follow-up stories.
+6. **Cross-loop cooperative rate limiting** — the shared token pool and predictive
+   breaker pattern at `docs/research-squad-ideas.md:122-124` — is the natural companion
+   to §1's capacity analysis but is explicitly out of scope for this story.
+7. **Where the integrator's own commit lands.** The integrator writes backlog/LEARNINGS/
+   ESCALATIONS transitions; whether those become one commit per story or one batched
+   commit per round affects `ship-pr`'s eventual summary
+   (`templates/loop/SKILL.md:96-97`) and is undecided.
+
+---
+
+## Rejected alternatives
+
+### A. Planning-layer write-set admission alone (the counter-position's position)
+
+*Verdict: adopted as a layer, rejected as sufficient.*
+
+`docs/research-designing-conflict-free-multi-agents.md:67` states it plainly: "You do not
+need locks, CRDTs, or worktrees if the plan guarantees disjointness", supported by the
+mechanism table at `:59` (declared disjoint write-sets = "Best fit… This is the primary
+recommendation") and the loop-specific Stage 5 sketch at `:113-118`. Taken seriously,
+this design would consist of §6.1 and nothing else: declare `writes:` per story, refuse
+to co-dispatch intersecting stories, run both slots in the one shared working tree.
+
+Argued on its merits, it is right about a great deal. It is cheaper than anything else
+here, it needs no runtime infrastructure, it travels in the prompt (which suits
+fresh-context subagents, `:59`), and it prevents the failure the empirical data actually
+measures — a 27.67% conflict rate over 142K+ agentic PRs (`:14`). §6.1 adopts it
+verbatim, including its escalate-don't-widen rule (`:105`) and its claimed-paths ledger
+idea (`:116`).
+
+It is rejected as a *complete* answer for three specific reasons:
+
+1. **Git state is a shared non-file surface.** HEAD, the index, and the working tree are
+   written by every iteration and owned by none. The research doc's own ATM summary
+   supplies the counterexample class: "physical disjointness remains necessary but not
+   sufficient" — disjoint writers are still blocked when they "touch a shared non-file
+   surface (a registry, generated artifact, or validator)" (`:18`). Here the shared
+   surface is git itself.
+2. **The loop's rollback primitive is global and destructive.** `git reset --hard
+   "$head_before"` (`loop.sh:113`) does not respect write-sets; it reverts *the tree*.
+   No plan-time property constrains what it deletes. A design that keeps a shared tree
+   must either remove this primitive (losing CB0's revert semantics,
+   `skills/setup/templates/ORCHESTRATION.md:483`) or accept that one slot can erase
+   another's commit.
+3. **Story write-sets are not knowable at dispatch.** The goal and its task write-sets
+   are derived *inside* the iteration (`templates/loop/SKILL.md:94-97`), so the declared
+   set is an authoring-time upper bound, not the computed disjointness proof CodeTeam's
+   plan-time check assumes (`:31`). Admission on an estimate is worth having; it is not
+   worth betting the working tree on.
+
+The reconciliation is therefore: `:67` is accepted for the layer it addresses (files) and
+declined for the layer it does not (git state), and `:65`'s judgment that locks are a
+last resort is honored literally — this design contains no locks.
+
+### B. Serialized writes with parallel reads (single writer; concurrent read-only planning and judging)
+
+*Verdict: rejected as the dispatch architecture, adopted as the shared-memory rule.*
+
+This is the pattern with the strongest empirical backing in the research doc: Cognition's
+"multi-agent systems work best today when writes stay single-threaded and the additional
+agents contribute intelligence rather than actions" (`:10`), Anthropic's read-heavy
+orchestrator-worker design where subagents "never talk to each other" (`:12`), and the
+underlying law that "read operations are naturally parallelizable, while write operations
+that must maintain consistency require sequential coordination" (`:37`). Applied here it
+would mean: N slots run Phases 1–3 (alignment, goal creation, goal judgment) and all
+judging concurrently in read-only worktrees, while a single writer applies Phase 4 edits
+serially.
+
+Argued seriously, this is attractive: it needs no admission rule at all, it makes §6
+almost vacuous, and it is the pattern the strongest primary sources validate.
+
+It is rejected as the dispatch architecture because **the kit's iteration has no short
+write tail to serialize.** Phase 4 is not a brief apply-step following a long planning
+step; execution and judging are interleaved — "implementer/test-writer execute, `judge`
+verifies every task and the final audit, fixes are always re-judged, 3 judge cycles max
+per task, tests climb ladder rungs 1–2 mid-story with rung 3 after the audit"
+(`templates/loop/SKILL.md:101-104`), plus per-story Phase 6 doc alignment
+(`:104-105`). The write-bearing portion is most of the wall clock, so serializing it
+serializes most of the run and the remaining parallelism is planning overhead. The
+research doc supplies the quantitative warning for exactly this shape: Co-Coder found
+naive parallelism gave "negligible" gains over sequential (57.7% vs 56.8%) at +44% cost
+(`:19`). Paying N× the tokens for a fraction of the wall-clock is a worse trade than the
+serial loop we already have.
+
+What *is* adopted is its principle, applied where the write tail genuinely is short:
+§6.3 makes the integrator the single writer for `_goals/backlog.md`,
+`_goals/LEARNINGS.md`, and `_goals/ESCALATIONS.md`. Those writes take milliseconds, so
+serializing them costs nothing and buys the whole-file-rewrite safety that compaction
+requires.
+
+### C. Branch-per-story with merge-conflict repair at fold-back
+
+*Verdict: rejected.* This is the dominant commercial answer — Copilot's `/fleet` and
+Claude Code's `isolation: worktree` (`:23`) — and it is the design a naive reading of
+"worktree-per-story" (the phrasing in this story's own backlog entry,
+`_goals/backlog.md:99`) would produce: let slots collide freely, resolve at merge. It is
+rejected on the research doc's terms, which this design accepts without reservation: it
+is "precisely the after-the-fact reconciliation the user wants to avoid" (`:23`) and it
+imports the measured 27.67% conflict rate (`:14`). The distinction from §2 matters and is
+worth restating: §2 uses worktrees so that admission-guaranteed-disjoint work integrates
+by **fast-forward with zero conflicts**, not so that conflicting work can be merged.
+
+### D. `merge=union` as the shared-memory mechanism
+
+*Verdict: rejected as a mechanism; retained as a safety net in installs.* The setup skill
+already emits `merge=union` for `_goals/LEARNINGS.md`, `_goals/ESCALATIONS.md`, and
+`_goals/*/orchestration-log.md` (`skills/setup/SKILL.md:120-122`), so building on it is
+tempting. Three reasons not to: (i) it does not exist in this repository, where `_goals/`
+is untracked (`.gitignore:6`) and the root `.gitattributes` carries only the two
+`text eol=lf` lines with no `merge=union` entry (`.gitattributes:2-3`), so a design
+resting on it would work in installs and silently not work here; (ii) it cannot survive
+the mandatory compaction rewrite at `templates/loop/SKILL.md:116-118` — union resolves
+additions, not deletions, so it would resurrect exactly the content compaction removed
+(§6.3); (iii) union merges are *unordered* concatenations, so interleaved learnings lose
+their sequence. The integrator (§6.3) makes union unnecessary in both environments; the
+emitted lines stay as protection against hand edits.
+
+### E. A global write lock on the shared working tree
+
+*Verdict: rejected.* Keep one tree, guard every commit with a lockfile. This is the
+minimal-change option and it does prevent index contention. It is rejected because it
+does not address the actual §2 failure — `head_before` is captured *outside* any
+plausible critical section (`loop.sh:79`) and the CB0 diff range spans the entire
+iteration, so a lock held only around `git commit` still lets slot B's commit fall inside
+slot A's diff window. Holding the lock for the whole iteration is just the serial loop
+with extra machinery. It is also the mechanism the research doc rates lowest — locks are
+"Overkill for a design-time-partitioned system; keep as a last-resort fallback only"
+(`:65`).
+
+### F. Per-slot breaker state files
+
+*Verdict: rejected.* Giving each slot its own `breaker-state.json` would sidestep §3's
+torn-read race entirely. It is rejected because it is semantically wrong: rate limits are
+a property of the *provider account*, not of a slot (§1), so N independent breakers would
+each need to observe N× fewer signals before tripping, and a slot in CLOSED would keep
+hammering a provider that another slot's breaker had already found OPEN. The breaker must
+stay global; §3.2 part 4 makes it single-owner instead.
+
+---
+
+## Scope
+
+**This story ships design only.** No change to `skills/setup/templates/` or `_loop/`
+(`_goals/backlog.md:109`). The verification for this story is structural: the
+placeholder-safe rendering check over this file, plus `bash .claude/checks.sh` as a
+**no-regression signal only** — no check in that suite reads `docs/` (its checks A–I
+cover templates, the emitted instance, frontmatter, model IDs, twin parity, and emitter
+reference coverage, `.claude/checks.sh:6-40`), so a green suite proves this document
+broke nothing, not that this document is correct.
+
+**Accepted consequence**: root `ORCHESTRATION.md` indexes `docs/`
+(`ORCHESTRATION.md:29-32`) and is out of scope here, so this design note ships unindexed
+until a follow-up links it.
+
+### Implementation follow-up: plausibly 3–4 stories
+
+Sized honestly, and deliberately ordered so each story is independently shippable and
+independently revertible. Story 2 is the one most likely to split, which is where the
+"3–4" range comes from.
+
+**Follow-up story 1 — Breaker hardening (independent of dispatch, ship first).**
+Atomic temp-plus-rename write, terminator-line integrity check, torn-read retry, and the
+fail-safe reseed inversion (§3.2 parts 1–3). Surfaces: `templates/loop/breaker.sh`,
+`templates/loop/breaker.ps1`, `templates/loop/SKILL.md` (the corrupted-state paragraph at
+`:69-70`), `.claude/checks.sh` (check G's parity assertions,
+`.claude/checks.sh:26-35`). This story has standalone value even if parallel dispatch is
+never built — the reseed-to-CLOSED weakening is reachable today by any second process
+touching the state file.
+
+**Follow-up story 2 — Slot supervision and per-slot isolation.** `LOOP_SLOTS`, the slot
+table, worktree lifecycle, per-slot CB1/CB2, quarantine, and the process-supervision
+primitives (§1, §2, §5). Surfaces: `templates/loop/loop.sh`, `templates/loop/loop.ps1`,
+`templates/loop/SKILL.md` (Windows-compatibility section, `:24-32`),
+`skills/setup/SKILL.md` (the `.gitignore` append for `.loop-worktrees/`, extending the
+precedent at `:127-129`), all four `skills/setup/emitters/*.md` (loop-extras rows, e.g.
+`skills/setup/emitters/claude-code.md:14`), `.claude/checks.sh`. **This is the story most
+likely to split in two** — bash and PowerShell supervision diverge more than any other
+part of the twin contract (§5), so "supervision (bash)" and "supervision (PowerShell
+twin + parity checks)" may need to be separate stories to each fit one context window per
+`_goals/backlog.md:7-8`.
+
+**Follow-up story 3 — Driver-owned dispatch and the integrator.** Story selection moved
+into the driver, `writes:` field and admission rule, hotspot set, per-slot outboxes, and
+the single-writer integrator including compaction/archival (§4, §6). Surfaces:
+`templates/loop/loop.sh`, `templates/loop/loop.ps1`, `templates/loop/PROMPT.md` (story
+pinning, `:1-5`), `templates/loop/SKILL.md` (sections 1, 3 and 4 — `:81-90`, `:110-123`,
+`:126-135`), `templates/loop/backlog.md` (the format comment gains `writes:`),
+`_goals/backlog.md`'s live format comment (`:3-10`) by way of a re-emit.
+
+**Follow-up story 4 — Completion and exit aggregation.** Sentinel demotion, per-slot log
+capture and `ITERATION:` cross-checking, and the exit-code aggregation table (§7).
+Surfaces: `templates/loop/loop.sh`, `templates/loop/loop.ps1`,
+`templates/loop/SKILL.md` (output contract, `:137-144`),
+`skills/setup/templates/ORCHESTRATION.md` (guard table rows at `:474-486`),
+`.claude/checks.sh` (check G's five-exit-code assertion, `:26-28`).
+
+**Surfaces touched across the whole follow-up**, consolidated:
+`skills/setup/templates/loop/loop.sh`, `skills/setup/templates/loop/loop.ps1`,
+`skills/setup/templates/loop/breaker.sh`, `skills/setup/templates/loop/breaker.ps1`,
+`skills/setup/templates/loop/SKILL.md` (the `auto-loop` skill),
+`skills/setup/templates/loop/PROMPT.md`, `skills/setup/templates/loop/backlog.md`,
+`skills/setup/templates/ORCHESTRATION.md`, `skills/setup/SKILL.md`, all four
+`skills/setup/emitters/*.md`, and `.claude/checks.sh`.
+
+**Out of scope for the entire follow-up**: multi-driver operation (Open question 3),
+cross-loop cooperative rate limiting (`docs/research-squad-ideas.md:122-124`), and any
+change to `ship-pr`'s one-PR-per-run model (`templates/loop/SKILL.md:96-97`).
