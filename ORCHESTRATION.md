@@ -6,7 +6,7 @@ every install:
 **[`skills/setup/templates/ORCHESTRATION.md`](skills/setup/templates/ORCHESTRATION.md)**
 
 It describes the orchestrator/worker/judge system as a template with `{{TOKEN}}`
-placeholders and `<!-- BOOTSTRAP: ... -->` guidance. As of kit v0.5.0 that covers:
+placeholders and `<!-- BOOTSTRAP: ... -->` guidance. As of kit v0.7.0 that covers:
 
 - the **seven-phase feature flow** — alignment, goal creation, goal judgment, task
   execution, final audit, docs alignment (`align-docs`), and an approval-gated pull
@@ -27,9 +27,10 @@ Running `/setup` in a target project compiles the template — along with the su
 and skills — into the native format of each targeted harness (Claude Code, Cursor,
 GitHub Copilot, OpenAI Codex). See [`README.md`](README.md) for install steps,
 [`docs/research-multi-harness-upgrade.md`](docs/research-multi-harness-upgrade.md) for
-the harness research, and
-[`docs/research-squad-ideas.md`](docs/research-squad-ideas.md) for the adopted
-hardening patterns.
+the harness research, [`docs/research-squad-ideas.md`](docs/research-squad-ideas.md) for
+the adopted hardening patterns, and
+[`docs/design-parallel-dispatch.md`](docs/design-parallel-dispatch.md) for the judged
+design for WIP-limited parallel dispatch in the autonomous loop (not yet implemented).
 
 Edit the template in the skill's `templates/` directory only; this file is just a
 pointer.

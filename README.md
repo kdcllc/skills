@@ -2,7 +2,7 @@
 
 [![skills.sh installs](https://skills.sh/b/kdcllc/skills)](https://skills.sh/kdcllc/skills)
 
-> Kit version: **0.5.0** (`skills/setup/VERSION`) · The install badge above goes live
+> Kit version: **0.7.0** (`skills/setup/VERSION`) · The install badge above goes live
 > once the repo is public and listed on [skills.sh](https://www.skills.sh/); it shows
 > anonymous install counts. If the repo publishes under a different owner/name, update
 > the badge path (`skills.sh/b/<owner>/<repo>`).
@@ -41,7 +41,9 @@ What an install gives a project:
 ORCHESTRATION.md              # Pointer to the canonical template inside the skill
 docs/
 ├── research-multi-harness-upgrade.md  # Verified per-harness research + upgrade plan
-└── research-squad-ideas.md            # bradygaster/squad study + adopted ideas (A1–A10)
+├── research-squad-ideas.md            # bradygaster/squad study + adopted ideas (A1–A10)
+└── design-parallel-dispatch.md        # Judged design: WIP-limited parallel dispatch
+                                       #   in the autonomous loop (not yet implemented)
 skills/setup/                 # The installable skill (the compiler)
 ├── SKILL.md                  # Workflow: detect harness(es) → inspect → interview →
 │                             #   resolve templates → emit per harness → manifest
@@ -118,8 +120,11 @@ names.
 
 Re-run `/setup`: it reads `orchestration-kit.manifest.json`, diffs file hashes to spot
 your local modifications, regenerates, and shows a diff before touching anything you
-edited. Bump `skills/setup/VERSION` when changing the kit; registry users re-run
-`npx skills add` to pull the new version, then re-run `/setup` to re-emit.
+edited. Seed files (today just `_goals/backlog.md`, listed in the manifest's
+`seedFiles`) sit outside that flow: created only if missing, never overwritten, and
+their hash drift is expected, not a modification the diff needs to show you. Bump
+`skills/setup/VERSION` when changing the kit; registry users re-run `npx skills add` to
+pull the new version, then re-run `/setup` to re-emit.
 
 ## Editing the templates
 
