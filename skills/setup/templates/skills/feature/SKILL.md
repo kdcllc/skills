@@ -129,7 +129,10 @@ Maintain `_goals/[goal-name]/orchestration-log.md`. **Before** every subagent la
 append an entry: timestamp, agent, model (and any rotation/fallback applied), why this
 agent was routed, the task's `writes` claim (its allowed-paths fence), expected
 outputs. **After** it returns, append the outcome (report received / files verified /
-verdict). Append-only: never edit or delete entries — rejections and respawns are new
+verdict) as a new line under that entry. Never write placeholder status lines
+("Outcome: (pending)", "TBD") — under append-only they can never be resolved in place
+and rot into permanently stale text; an entry with no outcome line yet IS the pending
+state. Append-only: never edit or delete entries — rejections and respawns are new
 entries. This ledger is what makes the re-judge invariants and fix-cycle rotation
 auditable.
 
