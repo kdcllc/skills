@@ -106,6 +106,16 @@ judge auto-fail triggers, and model IDs are derived from the codebase and your a
 never left generic. Start your first feature with `/feature`; start an unattended run
 (sandboxed!) with `_loop/loop.sh 10` (or `pwsh _loop/loop.ps1 10` — PowerShell 7+).
 
+### Self-install (local development of the kit itself)
+
+This repo dogfoods its own skill: run `/setup` in a session inside this repo and point
+it at itself. The emitted instance (`.claude/`, `_goals/`, `_loop/`, `_research/`,
+`orchestration-kit.manifest.json`) is **gitignored** — a self-install never reaches
+git, so it is safe to re-run at any time and nothing in the instance is source of
+truth. The canonical kit stays under `skills/setup/`; after editing templates, re-run
+`/setup` to refresh the local instance and exercise the change end-to-end before
+committing the canonical side.
+
 ## Model tiers
 
 Judges and the orchestrating session run a frontier model; implementer and test-writer
