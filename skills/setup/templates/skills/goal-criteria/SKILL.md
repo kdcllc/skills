@@ -35,6 +35,12 @@ Every task file carries an ownership block declaring `writes` / `reads` / `depen
    file in full is legitimate; `depends_on` names every producer task whose output this
    task consumes; rewrite semantics stated per owned file (`whole-file` is the default;
    `targeted-insertion` for large shared documents a task extends rather than rewrites).
+   A block still carrying the template's bracket-literal placeholder values (`[path]`,
+   `[NN-name]`, `[implementer|test-writer]`) is a pristine block, and a pristine block
+   counts as UNDECLARED rather than declared — the same fail-closed missing-block remedy
+   applies (author real values, re-judge). `owner` must be one of `implementer` /
+   `test-writer`; the judge additionally cross-checks it against the agent the
+   orchestration log shows was dispatched for that task.
 2. **Coverage** — the union of all tasks' `writes` equals the set of files the goal
    intends to change: no orphan edits (a planned change no task owns), no owned path
    the goal never asked for.

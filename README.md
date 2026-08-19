@@ -2,7 +2,7 @@
 
 [![skills.sh installs](https://skills.sh/b/kdcllc/skills)](https://skills.sh/kdcllc/skills)
 
-> Kit version: **0.8.0** (`skills/setup/VERSION`) · The install badge above applies
+> Kit version: **0.9.0** (`skills/setup/VERSION`) · The install badge above applies
 > only if the repo is made public: [skills.sh](https://www.skills.sh/) filters private
 > repos out of its public index by design
 > ([vercel-labs/skills#381](https://github.com/vercel-labs/skills/issues/381)), so it
@@ -66,6 +66,11 @@ skills/setup/                 # The installable skill (the compiler)
     │                         #   test-ladder, align-docs, ship-pr
     └── loop/                 # Optional autonomous loop: SKILL.md (one iteration),
                               #   loop.sh + loop.ps1 (guarded drivers), PROMPT.md, backlog.md
+tests/
+└── loop-harness/run.sh        # Tracked behavioral test suite (breaker state machine,
+                              #   SIGPIPE regressions, checks J/K mutations; 37 assertions);
+                              #   requires a self-install (_loop/ present) — SKIPs cleanly
+                              #   otherwise; run: bash tests/loop-harness/run.sh
 ```
 
 ## Install into a project
@@ -126,7 +131,9 @@ it at itself. The emitted instance (`.claude/`, `_goals/`, `_loop/`, `_research/
 git, so it is safe to re-run at any time and nothing in the instance is source of
 truth. The canonical kit stays under `skills/setup/`; after editing templates, re-run
 `/setup` to refresh the local instance and exercise the change end-to-end before
-committing the canonical side.
+committing the canonical side. The tracked test harness
+(`tests/loop-harness/run.sh`) exercises that resulting instance end-to-end —
+run it with `bash tests/loop-harness/run.sh`.
 
 ## Model tiers
 
