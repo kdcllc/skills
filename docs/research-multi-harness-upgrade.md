@@ -142,7 +142,51 @@ none panel-verified ⚠️:
 
 1. Per-field fidelity when Cursor/VS Code load a `.claude/agents` file — which
    Claude-specific keys are honored vs silently ignored (test empirically).
+
+   > 2026-08-18 empirical update (CLI-observed): Claude Code (native, raw
+   > `.claude/agents` tree) honors `name` and `description` verbatim — verified via
+   > nonce-instrumented probes with an active file-read denial set and a decoy
+   > negative control. `tools:` is partial: the injected pair (`WebSearch,
+   > WebFetch`) was returned correctly (injected-key test), but the same reply also
+   > asserted file-visibility facts (directory contents, exact frontmatter
+   > key-order/formatting) that the active `Read,Grep,Glob,Bash` denial should have
+   > made unobservable, so the cell is downgraded from `honored` to `partial`
+   > rather than taken at face value. `model`/`effort` fidelity is untestable — no
+   > introspection surface exposed model/effort metadata under `-p`/`--debug`. The
+   > Cursor and Copilot arms of this question are untestable: Cursor was gated
+   > pre-budget (`cursor-agent models` → no models available for this account,
+   > though the account is logged in); Copilot lost authentication mid-session
+   > (auth error on the first call after a clean auth smoke test). See
+   > `skills/setup/reference/harness-matrix.md` § Empirical validation (2026-08-18,
+   > CLI-observed).
+   >
+   > **Re-probe update:** a user-authorized re-auth and re-probe restored Copilot
+   > access and re-ran the recognition and tools probes across both the native
+   > `.github/agents/judge.agent.md` tree and the raw `.claude/agents` tree.
+   > `name` and `description` landed at `partial (confound: file-read not
+   > deniable)` on both trees, and `tools` at `partial` on the native
+   > `.agent.md` tree (the raw tree's `tools:` injection sits on
+   > `implementer.md` and was not probed) — Copilot exposes no file-read denial mechanism
+   > (`copilot help permissions` documents only `shell()/write()/<mcp-server>()/
+   > url()` kinds, no Read/Grep/Glob-equivalent), so no Copilot cell can clear
+   > `honored` regardless of nonce fidelity. Observed once (CLI-observed, n=1):
+   > with same-named `judge` agents in both `.github/agents` and `.claude/agents`,
+   > only the native one surfaced in the recognition reply; mechanism unconfirmed —
+   > reply-level dedup of same-named agents not excluded. Do not treat as a
+   > precedence rule. `model`/`effort` remain untestable — the native `.agent.md`
+   > fixture omits both keys. See `skills/setup/reference/harness-matrix.md` §
+   > Empirical validation (2026-08-18, CLI-observed).
 2. Exact current `.cursor/agents` frontmatter schema (the one refuted claim).
+
+   > 2026-08-18 empirical update (CLI-observed): NO evidence was obtained. A
+   > dual-emission fixture (`hv-cursor/`: raw `.claude/` tree plus distinct-named
+   > `.cursor/agents/*-cursor` translated copies) was built specifically to test
+   > schema acceptance, but the Cursor arm was gated before any probe budget was
+   > spent — `cursor-agent models` reported "No models available for this
+   > account" (`cursor-agent status` separately confirmed the account is logged
+   > in, so this is a model-availability restriction, not an auth failure). This
+   > question remains open. See `skills/setup/reference/harness-matrix.md` §
+   > Empirical validation (2026-08-18, CLI-observed).
 3. Quantitative judge-model-strength thresholds for reliable LLM-as-judge gating.
 4. Copilot coding agent (GitHub-issue-driven) specifics for the autonomous loop.
 

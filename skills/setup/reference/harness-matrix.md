@@ -17,7 +17,9 @@ canonical templates are Claude-format:
   [code.visualstudio.com/docs/agent-customization/custom-agents]
 - Caveat: directory *loading* is confirmed; per-field fidelity of Claude-specific keys
   (`tools:`, model aliases, `effort:`) is undocumented — emit translated per-harness
-  copies for anything model- or tools-critical.
+  copies for anything model- or tools-critical. (Claude Code raw-tree fidelity for
+  name/description empirically verified 2026-08-18, CLI-observed; tools partial — see
+  Empirical validation)
 
 ## Capability table
 
@@ -44,6 +46,68 @@ drivers assume the harness CLI runs natively where invoked.
 5. The exact `.cursor/agents` frontmatter schema was **refuted** in verification (0-3) —
    re-check `cursor.com/docs/subagents` live before emitting Cursor agent files.
 6. Copilot: the session runs the frontier tier (ceiling rule); judges cannot pin up.
+
+## Empirical validation (2026-08-18, CLI-observed)
+
+Live headless-CLI probes were run against per-harness scratch fixtures (outside this
+repo, per story-001-harness-validation) to test per-field frontmatter fidelity
+empirically rather than by documentation alone. Full detail, transcripts, and
+per-claim evidence citations live in the session scratchpad's `hv-results.md`
+(not committed to this repo — quoted here only where load-bearing).
+
+**Method:** headless CLI probes (`claude -p`, `cursor-agent`, `copilot -p`) against
+per-harness fixtures, instrumented with per-agent nonces embedded in `description:`
+fields, file-read denial where the harness exposes a mechanism (Claude Code:
+`--disallowedTools "Read,Grep,Glob,Bash"`), and a decoy negative-control agent/nonce
+per fixture — a `honored` verdict requires nonce traversal under active denial AND
+absence of the decoy nonce. Transcripts are retained in the session scratchpad
+(`hv-*/probes/*.txt`) — not committed to this repo. **GUI/IDE behavior was not
+exercised by any probe — every result below is CLI-scoped**, not evidence about any
+IDE/GUI surface (VS Code Copilot chat panel, Cursor IDE panel, or a hypothetical
+Claude Code IDE extension).
+
+| Harness | `name` | `description` | `model` | `effort` | `tools` (injected-key test: `WebSearch, WebFetch`) |
+|---|---|---|---|---|---|
+| Claude Code (`claude`) | honored | honored | untestable (no model/effort metadata surfaced in captured output) | untestable (no model/effort metadata surfaced in captured output) | partial (ambiguity: injected pair returned verbatim — injected-key test credited — but the same reply also asserted file-visibility facts, e.g. directory contents and exact frontmatter key order/formatting, that the active `Read,Grep,Glob,Bash` denial should have made unobservable; downgraded from a clean `honored`) |
+| Cursor (`cursor-agent`) | untestable (no model available for account) | untestable (no model available for account) | untestable (no model available for account) | untestable (no model available for account) | untestable (no model available for account) |
+| Copilot (VS Code CLI, `copilot`) | partial (confound: file-read not deniable) | partial (confound: file-read not deniable) | untestable (no introspection surface; native file omits the keys) | untestable (no introspection surface; native file omits the keys) | partial (confound: file-read not deniable) |
+| OpenAI Codex (`codex`) | untested — CLI absent | untested — CLI absent | untested — CLI absent | untested — CLI absent | untested — CLI absent |
+| VS Code GUI (Copilot chat panel / Cursor IDE panel / any Claude Code IDE extension) | untested — not installed, no GUI surface in this headless environment | untested — not installed, no GUI surface in this headless environment | untested — not installed, no GUI surface in this headless environment | untested — not installed, no GUI surface in this headless environment | untested — not installed, no GUI surface in this headless environment |
+
+Cursor's arm was gated pre-budget: `cursor-agent models` reported "No models
+available for this account" (`cursor-agent status` separately confirmed the account
+is logged in, so this is a model-availability restriction, not an auth failure) —
+zero probe budget was spent, including for the Q2 dual-emission (`.cursor/agents/*-cursor`)
+schema-acceptance check. Copilot's initial two probes failed unauthenticated (auth
+lost mid-session, on the first invocation after a clean auth smoke test; the
+auto-update-caused-invalidation explanation is the most plausible read of the
+observed sequence but is not itself transcript-proven) — a user-authorized re-auth
+and re-probe superseded that unauthenticated state with the results in the table
+above. Copilot exposes no file-read denial mechanism (`copilot help permissions`
+documents only `shell()/write()/<mcp-server>()/url()` permission kinds, no
+Read/Grep/Glob-equivalent), so no Copilot cell can clear `honored` regardless of
+nonce fidelity — every re-probed cell caps at `partial`. `model`/`effort` remain
+untestable for a different reason: the native `.agent.md` fixture deliberately
+omits both keys (a sanctioned manifest deviation), leaving nothing to introspect
+even with working auth.
+
+Observed once (CLI-observed, n=1): with same-named `judge` agents in both
+`.github/agents` and `.claude/agents`, only the native one surfaced in the
+recognition reply; mechanism unconfirmed — reply-level dedup of same-named agents
+not excluded. Do not treat as a precedence rule.
+
+**Evidence-floor status:** 9 non-untestable cells were obtained across all harnesses
+vs the goal's floor of 5 non-untestable cells — floor cleared (9 ≥ 5): Claude Code
+contributes 3 (`name` honored, `description` honored, `tools` partial); the Copilot
+re-probe contributes 6 confound-capped `partial` cells (native `name`, native
+`description`, native schema-acceptance, raw-tree `name`, raw-tree `description`,
+and `tools` — native tree only).
+Composition caveat: 6 of the 9 are confound-capped partials from Copilot, the one
+harness with no file-read denial mechanism (so its cells are ceilinged at `partial`
+independent of nonce fidelity); only the 3 Claude Code cells carry denial-controlled
+evidence (an active `Read,Grep,Glob,Bash` deny list during the probe). Cursor still
+contributes zero — its cells are gated on model availability, not auth, so the
+Copilot re-authorization does not touch them.
 
 ## Sources
 
