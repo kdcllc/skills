@@ -145,8 +145,10 @@ your local modifications, regenerates, and shows a diff before touching anything
 edited. Seed files (today just `_goals/backlog.md`, listed in the manifest's
 `seedFiles`) sit outside that flow: created only if missing, never overwritten, and
 their hash drift is expected, not a modification the diff needs to show you. Bump
-`skills/setup/VERSION` when changing the kit; registry users re-run `npx skills add` to
-pull the new version, then re-run `/setup` to re-emit.
+`skills/setup/VERSION` when changing the kit; users re-pull with whichever CLI they
+installed with — `npx skills add kdcllc/skills` again, or
+`npx agent-skills-cli update` (run `npx agent-skills-cli check` first to see installed
+skills with source and version) — then re-run `/setup` to re-emit.
 
 ## Editing the templates
 
