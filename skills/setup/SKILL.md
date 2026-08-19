@@ -78,6 +78,7 @@ In a scratch copy, resolve every `{{TOKEN}}` and act on + delete every
 | `{{MODEL_FRONTIER}}` / `{{MODEL_LIGHT}}` | Tier → model ID for the primary harness (from the model map) |
 | `{{CURSOR_MODEL_*}}`, `{{COPILOT_MODEL_*}}`, `{{CODEX_MODEL_*}}` | Per-harness tier IDs (model map only) |
 | `{{MODEL_ALT_FAMILY}}` | Different-family model at light-comparable tier, used by fix-cycle rotation (model map) |
+| `{{LOOP_MODEL_CHAIN}}` | Comma-separated loop fallback chain, first = preferred (from the model map's "Loop fallback chain" row); empty ⇒ the breaker still tracks state but never passes a model flag |
 | `{{EXECUTION_LAYERS}}` | Dependency-ordered layer chain |
 | `{{GROUND_TRUTH_DOC}}` | Committed domain ground-truth doc path |
 | `{{QA_SURFACES}}` | User-facing surfaces + evidence each produces |
@@ -102,11 +103,13 @@ Emitters compose: run Claude Code first when it is among the targets — Cursor 
 VS Code reuse parts of the emitted `.claude/` tree.
 
 **Loop extras (all harnesses)**: both loop drivers (`_loop/loop.sh` and
-`_loop/loop.ps1`) are always emitted for loop-enabled installs, regardless of target
-harness or detected OS — the user picks the one that matches their platform at
-invocation time. If the loop is enabled, append to the project's `.gitattributes`
-(create if missing) so parallel/append-only state merges cleanly and the loop drivers
-always check out with the line endings their interpreters require:
+`_loop/loop.ps1`) and their circuit-breaker helper twins (`_loop/breaker.sh` and
+`_loop/breaker.ps1`, sourced/dot-sourced by the drivers) are always emitted for
+loop-enabled installs, regardless of target harness or detected OS — the user picks
+the driver that matches their platform at invocation time. If the loop is enabled,
+append to the project's `.gitattributes` (create if missing) so parallel/append-only
+state merges cleanly and the loop drivers always check out with the line endings
+their interpreters require:
 
 ```
 _goals/LEARNINGS.md merge=union
@@ -115,6 +118,10 @@ _goals/*/orchestration-log.md merge=union
 *.sh text eol=lf
 *.ps1 text eol=lf
 ```
+
+Also append `_goals/breaker-state.json` to the project's `.gitignore` (create if
+missing) — this is runtime scratch written by the breaker helpers at run time and
+must never enter commits.
 
 **Checks scripts on Windows**: the kit does not emit a structural-checks script
 itself. If a project's install adopts one (as the kit's own repository does), and the loop

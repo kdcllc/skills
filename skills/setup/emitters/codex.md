@@ -13,7 +13,7 @@ markdown, no frontmatter, **32 KiB combined cap**, read once per session).
 | `templates/agents/*.md` bodies | `.codex/agents/<role>.md` | strip YAML frontmatter (Codex ignores it); keep the body as the role instruction file; these files double as Cursor-readable agents |
 | Role config | `.codex/config.toml` | see below |
 | Per-role model layers | `.codex/agents/<role>.toml` | `model = "{{CODEX_MODEL_FRONTIER}}"` for judges, `{{CODEX_MODEL_LIGHT}}` for workers |
-| `templates/loop/*` (if loop enabled) | `_loop/loop.sh`, `_loop/loop.ps1`, `_goals/backlog.md` | loop CLI: `codex exec` with `approval_policy = "never"`, `sandbox_mode = "workspace-write"` — sandbox only; invocation forms as in the Claude Code emitter (`_loop/loop.sh [max-iterations]` / `pwsh _loop/loop.ps1 [MaxIterations]`) |
+| `templates/loop/*` (if loop enabled) | `_loop/loop.sh`, `_loop/loop.ps1`, `_loop/breaker.sh`, `_loop/breaker.ps1`, `_goals/backlog.md` | loop CLI: `codex exec` with `approval_policy = "never"`, `sandbox_mode = "workspace-write"` — sandbox only; invocation forms as in the Claude Code emitter (`_loop/loop.sh [max-iterations]` / `pwsh _loop/loop.ps1 [MaxIterations]`) |
 
 `.codex/config.toml` (merge with any existing project config):
 

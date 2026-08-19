@@ -50,6 +50,23 @@ Rules (adapted from bradygaster/squad's model selector):
 - **Prompts are executable — treat like code**: tasks that author or edit agent, skill,
   or prompt files use the frontier tier, never the docs/light tier.
 
+### Loop fallback chain
+
+<!-- BOOTSTRAP: fill with CURRENT model IDs for the harness(es) targeted; delete this
+     subsection if the autonomous loop is not installed. Resolves {{LOOP_MODEL_CHAIN}}
+     (one comma-separated string, first entry = preferred, no spaces around the
+     commas — neither driver twin trims chain entries) wherever that token appears
+     in the emitted loop templates. -->
+
+| Chain (first available wins) | Resolves |
+|-------------------------------|----------|
+| {{MODEL_LIGHT}} → <alternate light model> → (omit pin — harness default) | `{{LOOP_MODEL_CHAIN}}` |
+
+Light-tier by default — the loop's iterations are implementer/test-writer-shaped work,
+same as the `light` row above. Ends with the same omit-the-pin rule as the tables
+above: a trip past the last chain entry clears the model pin and the harness default
+takes over (no hardcoded model IDs outside this file).
+
 ## Fix-cycle rotation (after judge rejections)
 
 A model blind to its own class of mistake rarely fixes it on retry. Rotate:

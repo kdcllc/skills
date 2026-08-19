@@ -12,6 +12,9 @@
 # SAFETY: run inside a sandbox (worktree/container) with minimal credentials.
 # This script never pushes and never bypasses permission prompts by itself.
 #
+# Breaker: dot-sources breaker.ps1 (functions: Breaker-Load, Breaker-ShouldSkip,
+# Breaker-Record, Breaker-CurrentModel); state file: _goals/breaker-state.json.
+#
 # Exit codes: 0 = backlog complete (sentinel found); 1 = max iterations reached without
 # completion; 2 = circuit breaker — no commit for 3 consecutive iterations; 3 = circuit
 # breaker — same failure signature 5 times consecutively; 4 = protected-path
@@ -42,6 +45,34 @@ if ([string]::IsNullOrEmpty($LoopCli)) {
 
 $PromptFile = Join-Path $PSScriptRoot 'PROMPT.md'
 $Sentinel = '<promise>COMPLETE</promise>'
+$StateFile = '_goals/breaker-state.json'
+
+$LoopModelFlag = $env:LOOP_MODEL_FLAG
+if ($null -eq $LoopModelFlag) { $LoopModelFlag = '' }
+
+# Dot-source the breaker helper twin (never invoked as a separate process — same
+# process/scope as loop.sh's `source`).
+. (Join-Path $PSScriptRoot 'breaker.ps1')
+Breaker-Load -Path $StateFile -Chain '{{LOOP_MODEL_CHAIN}}'
+
+# Test-RateLimited <output> -> $true iff any SINGLE line of <output> matches the pinned
+# rate-limit pattern (case-insensitive), $false otherwise. Deliberately line-oriented
+# (the foreach below tests one line's text at a time) — never a whole-capture match,
+# whose `.`/regex engine could otherwise join unrelated lines (e.g. a bare token count
+# on one line and the word "error" on another) into a false positive.
+function Test-RateLimited {
+    param([Parameter(Mandatory)] [AllowEmptyString()] [string]$Output)
+    $outputLines = ($Output -replace "`r`n", "`n") -split "`n"
+    foreach ($ln in $outputLines) {
+        if ($ln -imatch 'rate.?limit|too many requests|quota (exceeded|reached|hit)') {
+            return $true
+        }
+        if (($ln -imatch '429') -and ($ln -imatch 'error|status|http|rate|too many')) {
+            return $true
+        }
+    }
+    return $false
+}
 
 $noProgress = 0
 $sameError = 0
@@ -75,7 +106,25 @@ function Get-GitHead {
 for ($i = 1; $i -le $MaxIterations; $i++) {
     $timestamp = Get-Date -Format 'yyyy-MM-ddTHH:mm:sszzz'
     Write-Output "=== iteration $i/$MaxIterations $timestamp ==="
+
+    # Mechanism B: single machine, no loop restructure. If OPEN and cooldown has not
+    # elapsed, log + sleep, then ask again — the second call performs OPEN->HALF-OPEN
+    # and returns 0 — and proceed with this SAME iteration.
+    $skip = Breaker-ShouldSkip -Path $StateFile -Now ([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())
+    if ($skip -gt 0) {
+        Write-Output ("breaker OPEN — sleeping {0}s before HALF-OPEN trial" -f $skip)
+        Start-Sleep -Seconds $skip
+        $skip = Breaker-ShouldSkip -Path $StateFile -Now ([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())
+    }
+
     $headBefore = Get-GitHead
+
+    # Model arg only when BOTH LOOP_MODEL_FLAG and the current model are non-empty.
+    $model = Breaker-CurrentModel -Path $StateFile
+    $modelArgs = @()
+    if (-not [string]::IsNullOrEmpty($LoopModelFlag) -and -not [string]::IsNullOrEmpty($model)) {
+        $modelArgs = @($LoopModelFlag, $model)
+    }
 
     # Get-Content -Raw does not strip trailing newlines the way bash's $(cat ...) command
     # substitution does; TrimEnd restores that parity so the prompt argument matches.
@@ -89,7 +138,7 @@ for ($i = 1; $i -le $MaxIterations; $i++) {
     # the formatter — host-width truncation could silently wrap/truncate long lines
     # (risking the sentinel) and ErrorRecord objects get decorated across multiple
     # lines; ToString per object preserves each line's raw text width-independently.
-    $output = (& $cliCmd @cliArgs $promptContent 2>&1 | ForEach-Object { $_.ToString() }) -join "`n"
+    $output = (& $cliCmd @cliArgs @modelArgs $promptContent 2>&1 | ForEach-Object { $_.ToString() }) -join "`n"
     $status = $LASTEXITCODE
     # Trailing-newline trim keeps sentinel/last-N-lines logic keyed off the same
     # (unpadded) content as bash's command substitution, which strips trailing newlines.
@@ -100,6 +149,9 @@ for ($i = 1; $i -le $MaxIterations; $i++) {
 
     $lines = ($output -replace "`r`n", "`n") -split "`n"
     $lines | Select-Object -Last 25 | ForEach-Object { Write-Output $_ }
+
+    $detected = if (Test-RateLimited -Output $output) { 1 } else { 0 }
+    Breaker-Record -Path $StateFile -RateLimited $detected -Now ([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())
 
     if ($output.Contains($Sentinel)) {
         Write-Output "=== backlog complete after $i iteration(s) ==="
@@ -118,13 +170,20 @@ for ($i = 1; $i -le $MaxIterations; $i++) {
     }
 
     # Circuit breaker 1: no new commit for 3 consecutive iterations.
+    # CB1 carve-out (amended scope): a rate-limited pass never counts against this
+    # counter — the breaker owns recovery for it instead. Non-rate-limited no-commit
+    # passes increment noProgress exactly as before.
     $headAfter = Get-GitHead
     if ($headAfter -eq $headBefore) {
-        $noProgress++
-        Write-Output "--- no progress ($noProgress/3)"
-        if ($noProgress -ge 3) {
-            [Console]::Error.WriteLine('!!! circuit breaker: 3 iterations without a commit — stopping')
-            exit 2
+        if ($detected -eq 1) {
+            Write-Output "rate-limited pass — CB1 exempt (breaker owns it)"
+        } else {
+            $noProgress++
+            Write-Output "--- no progress ($noProgress/3)"
+            if ($noProgress -ge 3) {
+                [Console]::Error.WriteLine('!!! circuit breaker: 3 iterations without a commit — stopping')
+                exit 2
+            }
         }
     } else {
         $noProgress = 0
