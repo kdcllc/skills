@@ -29,3 +29,9 @@ checks tasks against this — every answered decision must be reflected in a tas
 | 01 | `01-[name].md` | [layer] | — |
 | 02 | `02-[name].md` | [layer] | 01 |
 | NN | `NN-tests.md` | tests | all |
+
+**Contract first.** If this goal touches a shared boundary or interface, the first task
+is a dedicated contract/scaffold task — it defines the types, schemas, and port
+interfaces and creates the empty file skeletons — and every task that consumes them
+lists it in `depends_on`. Consumers then build against a frozen contract instead of
+each other's files.

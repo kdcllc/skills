@@ -38,6 +38,14 @@ Create `_goals/[goal-name]/` containing:
 - One `NN-task-name.md` per task from `templates/task.md`, in dependency order
   following the project's layer chain: {{EXECUTION_LAYERS}}, then a final test task.
 
+Every task file carries the ownership contract block (`writes`/`reads`/`depends_on`/
+`owner`/`rewrite_semantics` — see `templates/task.md`), and you verify that the `writes`
+sets of every pair of tasks without a `depends_on` ordering between them are disjoint
+before Phase 3. Contract-first: if the goal touches a shared boundary or interface,
+define a dedicated contract/scaffold task that creates and freezes it FIRST, and make
+that task a `depends_on` prerequisite of every consumer task rather than letting two
+tasks write the boundary in parallel.
+
 Decision gate: if a task has multiple viable approaches, present them to the user with
 tradeoffs and **wait** — do not pick silently.
 
@@ -119,10 +127,11 @@ branch (then say so) or the user declines a PR.
 
 Maintain `_goals/[goal-name]/orchestration-log.md`. **Before** every subagent launch,
 append an entry: timestamp, agent, model (and any rotation/fallback applied), why this
-agent was routed, files it is authorized to touch, expected outputs. **After** it
-returns, append the outcome (report received / files verified / verdict). Append-only:
-never edit or delete entries — rejections and respawns are new entries. This ledger is
-what makes the re-judge invariants and fix-cycle rotation auditable.
+agent was routed, the task's `writes` claim (its allowed-paths fence), expected
+outputs. **After** it returns, append the outcome (report received / files verified /
+verdict). Append-only: never edit or delete entries — rejections and respawns are new
+entries. This ledger is what makes the re-judge invariants and fix-cycle rotation
+auditable.
 
 ## Context packages
 
@@ -141,6 +150,9 @@ CURRENT_DATETIME: [literal ISO timestamp — use this for any date; never guess]
 
 ## Files to Read
 [explicit paths: code, skills, ground-truth docs]
+
+## Write fence
+[the task's `writes` list — the ONLY paths this subagent may create or modify]
 
 ## Rules
 [must-do / must-not-do constraints for this task]

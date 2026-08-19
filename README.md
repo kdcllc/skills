@@ -2,7 +2,7 @@
 
 [![skills.sh installs](https://skills.sh/b/kdcllc/skills)](https://skills.sh/kdcllc/skills)
 
-> Kit version: **0.7.0** (`skills/setup/VERSION`) · The install badge above goes live
+> Kit version: **0.8.0** (`skills/setup/VERSION`) · The install badge above goes live
 > once the repo is public and listed on [skills.sh](https://www.skills.sh/); it shows
 > anonymous install counts. If the repo publishes under a different owner/name, update
 > the badge path (`skills.sh/b/<owner>/<repo>`).

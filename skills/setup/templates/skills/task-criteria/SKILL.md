@@ -40,6 +40,24 @@ regression), pass, and mock all external services. Run them yourself
 Only the task's declared files changed. Unrequested refactoring or drive-by edits are
 flagged.
 
+**Write fence — execution.** The task's ownership block declares a `writes` set; that set
+is the executor's fence. Verify it from the repository, never from the report:
+`git status` / `git diff --name-only` must show every change confined to the declared
+paths. Where declared paths lie outside git's view (gitignored install artifacts,
+generated state), `git status` proves nothing — verify those by content hash against a
+recorded baseline or by an mtime window covering the executor's run, and state which
+method you used. A file changed outside the fence is ❌ Contradicted scope whatever the
+justification. The healthy opposite is a reported escalation — the executor naming the
+exact out-of-fence path it needed and stopping instead of editing it; score that as a
+correct outcome that routes back to the orchestrator for re-planned ownership, not as a
+scope failure.
+
+**Write fence — delivery.** Confirm the fence actually reached the executor: the context
+package carried a `## Write fence` section, cross-checked against the `writes` claim the
+orchestration-log entry recorded for this task. If the orchestrator omitted the fence,
+the fault is the orchestrator's — route the fix there (re-dispatch with the fence in the
+package). Never fail the executor for a fence it was never given.
+
 ## Auto-fail triggers
 
 Apply the auto-fail list in `{{IDE_DIR}}/agents/judge.md`.

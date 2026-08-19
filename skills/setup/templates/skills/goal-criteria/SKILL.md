@@ -24,6 +24,49 @@ activities ("implement module X"). Each is verifiable by a judge without asking 
   requirements, explicit files-to-read, explicit constraints, a targeted test command.
 - A dedicated test task exists and covers every implementation task's output.
 
+### Ownership contract (write-set disjointness)
+
+Every task file carries an ownership block declaring `writes` / `reads` / `depends_on` /
+`owner` / `rewrite_semantics`. Verify all seven checks:
+
+1. **Declarations complete** — non-empty `writes` (explicit owned paths); `reads` are
+   interface briefs, not full-file dependencies on another task's owned files — unless
+   `depends_on` orders this task after that producer, in which case reading the finished
+   file in full is legitimate; `depends_on` names every producer task whose output this
+   task consumes; rewrite semantics stated per owned file (`whole-file` is the default;
+   `targeted-insertion` for large shared documents a task extends rather than rewrites).
+2. **Coverage** — the union of all tasks' `writes` equals the set of files the goal
+   intends to change: no orphan edits (a planned change no task owns), no owned path
+   the goal never asked for.
+3. **Pairwise disjointness** — for every pair of tasks with no `depends_on` ordering
+   between them, the two `writes` sets intersect in NOTHING. Resolve a shared path
+   either by reassigning that file to a single owner task or by adding the explicit
+   `depends_on` edge that serializes the writers.
+4. **Single owner** — no file appears in more than one task's `writes` across the whole
+   goal unless those tasks are strictly ordered.
+5. **Acyclic dependencies** — the `depends_on` graph is a DAG.
+6. **Contracts first** — any interface, schema, or scaffold that both a producer and a
+   consumer task touch is created and frozen in an earlier task than its consumers.
+7. **Hotspots** — shared/high-traffic files are either owned by exactly one task or
+   serialized by dependency; never concurrently written.
+
+Scoping clauses (apply before scoring the seven):
+
+- **Orchestrator-owned carve-out.** Goal and task files and the other `_goals/`
+  artifacts (orchestration log, backlog status fields, LEARNINGS/ESCALATIONS notes) are
+  written by the orchestrator, as are the documentation surfaces Phase 6 owns **as
+  listed in the `align-docs` skill's documentation surface map** — that map bounds the
+  exemption; it does not widen to "any doc". All of these sit OUTSIDE the task
+  write-set union: coverage and single-owner apply to task-owned product files only.
+- **Missing ownership block.** A task file with no ownership block is NEEDS REVISION —
+  fail closed, since an undeclared write-set is not an empty one. The remedy is to
+  author the block from the task template and re-judge; it is not a decomposition
+  defect and does not count toward re-decomposition.
+- **Globs.** Explicit paths by default. A glob is legitimate only where the task owns
+  the entire directory it matches, and any glob-vs-glob overlap counts as intersecting.
+
+Any violation of the seven checks is NEEDS REVISION.
+
 ## 4. Scope Discipline
 
 Out-of-scope section exists; no task smuggles in unrelated refactoring; no requirement

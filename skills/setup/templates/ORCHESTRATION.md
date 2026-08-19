@@ -388,6 +388,7 @@ Every subagent invocation requires a complete context package:
 │  "## Domain Reference" (domain skill + ground-truth excerpts)   │
 ├─────────────────────────────────────────────────────────────────┤
 │  SECTION 4: CONSTRAINTS                                         │
+│  "## Write fence" (the task's writes list)                      │
 │  "## Rules" or "## Critical Requirements"                       │
 │  - Must do X (e.g. reuse shared core modules)                   │
 │  - Must NOT do Y (e.g. re-implement auth, hit live services)    │
