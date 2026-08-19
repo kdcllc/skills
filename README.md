@@ -2,10 +2,13 @@
 
 [![skills.sh installs](https://skills.sh/b/kdcllc/skills)](https://skills.sh/kdcllc/skills)
 
-> Kit version: **0.8.0** (`skills/setup/VERSION`) · The install badge above goes live
-> once the repo is public and listed on [skills.sh](https://www.skills.sh/); it shows
-> anonymous install counts. If the repo publishes under a different owner/name, update
-> the badge path (`skills.sh/b/<owner>/<repo>`).
+> Kit version: **0.8.0** (`skills/setup/VERSION`) · The install badge above applies
+> only if the repo is made public: [skills.sh](https://www.skills.sh/) filters private
+> repos out of its public index by design
+> ([vercel-labs/skills#381](https://github.com/vercel-labs/skills/issues/381)), so it
+> stays dormant while this repo is private. Private installs work regardless — see
+> below. If the repo publishes under a different owner/name, update the badge path
+> (`skills.sh/b/<owner>/<repo>`).
 
 A portable orchestrator/worker/judge multi-agent system for AI coding harnesses —
 **Claude Code, Cursor, GitHub Copilot (VS Code), and OpenAI Codex** — packaged as one
@@ -67,13 +70,22 @@ skills/setup/                 # The installable skill (the compiler)
 
 ## Install into a project
 
-Once public and listed on skills.sh:
+A public repo is NOT required — both CLIs install from this private repo as long as
+the machine has git access to it:
 
 ```bash
+# Option A — skills CLI: clones with your LOCAL git credentials (SSH or gh auth),
+# so private repos work today (vercel-labs/skills#381; see src/git.ts). Caveats
+# from that thread: private repos are never indexed on skills.sh, and
+# `npx skills update` is currently unreliable for private repos.
 npx skills add kdcllc/skills
+
+# Option B — agent-skills-cli: first-class private-repo support
+# (SSH auto-detected; HTTPS via --token=... or GH_TOKEN=...; GitLab/Bitbucket too).
+npx agent-skills-cli install git@github.com:kdcllc/skills.git
 ```
 
-Until then, copy the skill in manually (any harness dir works — the skill detects and
+Or copy the skill in manually (any harness dir works — the skill detects and
 asks):
 
 ```bash
