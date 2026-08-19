@@ -102,6 +102,11 @@ For each target harness, follow its emitter exactly:
 Emitters compose: run Claude Code first when it is among the targets — Cursor and
 VS Code reuse parts of the emitted `.claude/` tree.
 
+**Seed files (create if missing; never overwrite)**: `_goals/backlog.md` is emitted as
+a *seed*, not as managed content — the user owns it from the first install onward.
+Create it only when it does not exist; on every re-run or upgrade leave an existing
+seed untouched, even when its recorded manifest hash no longer matches (see Step 6).
+
 **Loop extras (all harnesses)**: both loop drivers (`_loop/loop.sh` and
 `_loop/loop.ps1`) and their circuit-breaker helper twins (`_loop/breaker.sh` and
 `_loop/breaker.ps1`, sourced/dot-sourced by the drivers) are always emitted for
@@ -124,10 +129,10 @@ missing) — this is runtime scratch written by the breaker helpers at run time 
 must never enter commits.
 
 **Checks scripts on Windows**: the kit does not emit a structural-checks script
-itself. If a project's install adopts one (as the kit's own repository does), and the loop
-is enabled or Windows is a target platform, emit a `.ps1` twin with the same checks
-and exit semantics — the pattern mirrors the loop drivers (`checks.sh` /
-`checks.ps1`, behaviorally identical, no OS-detection branching).
+itself. If a project's install adopts one (as the kit's own repository does), emit a
+`.ps1` twin with the same checks and exit semantics — the pattern mirrors the loop
+drivers (`checks.sh` / `checks.ps1`, behaviorally identical, no OS-detection
+branching).
 
 ## Step 6 — Manifest, verify, report
 
@@ -139,9 +144,17 @@ and exit semantics — the pattern mirrors the loop drivers (`checks.sh` /
      "installedAt": "<ISO date>",
      "harnesses": ["claude-code", "..."],
      "options": { "research": true, "loop": false },
-     "files": { "<emitted path>": "<sha256>" }
+     "files": { "<emitted path>": "<sha256>" },
+     "seedFiles": ["_goals/backlog.md"]
    }
    ```
+   `seedFiles` lists the emitted paths that are seeds (today exactly one): their hash
+   is recorded in `files` at emit time and is EXEMPT from the upgrade diff-confirm
+   flow. Semantics:
+   a seed's recorded hash is an emit-time record; drift is expected and is never read as user modification.
+   `_goals/LEARNINGS.md`, `_goals/ESCALATIONS.md`, and `_goals/breaker-state.json`
+   are runtime/user artifacts the kit does not emit — never manifested in `files` or
+   `seedFiles`, no hash ever recorded.
 2. Run each emitter's Verify section. Global check: grep every emitted file for `{{`
    and `BOOTSTRAP:` — zero hits. Also: `pwsh -NoProfile -Command` parser check on
    emitted `.ps1` files when pwsh is available; otherwise note the skip in the report.
@@ -154,3 +167,9 @@ If `orchestration-kit.manifest.json` exists: compare its `kitVersion` to `VERSIO
 diff manifest hashes against the working tree to find user-modified files, regenerate
 into the scratch copy, and show the user a diff for any file they modified before
 overwriting it. Unmodified files update silently. Update the manifest last.
+
+Paths listed in `seedFiles` are outside this flow: create a seed if it is missing,
+otherwise leave it exactly as it is — never overwrite it, never diff-confirm it, and
+never report its hash drift as a user modification (the recorded hash is an emit-time
+record only). Runtime/user artifacts (`_goals/LEARNINGS.md`, `_goals/ESCALATIONS.md`,
+`_goals/breaker-state.json`) have no manifest entry and are never touched.

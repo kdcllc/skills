@@ -14,7 +14,7 @@ kit needs (subagent allowlists, `user-invocable`, model fallback arrays) require
 | Other skills (`research`, `*-criteria`, `test-ladder`, `align-docs`, `ship-pr`) | `.github/skills/` if skills are supported in the current VS Code build, else inline their content into the agents that use them | criteria + ladder content may also be appended to the judge/worker agents' bodies; align-docs and ship-pr can become additional `.agent.md` entries if inlining is too large |
 | `templates/ORCHESTRATION.md` | `ORCHESTRATION.md` at repo root (Copilot has no conventional home for it) | — |
 | Pointer | append to `.github/copilot-instructions.md` | "Feature work runs through the orchestrator/worker/judge system — see ORCHESTRATION.md. Start features with the `feature` agent." |
-| `templates/loop/*` (if loop enabled) | `_loop/loop.sh`, `_loop/loop.ps1`, `_loop/breaker.sh`, `_loop/breaker.ps1`, `_goals/backlog.md` | note: unattended execution on Copilot means the coding agent on GitHub issues — the local `loop.sh`/`loop.ps1` path targets the `copilot` CLI if installed; invocation forms as in the Claude Code emitter (`_loop/loop.sh [max-iterations]` / `pwsh _loop/loop.ps1 [MaxIterations]`) |
+| `templates/loop/*` (if loop enabled) | `_loop/loop.sh`, `_loop/loop.ps1`, `_loop/breaker.sh`, `_loop/breaker.ps1`, `_goals/backlog.md` (create if missing; never overwrite) | note: unattended execution on Copilot means the coding agent on GitHub issues — the local `loop.sh`/`loop.ps1` path targets the `copilot` CLI if installed; invocation forms as in the Claude Code emitter (`_loop/loop.sh [max-iterations]` / `pwsh _loop/loop.ps1 [MaxIterations]`) |
 
 Agent frontmatter shape (`.agent.md` uses YAML **arrays**, not comma strings):
 

@@ -18,7 +18,7 @@ undocumented, and `.cursor/` wins name conflicts.
 | `templates/skills/*` | `.cursor/skills/*` **only if** Claude Code emitter did not run (otherwise Cursor reads `.claude/skills/`) | Skills have **no model key** in Cursor — strip `model:`/`effort:` from any skill frontmatter |
 | `templates/ORCHESTRATION.md` | `.cursor/ORCHESTRATION.md` (skip if `.claude/ORCHESTRATION.md` exists; reference that instead) | — |
 | Pointer rule | `.cursor/rules/orchestration.mdc` | see below — **must be `.mdc`**, plain `.md` is silently ignored |
-| `templates/loop/*` (if loop enabled) | as in the Claude Code emitter — `_loop/loop.sh`, `_loop/loop.ps1`, `_loop/breaker.sh`, and `_loop/breaker.ps1` | loop CLI note: use `cursor-agent` or keep `claude` per user choice |
+| `templates/loop/*` (if loop enabled) | as in the Claude Code emitter — `_loop/loop.sh`, `_loop/loop.ps1`, `_loop/breaker.sh`, and `_loop/breaker.ps1` | loop CLI note: use `cursor-agent` or keep `claude` per user choice; invocation forms as in the Claude Code emitter (`_loop/loop.sh [max-iterations]` / `pwsh _loop/loop.ps1 [MaxIterations]`) |
 
 Pointer rule content:
 

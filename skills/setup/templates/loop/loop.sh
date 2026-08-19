@@ -2,7 +2,7 @@
 # Autonomous feature loop for {{PROJECT_NAME}} — drives one `auto-loop` iteration per
 # fresh-context CLI run. State lives in _goals/backlog.md + git, never in memory.
 #
-# Twin: skills/setup/templates/loop/loop.ps1 (PowerShell 7+) — behaviorally identical —
+# Twin: loop.ps1 (PowerShell 7+) — behaviorally identical —
 # same defaults, guards, and exit codes; any divergence is a bug.
 #
 # Usage:   _loop/loop.sh [max-iterations]        (default 10)
@@ -100,7 +100,9 @@ for ((i = 1; i <= MAX_ITER; i++)); do
   fi
   breaker_record "$STATE_FILE" "$detected" "$(date +%s)"
 
-  if printf '%s' "$output" | grep -qF "$SENTINEL"; then
+  # Herestring, not `printf | grep`: same pipefail+SIGPIPE false-negative class as
+  # detect_rate_limit above — no live producer here for a downstream match to SIGPIPE.
+  if grep -qF "$SENTINEL" <<< "$output"; then
     echo "=== backlog complete after $i iteration(s) ==="
     exit 0
   fi

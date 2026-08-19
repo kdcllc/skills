@@ -3,7 +3,7 @@
 # Autonomous feature loop for {{PROJECT_NAME}} — drives one `auto-loop` iteration per
 # fresh-context CLI run. State lives in _goals/backlog.md + git, never in memory.
 #
-# Twin: skills/setup/templates/loop/loop.sh (bash) — behaviorally identical — same
+# Twin: loop.sh (bash) — behaviorally identical — same
 # defaults, guards, and exit codes; any divergence is a bug.
 #
 # Usage:   pwsh _loop/loop.ps1 [MaxIterations]   (default 10)
@@ -93,6 +93,13 @@ if ($cliParts.Length -gt 1) {
 # exits with git's own non-zero status on failure, matching that abort semantics at both
 # call sites below.
 function Get-GitHead {
+    # T1a parity: bash's command-not-found exits 127; without this guard PowerShell
+    # would instead surface whatever $LASTEXITCODE happens to hold (or none at all)
+    # when the `git` binary itself cannot be found, diverging from the bash twin.
+    if (-not (Get-Command git -ErrorAction SilentlyContinue)) {
+        [Console]::Error.WriteLine('!!! git rev-parse HEAD failed — aborting')
+        exit 127
+    }
     $head = (& git rev-parse HEAD)
     $rc = $LASTEXITCODE
     if ($rc -ne 0 -or [string]::IsNullOrWhiteSpace($head)) {
@@ -130,7 +137,13 @@ for ($i = 1; $i -le $MaxIterations; $i++) {
     # substitution does; TrimEnd restores that parity so the prompt argument matches.
     # Read inside the loop (not hoisted before it) so a mid-run edit to PROMPT.md is
     # picked up on the next iteration, matching bash's per-iteration $(cat "$PROMPT_FILE").
-    $promptContent = (Get-Content -Raw -LiteralPath $PromptFile).TrimEnd("`r", "`n")
+    # T1b: a 0-byte PROMPT.md makes -Raw return $null (not ''), which would throw a
+    # null-method error on .TrimEnd; coalesce ONLY that literal-null case to '' — do
+    # NOT coalesce whitespace-only content, which must pass through unchanged exactly
+    # as bash's $(cat …) does (coalescing it would create a twin divergence).
+    $raw = Get-Content -Raw -LiteralPath $PromptFile
+    if ($null -eq $raw) { $raw = '' }
+    $promptContent = $raw.TrimEnd("`r", "`n")
 
     # Combined stdout+stderr capture (2>&1), exit code read from $LASTEXITCODE
     # immediately after the call — no other native command runs in between. ForEach

@@ -11,7 +11,7 @@ resolved templates.
 | `templates/skills/*` | `.claude/skills/*` |
 | `templates/models.map.md` | `.claude/skills/setup-models.map.md` (reference copy) |
 | `templates/ORCHESTRATION.md` | `.claude/ORCHESTRATION.md` |
-| `templates/loop/*` (if loop enabled) | `.claude/skills/auto-loop/SKILL.md`, `_loop/loop.sh` (chmod +x — no-op on Windows, harmless) AND `_loop/loop.ps1`, `_loop/breaker.sh` (chmod +x — no-op on Windows, harmless), `_loop/breaker.ps1`, `_loop/PROMPT.md`, `_goals/backlog.md` |
+| `templates/loop/*` (if loop enabled) | `.claude/skills/auto-loop/SKILL.md`, `_loop/loop.sh` (chmod +x — no-op on Windows, harmless) AND `_loop/loop.ps1`, `_loop/breaker.sh` (chmod +x — no-op on Windows, harmless), `_loop/breaker.ps1`, `_loop/PROMPT.md`, `_goals/backlog.md` (create if missing; never overwrite) |
 
 ## Harness specifics
 

@@ -3,7 +3,7 @@
 # HALF-OPEN state machine that degrades to cheaper models on rate limits and
 # self-heals. Sourced by the loop driver (`loop.sh`); never executed directly.
 #
-# Twin: skills/setup/templates/loop/breaker.ps1 (PowerShell 7+) — behaviorally
+# Twin: breaker.ps1 (PowerShell 7+) — behaviorally
 # identical — same states, thresholds, transitions, and schema; any divergence is a
 # bug. Function-name mapping (bash -> PowerShell):
 #   breaker_load          -> Breaker-Load
