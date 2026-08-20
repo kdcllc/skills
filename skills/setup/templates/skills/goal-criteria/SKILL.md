@@ -1,6 +1,7 @@
 ---
 name: goal-criteria
 description: Criteria the judge applies when judging a goal (goal.md + task files) for {{PROJECT_NAME}}. Reference skill — not invoked directly.
+disable-model-invocation: true
 ---
 
 # Goal Judgment Criteria

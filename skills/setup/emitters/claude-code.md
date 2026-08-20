@@ -27,8 +27,10 @@ resolved templates.
    Feature work runs through the orchestrator/worker/judge system — see
    .claude/ORCHESTRATION.md. Start features with /feature.
    ```
-3. Orchestrator spawn allowlists use `tools: Agent(implementer, test-writer, judge, qa-judge)`
-   comma-string syntax where needed.
+3. Orchestrator spawn allowlists use
+   `tools: Agent(implementer, test-writer, judge, qa-judge, terminal)` comma-string
+   syntax where needed — `terminal` joins the allowlist so the orchestrator can spawn it
+   for noisy rung-3 / read-only output.
 4. Model values: Claude aliases (`opus`, `sonnet`, `haiku`, `fable`) or full IDs are both
    valid; `inherit` is the frontmatter default if a tier is deliberately unpinned.
 5. **Loop invocation is per-OS** — both drivers are always emitted; the user runs
@@ -41,3 +43,9 @@ resolved templates.
 - `grep -rn '{{\|BOOTSTRAP:' .claude/ _loop/ _goals/backlog.md` → zero hits.
 - Each agent file has `name`, `description`; names match filenames.
 - `claude` session lists the agents (`/agents`) and skills after restart.
+- The seven P0 skills (`align-docs`, `ship-pr`, `auto-loop`, `test-ladder`,
+  `goal-criteria`, `task-criteria`, `qa-criteria`) still carry
+  `disable-model-invocation: true` after the as-is copy — this emitter never strips
+  frontmatter keys.
+- `.claude/agents/terminal.md` exists after the `templates/agents/*.md` copy, with the
+  canonical `tools: Bash, Read` preserved as-is.

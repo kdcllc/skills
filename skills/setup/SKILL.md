@@ -1,6 +1,6 @@
 ---
 name: setup
-description: Install the orchestrator/worker/judge multi-agent system into the current project, compiled for its AI coding harness(es) — Claude Code, Cursor, GitHub Copilot (VS Code), and/or OpenAI Codex. Generates the four subagents (judge, qa-judge, implementer, test-writer) with tiered model pins, the orchestrator skills (feature, research), the criteria skills, an optional autonomous feature loop, and a project-specific ORCHESTRATION.md. Run once per project; re-run to upgrade or re-target.
+description: Install the orchestrator/worker/judge multi-agent system into the current project, compiled for its AI coding harness(es) — Claude Code, Cursor, GitHub Copilot (VS Code), and/or OpenAI Codex. Generates the five subagents (judge, qa-judge, implementer, test-writer, terminal) with tiered model pins — terminal is light-tier and isolates noisy command output from the frontier session — plus the orchestrator skills (feature, research), the criteria skills, an optional autonomous feature loop, and a project-specific ORCHESTRATION.md. Run once per project; re-run to upgrade or re-target.
 ---
 
 # Setup (Orchestration Kit Compiler)

@@ -2,7 +2,7 @@
 
 [![skills.sh installs](https://skills.sh/b/kdcllc/skills)](https://skills.sh/kdcllc/skills)
 
-> Kit version: **0.14.0** (`skills/setup/VERSION`) · The install badge above applies
+> Kit version: **0.15.0** (`skills/setup/VERSION`) · The install badge above applies
 > only if the repo is made public: [skills.sh](https://www.skills.sh/) filters private
 > repos out of its public index by design
 > ([vercel-labs/skills#381](https://github.com/vercel-labs/skills/issues/381)), so it
@@ -21,9 +21,10 @@ What an install gives a project:
   judgment → task execution → final audit → docs alignment → approval-gated pull
   request. No phase advances without a judge verdict; fixes are always re-judged
   (3-cycle limits, explicit escalation).
-- **Four subagents with tiered model pinning**: `judge` and `qa-judge` on the frontier
-  tier (effort high), `implementer` and `test-writer` on the light tier (effort
-  medium). Model IDs are configuration (`models.map.md`), with per-tier fallback
+- **Five subagents with tiered model pinning**: `judge` and `qa-judge` on the frontier
+  tier (effort high), `implementer`, `test-writer`, and `terminal` on the light tier
+  (effort medium) — `terminal` isolates noisy command output from the frontier
+  session. Model IDs are configuration (`models.map.md`), with per-tier fallback
   chains, a never-fall-up rule, and a cost-ceiling policy.
 - **Hardened judging** (patterns adopted from studying
   [bradygaster/squad](https://github.com/bradygaster/squad)): existence checks with a

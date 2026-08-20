@@ -1,6 +1,7 @@
 ---
 name: task-criteria
 description: Criteria the judge applies when judging a completed task in {{PROJECT_NAME}}. Reference skill — not invoked directly.
+disable-model-invocation: true
 ---
 
 # Task Judgment Criteria

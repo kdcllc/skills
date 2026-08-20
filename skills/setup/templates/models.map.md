@@ -14,7 +14,7 @@ defined; re-run `/setup` (or edit here and re-emit) when providers rotate model 
 | Tier | Roles | Rationale |
 |------|-------|-----------|
 | `frontier` | orchestrator (main session), `judge`, `qa-judge` | Delegation and judging have a capability floor — don't cheap out on the roles that decide and verify |
-| `light` | `implementer`, `test-writer` | Checklist-driven execution retains most quality at a fraction of the cost when the plan and the verification are strong |
+| `light` | `implementer`, `test-writer`, `terminal` | Checklist-driven execution retains most quality at a fraction of the cost when the plan and the verification are strong |
 
 ## Resolved models
 

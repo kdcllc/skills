@@ -1,6 +1,7 @@
 ---
 name: ship-pr
 description: Summarize all commits on the current branch into a rich GitHub pull request — an executive (manager-facing) summary plus a technical breakdown — then create the PR with the gh CLI. Phase 7 of the {{PROJECT_NAME}} orchestration lifecycle; also usable standalone when the user says "open a PR" or "ship this branch".
+disable-model-invocation: true
 ---
 
 # Ship PR (Phase 7)

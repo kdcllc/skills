@@ -1,6 +1,7 @@
 ---
 name: align-docs
 description: Align all repository documentation to shipped code after a feature is implemented — Phase 6 of the {{PROJECT_NAME}} orchestration lifecycle. Updates every markdown surface (READMEs, docs/, agent/skill files) EXCEPT _research/ and _goals/ (orchestrator-managed, read-only). Runs after the final audit and Quality Checks pass, or when the user asks to sync documentation with recent changes.
+disable-model-invocation: true
 ---
 
 # Align Docs (Phase 6)

@@ -20,6 +20,15 @@ to `judge`. The full architecture is documented in
 - On transient subagent-launch failure: retry the same subagent up to 3 times
   (backoff 2s/4s/8s). Never substitute a different agent type.
 
+### Terminal spawn rule
+
+Spawn `terminal` for ladder rung 3 (the full-suite run) and for read-only git
+log/status inspection that would otherwise dump noisy output into this session.
+You must **never** run `{{FULL_TEST_COMMAND}}` yourself. Rungs 1–2 stay with
+`implementer`/`test-writer` — do not route them to `terminal`. Spawning `terminal`
+is coordination, the same as spawning any other subagent; it is not you executing
+product code.
+
 Maintain the "Orchestration Progress" state block from the architecture doc throughout,
 updating it after every step.
 
@@ -54,7 +63,9 @@ tradeoffs and **wait** — do not pick silently.
 Include in each task's context package the skills relevant to its layer:
 
 `test-ladder` is routed into **every** implementation and test task's context
-package — executors climb rungs 1–2; rung 3 belongs to this orchestrator at cycle end.
+package — executors climb rungs 1–2; rung 3's **authority** (when it runs) belongs to
+this orchestrator at cycle end, but its **execution** is a spawned `terminal`, never
+this session running `{{FULL_TEST_COMMAND}}` inline.
 
 <!-- BOOTSTRAP: map layers → additional skills, e.g.
 | Layer touched | Skills to include in context package |
@@ -102,26 +113,38 @@ Ladder rungs 1–2 only during this phase (see `test-ladder`); never rung 3.
 
 Launch `judge` in audit mode over the whole goal: every task's requirements,
 cross-task integration, regressions. **APPROVED** → run Quality Checks (ladder rung 3:
-every stack's full suite plus configured lint/type checks — `{{FULL_TEST_COMMAND}}`).
+every stack's full suite plus configured lint/type checks) by spawning `terminal`
+with `{{FULL_TEST_COMMAND}}` — never run that command yourself.
 **ISSUES** → fix via executor + re-judge (rungs 1–2), then re-audit (max 3 cycles).
+
+**Quality Checks failure path**: if `terminal` returns a non-zero exit and its
+excerpt is truncated, the log path is required in its report — **Read** that log's
+failure section, or its last ≤80 lines if it is large, never the whole file. Use
+that to route a fix to `implementer`; never dump the full suite into this session.
+Re-spawn `terminal` only with a **narrower** command (one failing test / one stack),
+not the full suite again, to confirm the fix. Inline shell in this session is
+allowed only for small read-only inspection (e.g. `git status`) — never for
+`{{FULL_TEST_COMMAND}}`.
 
 Optional QA gate: after approval, capture behavioral evidence from the affected
 user-facing surfaces and launch `qa-judge` per the architecture doc's QA section.
 
 ## Phase 6 — Align docs (loop until doc audit APPROVED)
 
-Invoke the `align-docs` skill: discover the shipped change surface, build a per-doc
-edit list, judge the plan, execute per doc via `implementer`, judge each doc, final
-doc audit. Docs-only — never code; `_research/` and `_goals/` are read-only. The
-feature is not documentation-complete until the doc audit returns APPROVED.
+Read `{{IDE_DIR}}/skills/align-docs/SKILL.md` and execute that workflow in this
+session: discover the shipped change surface, build a per-doc edit list, judge the
+plan, execute per doc via `implementer`, judge each doc, final doc audit. Docs-only —
+never code; `_research/` and `_goals/` are read-only. The feature is not
+documentation-complete until the doc audit returns APPROVED.
 
 ## Phase 7 — Pull request (gated on user approval)
 
-Invoke the `ship-pr` skill: analyze the branch's commits and diff, draft the
-PR (executive summary + technical breakdown), **show the draft and wait for the user's
-approval**, then push if needed and create the PR with `gh`. Report the PR URL as the
-final deliverable. Skip this phase only if the work happened directly on the default
-branch (then say so) or the user declines a PR.
+Read `{{IDE_DIR}}/skills/ship-pr/SKILL.md` and execute that workflow in this
+session: analyze the branch's commits and diff, draft the PR (executive summary +
+technical breakdown), **show the draft and wait for the user's approval**, then push
+if needed and create the PR with `gh`. Report the PR URL as the final deliverable.
+Skip this phase only if the work happened directly on the default branch (then say
+so) or the user declines a PR.
 
 ## Orchestration log (append-only spawn ledger)
 

@@ -112,6 +112,11 @@ ON subagent invocation failure:
      for the problem domain) and per supporting skill (TDD workflow, test ladder,
      smoke testing, frontend rules, visual QA, ...). Only list skills that exist. -->
 
+> `goal-criteria`, `task-criteria`, `qa-criteria`, `test-ladder`, `align-docs`,
+> `ship-pr`, and `auto-loop` set `disable-model-invocation: true` — they load via
+> `/name` or a cited path, not session-start auto-discovery. `feature` and
+> `research` remain auto-invocable.
+
 > Domain skills are the project's knowledge base — the orchestration skills above
 > reference them but do not replace them. Supporting skills are routed into subagent
 > context packages by `feature` (see its "Supporting skills" section)
@@ -125,10 +130,16 @@ ON subagent invocation failure:
 | `qa-judge` | Skeptical, user-perspective | Behavioral QA of user-facing surfaces | frontier — `{{MODEL_FRONTIER}}`, effort high |
 | `implementer` | Focused, checklist-driven | Implementation + fixes | light — `{{MODEL_LIGHT}}`, effort medium |
 | `test-writer` | Coverage-obsessed | Test creation, all external services mocked | light — `{{MODEL_LIGHT}}`, effort medium |
+| `terminal` | Compact command runner | Noisy test/build/git commands — runs the command, returns a summary | light — `{{MODEL_LIGHT}}`, effort medium |
+
+The orchestrator spawns `terminal` for ladder rung 3 (full-suite runs) and for
+read-only git log/status inspection, so that noisy command output stays out of the
+frontier session instead of accumulating in this conversation.
 
 **Model tiers:** The orchestrator (main session) and both judges run the **frontier**
-tier (`{{MODEL_FRONTIER}}`) — delegation and judging have a capability floor. The two
-workers run the **light** tier (`{{MODEL_LIGHT}}`) — checklist-driven execution keeps
+tier (`{{MODEL_FRONTIER}}`) — delegation and judging have a capability floor. The
+light-tier agents — the two workers **plus** `terminal` — run the **light** tier
+(`{{MODEL_LIGHT}}`) — checklist-driven execution and compact command running keep
 quality when the plan and verification are strong, at a fraction of the output-token
 cost. Model IDs are configuration, not constants: they are defined once in the model
 map and pinned in each agent's frontmatter; update them there when providers rotate
@@ -503,7 +514,8 @@ drifting run early. Headless entry point: `_loop/loop.sh [max-iterations]` (bash
 │   ├── judge.md        # Skeptical code/goal/task reviewer
 │   ├── qa-judge.md                 # Skeptical user-facing QA reviewer
 │   ├── implementer.md  # Focused implementer
-│   └── test-writer.md           # Test creator (external services mocked)
+│   ├── test-writer.md           # Test creator (external services mocked)
+│   └── terminal.md              # Compact command runner (rung 3, noisy read-only)
 │
 ├── skills/
 │   ├── feature/       # Feature coordination
@@ -552,7 +564,9 @@ _loop/{loop.sh,loop.ps1,breaker.sh,breaker.ps1,PROMPT.md}  # Headless loop drive
 
 Don't invent commands for tools that aren't configured. Tests must mock all external
 service/network access. Do not run rung 3 during Phase 4 tasks or TDD loops — the
-`test-ladder` skill governs which rung runs when.
+`test-ladder` skill governs which rung runs when. Rung 3 is executed by **spawning
+`terminal`** with the command above, never by the orchestrator running it in this
+session.
 
 ### Common Commands
 

@@ -1,6 +1,7 @@
 ---
 name: auto-loop
 description: Run exactly ONE autonomous iteration of the {{PROJECT_NAME}} feature loop through the full orchestration flow with judge gates, then stop — driver-dispatched mode runs the story named in its prompt, writes learnings/escalations to the outbox, and reports via an ITERATION line; manual mode picks the highest-priority open story from _goals/backlog.md itself, commits on green with direct backlog/memory writes, and prints the completion sentinel when none remain. Invoked repeatedly by the loop driver (`_loop/loop.sh` / `_loop/loop.ps1`) for unattended runs, or manually for a supervised single step.
+disable-model-invocation: true
 ---
 
 # Auto-Loop (One Iteration)

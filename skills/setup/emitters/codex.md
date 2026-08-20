@@ -12,7 +12,7 @@ markdown, no frontmatter, **32 KiB combined cap**, read once per session).
 | Orchestration summary | append a **short** section to root `AGENTS.md` (create if missing; keep the whole file well under the 32 KiB cap, aim ≤300 lines) | see pointer content below |
 | `templates/agents/*.md` bodies | `.codex/agents/<role>.md` | strip YAML frontmatter (Codex ignores it); keep the body as the role instruction file; these files double as Cursor-readable agents |
 | Role config | `.codex/config.toml` | see below |
-| Per-role model layers | `.codex/agents/<role>.toml` | `model = "{{CODEX_MODEL_FRONTIER}}"` for judges, `{{CODEX_MODEL_LIGHT}}` for workers |
+| Per-role model layers | `.codex/agents/<role>.toml` | `model = "{{CODEX_MODEL_FRONTIER}}"` for judges, `{{CODEX_MODEL_LIGHT}}` for workers **and** `terminal` — `terminal` is light-tier, never frontier, same as `implementer`/`test-writer` |
 | `templates/loop/*` (if loop enabled) | `_loop/loop.sh`, `_loop/loop.ps1`, `_loop/breaker.sh`, `_loop/breaker.ps1`, `_goals/backlog.md` (create if missing; never overwrite) | loop CLI: `codex exec` with `approval_policy = "never"`, `sandbox_mode = "workspace-write"` — sandbox only; invocation forms as in the Claude Code emitter (`_loop/loop.sh [max-iterations]` / `pwsh _loop/loop.ps1 [MaxIterations]`) |
 
 `.codex/config.toml` (merge with any existing project config):
@@ -37,7 +37,17 @@ config_file = "agents/implementer.toml"
 [agents.test-writer]
 description = "Coverage-obsessed test writer, external services mocked. Read .codex/agents/test-writer.md first."
 config_file = "agents/test-writer.toml"
+
+[agents.terminal]
+description = "Compact command runner — noisy test/build/git output only, never edits. Read .codex/agents/terminal.md first."
+config_file = "agents/terminal.toml"
 ```
+
+`.codex/agents/terminal.toml` gets the same light pin as the other workers:
+`model = "{{CODEX_MODEL_LIGHT}}"`, `default_subagent_reasoning_effort` unchanged
+(inherits the `[agents]` default). The `templates/agents/*.md` glob row above already
+copies `terminal.md` to `.codex/agents/terminal.md` — `[agents.terminal]` above is what
+registers that file so it is not a dangling, unregistered copy.
 
 AGENTS.md pointer section (keep short):
 
@@ -46,7 +56,8 @@ AGENTS.md pointer section (keep short):
 Non-trivial features run through the orchestrator/worker/judge flow in
 ORCHESTRATION.md: plan → judge the plan → implement per task (spawn `implementer` /
 `test-writer`) → judge every task (spawn `judge`) → final audit → quality checks.
-Fixes are always re-judged. Role instructions: .codex/agents/*.md.
+Fixes are always re-judged. Quality checks spawn `terminal` for the full-suite run so
+its raw output stays out of the session. Role instructions: .codex/agents/*.md.
 ```
 
 ## Harness specifics
@@ -65,3 +76,6 @@ Fixes are always re-judged. Role instructions: .codex/agents/*.md.
 - No `{{` / `BOOTSTRAP:` leftovers in `AGENTS.md`, `.codex/`.
 - `wc -c AGENTS.md` comfortably below 32768.
 - TOML parses (`python3 -c "import tomllib,pathlib; tomllib.loads(pathlib.Path('.codex/config.toml').read_text())"`).
+- `.codex/agents/terminal.md` and `.codex/agents/terminal.toml` both exist, and
+  `config.toml` has an `[agents.terminal]` table pointing at
+  `agents/terminal.toml` — the glob-copied file is registered, not dangling.

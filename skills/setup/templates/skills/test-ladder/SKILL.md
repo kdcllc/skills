@@ -2,6 +2,7 @@
 name: test-ladder
 description: Staged test ladder for {{PROJECT_NAME}} — run new tests first, then impacted tests, and the full suites only after all changes in the cycle are applied. Use whenever writing, running, or judging tests.
 user-invocable: true
+disable-model-invocation: true
 ---
 
 # Test Ladder (Staged)
@@ -104,7 +105,8 @@ re-run everything immediately.
 | `implementer` | 1 then 2. Rung 3 only when executing the goal's designated closer task (see the carve-out below). |
 | `test-writer` | 1 then 2. Rung 3 only when executing the goal's designated closer task (see the carve-out below). |
 | `judge` (via `task-criteria`) | Requires evidence of 1 then 2. Does **not** fail a task for skipping rung 3 (see the carve-out below for a closer task's mandated run). |
-| `feature` orchestrator (and ad-hoc main-session work) | After every task is PASS and the final audit is APPROVED: run rung 3. |
+| `feature` orchestrator (and ad-hoc main-session work) | After every task is PASS and the final audit is APPROVED: **spawn `terminal`** for rung 3 — the orchestrator's rung-3 authority (when it runs) is unchanged, only its execution is delegated. Never run rung 3 itself in this session. |
+| `terminal` | Rung 3 / noisy read-only commands only, when spawned. No edits. Returns a compact `{exit; excerpt; log path}` — nothing more. |
 | `qa-judge` | Behavioral evidence only. Does not replace the ladder. |
 
 ## Closer-task carve-out (delegated rung 3)
@@ -129,8 +131,17 @@ Judge interplay is unchanged: per `task-criteria`, no task is ever failed *for
 skipping rung 3*; a closer task that skips its mandated run fails
 requirements-completeness (its task file said so), not the ladder. The
 orchestrator's rung-3 authority is unchanged: Phase 5 Quality Checks still
-runs the full suites at cycle end. The closer task's run is an additional,
-judged regression gate — it never replaces Phase 5.
+runs the full suites at cycle end — the Who-does-what row above delegates only
+the *execution* of that run to a spawned `terminal`, not the authority over
+*when* it happens. The closer task's run is an additional, judged regression
+gate — it never replaces Phase 5.
+
+A spawned `terminal` reporting rung 3 output is **not** a designated closer
+task: it has no write fence, no task file, and no mandate of its own — it is a
+fenceless command runner, not a worker with a written mandate. The closer-task
+carve-out above still requires a *worker* (`implementer`/`test-writer`) with a
+task file that names the full-suite run in its requirements; spawning
+`terminal` never substitutes for that gate and never replaces Phase 5.
 
 This skill's tables plus this carve-out are the authoritative rung rules;
 one-line summaries elsewhere ("executors never run rung 3") are shorthand for

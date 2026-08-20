@@ -1,4 +1,5 @@
-Invoke the `auto-loop` skill in driver-dispatched mode: run story `%%STORY_ID%%`
+/auto-loop
+Driver-dispatched mode: run story `%%STORY_ID%%`
 from `_goals/backlog.md` through ONE iteration — orchestration flow, judge gates,
 commit only on an APPROVED audit with green targeted tests, then stop. This story
 was already selected and validated by the driver: never re-evaluate eligibility

@@ -1,6 +1,7 @@
 ---
 name: qa-criteria
 description: Criteria the qa-judge applies to user-facing behavioral evidence for {{PROJECT_NAME}}. Reference skill — not invoked directly.
+disable-model-invocation: true
 ---
 
 # QA Judgment Criteria
