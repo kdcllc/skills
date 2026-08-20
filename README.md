@@ -2,7 +2,7 @@
 
 [![skills.sh installs](https://skills.sh/b/kdcllc/skills)](https://skills.sh/kdcllc/skills)
 
-> Kit version: **0.10.0** (`skills/setup/VERSION`) · The install badge above applies
+> Kit version: **0.11.0** (`skills/setup/VERSION`) · The install badge above applies
 > only if the repo is made public: [skills.sh](https://www.skills.sh/) filters private
 > repos out of its public index by design
 > ([vercel-labs/skills#381](https://github.com/vercel-labs/skills/issues/381)), so it
@@ -37,6 +37,10 @@ What an install gives a project:
   one backlog story per fresh-context iteration, judge-gated commits, circuit breakers
   (no-progress, repeated-error, and protected-path violations enforced in the loop
   drivers, not prose), memory size gates, and a single human-approved PR at run end.
+  Slot-supervision knobs — `LOOP_SLOTS` (design default 2, dark-launch guarded to 1
+  until driver-owned dispatch ships) and `LOOP_WORKTREE` (default 0, main-tree
+  iteration; `=1` opts into a driver-managed worktree) — sit alongside the existing
+  five exit codes (0–4) as a new exit code 5 for setup/integration failures.
 
 ## Layout
 
@@ -46,7 +50,7 @@ docs/
 ├── research-multi-harness-upgrade.md  # Verified per-harness research + upgrade plan
 ├── research-squad-ideas.md            # bradygaster/squad study + adopted ideas (A1–A10)
 └── design-parallel-dispatch.md        # Judged design: WIP-limited parallel dispatch
-                                       #   in the autonomous loop (not yet implemented)
+                                       #   in the autonomous loop (partially shipped; see its Status block)
 skills/setup/                 # The installable skill (the compiler)
 ├── SKILL.md                  # Workflow: detect harness(es) → inspect → interview →
 │                             #   resolve templates → emit per harness → manifest
@@ -123,6 +127,9 @@ Everything is generated with project-specific content — layer order, test comm
 judge auto-fail triggers, and model IDs are derived from the codebase and your answers,
 never left generic. Start your first feature with `/feature`; start an unattended run
 (sandboxed!) with `_loop/loop.sh 10` (or `pwsh _loop/loop.ps1 10` — PowerShell 7+).
+`LOOP_SLOTS` stays dark-launch guarded to 1 and `LOOP_WORKTREE` defaults to 0
+(main-tree iteration; `=1` requires a tracked-instance preflight) until STORY-011's
+driver-owned dispatch ships; a new exit code 5 covers setup/integration failures.
 
 ### Self-install (local development of the kit itself)
 
@@ -157,6 +164,11 @@ their hash drift is expected, not a modification the diff needs to show you. Bum
 installed with — `npx skills add kdcllc/skills` again, or
 `npx agent-skills-cli update` (run `npx agent-skills-cli check` first to see installed
 skills with source and version) — then re-run `/setup` to re-emit.
+
+Installs that update `_loop/` drivers without re-running `/setup` Step 5 will lack the
+new `.loop-worktrees/` and `_goals/breaker-state.json.tmp.*` `.gitignore` lines
+(`skills/setup/SKILL.md:127-132`) — re-run `/setup` after upgrading (or append them
+manually).
 
 ## Editing the templates
 

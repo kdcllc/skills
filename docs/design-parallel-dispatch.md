@@ -1,12 +1,26 @@
 # Design: Bounded-Concurrency Dispatch for the Autonomous Loop
 
 **Status**: DESIGN ONLY for everything below still marked *Proposed* — a proposal, not
-shipped behavior. **Exception**: §3.2 parts 1–3 (write-temp-then-rename, the terminator
-check, and torn-retry/fail-safe-OPEN) shipped in STORY-009 (kit v0.10.0) and are marked
-Shipped in place below; §3.2 part 4, §3.3, and everything outside §3 remain
-unimplemented. No other file under `skills/setup/templates/` or `_loop/` changed for
-this story (`_goals/backlog.md:109`). Implementation of the remaining *Proposed*
-material is a follow-up; see the Scope section for honest sizing.
+shipped behavior. **Exceptions**: §3.2 parts 1–3 (write-temp-then-rename, the terminator
+check, and torn-retry/fail-safe-OPEN) shipped in STORY-009 (kit v0.10.0); §1 (slot
+accounting), §2 (worktree lifecycle), and §5 (per-slot failure/rollback) shipped in
+STORY-010 (kit v0.11.0) — each marked **Shipped — STORY-010, v0.11.0** in place below,
+with two argued deviations recorded where the relevant section text sits: (i) a
+**double dark launch** — §1's `LOOP_SLOTS` ships guarded to `1` regardless of its
+default-2 value, and §2's worktree isolation ships STAGED behind `LOOP_WORKTREE`
+defaulting to `0` (main-tree iteration unchanged) — both held back until STORY-011's
+driver-owned dispatch, goal-judged because no backlog story yet declares a `writes:`
+set (§6 is unimplemented, so nothing prevents two slots double-dispatching the same
+story) and because worktree execution is inoperable in gitignored-instance repos
+without the preflight this story added; (ii) §5's closing note that the kill-0 poll
+loop "must be reflected in the parity heuristic at `.claude/checks.sh:26-35`" was
+deliberately **not** done — `.claude/checks.sh` is untracked instance tooling, not the
+parity home; the tracked harness (`tests/loop-harness/run.sh`, assertion 53 and others)
+carries this parity instead. §3.2 part 4, §3.3, §4, §6, §7, and everything else marked
+*Proposed* remain unimplemented; STORY-010 also ships quarantine-lite only (branch
+retained, not integrated, and reported at exit — no marker file) — full quarantine
+remains STORY-012. No other file under
+`skills/setup/templates/` or `_loop/` changed beyond what STORY-010 required.
 
 **Pattern source**: squad's WIP-limited self-refilling dispatch —
 `available-slots = max(0, 3 - active PRs)`, refill on merge
@@ -77,6 +91,16 @@ owns shared memory, the driver owns breaker state.
 
 ## 1. Slot accounting
 
+**Shipped — STORY-010, v0.11.0.** `LOOP_SLOTS` (default 2, clamped `[1, 3]`,
+`loop.sh:57-58`; twin `loop.ps1:87-88`), the startup banner (`loop.sh:94`; twin
+`loop.ps1:131`), and the `available_slots = max(0, EFFECTIVE_SLOTS - active_slots)`
+formula (`loop.sh:196-201`; twin `loop.ps1:277-282`) all shipped as designed. One argued
+deviation: a dark-launch guard holds *effective* concurrency at 1 regardless of the
+configured value, warning on stderr when `LOOP_SLOTS>1` is explicitly requested, until
+STORY-011's driver-owned dispatch (§4/§6) exists — running two live slots today would
+double-dispatch the same backlog story with no admission rule (§6) to stop it, since no
+story yet declares a `writes:` set. See the Status block above for the full argument.
+
 **(c) Current behavior.** The driver is a strictly serial `for` loop:
 `for ((i = 1; i <= MAX_ITER; i++))` with `MAX_ITER="${1:-10}"` (`loop.sh:23,66`; twin at
 `loop.ps1:25,113`). One CLI invocation per iteration (`loop.sh:91`), one story per
@@ -145,6 +169,19 @@ and `LOOP_MODEL_FLAG` are already handled on both sides (`loop.sh:24-25`;
 ---
 
 ## 2. Isolation and integration of concurrent work
+
+**Shipped — STORY-010, v0.11.0.** The worktree-per-slot lifecycle below shipped, gated
+behind a new `LOOP_WORKTREE` env var: `0` (default) is today's main-tree iteration,
+unchanged; `1` runs each iteration under `.loop-worktrees/` per the mechanics below,
+guarded by a tracked-instance preflight (`loop.sh:11,29-34,213-234`; twin
+`loop.ps1:14,34,133-137,295-331`) — a worktree checks out tracked files only, so a
+gitignored `_loop`/`_goals`/`{{ IDE_DIR }}` instance fails the preflight loudly (exit
+5) rather than silently falling back to the main tree. **Deviation**: `LOOP_WORKTREE`
+defaults to `0`, staging worktree isolation as opt-in rather than making it the live
+default this design originally argued for — the same double-dark-launch reasoning as
+§1 (no `writes:` admission yet, and worktree execution is inoperable in
+gitignored-instance repos like this one's self-install without the preflight this
+story added) until STORY-011's driver-owned dispatch. See the Status block above.
 
 **(c) Current behavior.** Every iteration runs in the driver's own working tree.
 `head_before="$(git rev-parse HEAD)"` (`loop.sh:79`; twin `loop.ps1:127`) captures a
@@ -431,6 +468,21 @@ adopted here.
 
 ## 5. Per-slot failure and rollback
 
+**Shipped — STORY-010, v0.11.0** (supervision/circuit-breaker scoping, quarantine-lite).
+Worktree-local rollback, CB0-stays-fatal, and per-slot CB1/CB2 counters shipped as
+designed (`loop.sh:213-445`; twin `loop.ps1:295-586`); slot *retirement*
+(retire-without-ending-the-run) did **not** ship — CB1/CB2 remain run-fatal `exit
+2`/`exit 3` at the dark-launched N=1 (`loop.sh:440-445`), retirement bookkeeping
+deferred to STORY-012 alongside full quarantine (`loop.sh:415-418`). The quarantine
+mechanic shipped as **quarantine-lite**: an abnormally-exiting slot's branch is
+retained rather than integrated (the `retainedBranches` bookkeeping; its worktree is
+removed — only the non-fast-forward integration stop retains the worktree,
+`loop.sh:166`) but without the fuller escalation/re-dispatch machinery this section
+originally sketched —
+full quarantine (`_goals/ESCALATIONS.md` integration, re-dispatch at a new path) remains
+STORY-012. See the twin note at the end of this section for a second, deliberate
+deviation on the `.claude/checks.sh` parity requirement.
+
 **(c) Current behavior.** Failure handling is entirely global. The driver's exit-code
 contract is "0 = backlog complete (sentinel found); 1 = max iterations reached without
 completion; 2 = circuit breaker — no commit for 3 consecutive iterations; 3 = circuit
@@ -497,6 +549,15 @@ twin's `Wait-Job -Any` has no such constraint, so parity is achieved by the bash
 adopting the poll loop as its floor. This must be reflected in the parity heuristic at
 `.claude/checks.sh:26-35`, which today keys on the sentinel, the five exit codes, and the
 default iteration count.
+
+**Deviation, recorded rather than silently skipped**: that last sentence's prescription
+was **deliberately not done**. `.claude/checks.sh` is this repository's own untracked,
+gitignored instance tooling (a self-install artifact, not shipped kit content), so it is
+not the parity home for a kit feature — the tracked behavioral harness
+(`tests/loop-harness/run.sh`, assertion 53 and others covering §1–§2's shipped surface)
+is. `.claude/checks.sh`'s check G still only asserts the sentinel, the original five exit
+codes (0–4), and the default iteration count; it was not extended to assert `LOOP_SLOTS`,
+`LOOP_WORKTREE`, or exit code 5.
 
 ---
 

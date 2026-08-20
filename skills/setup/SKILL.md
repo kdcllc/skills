@@ -126,7 +126,10 @@ _goals/*/orchestration-log.md merge=union
 
 Also append `_goals/breaker-state.json` to the project's `.gitignore` (create if
 missing) — this is runtime scratch written by the breaker helpers at run time and
-must never enter commits.
+must never enter commits. Append two more lines to the same list: `.loop-worktrees/`
+(the per-slot worktree scratch created and destroyed by the driver at
+`LOOP_WORKTREE=1`) and `_goals/breaker-state.json.tmp.*` (crash-orphaned temp files
+left behind by the breaker's write-temp-then-rename, per STORY-009).
 
 **Checks scripts on Windows**: the kit does not emit a structural-checks script
 itself. If a project's install adopts one (as the kit's own repository does), emit a

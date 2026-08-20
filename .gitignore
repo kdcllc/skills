@@ -11,3 +11,6 @@ orchestration-kit.manifest.json
 # OS / editor noise
 .DS_Store
 Thumbs.db
+
+# Loop runtime scratch (driver worktrees)
+.loop-worktrees/

@@ -1309,6 +1309,717 @@ else
   report FAIL "36: CRLF prompt parity (ps1 structural)" "comment_ok=$comment_ok36 trimend_ok=$trimend_ok36"
 fi
 
+# ===========================================================================
+# STORY-010 slot-supervision coverage (assertions 37-53). Shared fixture
+# helpers: sandbox_write_loop substitutes the three instance tokens
+# ({{PROJECT_NAME}}/{{LOOP_MODEL_CHAIN}}/{{IDE_DIR}}) into COPIES of the
+# CANONICAL loop.sh/breaker.sh BEFORE any run (pinned) -- these fixtures never
+# drive the instance _loop/ files (that remains assertion 15's own lane, and
+# the goal's extraction-survival requirement is already proven by assertions
+# 13/14/13b/13c/16/33/35 above, which re-extract against these same canonical
+# files on every run of this harness). make_sandbox wraps the substituted
+# copy in a throwaway git repo under this run's mktemp workdir, with
+# independently-controllable tracked/gitignored _goals and {{IDE_DIR}} state
+# (needed by the two preflight-failure fixtures, 44/45).
+# ===========================================================================
+sandbox_write_loop() { # sandbox_write_loop <dest_dir> <ide_dir_name>
+  local dest="$1" ide="$2"
+  mkdir -p "$dest/_loop"
+  sed -e 's/{{PROJECT_NAME}}/sandbox-project/g' \
+      -e 's/{{LOOP_MODEL_CHAIN}}/sonnet/g' \
+      -e "s/{{IDE_DIR}}/$ide/g" \
+      "$LOOP_SH" > "$dest/_loop/loop.sh"
+  chmod +x "$dest/_loop/loop.sh"
+  sed -e 's/{{PROJECT_NAME}}/sandbox-project/g' \
+      "$BREAKER_SH" > "$dest/_loop/breaker.sh"
+  printf 'Fixture prompt: do the task; print the sentinel when done.\n' > "$dest/_loop/PROMPT.md"
+}
+
+make_sandbox() { # make_sandbox <dest_dir> <ide_dir_name> <track_goals:0|1> <track_ide:0|1>
+  local dest="$1" ide="$2" track_goals="$3" track_ide="$4"
+  rm -rf "$dest"
+  mkdir -p "$dest"
+  sandbox_write_loop "$dest" "$ide"
+  (
+    cd "$dest"
+    git init -q
+    git config user.email test@example.com
+    git config user.name "story010-test"
+    mkdir -p _goals "$ide"
+    printf '# backlog\n' > _goals/backlog.md
+    printf 'placeholder\n' > "$ide/.keep"
+    : > .gitignore
+    if [[ "$track_goals" != "1" ]]; then printf '_goals/\n' >> .gitignore; fi
+    if [[ "$track_ide" != "1" ]]; then printf '%s/\n' "$ide" >> .gitignore; fi
+    git add -A
+    git commit -qm init
+  )
+}
+
+# ---------------------------------------------------------------------------
+# 37-40: LOOP_SLOTS clamp/guard/banner surface. The banner ("slots: N — ...")
+# and the STORY-011 guard warning both print BEFORE the iteration loop body
+# ever runs (loop.sh:85-94), so MAX_ITER=0 exercises them with ZERO CLI
+# invocations -- no stub CLI, no git repo needed (nothing before the for-loop
+# touches git).
+# ---------------------------------------------------------------------------
+CLAMP_DIR="$TMP/clamp-sandbox"
+mkdir -p "$CLAMP_DIR/_goals"
+sandbox_write_loop "$CLAMP_DIR" ".claude"
+
+run_slots_probe() { # run_slots_probe <value|__UNSET__> -> sets slots_out/slots_err
+  local val="$1" out err
+  rm -f "$CLAMP_DIR/_goals/breaker-state.json"
+  out="$TMP/slots_stdout_${RANDOM}.txt"; err="$TMP/slots_stderr_${RANDOM}.txt"
+  if [[ "$val" == "__UNSET__" ]]; then
+    ( cd "$CLAMP_DIR" && unset LOOP_SLOTS && bash ./_loop/loop.sh 0 ) >"$out" 2>"$err"
+  else
+    ( cd "$CLAMP_DIR" && LOOP_SLOTS="$val" bash ./_loop/loop.sh 0 ) >"$out" 2>"$err"
+  fi
+  slots_out="$(cat "$out")"; slots_err="$(cat "$err")"
+}
+
+# 37: LOOP_SLOTS=0 -> effective 1, NO warning.
+run_slots_probe "0"
+if grep -qF 'slots: 1 — dark launch; design default 2 activates in STORY-011' <<< "$slots_out" \
+   && [[ -z "$slots_err" ]]; then
+  report PASS "37: LOOP_SLOTS=0 -> effective 1, banner correct, stderr empty (no warning)"
+else
+  report FAIL "37: LOOP_SLOTS=0 -> effective 1, no warning" "stdout='$slots_out' stderr='$slots_err'"
+fi
+
+# 38: LOOP_SLOTS=5 -> internally clamped to 3 (structural, since the guard's
+# collapse-to-1 makes the intermediate 3 behaviorally invisible on its own),
+# THEN the >1 dark-launch guard holds effective at 1 WITH the STORY-011
+# warning (explicitly set >1).
+t38_clamp_check() { # t38_clamp_check <file> -> 0 if SLOTS>3 clamp-to-3 exists, block-scoped
+  local f="$1" ln window
+  ln="$(grep -n 'SLOTS="\${LOOP_SLOTS:-2}"' "$f" | head -1 | cut -d: -f1)"
+  [[ -z "$ln" ]] && return 1
+  window="$(sed -n "${ln},$((ln + 10))p" "$f")"
+  grep -qE 'SLOTS > 3' <<< "$window" && grep -qE '^\s*SLOTS=3\s*$' <<< "$window"
+}
+run_slots_probe "5"
+if t38_clamp_check "$LOOP_SH" \
+   && grep -qF 'slots: 1 — dark launch; design default 2 activates in STORY-011' <<< "$slots_out" \
+   && grep -qF 'LOOP_SLOTS>1 requires driver-owned dispatch (STORY-011); running with 1' <<< "$slots_err"; then
+  report PASS "38: LOOP_SLOTS=5 -> structural clamp-to-3 present in canonical loop.sh, effective 1 WITH the STORY-011 warning"
+else
+  report FAIL "38: LOOP_SLOTS=5 -> clamp 3 -> guard 1 WITH warning" \
+    "clamp_present=$(t38_clamp_check "$LOOP_SH" && echo yes || echo no) stdout='$slots_out' stderr='$slots_err'"
+fi
+
+# 39: LOOP_SLOTS=3 -> warning + effective 1 (in-range, no upper clamp needed,
+# still >1 so the dark-launch guard applies).
+run_slots_probe "3"
+if grep -qF 'slots: 1 — dark launch; design default 2 activates in STORY-011' <<< "$slots_out" \
+   && grep -qF 'LOOP_SLOTS>1 requires driver-owned dispatch (STORY-011); running with 1' <<< "$slots_err"; then
+  report PASS "39: LOOP_SLOTS=3 -> effective 1 WITH the STORY-011 warning"
+else
+  report FAIL "39: LOOP_SLOTS=3 -> warning + effective 1" "stdout='$slots_out' stderr='$slots_err'"
+fi
+
+# 40: UNSET -> effective 1, PLAIN banner, stderr COMPLETELY warning-free (the
+# anti-warning-fatigue contract: the default path never warns).
+run_slots_probe "__UNSET__"
+if grep -qF 'slots: 1 — dark launch; design default 2 activates in STORY-011' <<< "$slots_out" \
+   && [[ -z "$slots_err" ]]; then
+  report PASS "40: LOOP_SLOTS unset -> effective 1, plain banner, stderr entirely warning-free (anti-warning-fatigue)"
+else
+  report FAIL "40: LOOP_SLOTS unset -> effective 1, warning-free stderr" "stdout='$slots_out' stderr='$slots_err'"
+fi
+
+# 40-mutation-proof: delete the dark-launch guard (the SLOTS>1 collapse-to-1
+# block) in a COPY, content-anchored (not by line number) -> with an in-range
+# explicit value (3), the banner must now show >1 (i.e. 3, unclamped by the
+# removed guard) -- proving the guard, not some other code path, is what
+# holds the banner at 1 above.
+MUT40_DIR="$TMP/clamp-sandbox-mut40"
+rm -rf "$MUT40_DIR"; mkdir -p "$MUT40_DIR/_goals" "$MUT40_DIR/_loop"
+awk '
+  /^if \(\( SLOTS > 1 \)\); then$/ && !done {
+    print "EFFECTIVE_SLOTS=$SLOTS   # mutation (test 40): dark-launch guard removed"
+    skip=4; done=1; next
+  }
+  skip>0 { skip--; next }
+  { print }
+' "$CLAMP_DIR/_loop/loop.sh" > "$MUT40_DIR/_loop/loop.sh"
+chmod +x "$MUT40_DIR/_loop/loop.sh"
+cp "$CLAMP_DIR/_loop/breaker.sh" "$MUT40_DIR/_loop/breaker.sh"
+mut40_guard_removed=0
+grep -qF 'EFFECTIVE_SLOTS=$SLOTS   # mutation (test 40)' "$MUT40_DIR/_loop/loop.sh" && \
+  ! grep -qE '^if \(\( SLOTS > 1 \)\); then$' "$MUT40_DIR/_loop/loop.sh" && mut40_guard_removed=1
+mut40_out="$TMP/mut40_stdout.txt"
+( cd "$MUT40_DIR" && LOOP_SLOTS=3 bash ./_loop/loop.sh 0 ) >"$mut40_out" 2>/dev/null
+mut40_banner="$(grep -oE 'slots: [0-9]+' "$mut40_out" | head -1 | grep -oE '[0-9]+')"
+if [[ "$mut40_guard_removed" -eq 1 && -n "$mut40_banner" && "$mut40_banner" -gt 1 ]]; then
+  report PASS "40-mutation-proof: dark-launch guard deleted in a COPY -> banner shows $mut40_banner (>1) with LOOP_SLOTS=3, confirming the guard (not other code) holds it at 1 on the real driver"
+else
+  report FAIL "40-mutation-proof: guard deletion must show banner >1" "guard_removed=$mut40_guard_removed banner='$mut40_banner'"
+fi
+
+# ---------------------------------------------------------------------------
+# 41 (goal's flag=0 equivalence contract, items a/b/c/e): LOOP_WORKTREE
+# unset/0 (default) + LOOP_SLOTS unset -> (a) no worktree created, no
+# .loop-worktrees/ path; (b) no new branch; (c) an identical stub run yields
+# the identical exit code (same sandbox, invoked twice); (e) stderr free of
+# the guard warning. Item (d) -- CB0/CB1/CB2 semantics/thresholds unchanged
+# -- is covered by the CB fixtures below: 50-52 run at these SAME default
+# flags (49 is the flag=1 CB0-scoped fixture, not a default-flags proof).
+# Item (f) is assertion 42 (its own literal enumeration proof, below).
+# ---------------------------------------------------------------------------
+EQUIV_DIR="$TMP/equiv-sandbox"
+make_sandbox "$EQUIV_DIR" ".claude" 1 1
+cat > "$EQUIV_DIR/_loop/stub-sentinel.sh" <<'STUBEOF'
+#!/usr/bin/env bash
+# Deterministic single-pass stub: no commit, prints the sentinel immediately.
+echo "<promise>COMPLETE</promise>"
+exit 0
+STUBEOF
+chmod +x "$EQUIV_DIR/_loop/stub-sentinel.sh"
+
+equiv_out_a="$TMP/equiv_a_stdout.txt"; equiv_err_a="$TMP/equiv_a_stderr.txt"
+( cd "$EQUIV_DIR" && LOOP_CLI="$EQUIV_DIR/_loop/stub-sentinel.sh" bash ./_loop/loop.sh 1 ) \
+  >"$equiv_out_a" 2>"$equiv_err_a"
+equiv_rc_a=$?
+
+equiv_out_b="$TMP/equiv_b_stdout.txt"; equiv_err_b="$TMP/equiv_b_stderr.txt"
+( cd "$EQUIV_DIR" && LOOP_CLI="$EQUIV_DIR/_loop/stub-sentinel.sh" bash ./_loop/loop.sh 1 ) \
+  >"$equiv_out_b" 2>"$equiv_err_b"
+equiv_rc_b=$?
+
+no_worktree_dir=1; [[ -e "$EQUIV_DIR/.loop-worktrees" ]] && no_worktree_dir=0
+no_new_branch=1
+equiv_branch_count="$(git -C "$EQUIV_DIR" branch --list 'loop/*' | wc -l)"
+[[ "$equiv_branch_count" -ne 0 ]] && no_new_branch=0
+identical_exit=0
+[[ "$equiv_rc_a" -eq "$equiv_rc_b" ]] && identical_exit=1
+stderr_warning_free=1
+grep -qF 'LOOP_SLOTS>1 requires driver-owned dispatch' "$equiv_err_a" && stderr_warning_free=0
+
+if [[ "$no_worktree_dir" -eq 1 && "$no_new_branch" -eq 1 && "$identical_exit" -eq 1 \
+      && "$stderr_warning_free" -eq 1 ]]; then
+  report PASS "41: flag=0 equivalence contract (a)(b)(c)(e) -- no .loop-worktrees/ path, no new branch, identical stub run (same sandbox, invoked twice) -> identical exit code ($equiv_rc_a == $equiv_rc_b), stderr free of the guard warning"
+else
+  report FAIL "41: flag=0 equivalence contract (a)(b)(c)(e)" \
+    "no_worktree_dir=$no_worktree_dir no_new_branch=$no_new_branch(count=$equiv_branch_count) identical_exit=$identical_exit(rc_a=$equiv_rc_a rc_b=$equiv_rc_b) stderr_warning_free=$stderr_warning_free"
+fi
+
+# ---------------------------------------------------------------------------
+# 42 (flag=0 equivalence contract, item f): the ONLY new stdout line versus
+# the pre-story driver is the slot banner -- the expected stdout line set is
+# enumerated LITERALLY here (never derived from git/HEAD, per the goal pin,
+# which would degrade into a self-comparison against the NEW driver), with
+# the iteration banner's embedded $(date -Is) timestamp normalized to a
+# placeholder (marker-normalization precedent: this file's own sed-based
+# clause normalization at assertion 33, run.sh:1163-1164 pre-story).
+# ---------------------------------------------------------------------------
+expected_f42="slots: 1 — dark launch; design default 2 activates in STORY-011
+=== iteration 1/1 <TS> ===
+<promise>COMPLETE</promise>
+=== backlog complete after 1 iteration(s) ==="
+normalized_f42="$(sed -E 's/=== iteration ([0-9]+\/[0-9]+) [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[+-][0-9]{2}:[0-9]{2} ===/=== iteration \1 <TS> ===/' "$equiv_out_a")"
+if [[ "$normalized_f42" == "$expected_f42" ]]; then
+  report PASS "42: flag=0 equivalence contract (f) -- normalized stdout exactly matches the literally-enumerated expected line set (banner + iteration + tail-25 CLI output + completion line), timestamp normalized"
+else
+  report FAIL "42: flag=0 equivalence contract (f)" "expected='$expected_f42' actual(normalized)='$normalized_f42'"
+fi
+
+# ---------------------------------------------------------------------------
+# 43: worktree lifecycle, flag=1, TRACKED sandbox (both _goals/backlog.md and
+# {{IDE_DIR}} tracked/committed, so the preflight passes). The stub probes
+# its OWN cwd (the worktree, per the driver/child boundary pin) into a file
+# OUTSIDE the repo, commits progress, then prints the sentinel so the run
+# completes via the pinned ff-only-integrate -> worktree-remove -> branch -d
+# ordering.
+# ---------------------------------------------------------------------------
+LIFECYCLE_DIR="$TMP/lifecycle-sandbox"
+make_sandbox "$LIFECYCLE_DIR" ".claude" 1 1
+lifecycle_probe="$TMP/lifecycle-wt-probe.txt"
+rm -f "$lifecycle_probe"
+
+cat > "$LIFECYCLE_DIR/_loop/stub-lifecycle.sh" <<STUBEOF
+#!/usr/bin/env bash
+pwd > "$lifecycle_probe"
+echo "progress" > progress.txt
+git add progress.txt
+git commit -qm "lifecycle progress"
+echo "<promise>COMPLETE</promise>"
+exit 0
+STUBEOF
+chmod +x "$LIFECYCLE_DIR/_loop/stub-lifecycle.sh"
+# Commit the stub CLI itself so it is not mistaken for post-run litter below.
+( cd "$LIFECYCLE_DIR" && git add -A && git commit -qm "add stub CLI" )
+
+lifecycle_log="$TMP/lifecycle-run.log"
+( cd "$LIFECYCLE_DIR" && LOOP_WORKTREE=1 LOOP_CLI="$LIFECYCLE_DIR/_loop/stub-lifecycle.sh" \
+    bash ./_loop/loop.sh 1 ) >"$lifecycle_log" 2>&1
+lifecycle_rc=$?
+
+expected_wt_path="$LIFECYCLE_DIR/.loop-worktrees/slot-1"
+probed_pwd="$( [[ -f "$lifecycle_probe" ]] && cat "$lifecycle_probe" )"
+worktree_existed=0
+[[ "$probed_pwd" == "$expected_wt_path" ]] && worktree_existed=1
+
+worktree_removed_after=1
+[[ -e "$expected_wt_path" ]] && worktree_removed_after=0
+
+branch_deleted=1
+[[ -n "$(git -C "$LIFECYCLE_DIR" branch --list 'loop/iter-1')" ]] && branch_deleted=0
+
+zero_stray_branches=1
+[[ -n "$(git -C "$LIFECYCLE_DIR" branch --list 'loop/*')" ]] && zero_stray_branches=0
+
+# zero_litter: `.loop-worktrees` itself is not removed by `git worktree
+# remove` (only the slot-N entry under it is), so an empty parent is
+# expected, not litter -- verified empirically before writing this check.
+# breaker-state.json is likewise an expected, non-litter byproduct.
+zero_litter=1
+if [[ -d "$LIFECYCLE_DIR/.loop-worktrees" ]]; then
+  [[ -z "$(ls -A "$LIFECYCLE_DIR/.loop-worktrees" 2>/dev/null)" ]] || zero_litter=0
+fi
+litter_status="$(git -C "$LIFECYCLE_DIR" status --porcelain -- . ':(exclude)_goals/breaker-state.json')"
+[[ -n "$litter_status" ]] && zero_litter=0
+
+worktree_list_count="$(git -C "$LIFECYCLE_DIR" worktree list | wc -l)"
+main_only=1
+[[ "$worktree_list_count" -ne 1 ]] && main_only=0
+
+integrated=1
+git -C "$LIFECYCLE_DIR" log --oneline | grep -qF "lifecycle progress" || integrated=0
+
+if [[ "$lifecycle_rc" -eq 0 && "$worktree_existed" -eq 1 && "$worktree_removed_after" -eq 1 \
+      && "$branch_deleted" -eq 1 && "$zero_stray_branches" -eq 1 && "$zero_litter" -eq 1 \
+      && "$main_only" -eq 1 && "$integrated" -eq 1 ]]; then
+  report PASS "43: worktree lifecycle (flag=1, tracked sandbox) -- worktree existed during the run (probed cwd=$probed_pwd), removed after, branch loop/iter-1 integrated ff-only into main (progress commit present) + deleted, zero litter, zero stray branches"
+else
+  report FAIL "43: worktree lifecycle" \
+    "rc=$lifecycle_rc existed=$worktree_existed removed_after=$worktree_removed_after branch_deleted=$branch_deleted zero_stray=$zero_stray_branches zero_litter=$zero_litter(status='$litter_status') main_only=$main_only(count=$worktree_list_count) integrated=$integrated probe='$probed_pwd' expected='$expected_wt_path'"
+  sed 's/^/    /' "$lifecycle_log" >&2
+fi
+
+# ---------------------------------------------------------------------------
+# 44 (preflight failure, fixture i): _goals/ GITIGNORED (this repo's own
+# shape). `git worktree add` SUCCEEDS (the branch does not pre-exist), so the
+# failure is the PREFLIGHT's own exit 5, not git's add failing with its own
+# status. Stub carries a marker so "stub never ran" is an assertable fact.
+# ---------------------------------------------------------------------------
+PREFLIGHT_I_DIR="$TMP/preflight-i-sandbox"
+make_sandbox "$PREFLIGHT_I_DIR" ".claude" 0 1   # _goals GITIGNORED, IDE_DIR tracked
+preflight_i_marker="$TMP/preflight-i-stub-ran.marker"
+rm -f "$preflight_i_marker"
+
+cat > "$PREFLIGHT_I_DIR/_loop/stub-never.sh" <<STUBEOF
+#!/usr/bin/env bash
+touch "$preflight_i_marker"
+echo "<promise>COMPLETE</promise>"
+exit 0
+STUBEOF
+chmod +x "$PREFLIGHT_I_DIR/_loop/stub-never.sh"
+
+preflight_i_log="$TMP/preflight-i-run.log"
+( cd "$PREFLIGHT_I_DIR" && LOOP_WORKTREE=1 LOOP_CLI="$PREFLIGHT_I_DIR/_loop/stub-never.sh" \
+    bash ./_loop/loop.sh 1 ) >"$preflight_i_log" 2>&1
+preflight_i_rc=$?
+
+stub_never_ran_i=1
+[[ -f "$preflight_i_marker" ]] && stub_never_ran_i=0
+worktree_removed_i=1
+[[ -e "$PREFLIGHT_I_DIR/.loop-worktrees/slot-1" ]] && worktree_removed_i=0
+branch_removed_i=1
+[[ -n "$(git -C "$PREFLIGHT_I_DIR" branch --list 'loop/iter-1')" ]] && branch_removed_i=0
+names_requirement_i=0
+grep -qF "must be committed (not gitignored) for LOOP_WORKTREE=1" "$preflight_i_log" \
+  && grep -qF "_goals/backlog.md" "$preflight_i_log" && names_requirement_i=1
+
+if [[ "$preflight_i_rc" -eq 5 && "$stub_never_ran_i" -eq 1 && "$worktree_removed_i" -eq 1 \
+      && "$branch_removed_i" -eq 1 && "$names_requirement_i" -eq 1 ]]; then
+  report PASS "44: preflight failure fixture (i, gitignored _goals/) -- exit 5, loud error naming the tracked-instance requirement + _goals/backlog.md, worktree removed, branch removed, stub never ran (no silent fallback)"
+else
+  report FAIL "44: preflight failure fixture (i, gitignored _goals/)" \
+    "rc=$preflight_i_rc(expected 5) stub_never_ran=$stub_never_ran_i worktree_removed=$worktree_removed_i branch_removed=$branch_removed_i names_requirement=$names_requirement_i"
+  sed 's/^/    /' "$preflight_i_log" >&2
+fi
+
+# ---------------------------------------------------------------------------
+# 45 (preflight failure, fixture ii): _goals/ TRACKED but {{IDE_DIR}}
+# GITIGNORED (the cycle-2 mirror case). Same assertions as 44, mirrored;
+# `git worktree add` SUCCEEDS here too.
+# ---------------------------------------------------------------------------
+PREFLIGHT_II_DIR="$TMP/preflight-ii-sandbox"
+make_sandbox "$PREFLIGHT_II_DIR" ".claude" 1 0   # _goals TRACKED, IDE_DIR gitignored
+preflight_ii_marker="$TMP/preflight-ii-stub-ran.marker"
+rm -f "$preflight_ii_marker"
+
+cat > "$PREFLIGHT_II_DIR/_loop/stub-never.sh" <<STUBEOF
+#!/usr/bin/env bash
+touch "$preflight_ii_marker"
+echo "<promise>COMPLETE</promise>"
+exit 0
+STUBEOF
+chmod +x "$PREFLIGHT_II_DIR/_loop/stub-never.sh"
+
+preflight_ii_log="$TMP/preflight-ii-run.log"
+( cd "$PREFLIGHT_II_DIR" && LOOP_WORKTREE=1 LOOP_CLI="$PREFLIGHT_II_DIR/_loop/stub-never.sh" \
+    bash ./_loop/loop.sh 1 ) >"$preflight_ii_log" 2>&1
+preflight_ii_rc=$?
+
+stub_never_ran_ii=1
+[[ -f "$preflight_ii_marker" ]] && stub_never_ran_ii=0
+worktree_removed_ii=1
+[[ -e "$PREFLIGHT_II_DIR/.loop-worktrees/slot-1" ]] && worktree_removed_ii=0
+branch_removed_ii=1
+[[ -n "$(git -C "$PREFLIGHT_II_DIR" branch --list 'loop/iter-1')" ]] && branch_removed_ii=0
+names_requirement_ii=0
+grep -qF "must be committed (not gitignored) for LOOP_WORKTREE=1" "$preflight_ii_log" \
+  && grep -qF ".claude" "$preflight_ii_log" && names_requirement_ii=1
+
+if [[ "$preflight_ii_rc" -eq 5 && "$stub_never_ran_ii" -eq 1 && "$worktree_removed_ii" -eq 1 \
+      && "$branch_removed_ii" -eq 1 && "$names_requirement_ii" -eq 1 ]]; then
+  report PASS "45: preflight failure fixture (ii, tracked _goals/ + gitignored {{IDE_DIR}}=.claude) -- exit 5, loud error naming the tracked-instance requirement + .claude, worktree removed, branch removed, stub never ran (no silent fallback)"
+else
+  report FAIL "45: preflight failure fixture (ii, tracked _goals/ + gitignored IDE_DIR)" \
+    "rc=$preflight_ii_rc(expected 5) stub_never_ran=$stub_never_ran_ii worktree_removed=$worktree_removed_ii branch_removed=$branch_removed_ii names_requirement=$names_requirement_ii"
+  sed 's/^/    /' "$preflight_ii_log" >&2
+fi
+
+# ---------------------------------------------------------------------------
+# 46: abnormal slot exit -- stub exits nonzero AND leaves an uncommitted
+# (dirty) worktree -> quarantine-lite: NOT integrated, --force cleanup,
+# branch RETAINED (never deleted) and named in the closing output (the
+# EXIT-trap-printed retained-branches summary).
+# ---------------------------------------------------------------------------
+ABNORMAL_DIR="$TMP/abnormal-sandbox"
+make_sandbox "$ABNORMAL_DIR" ".claude" 1 1
+abnormal_main_head_before="$(git -C "$ABNORMAL_DIR" rev-parse HEAD)"
+
+cat > "$ABNORMAL_DIR/_loop/stub-abnormal.sh" <<'STUBEOF'
+#!/usr/bin/env bash
+# Leaves the worktree dirty (uncommitted change) and exits nonzero -- neither
+# a recognized CB1/CB2 disposition (single iteration, thresholds 3/5 not
+# reached) nor a clean tree, so the driver's abnormal-exit branch fires.
+echo "dirty, uncommitted" > dirty.txt
+echo "boom"
+exit 7
+STUBEOF
+chmod +x "$ABNORMAL_DIR/_loop/stub-abnormal.sh"
+
+abnormal_log="$TMP/abnormal-run.log"
+( cd "$ABNORMAL_DIR" && LOOP_WORKTREE=1 LOOP_CLI="$ABNORMAL_DIR/_loop/stub-abnormal.sh" \
+    bash ./_loop/loop.sh 1 ) >"$abnormal_log" 2>&1
+abnormal_rc=$?
+
+abnormal_main_head_after="$(git -C "$ABNORMAL_DIR" rev-parse HEAD)"
+names_branch=0
+grep -qF "retaining branch 'loop/iter-1'" "$abnormal_log" && names_branch=1
+closing_summary=0
+grep -qF "retained branches from quarantined slots (NOT integrated): loop/iter-1" "$abnormal_log" && closing_summary=1
+worktree_cleaned=1
+[[ -e "$ABNORMAL_DIR/.loop-worktrees/slot-1" ]] && worktree_cleaned=0
+branch_retained=1
+[[ -z "$(git -C "$ABNORMAL_DIR" branch --list 'loop/iter-1')" ]] && branch_retained=0
+no_integration=1
+[[ "$abnormal_main_head_before" != "$abnormal_main_head_after" ]] && no_integration=0
+
+if [[ "$abnormal_rc" -eq 1 && "$names_branch" -eq 1 && "$closing_summary" -eq 1 \
+      && "$worktree_cleaned" -eq 1 && "$branch_retained" -eq 1 && "$no_integration" -eq 1 ]]; then
+  report PASS "46: abnormal slot exit -- dirty worktree + nonzero exit -> NOT integrated, --force cleanup, branch loop/iter-1 RETAINED (not deleted) and named in the closing retained-branches summary"
+else
+  report FAIL "46: abnormal slot exit" \
+    "rc=$abnormal_rc names_branch=$names_branch closing_summary=$closing_summary worktree_cleaned=$worktree_cleaned branch_retained=$branch_retained no_integration=$no_integration"
+  sed 's/^/    /' "$abnormal_log" >&2
+fi
+
+# ---------------------------------------------------------------------------
+# 47: available_slots accounting + refill-on-exit, structural (block-scoped,
+# each anchored at its own site, matching the assertion-18/34 coupling
+# precedent). Behavioral coverage at N=1 is implicit throughout 41-46/50-52 --
+# every one of those runs completes its dispatched iteration(s) via this
+# exact accounting.
+# ---------------------------------------------------------------------------
+t47_accounting_check() { # available_slots expression + negative-clamp, block-scoped
+  local f="$1" ln window
+  ln="$(grep -n 'available_slots=\$(( EFFECTIVE_SLOTS - active_slots ))' "$f" | head -1 | cut -d: -f1)"
+  [[ -z "$ln" ]] && return 1
+  window="$(sed -n "${ln},$((ln + 4))p" "$f")"
+  grep -qE 'available_slots < 0' <<< "$window"
+}
+t47_refill_check() { # refill-on-slot-exit, block-scoped at the decrement site
+  local f="$1" ln window
+  ln="$(grep -n 'active_slots=\$((active_slots - 1))' "$f" | head -1 | cut -d: -f1)"
+  [[ -z "$ln" ]] && return 1
+  window="$(sed -n "$((ln - 1)),$((ln + 1))p" "$f")"
+  grep -qF 'refill trigger' <<< "$window"
+}
+if t47_accounting_check "$LOOP_SH" && t47_refill_check "$LOOP_SH"; then
+  report PASS "47: available_slots/refill -- accounting expression (EFFECTIVE_SLOTS - active_slots) + negative-clamp, and refill-on-slot-exit (active_slots decrement + 'refill trigger' comment), both present in canonical loop.sh, block-scoped"
+else
+  report FAIL "47: available_slots/refill" \
+    "accounting=$(t47_accounting_check "$LOOP_SH" && echo ok || echo FAIL) refill=$(t47_refill_check "$LOOP_SH" && echo ok || echo FAIL)"
+fi
+
+# ---------------------------------------------------------------------------
+# 48 (mutation-prove by fixture): ff-only integration stop. The stub commits
+# progress inside its OWN worktree, but ALSO makes an EXTERNAL commit
+# directly against the sandbox's MAIN tree (simulating a concurrent
+# modification landing on main while the slot was running) before it exits
+# -- by the time the driver reaps the child and attempts
+# `git merge --ff-only`, main has diverged, so the branch is no longer a
+# fast-forward. Driver stops loudly at integration: exit 5, branch NOT
+# force-merged (main's log never gains the slot's commit).
+# ---------------------------------------------------------------------------
+FFONLY_DIR="$TMP/ffonly-sandbox"
+make_sandbox "$FFONLY_DIR" ".claude" 1 1
+
+cat > "$FFONLY_DIR/_loop/stub-ffonly.sh" <<STUBEOF
+#!/usr/bin/env bash
+echo "slot progress" > slot-progress.txt
+git add slot-progress.txt
+git commit -qm "slot-side commit (never integrated)"
+# Simulate an EXTERNAL, concurrent commit landing on the sandbox's MAIN tree
+# (a separate checkout of the SAME repo, not this worktree) while the slot
+# was running -- this is what makes the eventual ff-only merge non-fast-forward.
+git -C "$FFONLY_DIR" commit --allow-empty -qm "external main-tree commit (concurrent)"
+echo "no sentinel this iteration"
+exit 0
+STUBEOF
+chmod +x "$FFONLY_DIR/_loop/stub-ffonly.sh"
+
+ffonly_log="$TMP/ffonly-run.log"
+( cd "$FFONLY_DIR" && LOOP_WORKTREE=1 LOOP_CLI="$FFONLY_DIR/_loop/stub-ffonly.sh" \
+    bash ./_loop/loop.sh 1 ) >"$ffonly_log" 2>&1
+ffonly_rc=$?
+
+names_failure=0
+grep -qF "integration failed: 'loop/iter-1' is not a fast-forward" "$ffonly_log" && names_failure=1
+not_force_merged=1
+git -C "$FFONLY_DIR" log --oneline 2>/dev/null | grep -qF "slot-side commit" && not_force_merged=0
+
+if [[ "$ffonly_rc" -eq 5 && "$names_failure" -eq 1 && "$not_force_merged" -eq 1 ]]; then
+  report PASS "48: ff-only integration stop (mutation-prove: external main-tree commit forces a non-fast-forward) -- exit 5, loud 'not a fast-forward' stop, worktree branch NOT force-merged into main"
+else
+  report FAIL "48: ff-only integration stop" "rc=$ffonly_rc(expected 5) names_failure=$names_failure not_force_merged=$not_force_merged"
+  sed 's/^/    /' "$ffonly_log" >&2
+fi
+
+# ---------------------------------------------------------------------------
+# 49: CB0 scoped revert (LOOP_WORKTREE=1). Stub commits a PROTECTED-path
+# change (_loop/loop.sh itself) inside its own worktree -> CB0 fires: exit 4,
+# the SANDBOX MAIN TREE's HEAD is unchanged (the revert + --force removal
+# happen entirely on the worktree side), no integration, worktree cleaned up.
+# ---------------------------------------------------------------------------
+CB0_DIR="$TMP/cb0-sandbox"
+make_sandbox "$CB0_DIR" ".claude" 1 1
+cb0_main_head_before="$(git -C "$CB0_DIR" rev-parse HEAD)"
+
+cat > "$CB0_DIR/_loop/stub-cb0.sh" <<'STUBEOF'
+#!/usr/bin/env bash
+# Modifies a PROTECTED path (_loop/, per the CB0 path list) inside the
+# worktree -- must trigger the run-fatal revert, never reach CB1/CB2.
+echo "# protected-path tamper" >> _loop/loop.sh
+git add _loop/loop.sh
+git commit -qm "oops: touched protected _loop/"
+echo "irrelevant output"
+exit 0
+STUBEOF
+chmod +x "$CB0_DIR/_loop/stub-cb0.sh"
+
+cb0_log="$TMP/cb0-run.log"
+( cd "$CB0_DIR" && LOOP_WORKTREE=1 LOOP_CLI="$CB0_DIR/_loop/stub-cb0.sh" \
+    bash ./_loop/loop.sh 1 ) >"$cb0_log" 2>&1
+cb0_rc=$?
+
+cb0_main_head_after="$(git -C "$CB0_DIR" rev-parse HEAD)"
+main_head_unchanged=0
+[[ "$cb0_main_head_before" == "$cb0_main_head_after" ]] && main_head_unchanged=1
+cb0_worktree_cleaned=1
+[[ -e "$CB0_DIR/.loop-worktrees/slot-1" ]] && cb0_worktree_cleaned=0
+cb0_no_integration=1
+git -C "$CB0_DIR" log --oneline | grep -qF "protected _loop/" && cb0_no_integration=0
+cb0_named=0
+grep -qF "protected-path modification detected" "$cb0_log" && cb0_named=1
+
+if [[ "$cb0_rc" -eq 4 && "$main_head_unchanged" -eq 1 && "$cb0_worktree_cleaned" -eq 1 \
+      && "$cb0_no_integration" -eq 1 && "$cb0_named" -eq 1 ]]; then
+  report PASS "49: CB0 scoped revert (LOOP_WORKTREE=1) -- protected-path commit inside the worktree -> exit 4, sandbox MAIN TREE HEAD unchanged ($cb0_main_head_before), no integration, worktree cleaned up"
+else
+  report FAIL "49: CB0 scoped revert" \
+    "rc=$cb0_rc(expected 4) main_head_unchanged=$main_head_unchanged(before=$cb0_main_head_before after=$cb0_main_head_after) worktree_cleaned=$cb0_worktree_cleaned no_integration=$cb0_no_integration named=$cb0_named"
+  sed 's/^/    /' "$cb0_log" >&2
+fi
+
+# ---------------------------------------------------------------------------
+# 50 (per-slot CB1 meaning-preserved proof): assertion 15 already covers the
+# CB1 rate-limited carve-out end-to-end against the RE-EMITTED instance
+# driver (pre-story until task 05); this proves the SAME CB1 threshold (3
+# consecutive no-progress iterations) against the CANONICAL, newly
+# -restructured (slot-table-based counters) driver directly, at the default
+# flags (LOOP_WORKTREE=0). Stub never commits, never rate-limits -> exit 2
+# after exactly 3 no-progress iterations.
+# ---------------------------------------------------------------------------
+CB1_CANON_DIR="$TMP/cb1-canonical-sandbox"
+make_sandbox "$CB1_CANON_DIR" ".claude" 1 1
+
+cat > "$CB1_CANON_DIR/_loop/stub-cb1.sh" <<'STUBEOF'
+#!/usr/bin/env bash
+# Deliberately avoids any wording detect_rate_limit's pattern could match
+# (rate/limit/quota/429/too many requests) -- an earlier draft's own
+# incidental phrasing false-positived the detector and OPENED the breaker,
+# derailing this fixture into a 600s cooldown sleep.
+echo "steady state, nothing new this pass"
+exit 0
+STUBEOF
+chmod +x "$CB1_CANON_DIR/_loop/stub-cb1.sh"
+
+cb1c_log="$TMP/cb1-canonical-run.log"
+( cd "$CB1_CANON_DIR" && LOOP_CLI="$CB1_CANON_DIR/_loop/stub-cb1.sh" bash ./_loop/loop.sh 5 ) \
+  >"$cb1c_log" 2>&1
+cb1c_rc=$?
+
+if [[ "$cb1c_rc" -eq 2 ]] && grep -qF -- '--- no progress (3/3)' "$cb1c_log" \
+   && grep -qF 'circuit breaker: 3 iterations without a commit' "$cb1c_log"; then
+  report PASS "50: per-slot CB1 (canonical driver, default flags) -- meaning preserved: exit 2 after exactly 3 no-progress iterations (slot-table counter reaches 3/3)"
+else
+  report FAIL "50: per-slot CB1 (canonical driver)" "rc=$cb1c_rc(expected 2)"
+  sed 's/^/    /' "$cb1c_log" >&2
+fi
+
+# ---------------------------------------------------------------------------
+# 51 (per-slot CB2 -- NEW, previously ZERO CB2 coverage): stub commits
+# progress every iteration (so CB1's no-progress counter never fires) but
+# prints an IDENTICAL 5-line failure signature and exits nonzero every time
+# -> the per-slot same-error counter reaches 5 -> exit 3.
+# ---------------------------------------------------------------------------
+CB2_DIR="$TMP/cb2-sandbox"
+make_sandbox "$CB2_DIR" ".claude" 1 1
+cb2_counter_file="$TMP/cb2-counter.txt"
+rm -f "$cb2_counter_file"
+
+cat > "$CB2_DIR/_loop/stub-cb2.sh" <<STUBEOF
+#!/usr/bin/env bash
+counter_file="$cb2_counter_file"
+n=0
+[[ -f "\$counter_file" ]] && n="\$(cat "\$counter_file")"
+n=\$((n + 1))
+echo "\$n" > "\$counter_file"
+echo "progress \$n" >> progress.txt
+git add progress.txt
+git commit -qm "progress \$n"
+printf 'ERROR: build failed\nERROR: build failed\nERROR: build failed\nERROR: build failed\nERROR: build failed\n'
+exit 1
+STUBEOF
+chmod +x "$CB2_DIR/_loop/stub-cb2.sh"
+
+cb2_log="$TMP/cb2-run.log"
+( cd "$CB2_DIR" && LOOP_CLI="$CB2_DIR/_loop/stub-cb2.sh" bash ./_loop/loop.sh 6 ) >"$cb2_log" 2>&1
+cb2_rc=$?
+
+if [[ "$cb2_rc" -eq 3 ]] && grep -qF 'circuit breaker: same error 5 times' "$cb2_log" \
+   && ! grep -qF 'no progress' "$cb2_log"; then
+  report PASS "51: per-slot CB2 (NEW behavioral coverage) -- 5 identical failure outputs (each iteration still committing progress, so CB1 never fires) -> exit 3"
+else
+  report FAIL "51: per-slot CB2 behavioral" "rc=$cb2_rc(expected 3)"
+  sed 's/^/    /' "$cb2_log" >&2
+fi
+
+# ---------------------------------------------------------------------------
+# 52 (per-slot CB2 control): 4 identical failure outputs, then a DIFFERENT
+# 5th -> the same-error counter resets on the 5th, never reaching 5 -> the
+# run must NOT exit 3 (it exhausts MAX_ITER=5 and exits 1).
+# ---------------------------------------------------------------------------
+CB2_CTRL_DIR="$TMP/cb2-control-sandbox"
+make_sandbox "$CB2_CTRL_DIR" ".claude" 1 1
+cb2_ctrl_counter_file="$TMP/cb2-control-counter.txt"
+rm -f "$cb2_ctrl_counter_file"
+
+cat > "$CB2_CTRL_DIR/_loop/stub-cb2-control.sh" <<STUBEOF
+#!/usr/bin/env bash
+counter_file="$cb2_ctrl_counter_file"
+n=0
+[[ -f "\$counter_file" ]] && n="\$(cat "\$counter_file")"
+n=\$((n + 1))
+echo "\$n" > "\$counter_file"
+echo "progress \$n" >> progress.txt
+git add progress.txt
+git commit -qm "progress \$n"
+if [[ "\$n" -eq 5 ]]; then
+  printf 'ERROR: a totally different failure on the 5th pass\n'
+else
+  printf 'ERROR: build failed\nERROR: build failed\nERROR: build failed\nERROR: build failed\nERROR: build failed\n'
+fi
+exit 1
+STUBEOF
+chmod +x "$CB2_CTRL_DIR/_loop/stub-cb2-control.sh"
+
+cb2_ctrl_log="$TMP/cb2-control-run.log"
+( cd "$CB2_CTRL_DIR" && LOOP_CLI="$CB2_CTRL_DIR/_loop/stub-cb2-control.sh" bash ./_loop/loop.sh 5 ) \
+  >"$cb2_ctrl_log" 2>&1
+cb2_ctrl_rc=$?
+
+if [[ "$cb2_ctrl_rc" -eq 1 ]] && ! grep -qF 'circuit breaker: same error 5 times' "$cb2_ctrl_log" \
+   && grep -qF 'max iterations (5) reached' "$cb2_ctrl_log"; then
+  report PASS "52: per-slot CB2 control -- 4 identical + 1 DIFFERENT failure -> same-error counter resets, run does NOT exit 3 (exhausts MAX_ITER, exits 1)"
+else
+  report FAIL "52: per-slot CB2 control" "rc=$cb2_ctrl_rc(expected 1)"
+  sed 's/^/    /' "$cb2_ctrl_log" >&2
+fi
+
+# ---------------------------------------------------------------------------
+# 53: ps1 structural parity, block-scoped (assertion-18/34 coupling
+# precedent) against the CANONICAL loop.ps1 -- not runtime-verified, pwsh
+# absent, same disposition as this file's other ps1 structural guards.
+# ---------------------------------------------------------------------------
+t53_slots_check() { # $env:LOOP_SLOTS read + clamp, block-scoped
+  local f="$1" ln window
+  ln="$(grep -n '\$SlotsRaw = \$env:LOOP_SLOTS' "$f" | head -1 | cut -d: -f1)"
+  [[ -z "$ln" ]] && return 1
+  window="$(sed -n "${ln},$((ln + 10))p" "$f")"
+  grep -qF '$Slots -lt 1' <<< "$window" && grep -qF '$Slots -gt 3' <<< "$window"
+}
+t53_worktree_check() { grep -qF '$env:LOOP_WORKTREE' "$1"; }
+t53_guard_msg_check() { grep -qF 'LOOP_SLOTS>1 requires driver-owned dispatch' "$1"; }
+t53_preflight_check() { # two-path preflight, block-scoped
+  local f="$1" ln window
+  ln="$(grep -n 'backlogOk = Test-Path' "$f" | head -1 | cut -d: -f1)"
+  [[ -z "$ln" ]] && return 1
+  window="$(sed -n "${ln},$((ln + 6))p" "$f")"
+  grep -qF 'ideDirOk = Test-Path' <<< "$window" && grep -qF 'PathType Container' <<< "$window"
+}
+t53_startjob_wait_check() { # Start-Job/process wait, block-scoped
+  local f="$1" ln window
+  ln="$(grep -n 'Start-Job -ScriptBlock' "$f" | head -1 | cut -d: -f1)"
+  [[ -z "$ln" ]] && return 1
+  window="$(sed -n "${ln},$((ln + 30))p" "$f")"
+  grep -qF 'Wait-Job' <<< "$window"
+}
+t53_removal_ordering_check() { # wait-then-remove comment + --force/prune fallback
+  local f="$1" ln window
+  ln="$(grep -n 'Windows removal ordering' "$f" | head -1 | cut -d: -f1)"
+  [[ -z "$ln" ]] && return 1
+  window="$(sed -n "${ln},$((ln + 12))p" "$f")"
+  grep -qF 'Wait-Job' <<< "$window" || return 1
+  grep -qF -- '--force' "$f" && grep -qF 'prune' "$f"
+}
+t53_abnormal_check() { # abnormal-exit branch, block-scoped
+  local f="$1" ln window
+  ln="$(grep -n 'slot exited abnormally' "$f" | head -1 | cut -d: -f1)"
+  [[ -z "$ln" ]] && return 1
+  window="$(sed -n "${ln},$((ln + 6))p" "$f")"
+  grep -qF 'retainedBranches +=' <<< "$window"
+}
+t53_capacity_check() { grep -qF 'Capacity-contention rationale' "$1"; }
+t53_exit5_check() { grep -qF 'Exit 5 = setup or integration failure' "$1"; }
+
+if t53_slots_check "$LOOP_PS1" && t53_worktree_check "$LOOP_PS1" && t53_guard_msg_check "$LOOP_PS1" \
+   && t53_preflight_check "$LOOP_PS1" && t53_startjob_wait_check "$LOOP_PS1" \
+   && t53_removal_ordering_check "$LOOP_PS1" && t53_abnormal_check "$LOOP_PS1" \
+   && t53_capacity_check "$LOOP_PS1" && t53_exit5_check "$LOOP_PS1"; then
+  report PASS "53: ps1 structural parity -- \$env:LOOP_SLOTS+clamp, \$env:LOOP_WORKTREE, the STORY-011 guard message, the two-path preflight (backlogOk/ideDirOk, Container test), Start-Job/Wait-Job, removal ordering (wait-then-remove + --force/prune fallback), the abnormal-exit branch (retainedBranches +=), the capacity-contention comment, and the appended exit-5 sentence all present in canonical loop.ps1 -- not runtime-verified, pwsh absent"
+else
+  report FAIL "53: ps1 structural parity" \
+    "slots=$(t53_slots_check "$LOOP_PS1" && echo ok || echo FAIL) worktree=$(t53_worktree_check "$LOOP_PS1" && echo ok || echo FAIL) guard_msg=$(t53_guard_msg_check "$LOOP_PS1" && echo ok || echo FAIL) preflight=$(t53_preflight_check "$LOOP_PS1" && echo ok || echo FAIL) startjob_wait=$(t53_startjob_wait_check "$LOOP_PS1" && echo ok || echo FAIL) removal_ordering=$(t53_removal_ordering_check "$LOOP_PS1" && echo ok || echo FAIL) abnormal=$(t53_abnormal_check "$LOOP_PS1" && echo ok || echo FAIL) capacity=$(t53_capacity_check "$LOOP_PS1" && echo ok || echo FAIL) exit5=$(t53_exit5_check "$LOOP_PS1" && echo ok || echo FAIL)"
+fi
+
 echo
 echo "=== loop-harness summary ==="
 echo "PASS: $pass_count   FAIL: $fail_count"
