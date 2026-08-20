@@ -25,7 +25,8 @@
 #     copy-mode, overwrite, --force, dry-run, --dry-run --symlink, unknown-flag,
 #     empty-skills, sibling-preservation, rollback, --symlink, mode-transition,
 #     .gitignore dest-lines, bash -n, ps1 structural-parity, ps1 parse (pwsh-
-#     conditional), ps1 live run (pwsh-conditional), README citation.
+#     conditional), ps1 live run (pwsh-conditional), README citation, and
+#     checks B/D excluding the compiler copy at .claude/skills/setup/.
 #
 # Every assertion is outcome-verifying: it inspects the resulting state file /
 # stdout / stderr / exit code and FAILs loudly (non-zero exit, explicit FAIL
@@ -470,6 +471,41 @@ if command -v pwsh &>/dev/null; then
   fi
 else
   report SKIP "85: pwsh absent -- ps1 live copy-mode skipped"
+fi
+
+# ---------------------------------------------------------------------------
+# 86. checks B/D must ignore the self-install compiler copy at
+#     .claude/skills/setup/ (unresolved tokens there are required). SKIP if
+#     .claude/checks.sh is absent (fresh clone, no /setup). Mutation: a copy
+#     with --exclude-dir=setup stripped must still be distinguishable from
+#     the live script; the live tree must have tokens under that path so the
+#     exclusion is load-bearing.
+# ---------------------------------------------------------------------------
+if [[ -f "$CHECKS_SH" ]]; then
+  _b_exclude=0
+  _d_prune=0
+  grep -qF -- "--exclude-dir='setup'" "$CHECKS_SH" && _b_exclude=1
+  grep -qF ".claude/skills/setup" "$CHECKS_SH" && grep -qF -- '-prune' "$CHECKS_SH" \
+    && _d_prune=1
+  _setup_has_tokens=0
+  if grep -rqE '\{\{[A-Z_]+\}\}|<!-- BOOTSTRAP' \
+        "$REPO_ROOT/.claude/skills/setup" 2>/dev/null; then
+    _setup_has_tokens=1
+  fi
+  _t86="$TMP/checks_no_exclude.sh"
+  cp "$CHECKS_SH" "$_t86"
+  sed -i "s/ --exclude-dir='setup'//" "$_t86"
+  _mutant_lost_exclude=0
+  grep -qF -- "--exclude-dir='setup'" "$_t86" || _mutant_lost_exclude=1
+  if [[ "$_b_exclude" -eq 1 && "$_d_prune" -eq 1 \
+        && "$_setup_has_tokens" -eq 1 && "$_mutant_lost_exclude" -eq 1 ]]; then
+    report PASS "86: checks B/D exclude .claude/skills/setup/ compiler copy (load-bearing)"
+  else
+    report FAIL "86: checks B/D exclude compiler copy" \
+      "b_exclude=$_b_exclude d_prune=$_d_prune tokens=$_setup_has_tokens mutant_stripped=$_mutant_lost_exclude"
+  fi
+else
+  report SKIP "86: .claude/checks.sh absent -- compiler-copy exclusion skipped"
 fi
 
 # ===========================================================================
