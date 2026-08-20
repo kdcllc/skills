@@ -27,15 +27,20 @@ Rung 3  Full suites        →  {{FULL_TEST_COMMAND}}
 
 | When | Rungs |
 |------|-------|
-| TDD red/green, a single task, a judge-driven fix, mid-cycle implementation | **1 then 2 only** |
+| TDD red/green, a single task (except a designated closer task — next row), a judge-driven fix, mid-cycle implementation | **1 then 2 only** |
+| A goal's designated closer task, when its task file mandates the full-suite run as the closing gate | **1 → 2 → 3** (the delegated cycle-end run — see the carve-out below) |
 | All planned changes for the request/goal are applied (Phase 5 Quality Checks, or the last step of an ad-hoc change) | **1 → 2 → 3** |
 | Docs-only / no testable code | Skip all rungs |
 
 A **cycle** is one user request or one `feature` goal — not one file save and not one
-task. Phase 4 tasks and implement→judge retries are mid-cycle.
+task. Phase 4 tasks and implement→judge retries are mid-cycle. One exception: a
+goal's **designated closer task** applies the cycle's last planned changes, so
+cycle end occurs inside it (see the carve-out below).
 
 Rung 3 runs **every** stack's full suite, even if the cycle only touched one of them.
-That is the regression gate; it runs once per cycle.
+That is the regression gate; it runs at cycle end — in a goal's
+designated closer task when it has one (see the carve-out below), and in the
+orchestrator's Phase 5 Quality Checks.
 
 ## Rung 1 — New tests
 
@@ -96,11 +101,40 @@ re-run everything immediately.
 
 | Role | Allowed rungs |
 |------|---------------|
-| `implementer` | 1 then 2. Never 3. |
-| `test-writer` | 1 then 2. Never 3. |
-| `judge` (via `task-criteria`) | Requires evidence of 1 then 2. Does **not** fail a task for skipping rung 3. |
+| `implementer` | 1 then 2. Rung 3 only when executing the goal's designated closer task (see the carve-out below). |
+| `test-writer` | 1 then 2. Rung 3 only when executing the goal's designated closer task (see the carve-out below). |
+| `judge` (via `task-criteria`) | Requires evidence of 1 then 2. Does **not** fail a task for skipping rung 3 (see the carve-out below for a closer task's mandated run). |
 | `feature` orchestrator (and ad-hoc main-session work) | After every task is PASS and the final audit is APPROVED: run rung 3. |
 | `qa-judge` | Behavioral evidence only. Does not replace the ladder. |
+
+## Closer-task carve-out (delegated rung 3)
+
+A goal's **designated closer task** may run rung 3 when its task file mandates
+it as the closing gate. All conditions required:
+
+- **Written mandate**: the task file names the full-suite run in its
+  requirements. Task files are authored by the orchestrator, so the mandate is
+  the orchestrator's cycle-end rung-3 authority delegated in writing — never
+  the executor's own initiative.
+- **Actually last**: the closer task is the final task in dependency order;
+  every other planned change of the cycle lands before or inside it, so its
+  completion is the moment "after every planned change in the cycle is
+  applied" — the run is the cycle-end run, not a mid-cycle exception.
+- **At most one** designated closer task per goal.
+
+On a rung-3 failure outside its write fence, a closer task escalates per the
+write-fence rule — it never edits an out-of-fence file to make a suite pass.
+
+Judge interplay is unchanged: per `task-criteria`, no task is ever failed *for
+skipping rung 3*; a closer task that skips its mandated run fails
+requirements-completeness (its task file said so), not the ladder. The
+orchestrator's rung-3 authority is unchanged: Phase 5 Quality Checks still
+runs the full suites at cycle end. The closer task's run is an additional,
+judged regression gate — it never replaces Phase 5.
+
+This skill's tables plus this carve-out are the authoritative rung rules;
+one-line summaries elsewhere ("executors never run rung 3") are shorthand for
+them.
 
 ## Report this every time tests run
 

@@ -2,7 +2,7 @@
 
 [![skills.sh installs](https://skills.sh/b/kdcllc/skills)](https://skills.sh/kdcllc/skills)
 
-> Kit version: **0.13.0** (`skills/setup/VERSION`) · The install badge above applies
+> Kit version: **0.14.0** (`skills/setup/VERSION`) · The install badge above applies
 > only if the repo is made public: [skills.sh](https://www.skills.sh/) filters private
 > repos out of its public index by design
 > ([vercel-labs/skills#381](https://github.com/vercel-labs/skills/issues/381)), so it
@@ -32,7 +32,8 @@ What an install gives a project:
   family, then the frontier tier), silent-success artifact verification, and an
   append-only **orchestration log** per goal.
 - A **staged test ladder** (`test-ladder`): new tests → impacted tests mid-cycle; full
-  suites run exactly once, at cycle end.
+  suites at cycle end — in a goal's designated closer task when it has one, and in the
+  orchestrator's Phase 5 Quality Checks.
 - An optional **autonomous loop** (`auto-loop` + `_loop/loop.sh` / `_loop/loop.ps1`):
   one backlog story per fresh-context iteration, judge-gated commits, circuit breakers
   (no-progress, repeated-error, and protected-path violations enforced in the loop
