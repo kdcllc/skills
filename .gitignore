@@ -1,8 +1,10 @@
 # --- Self-install (dogfooding) instance — NEVER commit. ---
 # The canonical kit lives in skills/setup/; the paths below are the emitted
-# instance produced by running /setup on this repo itself. Re-runnable at any
-# time, so nothing here is source of truth.
+# instance produced by scripts/self-install.sh (--symlink also writes
+# .agents/skills/). Re-runnable at any time; nothing here is source of truth.
 .claude/
+.cursor/skills/
+.agents/skills/
 _goals/
 _loop/
 _research/

@@ -659,8 +659,8 @@ mismatch that no test catches — the empirically large cost the research doc do
 This split is not a footnote — it determines which mechanism is even *available*, and
 getting it wrong means proposing git merge drivers for files git never sees.
 
-**In THIS repository**, `.gitignore:6` ignores `_goals/` wholesale (alongside `.claude/`
-at `:5` and `_loop/` at `:7`, all under the header "Self-install (dogfooding)
+**In THIS repository**, `.gitignore:8` ignores `_goals/` wholesale (alongside `.claude/`
+at `:5` and `_loop/` at `:9`, all under the header "Self-install (dogfooding)
 instance — NEVER commit", `.gitignore:1`). `git ls-files` confirms neither
 `_goals/backlog.md` nor `_goals/LEARNINGS.md` is tracked. Consequences:
 
@@ -695,7 +695,7 @@ mechanism.
 
 The four files, each with its own rule — not one rule for the set.
 
-**`_goals/backlog.md`** — *gitignored here* (`.gitignore:6`); *not* merge=union even in
+**`_goals/backlog.md`** — *gitignored here* (`.gitignore:8`); *not* merge=union even in
 installs. Currently mutated by every iteration in two places: `attempts` incremented at
 iteration start (`templates/loop/SKILL.md:89-90`) and `passes: true` set on success
 (`templates/loop/SKILL.md:113`). **Rule: slots never write it.** The driver already owns
@@ -705,7 +705,7 @@ selection and the `attempts` increment (§4 step 3); the integrator applies the
 by one process, there is no merge and no last-writer-wins window. *Fold-back is
 unnecessary for this file: it is never modified on a slot branch.*
 
-**`_goals/LEARNINGS.md`** — *gitignored here* (`.gitignore:6`), absent from this tree;
+**`_goals/LEARNINGS.md`** — *gitignored here* (`.gitignore:8`), absent from this tree;
 merge=union in installs (`skills/setup/SKILL.md:120`). Two distinct problems:
 - *Concurrent appends*: "Append one line to `_goals/LEARNINGS.md`… Keep it one line per
   learning" (`templates/loop/SKILL.md:114-115`). **Rule**: the slot writes its learning
@@ -937,7 +937,7 @@ both twins.
    what the integrator should do on a *small* overrun (a story that also touched one
    README). Quarantine may be too blunt; an escalation-and-admit path may be better.
 5. **Should `_goals/` become tracked in this repository?** Today it is ignored
-   (`.gitignore:6`) as a dogfooding artifact. Tracking it would make the install-side
+   (`.gitignore:8`) as a dogfooding artifact. Tracking it would make the install-side
    merge=union guidance (`skills/setup/SKILL.md:120-122`) apply here too, changing which
    of §6.3's rules are belt and which are braces. Orthogonal to this design, but it
    changes the test surface for the follow-up stories.
@@ -1049,7 +1049,7 @@ by **fast-forward with zero conflicts**, not so that conflicting work can be mer
 already emits `merge=union` for `_goals/LEARNINGS.md`, `_goals/ESCALATIONS.md`, and
 `_goals/*/orchestration-log.md` (`skills/setup/SKILL.md:120-122`), so building on it is
 tempting. Three reasons not to: (i) it does not exist in this repository, where `_goals/`
-is untracked (`.gitignore:6`) and the root `.gitattributes` carries only the two
+is untracked (`.gitignore:8`) and the root `.gitattributes` carries only the two
 `text eol=lf` lines with no `merge=union` entry (`.gitattributes:2-3`), so a design
 resting on it would work in installs and silently not work here; (ii) it cannot survive
 the mandatory compaction rewrite at `templates/loop/SKILL.md:116-118` — union resolves

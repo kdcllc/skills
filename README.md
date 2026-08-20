@@ -51,6 +51,7 @@ ORCHESTRATION.md              # Pointer to the canonical template inside the ski
 docs/
 ├── research-multi-harness-upgrade.md  # Verified per-harness research + upgrade plan
 ├── research-squad-ideas.md            # bradygaster/squad study + adopted ideas (A1–A10)
+├── research-token-efficient-skills.md # 2026-08-20: invocation flags, hygiene, terminal agent
 └── design-parallel-dispatch.md        # Judged design: WIP-limited parallel dispatch
                                        #   in the autonomous loop (partially shipped; see its Status block)
 skills/setup/                 # The installable skill (the compiler)
@@ -72,12 +73,15 @@ skills/setup/                 # The installable skill (the compiler)
     │                         #   test-ladder, align-docs, ship-pr
     └── loop/                 # Optional autonomous loop: SKILL.md (one iteration),
                               #   loop.sh + loop.ps1 (guarded drivers), PROMPT.md, backlog.md
+scripts/                      # self-install.sh / self-install.ps1 — first-mile dogfood (see §Self-install)
 tests/
 └── loop-harness/run.sh        # Tracked behavioral test suite (breaker state machine +
                               #   torn-read/fail-safe hardening, SIGPIPE regressions,
-                              #   checks J/K mutations; 82 assertions (as of v0.12.0));
-                              #   requires a self-install (_loop/ present) — SKIPs cleanly
-                              #   otherwise; run: bash tests/loop-harness/run.sh
+                              #   checks J/K mutations); self-install assertions run before
+                              #   the `_loop/` guard (they execute on a fresh clone with no
+                              #   `_loop/`); the remaining loop-instance assertions are skipped
+                              #   if `_loop/` is absent (one aggregate skip, not per-row SKIP
+                              #   lines); run: bash tests/loop-harness/run.sh
 ```
 
 ## Install into a project
@@ -138,15 +142,45 @@ covers setup/integration failures.
 
 ### Self-install (local development of the kit itself)
 
+**First-mile skill copy (offline, no npx):** These scripts copy every top-level
+`skills/<name>/` directory (each containing a `SKILL.md`) from the working tree
+directly into `.claude/skills/` and `.cursor/skills/`. Overwrite-copy is the default;
+no network access or npx is required.
+
+```bash
+bash scripts/self-install.sh
+```
+
+On Windows or any system where the `.ps1` may lack execute permission, use `pwsh -File` (PowerShell 7+):
+
+```powershell
+pwsh -NoProfile -File scripts/self-install.ps1
+```
+
+Flags: `--dry-run` prints the planned destinations and writes nothing (exit 0);
+`--symlink` places the canonical real tree under `.agents/skills/` and makes
+`.claude/skills/<name>` and `.cursor/skills/<name>` symlinks pointing there (fails
+loudly on any symlink failure — never falls back to copy); `--force` is accepted
+and ignored (overwrite is already the default). The destination paths
+`.cursor/skills/` and `.agents/skills/` are gitignored alongside the entire `.claude/`
+directory (see `.gitignore`); nothing the scripts write ever reaches git.
+
+These scripts do **not** replace `/setup` and do **not** emit the compiled instance.
+`/setup` is the **compile** step that emits `_loop/`, the agents, `_goals/`,
+`orchestration-kit.manifest.json`, and all generated project-specific content. After
+running the scripts above, invoke `/setup` inside the repo session to produce the full
+local instance.
+
 This repo dogfoods its own skill: run `/setup` in a session inside this repo and point
 it at itself. The emitted instance (`.claude/`, `_goals/`, `_loop/`, `_research/`,
 `orchestration-kit.manifest.json`) is **gitignored** — a self-install never reaches
 git, so it is safe to re-run at any time and nothing in the instance is source of
 truth. The canonical kit stays under `skills/setup/`; after editing templates, re-run
 `/setup` to refresh the local instance and exercise the change end-to-end before
-committing the canonical side. The tracked test harness
-(`tests/loop-harness/run.sh`) exercises that resulting instance end-to-end —
-run it with `bash tests/loop-harness/run.sh`.
+committing the canonical side. The tracked test harness (`tests/loop-harness/run.sh`)
+exercises the `/setup`-emitted instance when `_loop/` is present — run it with
+`bash tests/loop-harness/run.sh`. Assertions for these scripts exist in the loop
+harness and run without requiring `_loop/`.
 
 ## Model tiers
 

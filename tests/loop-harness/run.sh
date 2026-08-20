@@ -20,6 +20,12 @@
 #     CHECKS_MANIFEST override and copy-based grep replication; the task-02
 #     pristine-clause literal tripwire; and a frozen TMPDIR characterization
 #     of the herestring sentinel check under an unwritable TMPDIR.
+#   - self-install block (no _loop/ required): assertions 69+ exercise
+#     scripts/self-install.sh and self-install.ps1 against a temp fixture —
+#     copy-mode, overwrite, --force, dry-run, --dry-run --symlink, unknown-flag,
+#     empty-skills, sibling-preservation, rollback, --symlink, mode-transition,
+#     .gitignore dest-lines, bash -n, ps1 structural-parity, ps1 parse (pwsh-
+#     conditional), ps1 live run (pwsh-conditional), README citation.
 #
 # Every assertion is outcome-verifying: it inspects the resulting state file /
 # stdout / stderr / exit code and FAILs loudly (non-zero exit, explicit FAIL
@@ -35,16 +41,6 @@ set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$HERE/../.." && pwd)"
 cd "$REPO_ROOT" || exit 1
-
-# ---------------------------------------------------------------------------
-# Top guard: this harness re-emits/inspects the self-install under _loop/. A
-# fresh clone (or the canonical templates repo itself, pre-/setup) has none --
-# SKIP cleanly rather than failing on a precondition the harness cannot meet.
-# ---------------------------------------------------------------------------
-if [[ ! -f "$REPO_ROOT/_loop/loop.sh" ]]; then
-  echo "SKIP: harness requires a self-install; run /setup first"
-  exit 0
-fi
 
 BREAKER_SH="$REPO_ROOT/skills/setup/templates/loop/breaker.sh"
 BREAKER_PS1="$REPO_ROOT/skills/setup/templates/loop/breaker.ps1"
@@ -69,12 +65,16 @@ trap 'rm -rf "$TMP"' EXIT
 
 fail_count=0
 pass_count=0
+skip_count=0
 
-report() { # report <PASS|FAIL> <name> [detail]
+report() { # report <PASS|FAIL|SKIP> <name> [detail]
   local status="$1" name="$2" detail="${3:-}"
   if [[ "$status" == "PASS" ]]; then
     pass_count=$((pass_count + 1))
     echo "PASS: $name"
+  elif [[ "$status" == "SKIP" ]]; then
+    skip_count=$((skip_count + 1))
+    echo "SKIP: $name"
   else
     fail_count=$((fail_count + 1))
     echo "FAIL: $name${detail:+ -- $detail}" >&2
@@ -83,6 +83,416 @@ report() { # report <PASS|FAIL> <name> [detail]
 
 # shellcheck source=/dev/null
 source "$BREAKER_SH"
+
+# ===========================================================================
+# Self-install dogfood assertions (69+, no _loop/ required).
+# Exercises scripts/self-install.sh and scripts/self-install.ps1 against a
+# temp fixture only — never writes to the live repo dests (.claude/, .cursor/,
+# .agents/ under REPO_ROOT).
+# ===========================================================================
+
+# Build shared temp fixture: two top-level skills (setup, other); one nested
+# SKILL.md under skills/setup/templates/… that must NOT be installed as a skill
+# named "feature"; installer scripts copied from the repo. cwd during all runs
+# is "$TMP" (different from the fixture root) to prove repo-root auto-detection.
+SI_FIX="$TMP/si-fix"
+mkdir -p "$SI_FIX/scripts" \
+         "$SI_FIX/skills/setup/templates/skills/feature" \
+         "$SI_FIX/skills/other"
+cp "$REPO_ROOT/scripts/self-install.sh"  "$SI_FIX/scripts/self-install.sh"
+cp "$REPO_ROOT/scripts/self-install.ps1" "$SI_FIX/scripts/self-install.ps1"
+printf 'SKILL:setup\n'              > "$SI_FIX/skills/setup/SKILL.md"
+printf 'NESTED:feature-not-a-skill\n' > "$SI_FIX/skills/setup/templates/skills/feature/SKILL.md"
+printf 'SKILL:other\n'              > "$SI_FIX/skills/other/SKILL.md"
+
+# ---------------------------------------------------------------------------
+# 69. bash -n syntax check on repo scripts/self-install.sh
+# ---------------------------------------------------------------------------
+if bash -n "$REPO_ROOT/scripts/self-install.sh" 2>/dev/null; then
+  report PASS "69: bash -n scripts/self-install.sh"
+else
+  report FAIL "69: bash -n scripts/self-install.sh" "syntax error in repo script"
+fi
+
+# ---------------------------------------------------------------------------
+# 70. ps1 structural-parity: four required markers must all be present in the
+#     ps1 twin (grep only — does not require pwsh).
+# ---------------------------------------------------------------------------
+_ps1_requires=0; _ps1_dryrun=0; _ps1_claude=0; _ps1_twin=0
+grep -qF '#Requires -Version 7.0'  "$REPO_ROOT/scripts/self-install.ps1" && _ps1_requires=1
+grep -qF -- '--dry-run'             "$REPO_ROOT/scripts/self-install.ps1" && _ps1_dryrun=1
+grep -qF '.claude/skills/'          "$REPO_ROOT/scripts/self-install.ps1" && _ps1_claude=1
+grep -qF 'Twin: self-install.sh'    "$REPO_ROOT/scripts/self-install.ps1" && _ps1_twin=1
+if [[ "$_ps1_requires$_ps1_dryrun$_ps1_claude$_ps1_twin" == "1111" ]]; then
+  report PASS "70: ps1 structural-parity (#Requires/--dry-run/.claude/skills/Twin markers present)"
+else
+  report FAIL "70: ps1 structural-parity" \
+    "requires=$_ps1_requires dryrun=$_ps1_dryrun claude=$_ps1_claude twin=$_ps1_twin"
+fi
+
+# ---------------------------------------------------------------------------
+# 71. README (mandatory): repo README.md cites both installer script paths.
+# ---------------------------------------------------------------------------
+_readme_sh=0; _readme_ps1=0
+grep -qF 'scripts/self-install.sh' "$REPO_ROOT/README.md" && _readme_sh=1
+grep -qF 'self-install.ps1'        "$REPO_ROOT/README.md" && _readme_ps1=1
+if [[ "$_readme_sh$_readme_ps1" == "11" ]]; then
+  report PASS "71: README contains scripts/self-install.sh and self-install.ps1"
+else
+  report FAIL "71: README missing self-install script references" "sh=$_readme_sh ps1=$_readme_ps1"
+fi
+
+# ---------------------------------------------------------------------------
+# 72. .gitignore dest-lines: exact lines .cursor/skills/ and .agents/skills/
+#     must be present; no wholesale .cursor/ or .agents/ ignore line.
+# ---------------------------------------------------------------------------
+_gi_cursor_skills=0; _gi_agents_skills=0; _gi_cursor_whole=0; _gi_agents_whole=0
+grep -qxF '.cursor/skills/' "$REPO_ROOT/.gitignore" && _gi_cursor_skills=1
+grep -qxF '.agents/skills/' "$REPO_ROOT/.gitignore" && _gi_agents_skills=1
+grep -qxF '.cursor/'        "$REPO_ROOT/.gitignore" && _gi_cursor_whole=1
+grep -qxF '.agents/'        "$REPO_ROOT/.gitignore" && _gi_agents_whole=1
+if [[ "$_gi_cursor_skills$_gi_agents_skills" == "11" && \
+      "$_gi_cursor_whole$_gi_agents_whole" == "00" ]]; then
+  report PASS "72: .gitignore has exact .cursor/skills/ and .agents/skills/ lines; no wholesale .cursor/ or .agents/"
+else
+  report FAIL "72: .gitignore dest-lines" \
+    "cursor_skills=$_gi_cursor_skills agents_skills=$_gi_agents_skills cursor_whole=$_gi_cursor_whole agents_whole=$_gi_agents_whole"
+fi
+
+# ---------------------------------------------------------------------------
+# 73. copy-mode: both harness dests (.claude/ and .cursor/) exist; SKILL.md
+#     bytes match source for setup AND other; feature is NOT installed.
+# ---------------------------------------------------------------------------
+_cm_dir="$TMP/si-cm"
+cp -a "$SI_FIX" "$_cm_dir"
+_cm_exit=0
+( cd "$TMP" && bash "$_cm_dir/scripts/self-install.sh" ) 2>/dev/null || _cm_exit=$?
+_cm_claude_setup="$_cm_dir/.claude/skills/setup/SKILL.md"
+_cm_cursor_setup="$_cm_dir/.cursor/skills/setup/SKILL.md"
+_cm_claude_other="$_cm_dir/.claude/skills/other/SKILL.md"
+_cm_cursor_other="$_cm_dir/.cursor/skills/other/SKILL.md"
+_cm_feature_present=0
+{ [[ -d "$_cm_dir/.claude/skills/feature" ]] || [[ -d "$_cm_dir/.cursor/skills/feature" ]]; } \
+  && _cm_feature_present=1
+_cm_setup_ok=0; _cm_other_ok=0; _cm_bytes_ok=0
+[[ -f "$_cm_claude_setup" && -f "$_cm_cursor_setup" ]] && _cm_setup_ok=1
+[[ -f "$_cm_claude_other" && -f "$_cm_cursor_other" ]] && _cm_other_ok=1
+if (( _cm_setup_ok == 1 && _cm_other_ok == 1 )); then
+  diff -q "$_cm_claude_setup" "$_cm_dir/skills/setup/SKILL.md" >/dev/null 2>&1 && \
+  diff -q "$_cm_cursor_setup" "$_cm_dir/skills/setup/SKILL.md" >/dev/null 2>&1 && \
+  diff -q "$_cm_claude_other" "$_cm_dir/skills/other/SKILL.md" >/dev/null 2>&1 && \
+  diff -q "$_cm_cursor_other" "$_cm_dir/skills/other/SKILL.md" >/dev/null 2>&1 && \
+  _cm_bytes_ok=1
+fi
+if [[ "$_cm_exit" -eq 0 && "$_cm_setup_ok" -eq 1 && "$_cm_other_ok" -eq 1 && \
+      "$_cm_bytes_ok" -eq 1 && "$_cm_feature_present" -eq 0 ]]; then
+  report PASS "73: copy-mode: both dests exist, bytes match source, feature not installed"
+else
+  report FAIL "73: copy-mode" \
+    "exit=$_cm_exit setup_ok=$_cm_setup_ok other_ok=$_cm_other_ok bytes_ok=$_cm_bytes_ok feature=$_cm_feature_present"
+fi
+
+# ---------------------------------------------------------------------------
+# 74. overwrite: seed dest with different bytes, re-run, dest matches source.
+# ---------------------------------------------------------------------------
+_ow_dir="$TMP/si-ow"
+cp -a "$SI_FIX" "$_ow_dir"
+( cd "$TMP" && bash "$_ow_dir/scripts/self-install.sh" ) 2>/dev/null
+printf 'STALE_BYTES\n' > "$_ow_dir/.claude/skills/setup/SKILL.md"
+_ow_exit=0
+( cd "$TMP" && bash "$_ow_dir/scripts/self-install.sh" ) 2>/dev/null || _ow_exit=$?
+_ow_bytes_match=0
+diff -q "$_ow_dir/.claude/skills/setup/SKILL.md" \
+        "$_ow_dir/skills/setup/SKILL.md" >/dev/null 2>&1 && _ow_bytes_match=1
+if [[ "$_ow_exit" -eq 0 && "$_ow_bytes_match" -eq 1 ]]; then
+  report PASS "74: overwrite: re-run replaces stale dest bytes with source"
+else
+  report FAIL "74: overwrite" "exit=$_ow_exit bytes_match=$_ow_bytes_match"
+fi
+
+# ---------------------------------------------------------------------------
+# 75. --force: exit 0, same copy-mode dest layout (not rejected as unknown flag).
+# ---------------------------------------------------------------------------
+_fo_dir="$TMP/si-fo"
+cp -a "$SI_FIX" "$_fo_dir"
+_fo_exit=0
+( cd "$TMP" && bash "$_fo_dir/scripts/self-install.sh" --force ) 2>/dev/null || _fo_exit=$?
+_fo_claude_ok=0; _fo_cursor_ok=0
+[[ -f "$_fo_dir/.claude/skills/setup/SKILL.md" && \
+   -f "$_fo_dir/.claude/skills/other/SKILL.md" ]] && _fo_claude_ok=1
+[[ -f "$_fo_dir/.cursor/skills/setup/SKILL.md" && \
+   -f "$_fo_dir/.cursor/skills/other/SKILL.md" ]] && _fo_cursor_ok=1
+if [[ "$_fo_exit" -eq 0 && "$_fo_claude_ok" -eq 1 && "$_fo_cursor_ok" -eq 1 ]]; then
+  report PASS "75: --force: exit 0, copy-mode dest layout identical to no-flags run"
+else
+  report FAIL "75: --force" "exit=$_fo_exit claude_ok=$_fo_claude_ok cursor_ok=$_fo_cursor_ok"
+fi
+
+# ---------------------------------------------------------------------------
+# 76. dry-run: exit 0, dest skill trees not created.
+# ---------------------------------------------------------------------------
+_dr_dir="$TMP/si-dr"
+cp -a "$SI_FIX" "$_dr_dir"
+_dr_exit=0
+( cd "$TMP" && bash "$_dr_dir/scripts/self-install.sh" --dry-run ) 2>/dev/null || _dr_exit=$?
+_dr_claude_absent=0; _dr_cursor_absent=0
+[[ ! -d "$_dr_dir/.claude/skills" ]] && _dr_claude_absent=1
+[[ ! -d "$_dr_dir/.cursor/skills" ]] && _dr_cursor_absent=1
+if [[ "$_dr_exit" -eq 0 && "$_dr_claude_absent" -eq 1 && "$_dr_cursor_absent" -eq 1 ]]; then
+  report PASS "76: dry-run: exit 0, no dest skill trees created"
+else
+  report FAIL "76: dry-run" "exit=$_dr_exit claude_absent=$_dr_claude_absent cursor_absent=$_dr_cursor_absent"
+fi
+
+# ---------------------------------------------------------------------------
+# 77. --dry-run --symlink: exit 0; stdout names all three dest trees; nothing
+#     written under .agents/, .claude/, or .cursor/skills/.
+# ---------------------------------------------------------------------------
+_ds_dir="$TMP/si-ds"
+cp -a "$SI_FIX" "$_ds_dir"
+_ds_exit=0
+_ds_out="$TMP/si-ds-out.txt"
+( cd "$TMP" && bash "$_ds_dir/scripts/self-install.sh" --dry-run --symlink ) \
+  >"$_ds_out" 2>/dev/null || _ds_exit=$?
+_ds_agents_named=0; _ds_claude_named=0; _ds_cursor_named=0
+grep -qF '.agents/skills/' "$_ds_out" && _ds_agents_named=1
+grep -qF '.claude/skills/' "$_ds_out" && _ds_claude_named=1
+grep -qF '.cursor/skills/' "$_ds_out" && _ds_cursor_named=1
+_ds_nothing_created=0
+[[ ! -d "$_ds_dir/.agents/skills" && \
+   ! -d "$_ds_dir/.claude/skills" && \
+   ! -d "$_ds_dir/.cursor/skills" ]] && _ds_nothing_created=1
+if [[ "$_ds_exit" -eq 0 && \
+      "$_ds_agents_named$_ds_claude_named$_ds_cursor_named" == "111" && \
+      "$_ds_nothing_created" -eq 1 ]]; then
+  report PASS "77: --dry-run --symlink: exit 0, stdout names all three dest trees, nothing written"
+else
+  report FAIL "77: --dry-run --symlink" \
+    "exit=$_ds_exit agents=$_ds_agents_named claude=$_ds_claude_named cursor=$_ds_cursor_named created=$(( 1 - _ds_nothing_created ))"
+fi
+
+# ---------------------------------------------------------------------------
+# 78. unknown flag: non-zero exit, stderr non-empty, dests unchanged.
+# ---------------------------------------------------------------------------
+_uf_dir="$TMP/si-uf"
+cp -a "$SI_FIX" "$_uf_dir"
+_uf_exit=0
+_uf_stderr="$TMP/si-uf-err.txt"
+( cd "$TMP" && bash "$_uf_dir/scripts/self-install.sh" --no-such-flag ) \
+  2>"$_uf_stderr" && _uf_exit=0 || _uf_exit=$?
+_uf_nonzero=0; _uf_stderr_ne=0; _uf_dests_unchanged=0
+[[ "$_uf_exit" -ne 0 ]] && _uf_nonzero=1
+[[ -s "$_uf_stderr" ]] && _uf_stderr_ne=1
+[[ ! -d "$_uf_dir/.claude/skills" && ! -d "$_uf_dir/.cursor/skills" ]] && _uf_dests_unchanged=1
+if [[ "$_uf_nonzero" -eq 1 && "$_uf_stderr_ne" -eq 1 && "$_uf_dests_unchanged" -eq 1 ]]; then
+  report PASS "78: unknown flag: non-zero exit, stderr non-empty, dests unchanged"
+else
+  report FAIL "78: unknown flag" \
+    "exit=$_uf_exit nonzero=$_uf_nonzero stderr_ne=$_uf_stderr_ne dests_unchanged=$_uf_dests_unchanged"
+fi
+
+# ---------------------------------------------------------------------------
+# 79. empty skills dir: non-zero exit, no dest writes.
+# ---------------------------------------------------------------------------
+_es_dir="$TMP/si-es"
+mkdir -p "$_es_dir/scripts" "$_es_dir/skills"
+cp "$REPO_ROOT/scripts/self-install.sh" "$_es_dir/scripts/self-install.sh"
+_es_exit=0
+( cd "$TMP" && bash "$_es_dir/scripts/self-install.sh" ) 2>/dev/null && _es_exit=0 || _es_exit=$?
+_es_nonzero=0; _es_no_dests=0
+[[ "$_es_exit" -ne 0 ]] && _es_nonzero=1
+[[ ! -d "$_es_dir/.claude" && ! -d "$_es_dir/.cursor" ]] && _es_no_dests=1
+if [[ "$_es_nonzero" -eq 1 && "$_es_no_dests" -eq 1 ]]; then
+  report PASS "79: empty skills: non-zero exit, no dest writes"
+else
+  report FAIL "79: empty skills" "exit=$_es_exit nonzero=$_es_nonzero no_dests=$_es_no_dests"
+fi
+
+# ---------------------------------------------------------------------------
+# 80. sibling preservation: pre-create .claude/skills/keepme/SKILL.md, install,
+#     keepme still present after install.
+# ---------------------------------------------------------------------------
+_kb_dir="$TMP/si-kb"
+cp -a "$SI_FIX" "$_kb_dir"
+mkdir -p "$_kb_dir/.claude/skills/keepme"
+printf 'keepme\n' > "$_kb_dir/.claude/skills/keepme/SKILL.md"
+_kb_exit=0
+( cd "$TMP" && bash "$_kb_dir/scripts/self-install.sh" ) 2>/dev/null || _kb_exit=$?
+_kb_keepme=0
+[[ -f "$_kb_dir/.claude/skills/keepme/SKILL.md" ]] && _kb_keepme=1
+if [[ "$_kb_exit" -eq 0 && "$_kb_keepme" -eq 1 ]]; then
+  report PASS "80: sibling preservation: keepme skill survives install"
+else
+  report FAIL "80: sibling preservation" "exit=$_kb_exit keepme=$_kb_keepme"
+fi
+
+# ---------------------------------------------------------------------------
+# 81. rollback: pre-seed .claude/skills/other/SKILL.md with OLD bytes
+#     (other is processed FIRST alphabetically by the discovery glob); make
+#     .cursor a plain FILE so mkdir .cursor/skills fails AFTER .claude/skills/other
+#     has been written; exit non-zero; the first-written dest must contain OLD
+#     bytes (rollback restored the snapshot). Absent dest after the run = FAIL.
+# ---------------------------------------------------------------------------
+_rb_dir="$TMP/si-rb"
+cp -a "$SI_FIX" "$_rb_dir"
+mkdir -p "$_rb_dir/.claude/skills/other"
+printf 'OLD_ROLLBACK_BYTES\n' > "$_rb_dir/.claude/skills/other/SKILL.md"
+printf 'blocker\n' > "$_rb_dir/.cursor"   # .cursor is now a file, not a dir
+_rb_exit=0
+( cd "$TMP" && bash "$_rb_dir/scripts/self-install.sh" ) 2>/dev/null && _rb_exit=0 || _rb_exit=$?
+_rb_nonzero=0; _rb_rollback_ok=0
+[[ "$_rb_exit" -ne 0 ]] && _rb_nonzero=1
+_rb_bytes="$(cat "$_rb_dir/.claude/skills/other/SKILL.md" 2>/dev/null)"
+[[ "$_rb_bytes" == "OLD_ROLLBACK_BYTES" ]] && _rb_rollback_ok=1
+[[ ! -f "$_rb_dir/.claude/skills/other/SKILL.md" ]] && _rb_rollback_ok=0  # absent dest = FAIL
+# load-bearing proof: neuter _do_restore — predicate must FAIL on mutant
+_rb_mut_dir="$TMP/si-rb-mut"
+mkdir -p "$_rb_mut_dir/fix/scripts"
+cp -a "$SI_FIX/." "$_rb_mut_dir/fix/"
+mkdir -p "$_rb_mut_dir/fix/.claude/skills/other"
+printf 'OLD_ROLLBACK_BYTES\n' > "$_rb_mut_dir/fix/.claude/skills/other/SKILL.md"
+printf 'blocker\n' > "$_rb_mut_dir/fix/.cursor"
+sed '/^_do_restore() {$/a\  return 0' \
+    "$REPO_ROOT/scripts/self-install.sh" > "$_rb_mut_dir/fix/scripts/self-install.sh"
+_rb_mut_exit=0
+( cd "$TMP" && bash "$_rb_mut_dir/fix/scripts/self-install.sh" ) 2>/dev/null \
+  && _rb_mut_exit=0 || _rb_mut_exit=$?
+_rb_mut_bytes="$(cat "$_rb_mut_dir/fix/.claude/skills/other/SKILL.md" 2>/dev/null)"
+_rb_load_ok=0
+[[ "$_rb_mut_bytes" != "OLD_ROLLBACK_BYTES" && "$_rb_mut_exit" -ne 0 ]] && _rb_load_ok=1
+if [[ "$_rb_nonzero" -eq 1 && "$_rb_rollback_ok" -eq 1 && "$_rb_load_ok" -eq 1 ]]; then
+  report PASS "81: rollback: non-zero exit; .claude dest restored to pre-install (OLD) bytes"
+else
+  report FAIL "81: rollback" \
+    "exit=$_rb_exit nonzero=$_rb_nonzero rollback_ok=$_rb_rollback_ok load_ok=$_rb_load_ok"
+fi
+
+# ---------------------------------------------------------------------------
+# 82. --symlink: .agents/skills/<name> is a real directory; both harness dests
+#     (.claude and .cursor) are symlinks. If OS cannot create symlinks, SKIP.
+# ---------------------------------------------------------------------------
+if ln -s /dev/null "$TMP/si-symlink-probe" 2>/dev/null; then
+  rm -f "$TMP/si-symlink-probe"
+  _sl_dir="$TMP/si-sl"
+  cp -a "$SI_FIX" "$_sl_dir"
+  _sl_exit=0
+  ( cd "$TMP" && bash "$_sl_dir/scripts/self-install.sh" --symlink ) 2>/dev/null || _sl_exit=$?
+  _sl_agents_real=0; _sl_claude_link=0; _sl_cursor_link=0
+  _sl_claude_tgt_ok=0; _sl_cursor_tgt_ok=0
+  { [[ -d "$_sl_dir/.agents/skills/setup" ]] && [[ ! -L "$_sl_dir/.agents/skills/setup" ]]; } \
+    && _sl_agents_real=1
+  [[ -L "$_sl_dir/.claude/skills/setup" ]] && _sl_claude_link=1
+  [[ -L "$_sl_dir/.cursor/skills/setup" ]] && _sl_cursor_link=1
+  _sl_claude_tgt="$(readlink "$_sl_dir/.claude/skills/setup" 2>/dev/null)"
+  _sl_cursor_tgt="$(readlink "$_sl_dir/.cursor/skills/setup" 2>/dev/null)"
+  [[ "$_sl_claude_tgt" == "$_sl_dir/.agents/skills/setup" ]] && _sl_claude_tgt_ok=1
+  [[ "$_sl_cursor_tgt" == "$_sl_dir/.agents/skills/setup" ]] && _sl_cursor_tgt_ok=1
+  if [[ "$_sl_exit" -eq 0 && "$_sl_agents_real" -eq 1 && \
+        "$_sl_claude_link" -eq 1 && "$_sl_cursor_link" -eq 1 && \
+        "$_sl_claude_tgt_ok" -eq 1 && "$_sl_cursor_tgt_ok" -eq 1 ]]; then
+    report PASS "82: --symlink: .agents/skills/setup is real dir; .claude and .cursor dests are symlinks"
+  else
+    report FAIL "82: --symlink" \
+      "exit=$_sl_exit agents_real=$_sl_agents_real claude_link=$_sl_claude_link cursor_link=$_sl_cursor_link claude_tgt_ok=$_sl_claude_tgt_ok cursor_tgt_ok=$_sl_cursor_tgt_ok"
+  fi
+else
+  report SKIP "82: --symlink (OS cannot create symlinks)"
+fi
+
+# ---------------------------------------------------------------------------
+# 83. mode-transition: --symlink then default copy-mode; harness dests must be
+#     real directories (not symlinks) with bytes matching source.
+# ---------------------------------------------------------------------------
+_mt_dir="$TMP/si-mt"
+cp -a "$SI_FIX" "$_mt_dir"
+_mt_exit1=0; _mt_exit2=0
+( cd "$TMP" && bash "$_mt_dir/scripts/self-install.sh" --symlink ) 2>/dev/null || _mt_exit1=$?
+( cd "$TMP" && bash "$_mt_dir/scripts/self-install.sh" ) 2>/dev/null || _mt_exit2=$?
+_mt_claude_real=0; _mt_cursor_real=0; _mt_bytes_ok=0
+{ [[ -d "$_mt_dir/.claude/skills/setup" ]] && [[ ! -L "$_mt_dir/.claude/skills/setup" ]]; } \
+  && _mt_claude_real=1
+{ [[ -d "$_mt_dir/.cursor/skills/setup" ]] && [[ ! -L "$_mt_dir/.cursor/skills/setup" ]]; } \
+  && _mt_cursor_real=1
+diff -q "$_mt_dir/.claude/skills/setup/SKILL.md" \
+        "$_mt_dir/skills/setup/SKILL.md" >/dev/null 2>&1 && _mt_bytes_ok=1
+if [[ "$_mt_exit2" -eq 0 && "$_mt_claude_real" -eq 1 && \
+      "$_mt_cursor_real" -eq 1 && "$_mt_bytes_ok" -eq 1 ]]; then
+  report PASS "83: mode-transition: --symlink then copy-mode; harness dests are real dirs with correct bytes"
+else
+  report FAIL "83: mode-transition" \
+    "exit1=$_mt_exit1 exit2=$_mt_exit2 claude_real=$_mt_claude_real cursor_real=$_mt_cursor_real bytes_ok=$_mt_bytes_ok"
+fi
+
+# ---------------------------------------------------------------------------
+# 84. pwsh: parse repo scripts/self-install.ps1 via .NET parser (zero errors).
+#     If pwsh is absent, SKIP.
+# ---------------------------------------------------------------------------
+if command -v pwsh &>/dev/null; then
+  _pwsh_parse_ok=0
+  _pwsh_parse_scr="$TMP/si-parse-test.ps1"
+  cat > "$_pwsh_parse_scr" <<'EOPWSH'
+$src = Get-Content -Raw -LiteralPath $args[0]
+$errors = $null
+$null = [System.Management.Automation.Language.Parser]::ParseInput($src, [ref]$null, [ref]$errors)
+exit $errors.Count
+EOPWSH
+  pwsh -NoProfile -File "$_pwsh_parse_scr" "$REPO_ROOT/scripts/self-install.ps1" 2>/dev/null \
+    && _pwsh_parse_ok=1
+  if [[ "$_pwsh_parse_ok" -eq 1 ]]; then
+    report PASS "84: pwsh parses scripts/self-install.ps1 with zero errors"
+  else
+    report FAIL "84: pwsh parses scripts/self-install.ps1 with zero errors" "parser reported errors"
+  fi
+else
+  report SKIP "84: pwsh absent -- ps1 parse skipped"
+fi
+
+# ---------------------------------------------------------------------------
+# 85. pwsh live copy-mode: run ps1 twin against a temp fixture; verify both
+#     harness dests have the expected SKILL.md files. If pwsh is absent, SKIP.
+# ---------------------------------------------------------------------------
+if command -v pwsh &>/dev/null; then
+  _pwsh_dir="$TMP/si-pwsh"
+  cp -a "$SI_FIX" "$_pwsh_dir"
+  _pwsh_exit=0
+  ( cd "$TMP" && pwsh -NoProfile -File "$_pwsh_dir/scripts/self-install.ps1" ) 2>/dev/null \
+    || _pwsh_exit=$?
+  _pwsh_claude_ok=0; _pwsh_cursor_ok=0
+  [[ -f "$_pwsh_dir/.claude/skills/setup/SKILL.md" && \
+     -f "$_pwsh_dir/.claude/skills/other/SKILL.md" ]] && _pwsh_claude_ok=1
+  [[ -f "$_pwsh_dir/.cursor/skills/setup/SKILL.md" && \
+     -f "$_pwsh_dir/.cursor/skills/other/SKILL.md" ]] && _pwsh_cursor_ok=1
+  if [[ "$_pwsh_exit" -eq 0 && "$_pwsh_claude_ok" -eq 1 && "$_pwsh_cursor_ok" -eq 1 ]]; then
+    report PASS "85: pwsh live copy-mode: ps1 twin installs skills to both harness dests"
+  else
+    report FAIL "85: pwsh live copy-mode" \
+      "exit=$_pwsh_exit claude_ok=$_pwsh_claude_ok cursor_ok=$_pwsh_cursor_ok"
+  fi
+else
+  report SKIP "85: pwsh absent -- ps1 live copy-mode skipped"
+fi
+
+# ===========================================================================
+# Guard: remaining assertions require a self-install (_loop/loop.sh). On a
+# fresh clone (or the canonical templates repo itself, pre-/setup), that dir
+# does not exist — skip the loop-instance assertions cleanly (or fail hard if
+# the self-install block above already found failures).
+# ===========================================================================
+if [[ ! -f "$REPO_ROOT/_loop/loop.sh" ]]; then
+  if (( fail_count > 0 )); then
+    echo
+    echo "=== loop-harness summary ==="
+    echo "PASS: $pass_count   FAIL: $fail_count   SKIP: $skip_count"
+    echo "RESULT: $fail_count assertion(s) FAILED"
+    exit 1
+  fi
+  echo "SKIP: remaining loop-instance assertions require _loop/loop.sh; run /setup first"
+  echo
+  echo "=== loop-harness summary ==="
+  echo "PASS: $pass_count   FAIL: $fail_count   SKIP: $skip_count"
+  echo "RESULT: all assertions passed"
+  exit 0
+fi
 
 # ---------------------------------------------------------------------------
 # Assertions 1-10: sequential state-machine scenario over one state file, chain
@@ -3403,7 +3813,7 @@ fi
 
 echo
 echo "=== loop-harness summary ==="
-echo "PASS: $pass_count   FAIL: $fail_count"
+echo "PASS: $pass_count   FAIL: $fail_count   SKIP: $skip_count"
 if ((fail_count)); then
   echo "RESULT: $fail_count assertion(s) FAILED"
   exit 1

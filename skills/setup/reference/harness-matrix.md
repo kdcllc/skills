@@ -1,10 +1,13 @@
 # Harness Capability Matrix
 
 Reference for the `setup` skill's emitters. **Verified 2026-08-18** against official
-docs (✅ = 3-vote adversarial verification against the cited page; 🔎 = manually
-spot-verified against the live page; ⚠️ = primary source, unverified). This space moves
-fast — when an emitter hits behavior that contradicts this table, trust the live docs,
-emit accordingly, and update this file with a new verified-on date.
+docs for the interchange/capability table below (✅ = 3-vote adversarial verification
+against the cited page; 🔎 = manually spot-verified against the live page; ⚠️ =
+primary source, unverified). **Context/invocation/command-output addendum verified
+2026-08-20** from live vendor docs (D = documented on the live page that day; I =
+inferred; U = unknown) — see that section; it is not 3-vote adversarial. This space
+moves fast — when an emitter hits behavior that contradicts this table, trust the
+live docs, emit accordingly, and update this file with a new verified-on date.
 
 ## The interchange finding
 
@@ -26,12 +29,12 @@ canonical templates are Claude-format:
 | Capability | Claude Code | Cursor | Copilot (VS Code) | OpenAI Codex |
 |---|---|---|---|---|
 | Agent definition | `.claude/agents/*.md`, YAML frontmatter ✅ | `.cursor/agents/` + reads `.claude/agents/` ✅ | `.github/agents/*.agent.md` (ex-`.chatmode.md`) + reads `.claude/agents` ✅ | `[agents.<name>]` tables in `config.toml` (`config_file`, `description`) 🔎 |
-| Skills | `.claude/skills/*/SKILL.md` ✅ | `.cursor/skills/` + reads `.claude/skills/`; `name`+`description` required; **no model key** ✅ | supported (per ruler/AIS matrices ⚠️) | `skills.config` per-skill enablement 🔎 |
+| Skills | `.claude/skills/*/SKILL.md` ✅ | `.cursor/skills/` + reads `.claude/skills/`; `name`+`description` required; **no model key** ✅ | `.github/skills/*/SKILL.md` first-class (progressive disclosure, `/skill`, `disable-model-invocation`) ✅ 2026-08-20 | `skills.config` per-skill enablement 🔎 |
 | Fresh-context subagents | Yes; nesting depth via `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` (default flipped twice July 2026 — **pin explicitly**) ✅ | Yes; main→L1→L2 since 2.5 (cloud: L1 only) ✅ | Yes (`agent/runSubagent`, stateless); nesting off by default (`chat.subagents.allowInvocationsFromSubagents`, max 5) ✅ | Yes: `spawn_agent` et al., `features.multi_agent` stable, on by default 🔎 |
-| Per-agent model pin | frontmatter `model:` (alias/ID/`inherit`); env > tool param > frontmatter > parent ✅ | frontmatter `model` incl. `[effort=…,context=…]`; up or down OK; **silent fallback** under restrictions ✅ | frontmatter `model` (string or fallback array); **cannot exceed parent tier** — stronger refuses to run; CLI rejects array form ✅ | `agents.default_subagent_model`, per-role `config_file`; spawn-time wins 🔎 |
+| Per-agent model pin | frontmatter `model:` (alias/ID/`inherit`); env > tool param > frontmatter > parent ✅ | frontmatter `model` incl. `[effort=…,context=…]`; up or down OK; **silent fallback** under restrictions ✅ | frontmatter `model` (string or fallback array); **cannot exceed parent tier** — stronger refuses to run; cheaper-than-parent is valid; CLI rejects array form ✅ | `agents.default_subagent_model`, per-role `config_file`; spawn-time wins 🔎 |
 | Effort pin | `effort:` low→max on agents/skills/commands ✅ | `[effort=…]` ✅ | — | `default_subagent_reasoning_effort` 🔎 |
 | Rules/instructions | `CLAUDE.md` (does NOT read AGENTS.md; import it from CLAUDE.md 💬) | `.cursor/rules/*.mdc` only (plain `.md` ignored); keys `alwaysApply`/`description`/`globs`; native nested AGENTS.md ✅ | `.github/copilot-instructions.md`, `.github/instructions/` | AGENTS.md root-down concat, nearest-last-wins; **32 KiB cap** (`project_doc_max_bytes`); read once per session 🔎 |
-| Role controls | `tools: Agent(implementer, test-writer)` allowlists ✅ | description-driven or `/name`; L1 agents may need explicit "you MUST spawn" prompting ✅ | `agents:` allowlist, `user-invocable: false`, `disable-model-invocation: true` ✅ | role `description` guides spawn 🔎 |
+| Role controls | `tools: Agent(implementer, test-writer)` allowlists; skill `disable-model-invocation: true` drops the description from session-start context ✅ 2026-08-20 | description-driven or `/name`; L1 agents may need explicit "you MUST spawn" prompting; skill `disable-model-invocation: true` (same spelling) ✅ 2026-08-20 | `agents:` allowlist, `user-invocable: false` (agents *and* skills, different meaning), skill/agent `disable-model-invocation: true` ✅ | role `description` guides spawn 🔎 |
 | Unattended mode | headless `claude -p` ⚠️ | Cloud Agents (L1 only) ✅ | Copilot coding agent on issues ⚠️ | `approval_policy: never` + `sandbox_mode` 🔎 |
 
 Windows note: per-harness CLI availability on Windows is unverified — the loop
@@ -46,6 +49,42 @@ drivers assume the harness CLI runs natively where invoked.
 5. The exact `.cursor/agents` frontmatter schema was **refuted** in verification (0-3) —
    re-check `cursor.com/docs/subagents` live before emitting Cursor agent files.
 6. Copilot: the session runs the frontier tier (ceiling rule); judges cannot pin up.
+   Workers and other subagents **may pin down**. The ceiling is “cannot exceed the
+   parent tier,” not “must equal the parent tier.”
+7. Copilot skills live at `.github/skills/*/SKILL.md` (first-class as of 2026-08-20).
+   Do **not** inline skill bodies into agents on current VS Code; reserve inlining
+   for a detected legacy build with no skills support.
+8. `disable-model-invocation: true` is the same skill frontmatter key on Claude Code,
+   Cursor, and Copilot. On Claude Code it removes the skill **description** from
+   session-start context (“full skill loads when you invoke”). Copilot `.prompt.md`
+   is the zero-metadata-tax analogue for manual-only workflows.
+9. Command-output size cap is Claude-only (`BASH_MAX_OUTPUT_LENGTH`, default 30,000
+   characters, middle-truncation). Cursor and Copilot document no equivalent; Copilot
+   documents terminal `outputLocation` and a timeout, not a size cap. Isolate noisy
+   commands in a light-tier subagent and capture quiet command forms at setup —
+   never invent runner flags.
+
+## Context, skills invocation, and command-output isolation (verified 2026-08-20)
+
+Session start injects skill **name + description only** (not bodies, not parameter
+schemas) on all three IDEs. Typical metadata ≈ 50–105 tokens/skill (description
+words × ~1.3) or ~100 tokens/skill per the Agent Skills spec community figure.
+Full sources and the kit skill-by-skill verdict:
+`docs/research-token-efficient-skills.md`.
+
+| Capability | Claude Code | Cursor | Copilot (VS Code) |
+|---|---|---|---|
+| Block auto-invoke, keep `/name` | `disable-model-invocation: true` (D) | `disable-model-invocation: true` (D) | `disable-model-invocation: true` (D) |
+| “Only model invokes” | `user-invocable: false` (D) | via `paths` / agent-decides; no skill `user-invocable` doc (I) | `user-invocable: false` on skills (D); on `.agent.md` hides from picker but still spawnable |
+| Manual-only prompt file | `.claude/commands/*.md` (D) | `.cursor/commands` / migrate-to-skills (D) | `.prompt.md` (D) |
+| Path-scoped guidance | skill `paths:` + nested CLAUDE.md (D) | `.mdc` `globs:` (D) | `.github/instructions/*.instructions.md` `applyTo` (D) |
+| Skill body model pin | `model:` on skill (D) | **no skill model key** — pin on agent (D) | pin on agent/prompt (D) |
+| Command-output isolation | subagent + `model: haiku`; `context: fork` (D) | built-in Bash subagent; custom agent model ID (D) | `runSubagent` (summary only); **model ≤ parent tier** — pinning *down* is valid (D) |
+| Output size cap | `BASH_MAX_OUTPUT_LENGTH` 30,000 default (D) | none (U) | none documented — only `outputLocation` / timeout (D) |
+| Command-rewrite hook | PreToolUse `updatedInput` / PostToolUse `updatedToolOutput` (D) | `beforeShellExecution` / `afterShellExecution` in hooks.json (D) | agent hooks Preview; shell-rewrite not the documented pattern (I) |
+| Cache-bust events | model, effort, fast-mode, compact, >1h, MCP change (D) | model/effort/context/tools change, inactivity (D) | model switch mid-session, instruction/agent change, inactivity (D) |
+| `/context` equivalent | `/context` + `/doctor` (D) | Customize panel; dashboard usage (D; no token breakdown) | Cache Explorer + Diagnostics view (D) |
+| Subagent nesting | subagents spawn subagents (D) | L1 + direct subagents spawn; grandchildren can't (D) | off by default; `chat.subagents.allowInvocationsFromSubagents` (D) |
 
 ## Empirical validation (2026-08-18, CLI-observed)
 
@@ -113,6 +152,8 @@ Copilot re-authorization does not touch them.
 
 code.claude.com/docs/en/{sub-agents,model-config,settings,skills} ·
 cursor.com/docs/{subagents,rules,skills} ·
-code.visualstudio.com/docs/{agent-customization/custom-agents,agents/run/subagents} ·
+code.visualstudio.com/docs/{agent-customization/custom-agents,agents/run/subagents,copilot/copilot-customization,copilot/customization/prompt-files} ·
 developers.openai.com/codex/{config-reference,guides/agents-md} (redirects to
-learn.chatgpt.com) · full citations in `docs/research-multi-harness-upgrade.md`.
+learn.chatgpt.com) · full citations in `docs/research-multi-harness-upgrade.md` ·
+2026-08-20 context/invocation addendum:
+`docs/research-token-efficient-skills.md`.
