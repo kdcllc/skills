@@ -41,12 +41,15 @@ was explicitly requested (supersedes the
 double-dark-launch); (iv) **compaction/archival deferred to manual**, with a driver-side
 slot prohibition — the driver does not compact or archive; manual compaction must not
 run while slots are live. **PRECONDITION note** (§6's fast-forward narrative and §2's
-discussion at :250): same-round sibling branches diverge after the first integration
+discussion at :253): same-round sibling branches diverge after the first integration
 commit, so the integrator rebases then ff-merges; a rebase conflict aborts → exit 5
-with artifacts retained. This is recorded near the §6 fold-back summary at :766-777
-rather than as a deviation, because `:250` already permits "fast-forward-or-rebase". §7.3
+with artifacts retained. This is recorded near the §6 fold-back summary at :807-818
+rather than as a deviation, because `:253` already permits "fast-forward-or-rebase". §7.3
 (exit-code aggregation) and all remaining *Proposed* items remain design-only; full
-quarantine remains STORY-012.
+quarantine remains STORY-012. *(Resolved by STORY-012, kit v0.13.0: §7.3's exit-code
+aggregation and §5's full quarantine (slot retirement + quarantine markers) both
+shipped — see the in-place "Shipped — STORY-012" notes at §5 :567-606 and §7.1/§7.2/§7.3
+below.)*
 
 **Pattern source**: squad's WIP-limited self-refilling dispatch —
 `available-slots = max(0, 3 - active PRs)`, refill on merge
@@ -410,7 +413,7 @@ like normal corruption handling.
 ### 3.3 The iteration counters, which are a different problem
 
 **Shipped — STORY-011, v0.12.0** (extends the per-slot CB1/CB2 counters shipped in
-STORY-010, see the §5 marker at :508-510, with driver-table state under N>1 dispatch).
+STORY-010, see the §5 marker at :511-513, with driver-table state under N>1 dispatch).
 
 `no_progress`, `same_error`, and `last_error_sig` are plain shell locals initialized once
 before the loop (`loop.sh:62-64`; twin `loop.ps1:77-79`). They are per-*driver*, and
@@ -511,21 +514,28 @@ designed (`loop.sh:213-445`; twin `loop.ps1:295-586`); slot *retirement*
 (retire-without-ending-the-run) did **not** ship — CB1/CB2 remain run-fatal `exit
 2`/`exit 3` at the dark-launched N=1 (`loop.sh:440-445`) *(the dark-launch guard was
 replaced by the N>1-iff-worktree rule in STORY-011, v0.12.0)*, retirement bookkeeping
-deferred to STORY-012 alongside full quarantine (`loop.sh:415-418`). The quarantine
+deferred to STORY-012 alongside full quarantine (`loop.sh:415-418`) *(shipped in
+STORY-012, v0.13.0 — see the CB1/CB2-retirement and quarantine bullets below,
+:567-606)*. The quarantine
 mechanic shipped as **quarantine-lite**: an abnormally-exiting slot's branch is
 retained rather than integrated (the `retainedBranches` bookkeeping; its worktree is
 removed — only the non-fast-forward integration stop retains the worktree,
 `loop.sh:166`) but without the fuller escalation/re-dispatch machinery this section
 originally sketched —
 full quarantine (`_goals/ESCALATIONS.md` integration, re-dispatch at a new path) remains
-STORY-012. See the twin note at the end of this section for a second, deliberate
+STORY-012 *(shipped in STORY-012, v0.13.0, as ARGUED-DEVIATION quarantine markers rather
+than the sketched ESCALATIONS-integration/re-dispatch machinery — see the quarantine
+bullet below, :578-606)*. See the twin note at the end of this section for a second, deliberate
 deviation on the `.claude/checks.sh` parity requirement.
 
 **(c) Current behavior.** Failure handling is entirely global. The driver's exit-code
 contract is "0 = backlog complete (sentinel found); 1 = max iterations reached without
 completion; 2 = circuit breaker — no commit for 3 consecutive iterations; 3 = circuit
 breaker — same failure signature 5 times consecutively; 4 = protected-path modification
-detected (iteration reverted)" (`loop.sh:17-20`; identical text at `loop.ps1:18-21`).
+detected (iteration reverted)" (`loop.sh:17-20`; identical text at `loop.ps1:18-21`)
+*(pre-STORY-012 text; the shipped contract block now reads "0 = backlog complete --
+the driver's own backlog re-scan …" — see loop.sh's header, `loop.sh:22-50`; twin
+`loop.ps1:24-52`)*.
 CB0 reverts with `git reset --hard "$head_before"` and exits 4 (`loop.sh:111-115`); CB1
 exits 2 (`loop.sh:127-130`); CB2 exits 3 (`loop.sh:141-144`). Inside the iteration, the
 skill's own failure path is "Do NOT commit implementation work; leave the tree clean
@@ -558,6 +568,13 @@ skill's own failure path is "Do NOT commit implementation work; leave the tree c
   iterations or 5 identical error signatures is *retired*, not run-fatal: the driver
   stops refilling it and logs the reason. Other slots continue. Aggregation to a driver
   exit code is §7.
+  *(Shipped — STORY-012, v0.13.0: CB1 retires at `loop.sh:1101-1106`, CB2 retires at
+  `loop.sh:1124-1129` (twin `loop.ps1:1272-1277` / `loop.ps1:1301-1306`), both inside
+  `_loop_reap_slot`; a retired slot is skipped forever by FILL, with no un-retire path.
+  Aggregation is the single `_loop_aggregate_exit` funnel (`loop.sh:1240-1301`; twin
+  `Invoke-LoopAggregateExit`, `loop.ps1:1434-1509`), which decides 3-vs-2 from
+  retirement reasons alone — any `cb2` retirement anywhere in the run wins over an
+  all-`cb1` run (`loop.sh:1251-1261`; twin `loop.ps1:1447-1457`).)*
 - **Quarantine instead of silent cleanup.** *Proposed*: a slot that exits abnormally
   leaves its worktree in place with a `.loop-worktrees/slot-<n>/QUARANTINE` marker file
   naming the story id and the exit code, and its branch `loop/<story-id>` is **not**
@@ -567,6 +584,26 @@ skill's own failure path is "Do NOT commit implementation work; leave the tree c
   `_goals/ESCALATIONS.md` (story id, what failed, judge verdicts, what a human must
   decide)" (`templates/loop/SKILL.md:131-133`), except the escalation append is
   performed by the integrator (§6), never by the dying slot.
+  *(Shipped — STORY-012, v0.13.0, with an ARGUED DEVIATION (D4) on marker location:
+  markers are `.loop-worktrees/QUARANTINE-<branch-with-slashes-replaced-by-dashes>.md`
+  siblings, not in-worktree files — the worktree is still removed and slot paths stay
+  fixed 1-based (no `slot-<n+k>` re-pathing), preserving the shipped v0.11.0/v0.12.0
+  lifecycle (harness 43-46/49 pin the fixed slot paths) rather than rewriting it.
+  ACCEPTED LOSS, recorded rather than hidden: on the dirty-abnormal path
+  `git worktree remove --force` destroys uncommitted worktree state the design's
+  retained worktree would have preserved; the branch carries committed work only.
+  Mitigation shipped instead of worktree retention: the marker's `dirty_paths` field
+  records the `git status --porcelain` list (`none` when clean), naming the loss
+  per-file even though the bytes are gone. Markers also embed the dispatched prompt
+  verbatim (closing the addendum-1/§7.2 durable-evidence gap, D5) and cover every
+  quarantine-lite disposal reason — `mismatch`/`abnormal`/`subset` — plus CB0-killed
+  slots (`reason: killed`), flag=1 only (at flag=0 there is no worktree/branch to
+  mark). Retirement reasons (`cb1`/`cb2`) decide the run's 3-vs-2 exit precedence — see
+  §7.3. Implementation: `_loop_write_quarantine_marker`, `loop.sh:672-689`; callers
+  `_loop_reap_slot`'s disposal, `loop.sh:1172-1197`, and `_loop_kill_other_slots`,
+  `loop.sh:709-733`; twin `Write-LoopQuarantineMarker`, `loop.ps1:751-777`; twin
+  callers `Invoke-LoopReapSlot`'s disposal, `loop.ps1:1346-1393`, and
+  `Stop-LoopOtherSlots`, `loop.ps1:796-824`.)*
 
 **(b) Failure mode prevented.** Two distinct ones. First, a *global* revert triggered by
 one slot's misbehavior wiping other slots' healthy committed work — today's
@@ -596,6 +633,10 @@ not the parity home for a kit feature — the tracked behavioral harness
 is. `.claude/checks.sh`'s check G still only asserts the sentinel, the original five exit
 codes (0–4), and the default iteration count; it was not extended to assert `LOOP_SLOTS`,
 `LOOP_WORKTREE`, or exit code 5.
+*(check G was extended to exit codes 0-5 in STORY-012, v0.13.0 — `for n in 0 1 2 3 4 5`,
+`.claude/checks.sh:309`; the deviation's substance is unchanged: `.claude/checks.sh` is
+still untracked instance tooling and still not the parity home, and it still asserts
+neither `LOOP_SLOTS` nor `LOOP_WORKTREE`.)*
 
 ---
 
@@ -769,9 +810,9 @@ case: admission guarantees no two in-flight branches touched the same one, so
 integration is a fast-forward. Fold-back's only real job is the subset verification
 described in §6.1 and the sequencing of outbox appends.
 
-**PRECONDITION note (shipped, STORY-011; cross-ref :277 and :250)**: same-round sibling
+**PRECONDITION note (shipped, STORY-011; cross-ref :280 and :253)**: same-round sibling
 branches diverge after the first integration commit lands on the target branch, so the
-integrator rebases the next slot's branch then ff-merges it — the design at :250 already
+integrator rebases the next slot's branch then ff-merges it — the design at :253 already
 permits "fast-forward-or-rebase". A rebase conflict aborts with exit 5 and artifacts
 retained (the branch is quarantine-lite rather than integrated). Admission keeps the
 normal case conflict-free, so rebase is a safety net, not the expected path.
@@ -820,6 +861,10 @@ advisory signal**, and the exit decision moves to the driver:
   treated as an ITERATION-mismatch and quarantined rather than marked `drained`
   (`loop.sh:905-906`) — the sentinel-from-dispatched-slot rule, because a correctly
   dispatched slot runs its pinned story, not an eligibility re-scan.
+  *(RATIFIED, STORY-012: under §4 driver-owned dispatch a slot-level `drained` mark is
+  meaningless; the driver's own backlog re-scan (§7.1(b)(ii), shipped) is strictly
+  stronger — the deviation is now the designed behavior, not an interim gap. Shipped
+  at `loop.sh:980-982`; twin `loop.ps1:1128-1130`.)*
 - The driver exits 0 only when **all three** hold: (i) every slot is `drained` or idle;
   (ii) the driver's *own* re-scan of `_goals/backlog.md` finds no eligible story under
   the pinned fields (`_goals/backlog.md:3-6`); (iii) every integration has been applied
@@ -828,6 +873,19 @@ advisory signal**, and the exit decision moves to the driver:
   gated on quarantined branches. `retained_branches` is reported-only via an EXIT trap
   that fires after the literal `exit` statement and cannot alter the pending exit status
   (`loop.sh:243-256, :1145-1151`). Full quarantine gating deferred to STORY-012.
+  *(RESOLVED, STORY-012: condition (iii) implemented — the drained completion exits 1
+  when quarantined branches were retained this run (`loop.sh:1283-1286`; twin
+  `loop.ps1:1490-1493`), inside the single `_loop_aggregate_exit` funnel
+  (`loop.sh:1240-1301`; twin `Invoke-LoopAggregateExit`, `loop.ps1:1434-1509`). Two
+  related shipped changes recorded here rather than restated per row: the funnel also
+  gained a fifth, loud `exit 5` site (orchestrator-ratified) for a backlog readable at
+  the last FILL gate but missing/unreadable by completion time — a mid-run destruction
+  that would otherwise silently report "backlog complete" (`loop.sh:1266-1275`; twin
+  `loop.ps1:1470-1482`); and, per §7.3's own row-1 "with eligible stories remaining"
+  qualifier, the MAX_ITER-exhausted path now exits 0, not 1, when the backlog is
+  genuinely drained and nothing was quarantined (`loop.sh:1279-1296`; twin
+  `loop.ps1:1486-1503`) — an intentional N=1 behavior change from today's unconditional
+  exit 1 there.)*
 - The sentinel string itself does not change — it is checked by both twins and by the
   parity heuristic at `.claude/checks.sh:26-28`, so changing it would be a gratuitous
   compatibility break. Only its *interpretation* moves.
@@ -857,6 +915,11 @@ contract's terminal lines already carry a story id — `ITERATION: <story-id> pa
   (`loop.sh:827`), not `.loop-worktrees/slot-<n>/iteration-<i>.log`; there is no
   prefixed tee — the slot's last 25 lines are printed to the console without a
   `[slot <n>]` prefix.
+  *(RATIFIED, STORY-012: capture separation — the attribution authority this section
+  needs — already shipped; mktemp works identically at `LOOP_WORKTREE=0` (no worktree
+  exists yet) and has zero gitignore surface, so the design's in-worktree log path buys
+  nothing the mktemp capture does not already provide. Shipped at `loop.sh:899-901`;
+  twin `loop.ps1:1016-1023`.)*
 - The driver then **cross-checks** the story id on the `ITERATION:` line against the id
   it dispatched to that slot (§4). A match is authoritative. A mismatch means the slot
   ignored its pinned story — a contract violation — and the slot is quarantined (§5)
@@ -870,6 +933,21 @@ contract's terminal lines already carry a story id — `ITERATION: <story-id> pa
   (`loop.sh:925-926`), rather than a `failed` record — the `attempts` counter was
   already incremented at dispatch, so the story is correctly charged without a
   separate transition.
+  *(RATIFIED, STORY-012: a `failed` record would differ from mismatch only in
+  *integrating* the crashed slot's branch — quarantining a branch whose producer
+  crashed is strictly safer than integrating it, and the story is already charged
+  (attempts incremented at claim; a `failed` verdict causes no field change anyway, so
+  nothing distinguishes the two outcomes on the backlog side). Shipped at
+  `loop.sh:970-982`; twin `loop.ps1:1120-1130`.)*
+
+**Shipped addition (STORY-012, v0.13.0, addendum-1 closure)**: the driver now writes the
+exact dispatched prompt to `<outbox>/dispatch-prompt.md` immediately before spawning
+each slot's child, after both `%%STORY_ID%%`/`%%OUTBOX_DIR%%` substitutions
+(`loop.sh:879-885`; twin `loop.ps1:995-1001`); reads it back at reap, before the outbox
+is removed (`loop.sh:1021-1029`; twin `loop.ps1:1173-1183`); and embeds it verbatim in
+the D4 quarantine marker (§5) on every non-clean disposal/kill path — the durable
+delivery evidence this section's attribution problem needed. It is discarded with the
+outbox on a clean integration, where the integrated commit is itself the evidence.
 
 **(b) Failure mode prevented.** Misattributed outcomes: marking story X `passed` because
 slot 2's success line was read while parsing slot 1's stream — which would set
@@ -879,6 +957,25 @@ Prefix-tagging alone is insufficient (a subagent can emit a line containing a li
 
 ### 7.3 Reducing N slot exit codes to one driver exit code
 
+**Shipped — STORY-012, v0.13.0.** The aggregation table below ships with one
+implementable reading, argued once here rather than restated per row (D3): the table's
+exit-3 conjunct "No slot made progress" is read as *every slot has stopped progressing
+(all retired)*, not "zero commits ever happened this run" — this preserves the N=1
+circuit-breaker codes exactly (a lone slot that committed earlier and only later trips
+CB2 still exits 3, as before) and keeps CB2's per-lineage meaning, the rationale the
+table itself gives. 3-vs-2 precedence is decided from retirement reasons alone: any
+`cb2` retirement anywhere in the run's lineage wins over an all-`cb1` run
+(`loop.sh:1251-1261`; twin `loop.ps1:1447-1457`). Row 1's own "with eligible stories
+remaining" qualifier is now load-bearing: the MAX_ITER-exhausted path exits 0, not 1,
+when the backlog is genuinely drained and nothing was quarantined — an intentional N=1
+behavior change from today's unconditional exit 1 there (`loop.sh:1279-1296`; twin
+`loop.ps1:1486-1503`). All literal `exit N` statements except CB0's `exit 4` and the
+five loud `exit 5` stops route through one driver-level funnel, `_loop_aggregate_exit`
+(`loop.sh:1240-1301`; twin `Invoke-LoopAggregateExit`, `loop.ps1:1434-1509`), evaluated
+strictly top-down: rows 3/2 (all-retired) before rows 0/1 (drained/quarantine) on every
+terminal route — see §7.1(b)(iii)'s resolution note above for the exit-0
+quarantine gate and the fifth `exit 5` site this same funnel carries.
+
 **(c) Current behavior.** Five codes, one producer: "0 = backlog complete (sentinel
 found); 1 = max iterations reached without completion; 2 = circuit breaker — no commit
 for 3 consecutive iterations; 3 = circuit breaker — same failure signature 5 times
@@ -887,6 +984,9 @@ consecutively; 4 = protected-path modification detected (iteration reverted)"
 the single driver process (`loop.sh:107,114,129,143,156`). The parity heuristic asserts
 "all five exit codes (0-4)" are present in both twins (`.claude/checks.sh:26-28`), so
 the *set* must not change.
+*(pre-STORY-012 text; the shipped contract block now reads "0 = backlog complete --
+the driver's own backlog re-scan …" — see loop.sh's header, `loop.sh:22-50`; twin
+`loop.ps1:24-52`)*
 
 **(a) Proposed artifact — an aggregation rule with a fixed precedence, preserving all
 five meanings.** Evaluated by the driver after all slots have terminated:
@@ -915,6 +1015,10 @@ as success.
 process exit status, so the aggregation table is expressible identically on both sides.
 The parity heuristic (`.claude/checks.sh:26-35`) continues to see all five literals in
 both twins.
+*(check G asserts 0-5 as of STORY-012 — the loop extended to `for n in 0 1 2 3 4 5`,
+`.claude/checks.sh:309`; a `kitVersion==VERSION` join tripwire was also added as a
+third, independently-gated check-J report line, `.claude/checks.sh:521-542`, unrelated
+to exit-code parity but shipped in the same story, D8.)*
 
 ---
 

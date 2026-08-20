@@ -4,5 +4,5 @@ commit only on an APPROVED audit with green targeted tests, then stop. This stor
 was already selected and validated by the driver: never re-evaluate eligibility
 or pick another. Write learning/escalation lines to `%%OUTBOX_DIR%%/learnings.md`
 and `%%OUTBOX_DIR%%/escalations.md` (names pinned) — never the shared memory
-files directly. The driver fills `%%STORY_ID%%`/`%%OUTBOX_DIR%%` at dispatch, not
-setup: end with the `ITERATION:` line naming `%%STORY_ID%%`. Never push.
+files directly. The story id and outbox path above are filled by the driver at
+dispatch, not at setup. End with the ITERATION: line naming your story id. Never push.

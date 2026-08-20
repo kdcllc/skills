@@ -1,6 +1,6 @@
 ---
 name: auto-loop
-description: Run exactly ONE autonomous iteration of the {{PROJECT_NAME}} feature loop — pull the highest-priority open story from _goals/backlog.md, drive it through the full orchestration flow with judge gates, commit on green, update the backlog, then stop. Invoked repeatedly by the loop driver (`_loop/loop.sh` / `_loop/loop.ps1`) for unattended runs, or manually for a supervised single step.
+description: Run exactly ONE autonomous iteration of the {{PROJECT_NAME}} feature loop through the full orchestration flow with judge gates, then stop — driver-dispatched mode runs the story named in its prompt, writes learnings/escalations to the outbox, and reports via an ITERATION line; manual mode picks the highest-priority open story from _goals/backlog.md itself, commits on green with direct backlog/memory writes, and prints the completion sentinel when none remain. Invoked repeatedly by the loop driver (`_loop/loop.sh` / `_loop/loop.ps1`) for unattended runs, or manually for a supervised single step.
 ---
 
 # Auto-Loop (One Iteration)
@@ -34,6 +34,19 @@ protected-path and commit rules above are unchanged in both modes. The design de
 2 slots — not more — because subagent fan-out multiplies per-slot load, all slots share
 one account's rate-limit budget, and a provider-global breaker cooldown stalls every
 slot at once.
+
+A slot that trips CB1 (3 consecutive no-commit reaps) or CB2 (5 consecutive identical
+failure signatures) is **retired**, not run-fatal: the driver stops refilling that slot
+and the run continues with whatever slots remain active. The run's exit code is
+aggregated across all slots with precedence 4>3>2>1>0 — every slot retired stops the run
+with exit 3 if any retirement was a signature match, else exit 2. A drained backlog (no
+eligible story remains) exits 0 only when no branch was quarantined this run; otherwise
+it exits 1 so the quarantined work gets inspected. Under `LOOP_WORKTREE=1`, a slot
+whose branch is quarantined — ITERATION-mismatch, abnormal exit, subset violation,
+or killed when another slot hit a protected path — leaves a
+`.loop-worktrees/QUARANTINE-<branch>.md` marker (slashes in the branch become
+dashes) naming the story, slot, branch, status, quarantine reason (`mismatch`,
+`abnormal`, `subset`, or `killed`), the dirty paths, and the dispatched prompt.
 
 ## Windows compatibility
 
@@ -119,7 +132,9 @@ an outbox directory is **manual mode** running that named story —
 self-contained behavior, direct writes, exactly as below. If no story id was
 supplied at all (a human invoked this skill directly), you are also in
 **manual mode**: the flow below applies unchanged, and it assumes no driver
-run is in flight against this repo.
+run is in flight against this repo. At dispatch, the driver also writes the
+exact dispatched prompt to `<outbox>/dispatch-prompt.md` as delivery evidence —
+slots must never modify or delete it.
 
 ## 1. Load state
 
@@ -205,4 +220,6 @@ End your final message with exactly one of:
 - `ITERATION: <story-id> passed`
 - `ITERATION: <story-id> failed (attempt N/3)`
 - `ITERATION: <story-id> blocked`
-- `<promise>COMPLETE</promise>` — only when no eligible stories remain.
+- `<promise>COMPLETE</promise>` — **manual mode only**, when no eligible stories
+  remain. A driver-dispatched slot must never print this: the driver treats it
+  as an ITERATION-mismatch and quarantines the slot.

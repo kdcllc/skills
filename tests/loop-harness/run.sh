@@ -2261,27 +2261,32 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 47 (RE-ANCHORED, task 05 -- STORY-011 restructure note): the STORY-010
-# accounting shape this assertion originally pinned (an explicit
-# `available_slots=$(( EFFECTIVE_SLOTS - active_slots ))` expression with its
-# own negative-clamp) no longer exists in the canonical driver: task 02's
-# fill/poll/reap/integrate/refill restructure replaced it with a per-row FILL
-# loop that tests `slot_state[SLOT]` directly, row by row, so an
-# over-subscription is impossible BY CONSTRUCTION (a "running" row is simply
-# skipped -- there is no separate counter left to go negative). Meaning
-# preserved: this still proves "one dispatch per idle row, never
-# over-subscribed" -- now via the per-row gate instead of a counter+clamp --
-# plus the SAME refill-on-slot-exit site as before (active_slots decrement +
-# 'refill trigger' comment, byte-unchanged).
-t47_accounting_check() { # per-row running-skip gate, block-scoped at the FILL
-  # loop's own running-check (NOT the shared `for ((SLOT = 0; ...))` header,
-  # which also appears at the slot-table init/poll/reap loops -- anchoring
-  # there would grab the wrong occurrence via `head -1`).
+# 47 (RE-ANCHORED AGAIN, STORY-012 task 06 -- red-window repair, harness-lag
+# not a regression): the STORY-011-era anchor this assertion pinned (a bare
+# `if [[ "${slot_state[SLOT]}" == "running" ]]; then` gate) no longer matches
+# byte-for-byte: STORY-012 task 01 (D2 retirement) widened that SAME line
+# with an explicit `|| (( slot_retired[SLOT] == 1 ))` disjunct, so a retired
+# slot is ALSO skipped by FILL, on top of the pre-existing "already running"
+# skip -- the gate is strictly STRONGER, never weaker (diagnosed harness-lag:
+# assertion 47 is in the goal's permitted-update set). Re-anchored to the
+# shipped disjunctive line; the check now additionally requires the
+# `slot_retired[SLOT]` disjunct so a REGRESSION that dropped the retirement
+# skip (re-widening the window to accept the old narrower line) would fail
+# this assertion, not silently pass it. Meaning preserved: still proves "one
+# dispatch per idle, non-retired row, never over-subscribed" -- now ALSO
+# proving a retired row is skipped -- plus the SAME refill-on-slot-exit site
+# as before (active_slots decrement + 'refill trigger' comment,
+# byte-unchanged).
+t47_accounting_check() { # per-row running-OR-retired-skip gate, block-scoped
+  # at the FILL loop's own gate line (NOT the shared `for ((SLOT = 0; ...))`
+  # header, which also appears at the slot-table init/poll/reap loops --
+  # anchoring there would grab the wrong occurrence via `head -1`).
   local f="$1" ln window
-  ln="$(grep -n 'if \[\[ "\${slot_state\[SLOT\]}" == "running" \]\]; then' "$f" | head -1 | cut -d: -f1)"
+  ln="$(grep -n 'if \[\[ "\${slot_state\[SLOT\]}" == "running" \]\] || (( slot_retired\[SLOT\] == 1 )); then' "$f" | head -1 | cut -d: -f1)"
   [[ -z "$ln" ]] && return 1
   window="$(sed -n "${ln},$((ln + 3))p" "$f")"
-  grep -qF 'slot_state[SLOT]' <<< "$window" && grep -qF 'continue' <<< "$window"
+  grep -qF 'slot_state[SLOT]' <<< "$window" && grep -qF 'slot_retired[SLOT]' <<< "$window" \
+    && grep -qF 'continue' <<< "$window"
 }
 t47_refill_check() { # refill-on-slot-exit, block-scoped at the decrement site
   local f="$1" ln window
@@ -2291,7 +2296,7 @@ t47_refill_check() { # refill-on-slot-exit, block-scoped at the decrement site
   grep -qF 'refill trigger' <<< "$window"
 }
 if t47_accounting_check "$LOOP_SH" && t47_refill_check "$LOOP_SH"; then
-  report PASS "47: per-row FILL gate (slot_state[SLOT]=='running' -> continue, over-subscription impossible by construction -- re-anchored from STORY-010's explicit available_slots counter, meaning preserved) + refill-on-slot-exit (active_slots decrement + 'refill trigger' comment), both present in canonical loop.sh, block-scoped"
+  report PASS "47: per-row FILL gate (slot_state[SLOT]=='running' OR slot_retired[SLOT]==1 -> continue, over-subscription AND retired-refill both impossible by construction -- re-anchored STORY-012 task 06 to the D2-widened disjunctive line, meaning preserved and strictly stronger) + refill-on-slot-exit (active_slots decrement + 'refill trigger' comment), both present in canonical loop.sh, block-scoped"
 else
   report FAIL "47: per-row FILL gate / refill" \
     "accounting=$(t47_accounting_check "$LOOP_SH" && echo ok || echo FAIL) refill=$(t47_refill_check "$LOOP_SH" && echo ok || echo FAIL)"
@@ -2562,10 +2567,18 @@ t53_abnormal_check() { # abnormal-exit branch, block-scoped -- anchor updated
   # abnormally' (no variable) never matches; anchored on the
   # variable-agnostic remainder 'exited abnormally' instead, window widened
   # to reach the retainedBranches append a few lines later.
+  # WINDOW RE-WIDENED (STORY-012 task 06, red-window repair -- harness-lag,
+  # not a regression): task 02's D4 quarantine-marker call
+  # (Write-LoopQuarantineMarker) landed BETWEEN the abnormal-exit message and
+  # the pre-existing `$script:retainedBranches +=` append, pushing the append
+  # from anchor+10 to anchor+11 (measured against the shipped file) -- one
+  # line past the old anchor+10 window ceiling. Widened to anchor+12 (>= the
+  # goal's required anchor+12 floor) for margin against any further
+  # single-line insertion in that block.
   local f="$1" ln window
   ln="$(grep -n 'exited abnormally' "$f" | head -1 | cut -d: -f1)"
   [[ -z "$ln" ]] && return 1
-  window="$(sed -n "${ln},$((ln + 10))p" "$f")"
+  window="$(sed -n "${ln},$((ln + 12))p" "$f")"
   grep -qF 'retainedBranches +=' <<< "$window"
 }
 t53_capacity_check() { grep -qF 'Capacity-contention rationale' "$1"; }
@@ -3831,6 +3844,16 @@ awk '{ if ($0 ~ /\|\| _loop_hotspot_conflict "\$writes"/) print "         false;
 mv "$TMP/loop-mut68.sh" "$MUT68_DIR/_loop/loop.sh"
 chmod +x "$MUT68_DIR/_loop/loop.sh"
 
+# D10 candidate 4 (STORY-012 task 06): the label below has always CLAIMED
+# "bash -n clean" for the mutant, but no predicate ever checked it -- the
+# awk substitution is a single textual replacement inside an `if` condition
+# ("false; then"), and nothing upstream verified it stays syntactically
+# valid bash. Added here so the label's claim is actually load-bearing: a
+# future mutation that broke parsing would now FAIL this assertion instead
+# of silently keeping the (untrue) "clean" wording.
+_mut68_bash_n_clean=0
+bash -n "$MUT68_DIR/_loop/loop.sh" 2>/dev/null && _mut68_bash_n_clean=1
+
 mut68_log="$TMP/admit-c-mut68-run.log"
 ( cd "$MUT68_DIR" && LOOP_SLOTS=2 LOOP_WORKTREE=1 \
     LOOP_CLI="$MUT68_DIR/_loop/stub-admit-c-mut.sh" bash ./_loop/loop.sh 2 ) \
@@ -3839,12 +3862,726 @@ mut68_log="$TMP/admit-c-mut68-run.log"
 mut68_peak_2=0
 grep -qF 'peak=2' "$mut68_overlap_log" && mut68_peak_2=1
 
-if [[ "$mut68_peak_2" -eq 1 && "$_mut68_match_count" -eq 1 ]]; then
-  report PASS "68-mutation-proof: hotspot-check deleted in a COPY (awk matched $_mut68_match_count line, bash -n clean) -> STORY-950 and STORY-951 dispatched concurrently (peak=2 in overlap log), confirming _loop_hotspot_conflict is the sole serializer for disjoint-writes / shared-hotspot story pairs"
+if [[ "$mut68_peak_2" -eq 1 && "$_mut68_match_count" -eq 1 && "$_mut68_bash_n_clean" -eq 1 ]]; then
+  report PASS "68-mutation-proof: hotspot-check deleted in a COPY (awk matched $_mut68_match_count line, bash -n clean -- now actually checked) -> STORY-950 and STORY-951 dispatched concurrently (peak=2 in overlap log), confirming _loop_hotspot_conflict is the sole serializer for disjoint-writes / shared-hotspot story pairs"
 else
   report FAIL "68-mutation-proof: hotspot deletion did not yield concurrent dispatch" \
-    "peak_2=$mut68_peak_2 awk_match_count=$_mut68_match_count"
+    "peak_2=$mut68_peak_2 awk_match_count=$_mut68_match_count bash_n_clean=$_mut68_bash_n_clean"
   sed 's/^/    /' "$mut68_log" >&2
+fi
+
+# ===========================================================================
+# 87+: STORY-012 exit-aggregation coverage (D2 retirement, D3 aggregation
+# funnel + precedence, D1 exit-0 quarantine gating, D4 quarantine markers,
+# D5 dispatch-prompt capture, D6 ps1 $status normalization, D7 contract-
+# block byte-parity, D8 check-G/tripwire). Numbered from 87 -- the
+# self-install block (69-86) is a parallel workstream's committed surface,
+# never touched here; 68-mutation-proof above is the prior tail.
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# 87: Retirement -- run continues past a stuck slot (D2). N=2 worktree
+# sandbox, disjoint writes: on every story (required for genuine N=2
+# concurrency -- an absent/empty writes: story runs alone, per admission
+# rule (d)/assertion 65). Priority order pins scheduling deterministically:
+# STORY-301 (prio 1) never commits and never emits a matching-verdict
+# ITERATION line's content changes anything (status=0, no diff -> CB1's
+# no-progress counter climbs every reap on whichever slot keeps drawing it);
+# STORY-302/STORY-303 (prio 2/3) each commit + pass immediately, so they
+# occupy the OTHER slot concurrently while STORY-301 grinds through 3
+# no-progress reaps on its own slot. Asserts: the P2 retirement stderr line,
+# STORY-302's passes:true transition, the run NOT halting (both later
+# stories still complete via the surviving slot), and a clean drained exit
+# rc=0 (STORY-301 exhausts its attempts cap at the same round CB1 trips, so
+# nothing is left to quarantine). "Never refilled" is the STRUCTURAL claim
+# assertion 47 already proves (the FILL gate's slot_retired[SLOT]==1 skip,
+# by construction) -- this behavioral fixture corroborates it observably: no
+# SECOND "slot 0 retired" line ever appears (would require FILL to have
+# re-considered the same already-retired row), and the assertion's checked
+# predicate -- STORY-301's own attempts field capped at exactly 3 in the
+# backlog -- holds even though the run's total dispatch budget (MAX_ITER=8)
+# is only 5/8 spent when the backlog drains (measured: 3 dispatches of
+# budget go unused), so a re-fill would have had room to happen if the gate
+# ever allowed it.
+# ---------------------------------------------------------------------------
+RETIRE_DIR="$TMP/retire-sandbox"
+rm -rf "$RETIRE_DIR"; mkdir -p "$RETIRE_DIR"
+sandbox_write_loop "$RETIRE_DIR" ".claude"
+(
+  cd "$RETIRE_DIR"
+  git init -q
+  git config user.email test@example.com
+  git config user.name "retire-test"
+  mkdir -p _goals .claude dummy
+  {
+    printf '# backlog\n\n'
+    printf '## STORY-301: never commits (retires its slot via CB1)\n'
+    printf -- '- priority: 1\n- passes: false\n- attempts: 0\n- blocked: false\n'
+    printf -- '- writes: dummy/a.txt\n\n'
+    printf '## STORY-302: passes immediately\n'
+    printf -- '- priority: 2\n- passes: false\n- attempts: 0\n- blocked: false\n'
+    printf -- '- writes: dummy/b.txt\n\n'
+    printf '## STORY-303: passes immediately\n'
+    printf -- '- priority: 3\n- passes: false\n- attempts: 0\n- blocked: false\n'
+    printf -- '- writes: dummy/c.txt\n'
+  } > _goals/backlog.md
+  printf 'placeholder\n' > .claude/.keep
+  : > .gitignore
+  git add -A
+  git commit -qm init
+)
+
+cat > "$RETIRE_DIR/_loop/stub-retire.sh" <<'STUBEOF'
+#!/usr/bin/env bash
+story_id="$(echo "$1" | grep -oE 'STORY-[0-9]+' | head -1)"
+case "$story_id" in
+  STORY-301)
+    echo "steady state, nothing new this pass"
+    echo "ITERATION: STORY-301 failed"
+    ;;
+  STORY-302)
+    mkdir -p dummy; echo "progress" > dummy/b.txt
+    git add dummy/b.txt; git commit -qm "story-302 progress"
+    echo "ITERATION: STORY-302 passed"
+    ;;
+  STORY-303)
+    mkdir -p dummy; echo "progress" > dummy/c.txt
+    git add dummy/c.txt; git commit -qm "story-303 progress"
+    echo "ITERATION: STORY-303 passed"
+    ;;
+esac
+exit 0
+STUBEOF
+chmod +x "$RETIRE_DIR/_loop/stub-retire.sh"
+
+retire_log="$TMP/retire-run.log"
+( cd "$RETIRE_DIR" && LOOP_SLOTS=2 LOOP_WORKTREE=1 \
+    LOOP_CLI="$RETIRE_DIR/_loop/stub-retire.sh" bash ./_loop/loop.sh 8 ) \
+  >"$TMP/retire-out.txt" 2>"$retire_log"
+retire_rc=$?
+
+retire_p2_count="$(grep -cF '!!! circuit breaker: 3 iterations without a commit' "$retire_log")"
+retire_p2_slot0=0
+grep -qE 'circuit breaker: 3 iterations without a commit — slot 0 retired \(not refilled\)' "$retire_log" \
+  && retire_p2_slot0=1
+retire_302_passed=0
+grep -A5 '## STORY-302' "$RETIRE_DIR/_goals/backlog.md" 2>/dev/null | grep -qF 'passes: true' \
+  && retire_302_passed=1
+retire_303_passed=0
+grep -A5 '## STORY-303' "$RETIRE_DIR/_goals/backlog.md" 2>/dev/null | grep -qF 'passes: true' \
+  && retire_303_passed=1
+retire_301_attempts_capped=0
+grep -A5 '## STORY-301' "$RETIRE_DIR/_goals/backlog.md" 2>/dev/null | grep -qF 'attempts: 3' \
+  && retire_301_attempts_capped=1
+retire_clean_rc=0
+[[ "$retire_rc" -eq 0 ]] && retire_clean_rc=1
+
+if [[ "$retire_p2_count" -eq 1 && "$retire_p2_slot0" -eq 1 && "$retire_302_passed" -eq 1 \
+      && "$retire_303_passed" -eq 1 && "$retire_301_attempts_capped" -eq 1 \
+      && "$retire_clean_rc" -eq 1 ]]; then
+  report PASS "87: retirement -- run continues past a stuck slot (D2): P2 line fires EXACTLY once for slot 0 (never a second time -- corroborates assertion 47's structural never-refilled proof), STORY-302/STORY-303 both transition passes:true via the surviving slot while slot 0 grinds through 3 no-progress reaps, STORY-301 attempts capped at 3, backlog drains clean -> rc=0"
+else
+  report FAIL "87: retirement -- run continues" \
+    "p2_count=$retire_p2_count(expected 1) p2_slot0=$retire_p2_slot0 302_passed=$retire_302_passed 303_passed=$retire_303_passed 301_capped=$retire_301_attempts_capped rc=$retire_rc(expected 0)"
+  sed 's/^/    /' "$retire_log" >&2
+fi
+
+# ---------------------------------------------------------------------------
+# 88: Aggregation precedence 3-vs-2 (D3) -- MIXED-reason precedence proof.
+# N=2 worktree sandbox: slot 0's track (STORY-CB1X, never commits) retires
+# via CB1 after 3 rounds; slot 1's track (STORY-CB2A then STORY-CB2B, two
+# stories needed since the attempts cap (3) is below CB2's threshold (5))
+# commits progress every dispatch (so CB1 never fires on slot 1) but emits
+# an IDENTICAL 5-line failure signature each time -> CB2 retires slot 1
+# after its 5th consecutive same-signature reap. Once BOTH slots are
+# retired, D3 requires the precedence rule "ANY cb2 retirement anywhere in
+# the lineage wins" -> rc=3, never rc=2, even though slot 0's own reason was
+# cb1. The all-CB1-only control (symmetric, no CB2 anywhere -> rc=2) is
+# already covered by assertion 50 (N=1, unchanged, still green) -- goal.md's
+# permitted-update-set trace explicitly allows reusing it rather than
+# duplicating a fresh fixture.
+# ---------------------------------------------------------------------------
+PREC_DIR="$TMP/precedence-sandbox"
+rm -rf "$PREC_DIR"; mkdir -p "$PREC_DIR"
+sandbox_write_loop "$PREC_DIR" ".claude"
+(
+  cd "$PREC_DIR"
+  git init -q
+  git config user.email test@example.com
+  git config user.name "precedence-test"
+  mkdir -p _goals .claude dummy
+  {
+    printf '# backlog\n\n'
+    printf '## STORY-CB1X: never commits (CB1 track)\n'
+    printf -- '- priority: 1\n- passes: false\n- attempts: 0\n- blocked: false\n'
+    printf -- '- writes: dummy/x.txt\n\n'
+    printf '## STORY-CB2A: same-signature failures (CB2 track, part 1)\n'
+    printf -- '- priority: 2\n- passes: false\n- attempts: 0\n- blocked: false\n'
+    printf -- '- writes: dummy/cb2a.txt\n\n'
+    printf '## STORY-CB2B: same-signature failures (CB2 track, part 2)\n'
+    printf -- '- priority: 3\n- passes: false\n- attempts: 0\n- blocked: false\n'
+    printf -- '- writes: dummy/cb2b.txt\n'
+  } > _goals/backlog.md
+  printf 'placeholder\n' > .claude/.keep
+  : > .gitignore
+  git add -A
+  git commit -qm init
+)
+
+cat > "$PREC_DIR/_loop/stub-precedence.sh" <<'STUBEOF'
+#!/usr/bin/env bash
+story_id="$(echo "$1" | grep -oE 'STORY-[A-Z0-9]+' | head -1)"
+case "$story_id" in
+  STORY-CB1X)
+    echo "steady state, nothing new this pass"
+    echo "ITERATION: STORY-CB1X failed"
+    exit 0
+    ;;
+  STORY-CB2A)
+    mkdir -p dummy; echo "p" > dummy/cb2a.txt
+    git add dummy/cb2a.txt; git commit -qm "cb2a progress"
+    echo "ITERATION: $story_id failed"
+    printf 'ERROR: build failed\nERROR: build failed\nERROR: build failed\nERROR: build failed\nERROR: build failed\n'
+    exit 1
+    ;;
+  STORY-CB2B)
+    mkdir -p dummy; echo "p" > dummy/cb2b.txt
+    git add dummy/cb2b.txt; git commit -qm "cb2b progress"
+    echo "ITERATION: $story_id failed"
+    printf 'ERROR: build failed\nERROR: build failed\nERROR: build failed\nERROR: build failed\nERROR: build failed\n'
+    exit 1
+    ;;
+esac
+STUBEOF
+chmod +x "$PREC_DIR/_loop/stub-precedence.sh"
+
+prec_log="$TMP/precedence-run.log"
+( cd "$PREC_DIR" && LOOP_SLOTS=2 LOOP_WORKTREE=1 \
+    LOOP_CLI="$PREC_DIR/_loop/stub-precedence.sh" bash ./_loop/loop.sh 10 ) \
+  >"$TMP/precedence-out.txt" 2>"$prec_log"
+prec_rc=$?
+
+prec_cb1_fired=0
+grep -qF 'circuit breaker: 3 iterations without a commit' "$prec_log" && prec_cb1_fired=1
+prec_cb2_fired=0
+grep -qF 'circuit breaker: same error 5 times' "$prec_log" && prec_cb2_fired=1
+prec_p3_present=0
+grep -qF '!!! all slots retired — stopping' "$prec_log" && prec_p3_present=1
+prec_rc3=0
+[[ "$prec_rc" -eq 3 ]] && prec_rc3=1
+
+if [[ "$prec_cb1_fired" -eq 1 && "$prec_cb2_fired" -eq 1 && "$prec_p3_present" -eq 1 && "$prec_rc3" -eq 1 ]]; then
+  report PASS "88: aggregation precedence 3-vs-2 (D3), MIXED-reason proof -- slot 0 retires cb1 (3 no-commit reaps), slot 1 retires cb2 (5 consecutive identical failure signatures across STORY-CB2A then STORY-CB2B), P3 line present, rc=3 (never 2) since ANY cb2 retirement anywhere in the lineage wins the precedence table; all-CB1-only control (rc=2) already covered unchanged by assertion 50"
+else
+  report FAIL "88: aggregation precedence 3-vs-2 (mixed)" \
+    "cb1_fired=$prec_cb1_fired cb2_fired=$prec_cb2_fired p3_present=$prec_p3_present rc=$prec_rc(expected 3)"
+  sed 's/^/    /' "$prec_log" >&2
+fi
+
+# ---------------------------------------------------------------------------
+# 89: Exit-0 quarantine gating (D1/§7.1(b)(iii)). N=1 worktree sandbox, one
+# story, MAX_ITER=3 (== the attempts cap): every dispatch emits the WRONG
+# story id (ITERATION-mismatch) -> quarantine-lite every time, branch
+# retained every time. By the 3rd dispatch attempts=3, so the final backlog
+# re-scan finds NO eligible survivor AND >=1 retained branch -> D1 requires
+# exit 1 (P4), NEVER the lying exit 0 a pre-story driver would report.
+# Control: a single passing story (no quarantine ever) -> exit 0 unchanged,
+# P4 absent.
+# ---------------------------------------------------------------------------
+QGATE_DIR="$TMP/qgate-sandbox"
+make_sandbox "$QGATE_DIR" ".claude" 1 1
+
+cat > "$QGATE_DIR/_loop/stub-qgate.sh" <<'STUBEOF'
+#!/usr/bin/env bash
+# Always emits the WRONG story id -> ITERATION-mismatch, every dispatch.
+echo "ITERATION: STORY-WRONG-ID failed"
+exit 0
+STUBEOF
+chmod +x "$QGATE_DIR/_loop/stub-qgate.sh"
+( cd "$QGATE_DIR" && git add -A && git commit -qm "add stub" )
+
+qgate_log="$TMP/qgate-run.log"
+qgate_out="$TMP/qgate-out.txt"
+( cd "$QGATE_DIR" && env -u LOOP_SLOTS LOOP_WORKTREE=1 \
+    LOOP_CLI="$QGATE_DIR/_loop/stub-qgate.sh" bash ./_loop/loop.sh 3 ) \
+  >"$qgate_out" 2>"$qgate_log"
+qgate_rc=$?
+
+qgate_p4_present=0
+grep -qF 'no eligible stories remain, but quarantined branches were retained this run — exiting 1' "$qgate_out" \
+  && qgate_p4_present=1
+qgate_rc1=0
+[[ "$qgate_rc" -eq 1 ]] && qgate_rc1=1
+qgate_attempts_capped=0
+grep -A5 '## STORY-101' "$QGATE_DIR/_goals/backlog.md" 2>/dev/null | grep -qF 'attempts: 3' \
+  && qgate_attempts_capped=1
+
+# Control: no quarantine ever -> rc=0 unchanged, P4 absent.
+QGATE_CTRL_DIR="$TMP/qgate-control-sandbox"
+make_sandbox "$QGATE_CTRL_DIR" ".claude" 1 1
+cat > "$QGATE_CTRL_DIR/_loop/stub-qgate-control.sh" <<'STUBEOF'
+#!/usr/bin/env bash
+echo "progress" > progress.txt
+git add progress.txt
+git commit -qm "qgate-control progress"
+echo "ITERATION: STORY-101 passed"
+exit 0
+STUBEOF
+chmod +x "$QGATE_CTRL_DIR/_loop/stub-qgate-control.sh"
+qgate_ctrl_out="$TMP/qgate-control-out.txt"
+qgate_ctrl_err="$TMP/qgate-control-err.txt"
+( cd "$QGATE_CTRL_DIR" && env -u LOOP_SLOTS LOOP_WORKTREE=1 \
+    LOOP_CLI="$QGATE_CTRL_DIR/_loop/stub-qgate-control.sh" bash ./_loop/loop.sh 3 ) \
+  >"$qgate_ctrl_out" 2>"$qgate_ctrl_err"
+qgate_ctrl_rc=$?
+qgate_ctrl_rc0=0
+[[ "$qgate_ctrl_rc" -eq 0 ]] && qgate_ctrl_rc0=1
+qgate_ctrl_p4_absent=0
+grep -qF 'exiting 1 (inspect before trusting the backlog)' "$qgate_ctrl_out" || qgate_ctrl_p4_absent=1
+
+if [[ "$qgate_p4_present" -eq 1 && "$qgate_rc1" -eq 1 && "$qgate_attempts_capped" -eq 1 \
+      && "$qgate_ctrl_rc0" -eq 1 && "$qgate_ctrl_p4_absent" -eq 1 ]]; then
+  report PASS "89: exit-0 quarantine gating (D1/§7.1(b)(iii)) -- 3 consecutive ITERATION-mismatch quarantines exhaust attempts (3/3), no eligible survivor remains, P4 line printed, rc=1 (never the lying exit 0); control (a single cleanly-passing story, zero quarantines) is unaffected: rc=0, P4 absent"
+else
+  report FAIL "89: exit-0 quarantine gating" \
+    "p4_present=$qgate_p4_present rc1=$qgate_rc1(rc=$qgate_rc) attempts_capped=$qgate_attempts_capped ctrl_rc0=$qgate_ctrl_rc0(rc=$qgate_ctrl_rc) ctrl_p4_absent=$qgate_ctrl_p4_absent"
+  sed 's/^/    /' "$qgate_log" >&2
+fi
+
+# ---------------------------------------------------------------------------
+# 90: MAX_ITER-drained-clean (D3 row 0, "bottom" banner P5). N=1 main-tree
+# sandbox, MAX_ITER == the exact number of eligible stories, so the LAST
+# allowed dispatch is also the one that drains the backlog -- the run falls
+# through the while loop's own condition (never re-entering the loop body's
+# in-loop terminal check) and lands on the bottom `_loop_aggregate_exit
+# "bottom"` call directly. Zero quarantines -> P5 + rc=0 (an intentional D3
+# behavior change from the pre-story driver's unconditional exit 1 there).
+# Control: MAX_ITER too small to drain a 2-story backlog -> rc=1 with
+# today's unchanged "max iterations (N) reached; backlog not complete"
+# banner (P5 absent).
+# ---------------------------------------------------------------------------
+MAXCLEAN_DIR="$TMP/maxclean-sandbox"
+make_sandbox "$MAXCLEAN_DIR" ".claude" 1 1
+
+cat > "$MAXCLEAN_DIR/_loop/stub-maxclean.sh" <<'STUBEOF'
+#!/usr/bin/env bash
+echo "progress" > progress.txt
+git add progress.txt
+git commit -qm "maxclean progress"
+echo "ITERATION: STORY-101 passed"
+exit 0
+STUBEOF
+chmod +x "$MAXCLEAN_DIR/_loop/stub-maxclean.sh"
+
+maxclean_out="$TMP/maxclean-out.txt"
+maxclean_err="$TMP/maxclean-err.txt"
+( cd "$MAXCLEAN_DIR" && env -u LOOP_SLOTS -u LOOP_WORKTREE \
+    LOOP_CLI="$MAXCLEAN_DIR/_loop/stub-maxclean.sh" bash ./_loop/loop.sh 1 ) \
+  >"$maxclean_out" 2>"$maxclean_err"
+maxclean_rc=$?
+
+maxclean_p5_present=0
+grep -qF 'max iterations reached and no eligible stories remain — backlog complete' "$maxclean_out" \
+  && maxclean_p5_present=1
+maxclean_rc0=0
+[[ "$maxclean_rc" -eq 0 ]] && maxclean_rc0=1
+
+# Control: 2-story backlog, MAX_ITER=1 -> one story survives -> rc=1, banner
+# unchanged, P5 absent.
+MAXCLEAN_CTRL_DIR="$TMP/maxclean-control-sandbox"
+make_sandbox "$MAXCLEAN_CTRL_DIR" ".claude" 1 1 2
+cat > "$MAXCLEAN_CTRL_DIR/_loop/stub-maxclean-control.sh" <<'STUBEOF'
+#!/usr/bin/env bash
+story_id="$(echo "$1" | grep -oE 'STORY-[0-9]+' | head -1)"
+echo "progress" > "progress-$story_id.txt"
+git add "progress-$story_id.txt"
+git commit -qm "maxclean-control progress $story_id"
+echo "ITERATION: $story_id passed"
+exit 0
+STUBEOF
+chmod +x "$MAXCLEAN_CTRL_DIR/_loop/stub-maxclean-control.sh"
+maxclean_ctrl_out="$TMP/maxclean-control-out.txt"
+( cd "$MAXCLEAN_CTRL_DIR" && env -u LOOP_SLOTS -u LOOP_WORKTREE \
+    LOOP_CLI="$MAXCLEAN_CTRL_DIR/_loop/stub-maxclean-control.sh" bash ./_loop/loop.sh 1 ) \
+  >"$maxclean_ctrl_out" 2>/dev/null
+maxclean_ctrl_rc=$?
+maxclean_ctrl_rc1=0
+[[ "$maxclean_ctrl_rc" -eq 1 ]] && maxclean_ctrl_rc1=1
+maxclean_ctrl_banner=0
+grep -qF 'max iterations (1) reached; backlog not complete' "$maxclean_ctrl_out" && maxclean_ctrl_banner=1
+maxclean_ctrl_p5_absent=0
+grep -qF 'backlog complete' "$maxclean_ctrl_out" || maxclean_ctrl_p5_absent=1
+
+if [[ "$maxclean_p5_present" -eq 1 && "$maxclean_rc0" -eq 1 && "$maxclean_ctrl_rc1" -eq 1 \
+      && "$maxclean_ctrl_banner" -eq 1 && "$maxclean_ctrl_p5_absent" -eq 1 ]]; then
+  report PASS "90: MAX_ITER-drained-clean (D3 row 0, bottom-path P5 banner) -- MAX_ITER exactly matches the one eligible story, the run falls through to the bottom aggregation call, zero quarantines -> P5 line + rc=0 (D3's intentional change from the pre-story unconditional exit 1); control (an eligible story still remains after budget exhausts) -> rc=1 with today's unchanged 'max iterations (N) reached' banner, P5 absent"
+else
+  report FAIL "90: MAX_ITER-drained-clean" \
+    "p5_present=$maxclean_p5_present rc0=$maxclean_rc0(rc=$maxclean_rc) ctrl_rc1=$maxclean_ctrl_rc1(rc=$maxclean_ctrl_rc) ctrl_banner=$maxclean_ctrl_banner ctrl_p5_absent=$maxclean_ctrl_p5_absent"
+  sed 's/^/    /' "$maxclean_err" >&2
+fi
+
+# ---------------------------------------------------------------------------
+# 91: MAX_ITER-coincident retirement (cycle-1 blocker regression, standing
+# assertion -- task 01 micro-test (h) promoted here). N=1 default flags,
+# MAX_ITER=3 EXACTLY matching both the attempts cap AND the CB1 threshold,
+# one never-progressing story: the 3rd dispatch both exhausts MAX_ITER AND
+# trips CB1 on the SAME reap, so the while loop exits to the bottom
+# aggregation call with active_slots==0 purely from the loop condition (NOT
+# from the in-loop terminal check, which never runs again after this
+# round). D3's single funnel evaluates rows 3/2 (all-retired) BEFORE the
+# eligibility rescan on EVERY call site -- including this "fell through the
+# while condition" bottom call -- so this must NEVER report a lying exit
+# 0/1: rc MUST be 2, P3 MUST be present.
+# ---------------------------------------------------------------------------
+COINCIDE_DIR="$TMP/coincide-sandbox"
+make_sandbox "$COINCIDE_DIR" ".claude" 1 1
+
+cat > "$COINCIDE_DIR/_loop/stub-coincide.sh" <<'STUBEOF'
+#!/usr/bin/env bash
+echo "steady state, nothing new this pass"
+exit 0
+STUBEOF
+chmod +x "$COINCIDE_DIR/_loop/stub-coincide.sh"
+
+coincide_log="$TMP/coincide-run.log"
+( cd "$COINCIDE_DIR" && env -u LOOP_SLOTS -u LOOP_WORKTREE \
+    LOOP_CLI="$COINCIDE_DIR/_loop/stub-coincide.sh" bash ./_loop/loop.sh 3 ) \
+  >"$TMP/coincide-out.txt" 2>"$coincide_log"
+coincide_rc=$?
+
+coincide_rc_never_0_or_1=0
+[[ "$coincide_rc" -ne 0 && "$coincide_rc" -ne 1 ]] && coincide_rc_never_0_or_1=1
+coincide_rc2=0
+[[ "$coincide_rc" -eq 2 ]] && coincide_rc2=1
+coincide_p3_present=0
+grep -qF '!!! all slots retired — stopping' "$coincide_log" && coincide_p3_present=1
+coincide_attempts3=0
+grep -A5 '## STORY-101' "$COINCIDE_DIR/_goals/backlog.md" 2>/dev/null | grep -qF 'attempts: 3' \
+  && coincide_attempts3=1
+
+if [[ "$coincide_rc_never_0_or_1" -eq 1 && "$coincide_rc2" -eq 1 && "$coincide_p3_present" -eq 1 \
+      && "$coincide_attempts3" -eq 1 ]]; then
+  report PASS "91: MAX_ITER-coincident retirement (cycle-1 blocker regression, standing assertion) -- N=1, MAX_ITER=3 exactly coincides with the attempts cap and the CB1 threshold on the SAME reap; the single D3 funnel still evaluates all-retired FIRST at the bottom call -> rc=2 (never 0 or 1), P3 present"
+else
+  report FAIL "91: MAX_ITER-coincident retirement" \
+    "rc_never_0_or_1=$coincide_rc_never_0_or_1 rc2=$coincide_rc2(rc=$coincide_rc) p3_present=$coincide_p3_present attempts3=$coincide_attempts3"
+  sed 's/^/    /' "$coincide_log" >&2
+fi
+
+# ---------------------------------------------------------------------------
+# 92: Quarantine marker (D4) -- reuses assertion 62's already-computed
+# ITERATION-mismatch fixture (MISMATCH_DIR/mismatch_log, unchanged, flag=1,
+# branch loop/iter-1) rather than re-deriving an identical scenario: exactly
+# one .loop-worktrees/QUARANTINE-loop-iter-*.md file exists, and it contains
+# every pinned field (QUARANTINE, story:, slot:, branch:, status:,
+# reason: mismatch, dirty_paths:) plus a distinctive substring of the
+# substituted dispatched prompt (the story id embedded in the fixture's own
+# %%STORY_ID%% substitution).
+# ---------------------------------------------------------------------------
+qmark_files=("$MISMATCH_DIR"/.loop-worktrees/QUARANTINE-loop-iter-*.md)
+qmark_count=0
+[[ -e "${qmark_files[0]}" ]] && qmark_count="${#qmark_files[@]}"
+qmark_exactly_one=0
+[[ "$qmark_count" -eq 1 ]] && qmark_exactly_one=1
+qmark_fields_ok=0
+if [[ "$qmark_exactly_one" -eq 1 ]]; then
+  qmark_file="${qmark_files[0]}"
+  if grep -qxF 'QUARANTINE' "$qmark_file" \
+     && grep -qE '^story: ' "$qmark_file" \
+     && grep -qE '^slot: ' "$qmark_file" \
+     && grep -qE '^branch: loop/iter-1$' "$qmark_file" \
+     && grep -qE '^status: ' "$qmark_file" \
+     && grep -qxF 'reason: mismatch' "$qmark_file" \
+     && grep -qE '^dirty_paths: ' "$qmark_file" \
+     && grep -qF 'Fixture prompt for STORY-101' "$qmark_file"; then
+    qmark_fields_ok=1
+  fi
+fi
+
+if [[ "$qmark_exactly_one" -eq 1 && "$qmark_fields_ok" -eq 1 ]]; then
+  report PASS "92: quarantine marker (D4) -- exactly one .loop-worktrees/QUARANTINE-loop-iter-*.md exists after assertion 62's mismatch quarantine, carrying every pinned field (QUARANTINE/story/slot/branch/status/reason: mismatch/dirty_paths) plus a distinctive substring of the substituted dispatched prompt (STORY-101)"
+else
+  report FAIL "92: quarantine marker" \
+    "count=$qmark_count(expected 1) fields_ok=$qmark_fields_ok"
+  [[ "$qmark_exactly_one" -eq 1 ]] && sed 's/^/    /' "${qmark_files[0]}" >&2
+fi
+
+# ---------------------------------------------------------------------------
+# 93: Dispatch-prompt capture, structural (D5) -- both canonical drivers
+# write the substituted prompt to dispatch-prompt.md AFTER both %%...%%
+# substitutions and BEFORE the child spawns (assertion 92 above is the
+# behavioral half, via the marker's embedded prompt on the quarantine path).
+# Block-scoped: anchored on each twin's OWN final substitution line, window
+# forward to the child-spawn site, requiring the write to fall strictly
+# between them.
+# ---------------------------------------------------------------------------
+t93_sh_check() {
+  local f="$1" ln window
+  ln="$(grep -n 'OUTBOX_DIR%%/\$outbox_dir' "$f" | head -1 | cut -d: -f1)"
+  [[ -z "$ln" ]] && return 1
+  window="$(sed -n "${ln},$((ln + 10))p" "$f")"
+  grep -qF '> "$outbox_dir/dispatch-prompt.md"' <<< "$window" || return 1
+  # the write must precede the child-spawn subshell, not follow it
+  local write_ln spawn_ln
+  write_ln="$(grep -n '> "\$outbox_dir/dispatch-prompt.md"' "$f" | head -1 | cut -d: -f1)"
+  spawn_ln="$(grep -n '\$LOOP_CLI \$model_arg "\$p"' "$f" | head -1 | cut -d: -f1)"
+  [[ -n "$write_ln" && -n "$spawn_ln" ]] && (( write_ln < spawn_ln ))
+}
+t93_ps1_check() {
+  local f="$1" subst_ln window
+  # Anchor on the FINAL substitution call itself (.Replace('%%OUTBOX_DIR%%'
+  # ...), matches exactly once) rather than the earlier missing-token GUARD
+  # line, which also contains the literal 'OUTBOX_DIR%%' substring and would
+  # otherwise bind first under head -1.
+  subst_ln="$(grep -n "\.Replace('%%OUTBOX_DIR%%'" "$f" | head -1 | cut -d: -f1)"
+  [[ -z "$subst_ln" ]] && return 1
+  window="$(sed -n "${subst_ln},$((subst_ln + 15))p" "$f")"
+  # Anchor the write on the Set-Content call itself, not the bare Join-Path
+  # fragment (which also matches the unrelated read-back at reap time) --
+  # disambiguates the write site deterministically.
+  grep -qF "Set-Content -LiteralPath (Join-Path \$outboxDir 'dispatch-prompt.md')" <<< "$window" || return 1
+  local write_ln spawn_ln
+  write_ln="$(grep -n "Set-Content -LiteralPath (Join-Path \$outboxDir 'dispatch-prompt.md')" "$f" | head -1 | cut -d: -f1)"
+  spawn_ln="$(grep -n 'Start-Job -ScriptBlock' "$f" | head -1 | cut -d: -f1)"
+  [[ -n "$write_ln" && -n "$spawn_ln" ]] || return 1
+  (( subst_ln < write_ln )) && (( write_ln < spawn_ln ))
+}
+if t93_sh_check "$LOOP_SH" && t93_ps1_check "$LOOP_PS1"; then
+  report PASS "93: dispatch-prompt capture, structural (D5) -- both canonical drivers write the fully-substituted prompt to <outbox>/dispatch-prompt.md strictly AFTER the final %%OUTBOX_DIR%% substitution and strictly BEFORE the child/job spawn site, in loop.sh AND loop.ps1"
+else
+  report FAIL "93: dispatch-prompt capture, structural" \
+    "sh=$(t93_sh_check "$LOOP_SH" && echo ok || echo FAIL) ps1=$(t93_ps1_check "$LOOP_PS1" && echo ok || echo FAIL)"
+fi
+
+# ---------------------------------------------------------------------------
+# 94: Contract-block byte-parity, FULL (D7) -- SUPERSEDES assertion 33
+# (strictly stronger: 33 checked only the appended 126/127 clause; this
+# extracts the ENTIRE P1 block, from the `# Exit codes` header line through
+# the `# branch for inspection).` closer line, inclusive) from both
+# canonical twins and requires the extracted text be byte-identical
+# (marker-normalized, same technique as 33), covering every one of the six
+# aggregated exit codes (0-5) AND the 126/127 clause 33 already proved --
+# 33 itself is left untouched (byte-identical, in the permitted-update set
+# but not modified) since it still holds and this assertion is additive.
+# No-weakening mapping: 33 (126/127 clause only) -> 94 (full six-code block,
+# superset).
+# ---------------------------------------------------------------------------
+extract_p1_block() { # extract_p1_block <file>
+  awk '/^# Exit codes \(driver-aggregated/{flag=1} flag{print} /branch for inspection\)\.$/{if (flag) exit}' "$1"
+}
+p1_sh94="$(extract_p1_block "$LOOP_SH")"
+p1_ps194="$(extract_p1_block "$LOOP_PS1")"
+p1_norm_sh94="$(sed 's/^# \{0,1\}//' <<< "$p1_sh94")"
+p1_norm_ps194="$(sed 's/^# \{0,1\}//' <<< "$p1_ps194")"
+
+p1_nonempty=0
+[[ -n "$p1_sh94" && -n "$p1_ps194" ]] && p1_nonempty=1
+p1_identical=0
+[[ "$p1_norm_sh94" == "$p1_norm_ps194" ]] && p1_identical=1
+p1_all_codes=1
+for _code_marker in '0 = backlog complete' '1 = stopped without completing' \
+                    '2 = circuit breaker' '3 = circuit breaker' \
+                    '4 = protected-path modification' 'Exit 5 = setup or integration failure' \
+                    '126' '127'; do
+  grep -qF "$_code_marker" <<< "$p1_norm_sh94" || p1_all_codes=0
+done
+
+if [[ "$p1_nonempty" -eq 1 && "$p1_identical" -eq 1 && "$p1_all_codes" -eq 1 ]]; then
+  report PASS "94: contract-block byte-parity, FULL (D7, supersedes 33) -- the entire pinned exit-code contract block (six aggregated codes 0-5 plus the 126/127 shell-propagated clause) is byte-identical (marker-normalized) between canonical loop.sh and loop.ps1"
+else
+  report FAIL "94: contract-block byte-parity, FULL" \
+    "nonempty=$p1_nonempty identical=$p1_identical all_codes=$p1_all_codes"
+fi
+
+# ---------------------------------------------------------------------------
+# 95: ps1 structural parity for the STORY-012 mechanics not covered by
+# assertion 53 (which pins the pre-story/STORY-011 surface). Block-scoped,
+# same discipline as 53/34/18: Retired/RetireReason slot fields; the
+# Invoke-LoopAggregateExit funnel's rows-3/2 (all-retired) branch; the P4
+# and P5 stdout literals (byte-exact); the $status normalization to -1 plus
+# the P6 stderr literal. Not runtime-verified -- pwsh absent, same
+# disposition as every other ps1 structural guard in this file.
+# ---------------------------------------------------------------------------
+t95_retired_fields_check() {
+  local f="$1" ln window
+  ln="$(grep -n '^\$slots = @()$' "$f" | head -1 | cut -d: -f1)"
+  [[ -z "$ln" ]] && return 1
+  window="$(sed -n "${ln},$((ln + 20))p" "$f")"
+  grep -qF 'Retired' <<< "$window" && grep -qF 'RetireReason' <<< "$window"
+}
+t95_funnel_check() {
+  local f="$1" ln window
+  ln="$(grep -n 'function Invoke-LoopAggregateExit' "$f" | head -1 | cut -d: -f1)"
+  [[ -z "$ln" ]] && return 1
+  window="$(sed -n "${ln},$((ln + 40))p" "$f")"
+  grep -qF '$allRetired' <<< "$window" && grep -qF '$anyCb2' <<< "$window" \
+    && grep -qE '^\s*exit 3\s*$' <<< "$window" && grep -qE '^\s*exit 2\s*$' <<< "$window"
+}
+t95_p4_check() { grep -qF 'no eligible stories remain, but quarantined branches were retained this run — exiting 1' "$1"; }
+t95_p5_check() { grep -qF 'max iterations reached and no eligible stories remain — backlog complete' "$1"; }
+t95_status_norm_check() {
+  local f="$1" ln window
+  ln="$(grep -n 'Receive-Job -Job \$job' "$f" | head -1 | cut -d: -f1)"
+  [[ -z "$ln" ]] && return 1
+  window="$(sed -n "${ln},$((ln + 25))p" "$f")"
+  grep -qF '$status = -1' <<< "$window" \
+    && grep -qF 'job produced no usable exit status — normalizing to -1 (abnormal)' <<< "$window"
+}
+if t95_retired_fields_check "$LOOP_PS1" && t95_funnel_check "$LOOP_PS1" \
+   && t95_p4_check "$LOOP_PS1" && t95_p5_check "$LOOP_PS1" && t95_status_norm_check "$LOOP_PS1"; then
+  report PASS "95: ps1 structural parity, STORY-012 mechanics -- Retired/RetireReason slot fields, Invoke-LoopAggregateExit's rows-3/2 all-retired branch (\$allRetired/\$anyCb2/exit 3/exit 2), the P4 and P5 literals, and the \$status normalization to -1 with its P6 stderr note all present in canonical loop.ps1, block-scoped -- not runtime-verified, pwsh absent"
+else
+  report FAIL "95: ps1 structural parity, STORY-012 mechanics" \
+    "retired_fields=$(t95_retired_fields_check "$LOOP_PS1" && echo ok || echo FAIL) funnel=$(t95_funnel_check "$LOOP_PS1" && echo ok || echo FAIL) p4=$(t95_p4_check "$LOOP_PS1" && echo ok || echo FAIL) p5=$(t95_p5_check "$LOOP_PS1" && echo ok || echo FAIL) status_norm=$(t95_status_norm_check "$LOOP_PS1" && echo ok || echo FAIL)"
+fi
+
+# ---------------------------------------------------------------------------
+# 96: exit-5 site count == 5 in BOTH canonical twins (D3's [AMENDED]
+# five-site pin). Nothing at HEAD previously counted the exit-5 SITES
+# themselves (only their prose, via check G/assertion 33/94) -- this counts
+# the literal, standalone `exit 5` STATEMENT lines only (anchored `^\s*exit
+# 5\s*$`, never matching prose mentions like "exit 5, setup-failure
+# category" inside comments, which do not end the line at the digit).
+# ---------------------------------------------------------------------------
+exit5_sh_count="$(grep -cE '^\s*exit 5\s*$' "$LOOP_SH")"
+exit5_ps1_count="$(grep -cE '^\s*exit 5\s*$' "$LOOP_PS1")"
+if [[ "$exit5_sh_count" -eq 5 && "$exit5_ps1_count" -eq 5 ]]; then
+  report PASS "96: exit-5 site count == 5 in both canonical twins (loop.sh=$exit5_sh_count loop.ps1=$exit5_ps1_count) -- matches D3's [AMENDED] five-site pin (preflight, PROMPT.md substitution, missing/unreadable backlog at fill-time, non-ff integration, missing/unreadable backlog at the funnel's bottom-path re-scan)"
+else
+  report FAIL "96: exit-5 site count" "loop.sh=$exit5_sh_count(expected 5) loop.ps1=$exit5_ps1_count(expected 5)"
+fi
+
+# ---------------------------------------------------------------------------
+# 97: check-G/tripwire mutation, NEGATIVE (D8) -- CHECKS_VERSION_FILE
+# pointed at a temp file containing a deliberately-wrong "0.99.0" while the
+# real manifest's kitVersion is left untouched -> the REAL .claude/checks.sh
+# (CHECKS_MANIFEST-override precedent, assertions 24/25) must FAIL the
+# "J: kitVersion==VERSION join" line and name BOTH values.
+# ---------------------------------------------------------------------------
+j_real_kitversion="$(grep -m1 '"kitVersion"' "$MANIFEST_JSON" 2>/dev/null | \
+  sed -E 's/.*"kitVersion"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/')"
+if [[ -f "$CHECKS_SH" && -f "$MANIFEST_JSON" && -n "$j_real_kitversion" ]]; then
+  j_tripwire_neg_file="$TMP/version-mismatch.txt"
+  printf '0.99.0\n' > "$j_tripwire_neg_file"
+  j_tripwire_neg_out="$TMP/tripwire-neg-out.txt"
+  j_tripwire_neg_err="$TMP/tripwire-neg-err.txt"
+  CHECKS_VERSION_FILE="$j_tripwire_neg_file" "$CHECKS_SH" \
+    >"$j_tripwire_neg_out" 2>"$j_tripwire_neg_err"
+  j_tripwire_neg_rc=$?
+  j_tripwire_neg_fails=0
+  grep -qE '^FAIL  J: kitVersion==VERSION join' "$j_tripwire_neg_out" && j_tripwire_neg_fails=1
+  j_tripwire_neg_names_both=0
+  grep -qF "VERSION=0.99.0" "$j_tripwire_neg_err" \
+    && grep -qF "kitVersion=$j_real_kitversion" "$j_tripwire_neg_err" \
+    && j_tripwire_neg_names_both=1
+  if [[ "$j_tripwire_neg_rc" -ne 0 && "$j_tripwire_neg_fails" -eq 1 && "$j_tripwire_neg_names_both" -eq 1 ]]; then
+    report PASS "97: check-G/tripwire mutation, NEGATIVE (D8) -- CHECKS_VERSION_FILE=0.99.0 (real kitVersion=$j_real_kitversion) FAILS 'J: kitVersion==VERSION join' naming both values, non-zero overall exit"
+  else
+    report FAIL "97: check-G/tripwire mutation, NEGATIVE" \
+      "rc=$j_tripwire_neg_rc fails=$j_tripwire_neg_fails names_both=$j_tripwire_neg_names_both"
+    sed 's/^/    /' "$j_tripwire_neg_err" >&2
+  fi
+else
+  report SKIP "97: check-G/tripwire mutation, NEGATIVE (.claude/checks.sh or manifest absent, or kitVersion unreadable)"
+fi
+
+# ---------------------------------------------------------------------------
+# 98: check-G/tripwire mutation, POSITIVE (D8) -- the REAL tree (no
+# override) must PASS 'J: kitVersion==VERSION join' with overall exit 0.
+# ---------------------------------------------------------------------------
+if [[ -f "$CHECKS_SH" ]]; then
+  j_tripwire_pos_out="$TMP/tripwire-pos-out.txt"
+  "$CHECKS_SH" >"$j_tripwire_pos_out" 2>"$TMP/tripwire-pos-err.txt"
+  j_tripwire_pos_rc=$?
+  j_tripwire_pos_pass=0
+  grep -qE '^PASS  J: kitVersion==VERSION join' "$j_tripwire_pos_out" && j_tripwire_pos_pass=1
+  if [[ "$j_tripwire_pos_rc" -eq 0 && "$j_tripwire_pos_pass" -eq 1 ]]; then
+    report PASS "98: check-G/tripwire mutation, POSITIVE (D8) -- real tree (no override) PASSES 'J: kitVersion==VERSION join', overall checks.sh exit 0"
+  else
+    report FAIL "98: check-G/tripwire mutation, POSITIVE" "rc=$j_tripwire_pos_rc pass_line=$j_tripwire_pos_pass"
+  fi
+else
+  report SKIP "98: check-G/tripwire mutation, POSITIVE (.claude/checks.sh absent)"
+fi
+
+# ---------------------------------------------------------------------------
+# 99: check G mutation -- exit-5-stripped loop.sh COPY -> FAIL (D8). Check
+# G's `local sh=`/`local ps1=`/`local brk_sh=`/`local brk_ps1=` paths are
+# RELATIVE to cwd, not truly hardcoded-absolute, so a cwd-mirrored sandbox
+# (skills/setup/templates/loop/{loop.sh,loop.ps1,breaker.sh,breaker.ps1}
+# under a throwaway root) achieves a clean copy-mutation without needing the
+# assertion-26-class `$sh`-sed-repoint-the-checks.sh-copy fallback the task
+# anticipated for a truly hardcoded-absolute case -- noted here since that
+# fallback technique was considered and found unnecessary. The REAL check_g
+# function body is extracted verbatim (eval, same technique as
+# detect_rate_limit at assertion 13/14) and invoked with report() shadowed
+# locally (subshell-scoped, never touching this harness's own pass/fail
+# counters) against BOTH the mutant and an unmutated mirror (positive
+# control, mutation must discriminate).
+#
+# Mutation design note (measured, not assumed): check G's own detector is
+# `grep -qE "exit 5([^0-9]|$)"` over the WHOLE file -- it is satisfied by a
+# bare PROSE mention of "exit 5," in a comment just as readily as by a real
+# `exit 5` statement (verified: a code-statement-only mutation, `^\s*exit
+# 5\s*$` -> `exit 55`, left 3 prose comment mentions of "exit 5," intact and
+# check G still PASSED -- a false negative for THIS harness assertion's own
+# purpose, not a flaw in check G's actual job of detecting a missing exit-5
+# CAPABILITY prose-or-code). To make the mutation discriminate against check
+# G's real regex, every substring "exit 5" (code AND prose, global) becomes
+# "exit 55", which removes every match of `exit 5([^0-9]|$)` file-wide
+# (confirmed zero matches remain) while staying `bash -n` clean.
+# ---------------------------------------------------------------------------
+if [[ -f "$CHECKS_SH" ]]; then
+  checkg_src99="$(sed -n '/^check_g() {/,/^}/p' "$CHECKS_SH")"
+  if [[ -z "$checkg_src99" ]]; then
+    report FAIL "99 setup: extract check_g from .claude/checks.sh" "function not found -- checks.sh structure changed?"
+  else
+    CHECKG_POS_DIR="$TMP/checkg-pos"
+    CHECKG_MUT_DIR="$TMP/checkg-mut"
+    for _d in "$CHECKG_POS_DIR" "$CHECKG_MUT_DIR"; do
+      mkdir -p "$_d/skills/setup/templates/loop"
+      cp "$LOOP_SH" "$_d/skills/setup/templates/loop/loop.sh"
+      cp "$LOOP_PS1" "$_d/skills/setup/templates/loop/loop.ps1"
+      cp "$BREAKER_SH" "$_d/skills/setup/templates/loop/breaker.sh"
+      cp "$BREAKER_PS1" "$_d/skills/setup/templates/loop/breaker.ps1"
+    done
+    sed -i 's/exit 5/exit 55/g' "$CHECKG_MUT_DIR/skills/setup/templates/loop/loop.sh"
+
+    checkg_mut_bash_n_ok=0
+    bash -n "$CHECKG_MUT_DIR/skills/setup/templates/loop/loop.sh" 2>/dev/null && checkg_mut_bash_n_ok=1
+
+    checkg_mut_result="$(
+      cd "$CHECKG_MUT_DIR" || exit 1
+      eval "$checkg_src99"
+      report() { echo "$1|$2|${3:-}"; }
+      check_g 2>&1
+    )"
+    checkg_pos_result="$(
+      cd "$CHECKG_POS_DIR" || exit 1
+      eval "$checkg_src99"
+      report() { echo "$1|$2|${3:-}"; }
+      check_g 2>&1
+    )"
+
+    checkg_mut_fails=0
+    grep -qE '^FAIL\|G: loop driver parity heuristic' <<< "$checkg_mut_result" && checkg_mut_fails=1
+    checkg_mut_names_exit5=0
+    grep -qF 'missing exit 5' <<< "$checkg_mut_result" && checkg_mut_names_exit5=1
+    checkg_pos_passes=0
+    grep -qE '^PASS\|G: loop driver parity heuristic' <<< "$checkg_pos_result" && checkg_pos_passes=1
+
+    if [[ "$checkg_mut_bash_n_ok" -eq 1 && "$checkg_mut_fails" -eq 1 && "$checkg_mut_names_exit5" -eq 1 \
+          && "$checkg_pos_passes" -eq 1 ]]; then
+      report PASS "99: check G mutation -- every 'exit 5' substring (code AND prose) rewritten to 'exit 55' in a loop.sh COPY (relative-path-mirrored sandbox, real check_g function extracted verbatim) removes all matches of check G's own exit 5([^0-9]|\$) detector -> FAILS naming 'missing exit 5' (bash -n still clean on the mutant), while the SAME extracted function PASSES against an unmutated mirror of the real files -- discriminates correctly in both directions"
+    else
+      report FAIL "99: check G mutation" \
+        "bash_n_ok=$checkg_mut_bash_n_ok mut_fails=$checkg_mut_fails names_exit5=$checkg_mut_names_exit5 pos_passes=$checkg_pos_passes"
+      printf '%s\n' "$checkg_mut_result" "$checkg_pos_result" | sed 's/^/    /' >&2
+    fi
+  fi
+else
+  report SKIP "99: check G mutation (.claude/checks.sh absent)"
 fi
 
 echo

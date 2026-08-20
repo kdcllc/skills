@@ -19,22 +19,35 @@
 # Breaker: sources breaker.sh (functions: breaker_load, breaker_should_skip,
 # breaker_record, breaker_current_model); state file: _goals/breaker-state.json.
 #
-# Exit codes: 0 = backlog complete (sentinel found); 1 = max iterations reached without
-# completion; 2 = circuit breaker — no commit for 3 consecutive iterations; 3 = circuit
-# breaker — same failure signature 5 times consecutively; 4 = protected-path
-# modification detected (iteration reverted).
+# Exit codes (driver-aggregated across slots, precedence 4>3>2>1>0 -- the most
+# severe cause is always the one reported):
+# 0 = backlog complete -- the driver's own backlog re-scan found no eligible
+# story and no branch was quarantined this run. Under driver-owned dispatch a
+# slot-emitted sentinel is an ITERATION-mismatch (contract violation), never a
+# completion signal; the sentinel decides completion only in MANUAL
+# (non-dispatched) auto-loop runs.
+# 1 = stopped without completing the backlog -- max iterations reached with
+# eligible stories remaining, or no eligible story remains but quarantined
+# branches were retained this run (inspect them before trusting the backlog).
+# 2 = circuit breaker -- every slot retired on no-progress (a slot retires,
+# and is no longer refilled, after 3 consecutive no-commit reaps).
+# 3 = circuit breaker -- every slot retired and at least one retirement was
+# for 5 consecutive identical failure signatures (per-slot lineage).
+# 4 = protected-path modification detected (iteration reverted; the run stops
+# immediately and every other running slot is killed).
 # 126/127 (shell-propagated edge cases, not loop-owned codes): command-not-found
-# propagates as exit 127 and found-but-not-executable as exit 126 (bash) —
-# standard shell convention, distinct from the four codes above. The
+# propagates as exit 127 and found-but-not-executable as exit 126 (bash) --
+# standard shell convention, distinct from the aggregated codes above. The
 # PowerShell twin's Get-Command guard does not attempt to distinguish the two
-# and exits 127 for both — a stated, knowingly-accepted platform difference
+# and exits 127 for both -- a stated, knowingly-accepted platform difference
 # (the 126 case is Unix-host-only).
 # Exit 5 = setup or integration failure: the LOOP_WORKTREE=1 tracked-instance
-# preflight failing after `git worktree add`, or the interim ff-only
-# integration step hitting a non-fast-forward -- both are loud, driver-level
-# stops that never silently fall back to the main tree (the preflight path
-# removes its worktree; the non-ff path retains worktree and branch for
-# inspection).
+# preflight failing after `git worktree add`, PROMPT.md missing a %%...%%
+# substitution point, a missing/unreadable _goals/backlog.md, or the
+# rebase-then-ff integration step hitting a non-fast-forward -- all loud,
+# driver-level stops that never silently fall back to the main tree (the
+# preflight path removes its worktree; the non-ff path retains worktree and
+# branch for inspection).
 set -euo pipefail
 
 MAX_ITER="${1:-10}"   # total dispatches ACROSS all active slots (fill/poll/reap/
@@ -158,6 +171,13 @@ slot_no_progress=()
 slot_last_error_sig=()
 slot_same_error=()
 slot_state=()   # "idle" | "running"
+# Retirement (D2/STORY-012): a slot that trips CB1 or CB2 is RETIRED, not
+# run-fatal -- slot_retired flips to 1 and FILL skips it forever (no
+# un-retire path); slot_retire_reason records which breaker retired it
+# ("cb1"|"cb2"), consumed only by the D3 aggregation funnel's 3-vs-2
+# precedence test below.
+slot_retired=()
+slot_retire_reason=()
 # In-memory claim table (STORY-011 §4 step 3; design twin note :456-459):
 # slot -> story-id, parallel to the row above -- slot_writes mirrors the
 # claimed story's writes: glob for the admission test below. Consulted via
@@ -182,6 +202,8 @@ for ((SLOT = 0; SLOT < EFFECTIVE_SLOTS; SLOT++)); do
   slot_last_error_sig[SLOT]=""
   slot_same_error[SLOT]=0
   slot_state[SLOT]="idle"
+  slot_retired[SLOT]=0
+  slot_retire_reason[SLOT]=""
   slot_story[SLOT]=""
   slot_writes[SLOT]=""
   slot_outbox[SLOT]=""
@@ -637,19 +659,53 @@ _loop_subset_violation() {
   fi
 }
 
+# _loop_write_quarantine_marker <story> <slot> <branch> <status> <reason>
+# <dirty_paths> <prompt> -- D4-pinned marker file, one per quarantined/killed
+# branch: `.loop-worktrees/QUARANTINE-<branch, slashes -> dashes>.md`.
+# Content order pinned byte-for-byte: `QUARANTINE`, `story:`, `slot:`,
+# `branch:`, `status:`, `reason:` (mismatch|abnormal|subset|killed),
+# `dirty_paths:` (porcelain flattened to one line, or `none`/the killed-path
+# literal), a blank line, `--- dispatched prompt ---`, then the dispatched
+# prompt verbatim. Called from both _loop_reap_slot's quarantine-lite
+# disposal (flag=1 only) and _loop_kill_other_slots' kill path -- the two
+# ONLY producers of quarantined/lost branches.
+_loop_write_quarantine_marker() {
+  local story="$1" slot="$2" branch="$3" status="$4" reason="$5"
+  local dirty_paths="$6" prompt="$7"
+  mkdir -p "$PWD/.loop-worktrees"
+  local safe_branch="${branch//\//-}"
+  {
+    echo "QUARANTINE"
+    echo "story: $story"
+    echo "slot: $slot"
+    echo "branch: $branch"
+    echo "status: $status"
+    echo "reason: $reason"
+    echo "dirty_paths: $dirty_paths"
+    echo ""
+    echo "--- dispatched prompt ---"
+    printf '%s\n' "$prompt"
+  } > "$PWD/.loop-worktrees/QUARANTINE-${safe_branch}.md"
+}
+
 # _loop_kill_other_slots <except-slot> -- best-effort SIGTERM + reap of every
-# OTHER "running" slot before a driver-fatal exit (CB0/CB1/CB2/non-ff
-# integration failure all terminate the whole process under N>1) -- without
-# this, a background child would be orphaned when this script exits, since
-# nothing else in the process tree would ever `wait` for it. `kill`/`wait`
-# failures (the child already exited on its own) are swallowed. Each killed
-# slot's branch is named in the retained-branches EXIT-trap summary too
-# (extending that summary's CONTENT, not its printing mechanism) so an
-# abrupt multi-slot stop is never silently invisible -- full per-slot
-# quarantine bookkeeping on this abrupt path is out of this task's scope
-# (STORY-012's slot retirement/quarantine-marker work), so these branches
-# are named as "killed, unexamined" rather than run through the normal
-# quarantine-lite disposal.
+# OTHER "running" slot before a driver-fatal exit. Post-STORY-012 this
+# helper's ONLY remaining caller is CB0's exit-4 path: CB1/CB2 no longer
+# call it (they retire the slot and let the SAME reap's own disposal run
+# instead -- see the D2 retirement block in _loop_reap_slot), and the
+# exit-5 sites never called it either. Without this, a background child
+# would be orphaned when this script exits, since nothing else in the
+# process tree would ever `wait` for it. `kill`/`wait` failures (the child
+# already exited on its own) are swallowed. Each killed slot's branch is
+# named in the retained-branches EXIT-trap summary too (extending that
+# summary's CONTENT, not its printing mechanism) AND now writes a D4
+# quarantine marker (reason `killed`, status the literal string `killed`,
+# dirty_paths `unknown (killed before reap)` since the worktree is never
+# inspected post-kill) -- this closes the "killed, unexamined" deferral
+# this comment used to record: the marker ships on this path now, sourcing
+# the dispatched prompt from the killed slot's own outbox before that
+# outbox is removed (the "(killed, unexamined)" retained-branches suffix
+# below is otherwise unchanged).
 _loop_kill_other_slots() {
   local except="$1" s
   for ((s = 0; s < EFFECTIVE_SLOTS; s++)); do
@@ -661,6 +717,15 @@ _loop_kill_other_slots() {
       wait "${slot_pid[s]}" 2>/dev/null || true
       slot_state[s]="idle"
       if [[ -n "${slot_branch[s]:-}" ]]; then
+        local killed_prompt=""
+        if [[ -n "${slot_outbox[s]:-}" && -f "${slot_outbox[s]}/dispatch-prompt.md" ]]; then
+          killed_prompt="$(cat "${slot_outbox[s]}/dispatch-prompt.md")"
+        fi
+        _loop_write_quarantine_marker "${slot_story[s]:-}" "$s" "${slot_branch[s]}" \
+          "killed" "killed" "unknown (killed before reap)" "$killed_prompt"
+        if [[ -n "${slot_outbox[s]:-}" ]]; then
+          rm -rf "${slot_outbox[s]}"
+        fi
         retained_branches+=("${slot_branch[s]} (killed, unexamined)")
       fi
     fi
@@ -811,6 +876,14 @@ _loop_fill_slot() {
   p="${p//%%STORY_ID%%/$SELECTED_ID}"
   p="${p//%%OUTBOX_DIR%%/$outbox_dir}"
 
+  # Dispatch-prompt capture (D5/STORY-012, addendum 1 §7.2 durable
+  # evidence): the EXACT dispatched prompt, written after both
+  # substitutions and before the child spawns -- driver-owned; slots must
+  # not modify it. Read back at reap (before the outbox is removed) and
+  # embedded verbatim in quarantine markers (D4) on every non-clean
+  # disposal/kill path; discarded with the outbox on a clean integration.
+  printf '%s' "$p" > "$outbox_dir/dispatch-prompt.md"
+
   # --- driver/child boundary (the pin) --------------------------------------
   # The child is a background subshell that runs ONLY the CLI invocation, cwd
   # = the slot's tree (worktree at LOOP_WORKTREE=1, main tree otherwise),
@@ -841,8 +914,10 @@ _loop_fill_slot() {
 # ITERATION-mismatch check (quarantine-lite; ORDERED BEFORE the sentinel
 # scan's own outcome, per the goal's reap-order pin), backlog transition,
 # outbox appends (integration order = reap order), memory size gates, CB0
-# (global-fatal, kills every other active slot), CB1/CB2 (per-slot,
-# run-fatal -- thresholds/semantics UNCHANGED from STORY-010), and disposal
+# (global-fatal, kills every other active slot), CB1/CB2 (per-slot
+# RETIREMENT, D2/STORY-012 -- thresholds/semantics UNCHANGED from STORY-010,
+# but a trip no longer ends the run: the slot retires and stops being
+# refilled instead), and disposal
 # (subset-check + integrate, or quarantine-lite). Bare statement at EVERY
 # call site below -- see _loop_fill_slot's comment: this function contains
 # unguarded `git worktree prune` / `git -C ... reset --hard` call sites that
@@ -943,6 +1018,15 @@ _loop_reap_slot() {
   if [[ -f "$outbox_dir/escalations.md" ]]; then
     cat "$outbox_dir/escalations.md" >> "$PWD/_goals/ESCALATIONS.md"
   fi
+  # Dispatch-prompt readback (D5/STORY-012): read before the outbox goes
+  # away -- empty-safe (a manual/pre-STORY-012 outbox may lack the file).
+  # Discarded with the outbox on a clean integration (that evidence is the
+  # integrated commit itself); embedded verbatim in the quarantine marker
+  # (D4) on every non-clean disposal path below.
+  local dispatched_prompt=""
+  if [[ -f "$outbox_dir/dispatch-prompt.md" ]]; then
+    dispatched_prompt="$(cat "$outbox_dir/dispatch-prompt.md")"
+  fi
   rm -rf "$outbox_dir"
 
   # --- Integrator step 4: memory size gates, driver-side, AFTER appends
@@ -989,14 +1073,22 @@ _loop_reap_slot() {
   local head_after
   head_after="$(git -C "$tree" rev-parse HEAD)"
 
-  # cb_disposition/cb_exit defer CB1/CB2's exit so the worktree lifecycle
-  # (integrate-or-quarantine, below) runs first even on a terminal iteration —
-  # the underlying evaluation order (record -> sentinel -> CB0 -> CB1 -> CB2)
-  # is unchanged; only WHERE the exit statement executes moves.
-  local cb_disposition=0 cb_exit=0
+  # retired_this_reap replaces the old cb_disposition/cb_exit deferred-exit
+  # pair (D2/STORY-012, goal-judge fix 5): CB1/CB2 no longer exit AT ALL --
+  # they RETIRE the slot (slot_retired[s]=1, no un-retire path) and let this
+  # reap's own disposal (integrate-or-quarantine, below) run first, exactly
+  # as today's deferred-exit ordering did (record -> sentinel -> CB0 -> CB1
+  # -> CB2 -> disposal, unchanged). The flag's only remaining job is gating
+  # CB2 and the abnormal test so a CB1-retiring reap is never
+  # double-evaluated by CB2 and never double-counted as abnormal (INVARIANT:
+  # a CB1-retiring reap never sets slot_retire_reason=cb2). Every literal
+  # exit statement this used to gate now lives in _loop_aggregate_exit,
+  # below the main loop.
+  local retired_this_reap=0
 
   # Circuit breaker 1: no new commit for 3 consecutive iterations (per-slot
-  # counter, unchanged threshold).
+  # counter, unchanged threshold). RETIRES the slot (D2) instead of ending
+  # the run -- other slots keep going; FILL skips a retired slot forever.
   # CB1 carve-out (amended scope): a rate-limited pass never counts against this
   # counter — the breaker owns recovery for it instead. Non-rate-limited no-commit
   # passes increment no_progress exactly as before.
@@ -1007,9 +1099,10 @@ _loop_reap_slot() {
       slot_no_progress[s]=$(( slot_no_progress[s] + 1 ))
       echo "--- no progress (${slot_no_progress[s]}/3)"
       if (( slot_no_progress[s] >= 3 )); then
-        echo "!!! circuit breaker: 3 iterations without a commit — stopping" >&2
-        cb_disposition=1
-        cb_exit=2
+        echo "!!! circuit breaker: 3 iterations without a commit — slot $s retired (not refilled)" >&2
+        slot_retired[s]=1
+        slot_retire_reason[s]="cb1"
+        retired_this_reap=1
       fi
     fi
   else
@@ -1018,25 +1111,27 @@ _loop_reap_slot() {
 
   # Circuit breaker 2: same failure signature 5 times in a row (per-slot
   # counter, thresholds unchanged; CB2's signature reads the same output
-  # variable the driver already captured above). Skipped entirely once
-  # CB1 has already assigned a disposition this iteration — matches the
-  # original ordering, where CB1's `exit 2` would have prevented this code
-  # from ever running.
-  if (( cb_disposition == 0 )) && (( status != 0 )); then
+  # variable the driver already captured above). Skipped entirely once CB1
+  # has already retired this slot this reap — matches the original
+  # ordering, where CB1's disposition would have prevented this code from
+  # ever running (INVARIANT: a CB1-retiring reap never sets
+  # slot_retire_reason=cb2). RETIRES the slot (D2) instead of ending the run.
+  if (( retired_this_reap == 0 )) && (( status != 0 )); then
     local error_sig
     error_sig="$(printf '%s' "$output" | tail -n 5 | sha256sum | cut -d' ' -f1)"
     if [[ "$error_sig" == "${slot_last_error_sig[s]}" ]]; then
       slot_same_error[s]=$(( slot_same_error[s] + 1 ))
       if (( slot_same_error[s] >= 5 )); then
-        echo "!!! circuit breaker: same error 5 times — stopping" >&2
-        cb_disposition=1
-        cb_exit=3
+        echo "!!! circuit breaker: same error 5 times — slot $s retired (not refilled)" >&2
+        slot_retired[s]=1
+        slot_retire_reason[s]="cb2"
+        retired_this_reap=1
       fi
     else
       slot_same_error[s]=1
       slot_last_error_sig[s]="$error_sig"
     fi
-  elif (( cb_disposition == 0 )); then
+  elif (( retired_this_reap == 0 )); then
     slot_same_error[s]=0
     slot_last_error_sig[s]=""
   fi
@@ -1046,16 +1141,28 @@ _loop_reap_slot() {
   # worktree/branch to act on (main tree already carries whatever the slot
   # committed, today's unchanged behavior).
   if (( WORKTREE == 1 )); then
+    # dirty_paths capture (D4/STORY-012): the porcelain text itself, not just
+    # the boolean it also feeds -- flattened to one line for the quarantine
+    # marker's `dirty_paths:` field (`none` when clean, the D4 accepted-loss
+    # mitigation for the dirty-abnormal path's `--force` worktree removal).
+    # Captured BEFORE any removal below (order pinned: capture, then act).
+    local porcelain
+    porcelain="$(git -C "$tree" status --porcelain 2>/dev/null)"
     local dirty=0
-    if [[ -n "$(git -C "$tree" status --porcelain 2>/dev/null)" ]]; then
+    if [[ -n "$porcelain" ]]; then
       dirty=1
+    fi
+    local dirty_paths_flat="none"
+    if (( dirty == 1 )); then
+      dirty_paths_flat="${porcelain//$'\n'/; }"
     fi
     local abnormal=0
     # Abnormal slot exit (quarantine-lite, pinned): a nonzero CLI status that
-    # did NOT earn a recognized CB1/CB2 disposition this iteration, OR a
-    # dirty worktree left behind either way. Full quarantine (markers,
-    # retirement bookkeeping) is STORY-012's; this is an explicit deferral.
-    if (( status != 0 )) && (( cb_disposition == 0 )); then
+    # did NOT retire this slot this reap (CB1/CB2 retirement, D2), OR a
+    # dirty worktree left behind either way. Quarantine markers (D4) now
+    # ship on this path (and the mismatch/subset paths below) -- see
+    # _loop_write_quarantine_marker.
+    if (( status != 0 )) && (( retired_this_reap == 0 )); then
       abnormal=1
     fi
     if (( dirty == 1 )); then
@@ -1064,11 +1171,13 @@ _loop_reap_slot() {
 
     if (( mismatch == 1 )); then
       echo "!!! slot $s: ITERATION-mismatch — quarantine-lite: NOT integrating; retaining branch '$branch' for inspection ($tree)" >&2
+      _loop_write_quarantine_marker "$story" "$s" "$branch" "$status" "mismatch" "$dirty_paths_flat" "$dispatched_prompt"
       git worktree remove --force "$tree" 2>/dev/null || true
       git worktree prune
       retained_branches+=("$branch")
     elif (( abnormal == 1 )); then
       echo "!!! slot $s exited abnormally (status=$status dirty=$dirty) — quarantine-lite: NOT integrating; retaining branch '$branch' for inspection ($tree)" >&2
+      _loop_write_quarantine_marker "$story" "$s" "$branch" "$status" "abnormal" "$dirty_paths_flat" "$dispatched_prompt"
       git worktree remove --force "$tree" 2>/dev/null || true
       git worktree prune
       retained_branches+=("$branch")
@@ -1082,6 +1191,7 @@ _loop_reap_slot() {
       # prevented any conflict for it, so the check is skipped there
       # rather than manufacturing a spurious violation.
       echo "!!! slot $s: branch '$branch' touched paths outside its declared writes: (quarantine-lite, not integrated): $subset_bad" >&2
+      _loop_write_quarantine_marker "$story" "$s" "$branch" "$status" "subset" "$dirty_paths_flat" "$dispatched_prompt"
       git worktree remove --force "$tree" 2>/dev/null || true
       git worktree prune
       retained_branches+=("$branch")
@@ -1089,18 +1199,105 @@ _loop_reap_slot() {
       _loop_integrate_slot "$tree" "$branch"
     fi
   fi
+}
 
-  # Literal `exit 2`/`exit 3` statements (not a variable exit): the
-  # structural checks grep for literal exit digits on a driver-level exit
-  # line, so cb_exit only SELECTS between them, it never
-  # substitutes for them.
-  if (( cb_disposition == 1 )); then
-    _loop_kill_other_slots "$s"
-    if (( cb_exit == 2 )); then
-      exit 2
+# _loop_all_retired -- exit 0 (true) iff every slot 0..EFFECTIVE_SLOTS-1 is
+# retired. Used only to WIDEN the in-loop terminal's trigger condition
+# (goal-pinned): filled_this_round==0 already holds whenever every slot is
+# retired (FILL skips a retired slot, so it can never set
+# filled_this_round=1), but this makes the "every slot stopped progressing"
+# trigger the funnel's rows 3/2 depend on an explicit, named check rather
+# than an emergent property of the FILL skip.
+_loop_all_retired() {
+  local s
+  for ((s = 0; s < EFFECTIVE_SLOTS; s++)); do
+    if (( slot_retired[s] == 0 )); then
+      return 1
     fi
-    exit 3
+  done
+  return 0
+}
+
+# _loop_aggregate_exit <context> -- THE single driver-level exit-aggregation
+# funnel (D3, goal-judge fix 1): every terminal literal `exit N` statement
+# EXCEPT CB0's `exit 4` (above, short-circuits the table) and the five loud
+# `exit 5` stops lives HERE. Evaluated strictly TOP-DOWN on every call: rows
+# 3/2 (all-retired) BEFORE rows 0/1 (drained/quarantine) -- the two-gate
+# form (checking drained-vs-survivor first, all-retired second) is
+# forbidden, because it can report a lying exit 0/1 on the exact dispatch
+# where MAX_ITER exhaustion coincides with the last slot's retirement
+# (micro-test (h)). <context> is "in_loop" or "bottom" -- the ONLY thing it
+# affects is which banner prints on the clean-drained outcome (in_loop keeps
+# today's "no eligible stories" banner + refused-ids line; bottom prints
+# P5); every other outcome (all-retired 3/2, drained-with-quarantine 1,
+# survivor-remains 1) is call-site-independent. Both callers invoke this
+# ONLY at active_slots==0, so there are no in-flight claims to bias the
+# eligibility re-check below -- a survivor found here is genuine remaining
+# work, not a transient admission conflict (in practice, unreachable from
+# the in_loop call site: active==0 there already implies no admission
+# conflicts, so a genuine survivor would have been filled instead of
+# reaching this call at all -- see the in-loop call site's comment).
+_loop_aggregate_exit() {
+  local context="$1" s all_retired=1 any_cb2=0
+
+  for ((s = 0; s < EFFECTIVE_SLOTS; s++)); do
+    if (( slot_retired[s] == 0 )); then
+      all_retired=0
+    elif [[ "${slot_retire_reason[s]}" == "cb2" ]]; then
+      any_cb2=1
+    fi
+  done
+
+  # Rows 3/2: all-retired. 3-vs-2 precedence from retirement reasons alone
+  # (D3): ANY cb2 retirement anywhere in the lineage wins over an all-cb1
+  # run, so a lone slot that committed earlier and only later tripped CB2
+  # still exits 3, exactly as N=1 always has.
+  if (( all_retired == 1 )); then
+    echo "!!! all slots retired — stopping" >&2
+    if (( any_cb2 == 1 )); then
+      exit 3
+    fi
+    exit 2
   fi
+
+  # Rows 0/1: re-check eligibility (§7.1(b)(ii), the driver's own re-scan --
+  # strictly stronger than trusting a slot's advisory sentinel).
+  SELECTED_ID=""
+  if [[ ! -r "$BACKLOG_FILE" ]]; then
+    # A backlog readable at the last FILL gate and unreadable now was destroyed
+    # mid-run: the SAME setup failure _loop_fill_slot's gate catches, and the
+    # contract block above names it an exit-5 cause. Only the never-dispatched
+    # degenerate case (MAX_ITER=0, where FILL's gate never ran) stays quiet --
+    # nothing ran, so nothing can have broken.
+    if (( dispatched > 0 )); then
+      echo "!!! $BACKLOG_FILE is missing or unreadable -- cannot confirm completion (setup failure)" >&2
+      exit 5
+    fi
+  else
+    _loop_select_story || true
+  fi
+  if [[ -z "$SELECTED_ID" ]]; then
+    # No survivor. §7.1(b)(iii)/D1: exit 0 is gated on zero quarantined
+    # branches this run -- a quarantine-looped-to-exhaustion story must
+    # never report a lying "backlog complete".
+    if (( ${#retained_branches[@]} > 0 )); then
+      echo "=== no eligible stories remain, but quarantined branches were retained this run — exiting 1 (inspect before trusting the backlog) ==="
+      exit 1
+    fi
+    if [[ "$context" == "bottom" ]]; then
+      echo "=== max iterations reached and no eligible stories remain — backlog complete ==="
+    else
+      echo "=== no eligible stories remain -- exiting ==="
+      if (( ${#refused_ids[@]} > 0 )); then
+        echo "=== protected-path-refused this run (never dispatched): ${refused_ids[*]} ==="
+      fi
+    fi
+    exit 0
+  fi
+
+  # Survivor remains: MAX_ITER exhausted with eligible work still pending.
+  echo "=== max iterations ($MAX_ITER) reached; backlog not complete ==="
+  exit 1
 }
 
 # =============================================================================
@@ -1117,7 +1314,7 @@ while (( dispatched < MAX_ITER )) || (( active_slots > 0 )); do
   # --- FILL ------------------------------------------------------------------
   filled_this_round=0
   for ((SLOT = 0; SLOT < EFFECTIVE_SLOTS; SLOT++)); do
-    if [[ "${slot_state[SLOT]}" == "running" ]]; then
+    if [[ "${slot_state[SLOT]}" == "running" ]] || (( slot_retired[SLOT] == 1 )); then
       continue
     fi
     if (( dispatched >= MAX_ITER )); then
@@ -1137,17 +1334,16 @@ while (( dispatched < MAX_ITER )) || (( active_slots > 0 )); do
   done
 
   # No eligible story survived selection this round AND nothing is still
-  # running -> the driver owns the completion determination now (the
-  # skill's <promise>COMPLETE</promise> branch remains for MANUAL invocation
-  # only). Refused-story completion visibility (cycle-1 fix 10): name every
-  # protected-path-refused story id so "complete" never silently masks
-  # permanently undispatchable work; exit code stays 0.
-  if (( active_slots == 0 )) && (( filled_this_round == 0 )); then
-    echo "=== no eligible stories remain -- exiting ==="
-    if (( ${#refused_ids[@]} > 0 )); then
-      echo "=== protected-path-refused this run (never dispatched): ${refused_ids[*]} ==="
-    fi
-    exit 0
+  # running (OR every slot has retired -- _loop_all_retired below, an
+  # explicit widening of the same trigger) -> hand off to the D3
+  # aggregation funnel, which owns every literal exit statement from here
+  # down (the skill's <promise>COMPLETE</promise> branch remains for MANUAL
+  # invocation only). Rows 3/2 (all-retired) evaluate before rows 0/1
+  # (drained/quarantine) inside the funnel -- the refused-story visibility
+  # (cycle-1 fix 10) and the drained-with-quarantine gate (D1) both live
+  # there now, not here.
+  if (( active_slots == 0 )) && { (( filled_this_round == 0 )) || _loop_all_retired; }; then
+    _loop_aggregate_exit "in_loop"
   fi
 
   # --- POLL --------------------------------------------------------------
@@ -1191,7 +1387,12 @@ while (( dispatched < MAX_ITER )) || (( active_slots > 0 )); do
   # --- REFILL: loop back to FILL at the top ---------------------------------
 done
 
-# (Retained-branches summary, if any, is printed by the _loop_report_retained
-# EXIT trap installed above -- it fires here too, after this exit statement.)
-echo "=== max iterations ($MAX_ITER) reached; backlog not complete ==="
-exit 1
+# Bottom (MAX_ITER-exhausted) terminal: calls the SAME D3 aggregation funnel
+# as the in-loop terminal above -- this is what closes the cycle-1 blocker
+# (a slot retiring on the exact dispatch that also exhausts MAX_ITER must
+# still land in rows 3/2, never fall through to a lying exit 0/1). Every
+# literal exit statement, and the banner for each of its outcomes, lives
+# inside the funnel. (Retained-branches summary, if any, is printed by the
+# _loop_report_retained EXIT trap installed above -- it fires here too,
+# after the funnel's exit statement.)
+_loop_aggregate_exit "bottom"

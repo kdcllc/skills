@@ -476,9 +476,9 @@ Next iteration (fresh context)
 |-------|---------|
 | Max iterations per run | 10 (argument to the loop driver (`loop.sh`/`loop.ps1`)) |
 | Per-story attempt cap | 3, then blocked + escalation entry |
-| Circuit breaker | stop after 3 consecutive iterations with no new commit, or 5 with the same error |
+| Circuit breaker | per slot: retire after 3 consecutive no-commit reaps or 5 identical failure signatures (run continues); every slot retired stops the run — exit 3 if any signature-retirement, else 2 |
 | Model breaker | CLOSED/OPEN/HALF-OPEN on anchored rate-limit detection; 600s cooldown, 2 successes to close; falls down the loop model chain, omit-pin at chain end; OPEN sleeps instead of hammering; rate-limited passes CB1-exempt |
-| Exit condition | explicit `<promise>COMPLETE</promise>` sentinel — never inferred from prose |
+| Exit condition | driver-dispatched runs: the driver's own backlog re-scan, gated on zero quarantined branches (exit 0); manual runs: explicit `<promise>COMPLETE</promise>` sentinel — never inferred from prose |
 | Merge gate | judge PASS + green ladder rungs 1–2 before any commit; rung 3 at run end |
 | Docs | align-docs (Phase 6) runs per story — doc updates land in the story's commit |
 | Protected paths | the loop may not modify `_loop/`, kit agents/skills, the manifest, or `.gitattributes` — the loop driver (`loop.sh`/`loop.ps1`) reverts the iteration and stops (exit 4) |

@@ -2,7 +2,7 @@
 
 [![skills.sh installs](https://skills.sh/b/kdcllc/skills)](https://skills.sh/kdcllc/skills)
 
-> Kit version: **0.12.0** (`skills/setup/VERSION`) · The install badge above applies
+> Kit version: **0.13.0** (`skills/setup/VERSION`) · The install badge above applies
 > only if the repo is made public: [skills.sh](https://www.skills.sh/) filters private
 > repos out of its public index by design
 > ([vercel-labs/skills#381](https://github.com/vercel-labs/skills/issues/381)), so it
@@ -41,8 +41,11 @@ What an install gives a project:
   N>1-iff-worktree rule shipped in v0.12.0: honored when `LOOP_WORKTREE=1`, clamps to
   effective 1 when `LOOP_WORKTREE=0` (with a stderr note only when `LOOP_SLOTS>1` was
   set explicitly)) and `LOOP_WORKTREE` (default 0, main-tree iteration; `=1` opts into
-  a driver-managed worktree) — sit alongside the existing five exit codes (0–4) as a
-  new exit code 5 for setup/integration failures.
+  a driver-managed worktree) — sit alongside a six-code exit contract: codes 0–3
+  aggregated across slots with precedence 4>3>2>1>0 (per-slot CB1/CB2 retirement
+  instead of a run-fatal stop; drained completion exits 0 only when no branch was
+  quarantined this run), exit 4 short-circuiting the table on protected-path
+  violations, and exit 5 as the loud setup/integration stop.
 
 ## Layout
 
@@ -134,11 +137,18 @@ judge auto-fail triggers, and model IDs are derived from the codebase and your a
 never left generic. Start your first feature with `/feature`; start an unattended run
 (sandboxed!) with `_loop/loop.sh 10` (or `pwsh _loop/loop.ps1 10` — PowerShell 7+).
 Driver-owned dispatch, write-set admission, and the single-writer integrator shipped in
-v0.12.0. `LOOP_WORKTREE` still defaults to 0 (main-tree iteration; `=1` requires a
-tracked-instance preflight); `LOOP_SLOTS` is live under the N>1-iff-worktree rule
-(LOOP_WORKTREE=1 honors the configured value; LOOP_WORKTREE=0 clamps to effective 1,
-with a stderr note only when `LOOP_SLOTS>1` was set explicitly). A new exit code 5
-covers setup/integration failures.
+v0.12.0. Completion and exit aggregation shipped in v0.13.0 — per-slot CB1/CB2
+retirement instead of a run-fatal stop, the run exit aggregated across slots with
+precedence 4>3>2>1>0, quarantine-gated completion (drained-backlog exit 0 only when no
+branch was quarantined this run), and `.loop-worktrees/QUARANTINE-<branch>.md` markers
+(slashes in the branch become dashes) embedding the dispatched prompt.
+`LOOP_WORKTREE` still defaults to 0 (main-tree iteration; `=1` requires a
+tracked-instance preflight); `LOOP_SLOTS` is live under the
+N>1-iff-worktree rule (LOOP_WORKTREE=1 honors the configured value; LOOP_WORKTREE=0
+clamps to effective 1, with a stderr note only when `LOOP_SLOTS>1` was set explicitly).
+A new exit code 5 covers setup/integration failures; the completion-time backlog
+re-scan added in v0.13.0 now raises the same missing/unreadable-backlog cause at a
+fifth site (the four causes are unchanged — this adds loud completion-time coverage).
 
 ### Self-install (local development of the kit itself)
 

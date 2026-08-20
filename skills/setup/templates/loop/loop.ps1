@@ -21,22 +21,35 @@
 # Breaker: dot-sources breaker.ps1 (functions: Breaker-Load, Breaker-ShouldSkip,
 # Breaker-Record, Breaker-CurrentModel); state file: _goals/breaker-state.json.
 #
-# Exit codes: 0 = backlog complete (sentinel found); 1 = max iterations reached without
-# completion; 2 = circuit breaker — no commit for 3 consecutive iterations; 3 = circuit
-# breaker — same failure signature 5 times consecutively; 4 = protected-path
-# modification detected (iteration reverted).
+# Exit codes (driver-aggregated across slots, precedence 4>3>2>1>0 -- the most
+# severe cause is always the one reported):
+# 0 = backlog complete -- the driver's own backlog re-scan found no eligible
+# story and no branch was quarantined this run. Under driver-owned dispatch a
+# slot-emitted sentinel is an ITERATION-mismatch (contract violation), never a
+# completion signal; the sentinel decides completion only in MANUAL
+# (non-dispatched) auto-loop runs.
+# 1 = stopped without completing the backlog -- max iterations reached with
+# eligible stories remaining, or no eligible story remains but quarantined
+# branches were retained this run (inspect them before trusting the backlog).
+# 2 = circuit breaker -- every slot retired on no-progress (a slot retires,
+# and is no longer refilled, after 3 consecutive no-commit reaps).
+# 3 = circuit breaker -- every slot retired and at least one retirement was
+# for 5 consecutive identical failure signatures (per-slot lineage).
+# 4 = protected-path modification detected (iteration reverted; the run stops
+# immediately and every other running slot is killed).
 # 126/127 (shell-propagated edge cases, not loop-owned codes): command-not-found
-# propagates as exit 127 and found-but-not-executable as exit 126 (bash) —
-# standard shell convention, distinct from the four codes above. The
+# propagates as exit 127 and found-but-not-executable as exit 126 (bash) --
+# standard shell convention, distinct from the aggregated codes above. The
 # PowerShell twin's Get-Command guard does not attempt to distinguish the two
-# and exits 127 for both — a stated, knowingly-accepted platform difference
+# and exits 127 for both -- a stated, knowingly-accepted platform difference
 # (the 126 case is Unix-host-only).
 # Exit 5 = setup or integration failure: the LOOP_WORKTREE=1 tracked-instance
-# preflight failing after `git worktree add`, or the interim ff-only
-# integration step hitting a non-fast-forward -- both are loud, driver-level
-# stops that never silently fall back to the main tree (the preflight path
-# removes its worktree; the non-ff path retains worktree and branch for
-# inspection).
+# preflight failing after `git worktree add`, PROMPT.md missing a %%...%%
+# substitution point, a missing/unreadable _goals/backlog.md, or the
+# rebase-then-ff integration step hitting a non-fast-forward -- all loud,
+# driver-level stops that never silently fall back to the main tree (the
+# preflight path removes its worktree; the non-ff path retains worktree and
+# branch for inspection).
 
 param(
     # total dispatches ACROSS all active slots (fill/poll/reap/integrate/
@@ -182,6 +195,11 @@ function Test-RateLimited {
 # populated by Invoke-LoopFillSlot, consumed by Invoke-LoopReapSlot -- these
 # replace the single-slot scalars the dark-launched N=1 code used, since N>1
 # now needs one of each per concurrently-running slot.
+# Retired/RetireReason (D2/STORY-012): a slot that trips CB1 or CB2 is
+# RETIRED, not run-fatal -- Retired flips to 1 and FILL skips it forever (no
+# un-retire path); RetireReason records which breaker retired it
+# ('cb1'|'cb2'), consumed only by the D3 aggregation funnel's 3-vs-2
+# precedence test below.
 $slots = @()
 for ($i = 0; $i -lt $EffectiveSlots; $i++) {
     $slots += @{
@@ -192,6 +210,8 @@ for ($i = 0; $i -lt $EffectiveSlots; $i++) {
         LastErrorSig = ''
         SameError    = 0
         State        = 'idle'   # 'idle' | 'running'
+        Retired      = 0
+        RetireReason = ''
         Story        = ''
         Writes       = ''
         Outbox       = ''
@@ -718,19 +738,61 @@ function Get-LoopSubsetViolation {
     return $bad
 }
 
+# Write-LoopQuarantineMarker <story> <slot> <branch> <status> <reason>
+# <dirty_paths> <prompt> -- D4-pinned marker file, one per quarantined/killed
+# branch: `.loop-worktrees/QUARANTINE-<branch, slashes -> dashes>.md`.
+# Content order pinned byte-for-byte: `QUARANTINE`, `story:`, `slot:`,
+# `branch:`, `status:`, `reason:` (mismatch|abnormal|subset|killed),
+# `dirty_paths:` (porcelain flattened to one line, or `none`/the killed-path
+# literal), a blank line, `--- dispatched prompt ---`, then the dispatched
+# prompt verbatim. Called from both Invoke-LoopReapSlot's quarantine-lite
+# disposal (flag=1 only) and Stop-LoopOtherSlots' kill path -- the two ONLY
+# producers of quarantined/lost branches.
+function Write-LoopQuarantineMarker {
+    param(
+        [Parameter(Mandatory)] [AllowEmptyString()] [string]$Story,
+        [Parameter(Mandatory)] [int]$Slot,
+        [Parameter(Mandatory)] [string]$Branch,
+        [Parameter(Mandatory)] [AllowEmptyString()] [string]$LoopStatus,
+        [Parameter(Mandatory)] [string]$Reason,
+        [Parameter(Mandatory)] [AllowEmptyString()] [string]$DirtyPaths,
+        [Parameter(Mandatory)] [AllowEmptyString()] [string]$Prompt
+    )
+    $dir = Join-Path (Get-Location).Path '.loop-worktrees'
+    New-Item -ItemType Directory -Path $dir -Force | Out-Null
+    $safeBranch = $Branch -replace '/', '-'
+    $lines = @(
+        'QUARANTINE',
+        "story: $Story",
+        "slot: $Slot",
+        "branch: $Branch",
+        "status: $LoopStatus",
+        "reason: $Reason",
+        "dirty_paths: $DirtyPaths",
+        '',
+        '--- dispatched prompt ---'
+    )
+    $content = ($lines -join "`n") + "`n" + $Prompt + "`n"
+    Set-Content -LiteralPath (Join-Path $dir "QUARANTINE-${safeBranch}.md") -Value $content -NoNewline
+}
+
 # Stop-LoopOtherSlots <except-slot> -- best-effort stop of every OTHER
-# 'running' slot before a driver-fatal exit (CB0/CB1/CB2/non-ff integration
-# failure all terminate the whole process under N>1) -- without this, a
-# background job would be orphaned when this script exits, since nothing
-# else in the process would ever reap it. Stop-Job/Remove-Job failures (the
-# job already exited on its own) are swallowed. Each stopped slot's branch
-# is named in the retained-branches closing summary too (extending that
-# summary's CONTENT, not its printing mechanism) so an abrupt multi-slot
-# stop is never silently invisible -- full per-slot quarantine bookkeeping
-# on this abrupt path is out of this task's scope (STORY-012's slot
-# retirement/quarantine-marker work), so these branches are named as
-# "killed, unexamined" rather than run through the normal quarantine-lite
-# disposal.
+# 'running' slot before a driver-fatal exit. Post-STORY-012 this helper's
+# ONLY remaining caller is CB0's exit-4 path: CB1/CB2 no longer call it
+# (they retire the slot and let the SAME reap's own disposal run instead --
+# see the D2 retirement block in Invoke-LoopReapSlot), and the exit-5 sites
+# never called it either. Without this, a background job would be orphaned
+# when this script exits, since nothing else in the process would ever reap
+# it. Stop-Job/Remove-Job failures (the job already exited on its own) are
+# swallowed. Each stopped slot's branch is named in the retained-branches
+# closing summary too (extending that summary's CONTENT, not its printing
+# mechanism) AND now writes a D4 quarantine marker (reason `killed`, status
+# the literal string `killed`, dirty_paths `unknown (killed before reap)`
+# since the worktree is never inspected post-kill) -- this closes the
+# "killed, unexamined" deferral this comment used to record: the marker
+# ships on this path now, sourcing the dispatched prompt from the killed
+# slot's own outbox before that outbox is removed (the "(killed,
+# unexamined)" retained-branches suffix below is otherwise unchanged).
 function Stop-LoopOtherSlots {
     param([Parameter(Mandatory)] [int]$Except)
     for ($s = 0; $s -lt $EffectiveSlots; $s++) {
@@ -742,6 +804,19 @@ function Stop-LoopOtherSlots {
             }
             $slots[$s].State = 'idle'
             if (-not [string]::IsNullOrEmpty($slots[$s].Branch)) {
+                $killedPrompt = ''
+                if (-not [string]::IsNullOrEmpty($slots[$s].Outbox)) {
+                    $killedPromptSrc = Join-Path $slots[$s].Outbox 'dispatch-prompt.md'
+                    if (Test-Path -LiteralPath $killedPromptSrc -PathType Leaf) {
+                        $killedPrompt = Get-Content -Raw -LiteralPath $killedPromptSrc
+                        if ($null -eq $killedPrompt) { $killedPrompt = '' }
+                    }
+                }
+                Write-LoopQuarantineMarker -Story $slots[$s].Story -Slot $s -Branch $slots[$s].Branch `
+                    -LoopStatus 'killed' -Reason 'killed' -DirtyPaths 'unknown (killed before reap)' -Prompt $killedPrompt
+                if (-not [string]::IsNullOrEmpty($slots[$s].Outbox)) {
+                    Remove-Item -LiteralPath $slots[$s].Outbox -Recurse -Force -ErrorAction SilentlyContinue
+                }
                 $script:retainedBranches += "$($slots[$s].Branch) (killed, unexamined)"
             }
         }
@@ -917,6 +992,14 @@ function Invoke-LoopFillSlot {
     $promptContent = $promptContent.Replace('%%STORY_ID%%', $selected.Id)
     $promptContent = $promptContent.Replace('%%OUTBOX_DIR%%', $outboxDir)
 
+    # Dispatch-prompt capture (D5/STORY-012, addendum 1 §7.2 durable
+    # evidence): the EXACT dispatched prompt, written after both
+    # substitutions and before the job starts -- driver-owned; slots must
+    # not modify it. Read back at reap (before the outbox is removed) and
+    # embedded verbatim in quarantine markers (D4) on every non-clean
+    # disposal/kill path; discarded with the outbox on a clean integration.
+    Set-Content -LiteralPath (Join-Path $outboxDir 'dispatch-prompt.md') -Value $promptContent -NoNewline
+
     # --- driver/child boundary (the pin) --------------------------------------
     # The child is a Start-Job background job that runs ONLY the CLI
     # invocation, cwd = the slot's tree (worktree at LOOP_WORKTREE=1, main
@@ -946,13 +1029,15 @@ function Invoke-LoopFillSlot {
 }
 
 # Invoke-LoopReapSlot <slot> -- drains ONE finished slot (caller has already
-# confirmed the job is no longer 'Running'): real exit status, breaker
-# record, ITERATION-mismatch check (quarantine-lite; ORDERED BEFORE the
-# sentinel scan's own outcome, per the goal's reap-order pin), backlog
-# transition, outbox appends (integration order = reap order), memory size
-# gates, CB0 (global-fatal, kills every other active slot), CB1/CB2
-# (per-slot, run-fatal -- thresholds/semantics UNCHANGED from STORY-010),
-# and disposal (subset-check + integrate, or quarantine-lite).
+# confirmed the job is no longer 'Running'): real exit status ($status,
+# D6-normalized below), breaker record, ITERATION-mismatch check
+# (quarantine-lite; ORDERED BEFORE the sentinel scan's own outcome, per the
+# goal's reap-order pin), backlog transition, outbox appends (integration
+# order = reap order), memory size gates, CB0 (global-fatal, kills every
+# other active slot), CB1/CB2 (per-slot RETIREMENT, D2/STORY-012 --
+# thresholds/semantics UNCHANGED from STORY-010, but a trip no longer ends
+# the run: the slot retires and stops being refilled instead), and disposal
+# (subset-check + integrate, or quarantine-lite).
 function Invoke-LoopReapSlot {
     param([Parameter(Mandatory)] [int]$Slot)
 
@@ -977,6 +1062,30 @@ function Invoke-LoopReapSlot {
     Wait-Job -Job $job | Out-Null
     $status = (Receive-Job -Job $job)[-1]
     Remove-Job -Job $job -Force
+
+    # D6/STORY-012 status normalization (ps1-only; bash needs no equivalent
+    # parity note -- `wait` always yields an integer, so this whole block
+    # has no bash twin). A background job's scriptblock is expected to emit
+    # its own $LASTEXITCODE as the last output object, but a crashed job
+    # runspace or an unexpected non-numeric emission can leave $status
+    # $null or non-castable. Normalizing to -1 routes it down the SAME
+    # abnormal path a genuine nonzero status would (the safe direction
+    # $null accidentally fell into before this change), and every
+    # message/marker below now prints status=-1, never an empty field.
+    $rawStatus = $status
+    $statusIsValid = $false
+    if ($null -ne $rawStatus) {
+        try {
+            $status = [int]$rawStatus
+            $statusIsValid = $true
+        } catch {
+            $statusIsValid = $false
+        }
+    }
+    if (-not $statusIsValid) {
+        [Console]::Error.WriteLine("!!! slot $Slot job produced no usable exit status — normalizing to -1 (abnormal)")
+        $status = -1
+    }
 
     $slots[$Slot].State = 'idle'
     $script:activeSlots = $script:activeSlots - 1   # refill trigger: slot exit, not merge
@@ -1061,6 +1170,17 @@ function Invoke-LoopReapSlot {
     if (Test-Path -LiteralPath $escalationsSrc -PathType Leaf) {
         Add-Content -LiteralPath $escalationsTarget -Value (Get-Content -Raw -LiteralPath $escalationsSrc) -NoNewline
     }
+    # Dispatch-prompt readback (D5/STORY-012): read before the outbox goes
+    # away -- empty-safe (a manual/pre-STORY-012 outbox may lack the file).
+    # Discarded with the outbox on a clean integration (that evidence is the
+    # integrated commit itself); embedded verbatim in the quarantine marker
+    # (D4) on every non-clean disposal path below.
+    $dispatchedPrompt = ''
+    $dispatchPromptSrc = Join-Path $outboxDir 'dispatch-prompt.md'
+    if (Test-Path -LiteralPath $dispatchPromptSrc -PathType Leaf) {
+        $dispatchedPrompt = Get-Content -Raw -LiteralPath $dispatchPromptSrc
+        if ($null -eq $dispatchedPrompt) { $dispatchedPrompt = '' }
+    }
     Remove-Item -LiteralPath $outboxDir -Recurse -Force -ErrorAction SilentlyContinue
 
     # --- Integrator step 4: memory size gates, driver-side, AFTER appends
@@ -1123,16 +1243,23 @@ function Invoke-LoopReapSlot {
     # DRIVER-owned HEAD capture, after reap.
     $headAfter = Get-GitHead -Tree $tree
 
-    # $cbDisposition/$cbExit defer CB1/CB2's exit so the worktree lifecycle
-    # (integrate-or-quarantine, below) runs first even on a terminal
-    # iteration — the underlying evaluation order (record -> sentinel ->
-    # CB0 -> CB1 -> CB2) is unchanged; only WHERE the exit statement
-    # executes moves.
-    $cbDisposition = 0
-    $cbExit = 0
+    # RetiredThisReap replaces the old $cbDisposition/$cbExit deferred-exit
+    # pair (D2/STORY-012, goal-judge fix 5): CB1/CB2 no longer exit AT ALL --
+    # they RETIRE the slot ($slots[$Slot].Retired = 1, no un-retire path) and
+    # let this reap's own disposal (integrate-or-quarantine, below) run
+    # first, exactly as today's deferred-exit ordering did (record ->
+    # sentinel -> CB0 -> CB1 -> CB2 -> disposal, unchanged). The flag's only
+    # remaining job is gating CB2 and the abnormal test so a CB1-retiring
+    # reap is never double-evaluated by CB2 and never double-counted as
+    # abnormal (INVARIANT: a CB1-retiring reap never sets RetireReason =
+    # 'cb2'). Every literal exit statement this used to gate now lives in
+    # Invoke-LoopAggregateExit, below the main loop.
+    $retiredThisReap = $false
 
     # Circuit breaker 1: no new commit for 3 consecutive iterations
-    # (per-slot counter, unchanged threshold).
+    # (per-slot counter, unchanged threshold). RETIRES the slot (D2)
+    # instead of ending the run -- other slots keep going; FILL skips a
+    # retired slot forever.
     # CB1 carve-out (amended scope): a rate-limited pass never counts against this
     # counter — the breaker owns recovery for it instead. Non-rate-limited no-commit
     # passes increment NoProgress exactly as before.
@@ -1143,9 +1270,10 @@ function Invoke-LoopReapSlot {
             $slots[$Slot].NoProgress = $slots[$Slot].NoProgress + 1
             Write-Output ("--- no progress ({0}/3)" -f $slots[$Slot].NoProgress)
             if ($slots[$Slot].NoProgress -ge 3) {
-                [Console]::Error.WriteLine('!!! circuit breaker: 3 iterations without a commit — stopping')
-                $cbDisposition = 1
-                $cbExit = 2
+                [Console]::Error.WriteLine("!!! circuit breaker: 3 iterations without a commit — slot $Slot retired (not refilled)")
+                $slots[$Slot].Retired = 1
+                $slots[$Slot].RetireReason = 'cb1'
+                $retiredThisReap = $true
             }
         }
     } else {
@@ -1155,10 +1283,11 @@ function Invoke-LoopReapSlot {
     # Circuit breaker 2: same failure signature 5 times in a row
     # (per-slot counter, thresholds unchanged; CB2's signature reads the
     # same $output the driver already captured above). Skipped entirely
-    # once CB1 has already assigned a disposition this iteration — matches
-    # the original ordering, where CB1's exit would have prevented this
-    # code from ever running.
-    if ($cbDisposition -eq 0 -and $status -ne 0) {
+    # once CB1 has already retired this slot this reap — matches the
+    # original ordering, where CB1's disposition would have prevented this
+    # code from ever running (INVARIANT: a CB1-retiring reap never sets
+    # RetireReason = 'cb2'). RETIRES the slot (D2) instead of ending the run.
+    if (-not $retiredThisReap -and $status -ne 0) {
         $last5 = ($lines | Select-Object -Last 5) -join "`n"
         $sha256 = [System.Security.Cryptography.SHA256]::Create()
         try {
@@ -1170,15 +1299,16 @@ function Invoke-LoopReapSlot {
         if ($errorSig -eq $slots[$Slot].LastErrorSig) {
             $slots[$Slot].SameError = $slots[$Slot].SameError + 1
             if ($slots[$Slot].SameError -ge 5) {
-                [Console]::Error.WriteLine('!!! circuit breaker: same error 5 times — stopping')
-                $cbDisposition = 1
-                $cbExit = 3
+                [Console]::Error.WriteLine("!!! circuit breaker: same error 5 times — slot $Slot retired (not refilled)")
+                $slots[$Slot].Retired = 1
+                $slots[$Slot].RetireReason = 'cb2'
+                $retiredThisReap = $true
             }
         } else {
             $slots[$Slot].SameError = 1
             $slots[$Slot].LastErrorSig = $errorSig
         }
-    } elseif ($cbDisposition -eq 0) {
+    } elseif (-not $retiredThisReap) {
         $slots[$Slot].SameError = 0
         $slots[$Slot].LastErrorSig = ''
     }
@@ -1188,20 +1318,35 @@ function Invoke-LoopReapSlot {
     # worktree/branch to act on (main tree already carries whatever the
     # slot committed, today's unchanged behavior).
     if ($Worktree -eq 1) {
+        # dirty_paths capture (D4/STORY-012): the porcelain text itself, not
+        # just the boolean it also feeds -- flattened to one line for the
+        # quarantine marker's `dirty_paths:` field (`none` when clean, the
+        # D4 accepted-loss mitigation for the dirty-abnormal path's
+        # `--force` worktree removal). Captured BEFORE any removal below
+        # (order pinned: capture, then act). Parity note: bash flattens via
+        # an unquoted `${porcelain//$'\n'/; }` substitution; ps1 has no
+        # quoting hazard to avoid, so a plain -split/-join round-trip
+        # (equivalent to a global newline replace) is used instead.
+        $porcelain = & git -C $tree status --porcelain 2>$null
         $dirty = 0
-        $statusOutput = & git -C $tree status --porcelain 2>$null
-        if (-not [string]::IsNullOrEmpty($statusOutput)) { $dirty = 1 }
+        if (-not [string]::IsNullOrEmpty($porcelain)) { $dirty = 1 }
+        $dirtyPathsFlat = 'none'
+        if ($dirty -eq 1) {
+            $dirtyPathsFlat = (($porcelain -replace "`r`n", "`n") -split "`n") -join '; '
+        }
         $abnormal = 0
         # Abnormal slot exit (quarantine-lite, pinned): a nonzero CLI
-        # status that did NOT earn a recognized CB1/CB2 disposition this
-        # iteration, OR a dirty worktree left behind either way. Full
-        # quarantine (markers, retirement bookkeeping) is STORY-012's;
-        # this is an explicit deferral.
-        if ($status -ne 0 -and $cbDisposition -eq 0) { $abnormal = 1 }
+        # status that did NOT retire this slot this reap (CB1/CB2
+        # retirement, D2), OR a dirty worktree left behind either way.
+        # Quarantine markers (D4) now ship on this path (and the
+        # mismatch/subset paths below) -- see Write-LoopQuarantineMarker.
+        if ($status -ne 0 -and -not $retiredThisReap) { $abnormal = 1 }
         if ($dirty -eq 1) { $abnormal = 1 }
 
         if ($mismatch) {
             [Console]::Error.WriteLine("!!! slot $Slot: ITERATION-mismatch — quarantine-lite: NOT integrating; retaining branch '$branch' for inspection ($tree)")
+            Write-LoopQuarantineMarker -Story $story -Slot $Slot -Branch $branch -LoopStatus "$status" `
+                -Reason 'mismatch' -DirtyPaths $dirtyPathsFlat -Prompt $dispatchedPrompt
             & git worktree remove --force $tree 2>$null
             & git worktree prune
             $rc = $LASTEXITCODE
@@ -1213,6 +1358,8 @@ function Invoke-LoopReapSlot {
             $script:retainedBranches += $branch
         } elseif ($abnormal -eq 1) {
             [Console]::Error.WriteLine("!!! slot $Slot exited abnormally (status=$status dirty=$dirty) — quarantine-lite: NOT integrating; retaining branch '$branch' for inspection ($tree)")
+            Write-LoopQuarantineMarker -Story $story -Slot $Slot -Branch $branch -LoopStatus "$status" `
+                -Reason 'abnormal' -DirtyPaths $dirtyPathsFlat -Prompt $dispatchedPrompt
             & git worktree remove --force $tree 2>$null
             & git worktree prune
             $rc = $LASTEXITCODE
@@ -1233,6 +1380,8 @@ function Invoke-LoopReapSlot {
             # conflict for it, so the check is skipped there rather than
             # manufacturing a spurious violation.
             [Console]::Error.WriteLine("!!! slot $Slot: branch '$branch' touched paths outside its declared writes: (quarantine-lite, not integrated): $($subsetBad -join ' ')")
+            Write-LoopQuarantineMarker -Story $story -Slot $Slot -Branch $branch -LoopStatus "$status" `
+                -Reason 'subset' -DirtyPaths $dirtyPathsFlat -Prompt $dispatchedPrompt
             & git worktree remove --force $tree 2>$null
             & git worktree prune
             $rc = $LASTEXITCODE
@@ -1246,18 +1395,117 @@ function Invoke-LoopReapSlot {
             Integrate-Slot -Tree $tree -Branch $branch
         }
     }
+}
 
-    # Literal `exit 2`/`exit 3` statements (not a variable exit): the
-    # structural checks grep for literal exit digits on a driver-level exit
-    # line, so cbExit only SELECTS between them, it never
-    # substitutes for them.
-    if ($cbDisposition -eq 1) {
-        Stop-LoopOtherSlots -Except $Slot
-        if ($cbExit -eq 2) {
-            exit 2
-        }
-        exit 3
+# Test-LoopAllRetired -- $true iff every slot 0..EffectiveSlots-1 is
+# retired. Used only to WIDEN the in-loop terminal's trigger condition
+# (goal-pinned): $filledThisRound stays $false whenever every slot is
+# retired (FILL skips a retired slot, so it can never set
+# filledThisRound=$true), but this makes the "every slot stopped
+# progressing" trigger the funnel's rows 3/2 depend on an explicit, named
+# check rather than an emergent property of the FILL skip.
+function Test-LoopAllRetired {
+    for ($s = 0; $s -lt $EffectiveSlots; $s++) {
+        if ($slots[$s].Retired -eq 0) { return $false }
     }
+    return $true
+}
+
+# Invoke-LoopAggregateExit <Context> -- THE single driver-level exit-
+# aggregation funnel (D3, goal-judge fix 1): every terminal literal `exit N`
+# statement EXCEPT CB0's `exit 4` (above, short-circuits the table) and the
+# five loud `exit 5` stops lives HERE. Evaluated strictly TOP-DOWN on every
+# call: rows 3/2 (all-retired) BEFORE rows 0/1 (drained/quarantine) -- the
+# two-gate form (checking drained-vs-survivor first, all-retired second) is
+# forbidden, because it can report a lying exit 0/1 on the exact dispatch
+# where MaxIterations exhaustion coincides with the last slot's retirement
+# (task 01 micro-test (h)). <Context> is 'in_loop' or 'bottom' -- the ONLY
+# thing it affects is which banner prints on the clean-drained outcome
+# (in_loop keeps today's "no eligible stories" banner + refused-ids line;
+# bottom prints P5); every other outcome (all-retired 3/2,
+# drained-with-quarantine 1, survivor-remains 1) is call-site-independent.
+# Both callers invoke this ONLY at activeSlots==0, so there are no
+# in-flight claims to bias the eligibility re-check below -- a survivor
+# found here is genuine remaining work, not a transient admission conflict
+# (in practice, unreachable from the in_loop call site: active==0 there
+# already implies no admission conflicts, so a genuine survivor would have
+# been filled instead of reaching this call at all -- see the in-loop call
+# site's comment).
+function Invoke-LoopAggregateExit {
+    param([Parameter(Mandatory)] [string]$Context)
+
+    $allRetired = $true
+    $anyCb2 = $false
+    for ($s = 0; $s -lt $EffectiveSlots; $s++) {
+        if ($slots[$s].Retired -eq 0) {
+            $allRetired = $false
+        } elseif ($slots[$s].RetireReason -eq 'cb2') {
+            $anyCb2 = $true
+        }
+    }
+
+    # Rows 3/2: all-retired. 3-vs-2 precedence from retirement reasons alone
+    # (D3): ANY cb2 retirement anywhere in the lineage wins over an all-cb1
+    # run, so a lone slot that committed earlier and only later tripped CB2
+    # still exits 3, exactly as N=1 always has.
+    if ($allRetired) {
+        [Console]::Error.WriteLine('!!! all slots retired — stopping')
+        if ($anyCb2) {
+            exit 3
+        }
+        exit 2
+    }
+
+    # Rows 0/1: re-check eligibility (§7.1(b)(ii), the driver's own re-scan
+    # -- strictly stronger than trusting a slot's advisory sentinel).
+    # Fifth exit-5 site (task-01 judge fix, orchestrator-ratified): a
+    # backlog readable at the last FILL gate and unreadable now was
+    # destroyed mid-run -- the SAME setup failure Invoke-LoopFillSlot's
+    # gate catches, and the contract block above names it an exit-5 cause.
+    # Only the never-dispatched degenerate case (MaxIterations=0, where
+    # FILL's gate never ran) stays quiet -- nothing ran, so nothing can
+    # have broken. Readability probe mirrors Invoke-LoopFillSlot's own
+    # `[[ -r ]]` twin (existence alone would let an unreadable file parse
+    # as zero stories and exit 0 as "complete").
+    $backlogReadable = $false
+    if (Test-Path -LiteralPath $BacklogFile -PathType Leaf) {
+        try {
+            [System.IO.File]::OpenRead($BacklogFile).Dispose()
+            $backlogReadable = $true
+        } catch { }
+    }
+    $selected = $null
+    if (-not $backlogReadable) {
+        if ($dispatched -gt 0) {
+            [Console]::Error.WriteLine("!!! $BacklogFile is missing or unreadable -- cannot confirm completion (setup failure)")
+            exit 5
+        }
+    } else {
+        $selected = Select-LoopStory
+    }
+    if ($null -eq $selected) {
+        # No survivor. §7.1(b)(iii)/D1: exit 0 is gated on zero quarantined
+        # branches this run -- a quarantine-looped-to-exhaustion story must
+        # never report a lying "backlog complete".
+        if ($script:retainedBranches.Count -gt 0) {
+            Write-Output "=== no eligible stories remain, but quarantined branches were retained this run — exiting 1 (inspect before trusting the backlog) ==="
+            exit 1
+        }
+        if ($Context -eq 'bottom') {
+            Write-Output "=== max iterations reached and no eligible stories remain — backlog complete ==="
+        } else {
+            Write-Output "=== no eligible stories remain -- exiting ==="
+            if ($script:refusedIds.Count -gt 0) {
+                Write-Output "=== protected-path-refused this run (never dispatched): $($script:refusedIds -join ' ') ==="
+            }
+        }
+        exit 0
+    }
+
+    # Survivor remains: MaxIterations exhausted with eligible work still
+    # pending.
+    Write-Output "=== max iterations ($MaxIterations) reached; backlog not complete ==="
+    exit 1
 }
 
 # =============================================================================
@@ -1276,7 +1524,7 @@ try {
         # --- FILL ------------------------------------------------------------
         $filledThisRound = $false
         for ($SlotIdx = 0; $SlotIdx -lt $EffectiveSlots; $SlotIdx++) {
-            if ($slots[$SlotIdx].State -eq 'running') { continue }
+            if ($slots[$SlotIdx].State -eq 'running' -or $slots[$SlotIdx].Retired -eq 1) { continue }
             if ($dispatched -ge $MaxIterations) { break }   # no capacity left this run
             $fillOk = Invoke-LoopFillSlot -Slot $SlotIdx
             if ($fillOk) {
@@ -1293,18 +1541,17 @@ try {
         }
 
         # No eligible story survived selection this round AND nothing is
-        # still running -> the driver owns the completion determination now
-        # (the skill's <promise>COMPLETE</promise> branch remains for
-        # MANUAL invocation only). Refused-story completion visibility
-        # (cycle-1 fix 10): name every protected-path-refused story id so
-        # "complete" never silently masks permanently undispatchable work;
-        # exit code stays 0.
-        if ($activeSlots -eq 0 -and -not $filledThisRound) {
-            Write-Output "=== no eligible stories remain -- exiting ==="
-            if ($refusedIds.Count -gt 0) {
-                Write-Output "=== protected-path-refused this run (never dispatched): $($refusedIds -join ' ') ==="
-            }
-            exit 0
+        # still running (OR every slot has retired -- Test-LoopAllRetired
+        # below, an explicit widening of the same trigger) -> hand off to
+        # the D3 aggregation funnel, which owns every literal exit
+        # statement from here down (the skill's <promise>COMPLETE</promise>
+        # branch remains for MANUAL invocation only). Rows 3/2
+        # (all-retired) evaluate before rows 0/1 (drained/quarantine)
+        # inside the funnel -- the refused-story visibility (cycle-1 fix
+        # 10) and the drained-with-quarantine gate (D1) both live there
+        # now, not here.
+        if ($activeSlots -eq 0 -and (-not $filledThisRound -or (Test-LoopAllRetired))) {
+            Invoke-LoopAggregateExit -Context 'in_loop'
         }
 
         # --- POLL --------------------------------------------------------------
@@ -1334,8 +1581,16 @@ try {
         # --- REFILL: loop back to FILL at the top ---------------------------------
     }
 
-    Write-Output "=== max iterations ($MaxIterations) reached; backlog not complete ==="
-    exit 1
+    # Bottom (MaxIterations-exhausted) terminal: calls the SAME D3
+    # aggregation funnel as the in-loop terminal above -- this is what
+    # closes the cycle-1 blocker (a slot retiring on the exact dispatch
+    # that also exhausts MaxIterations must still land in rows 3/2, never
+    # fall through to a lying exit 0/1). Every literal exit statement, and
+    # the banner for each of its outcomes, lives inside the funnel.
+    # (Retained-branches summary, if any, is printed by the
+    # Write-RetainedSummary `finally` block below -- it fires here too,
+    # after the funnel's exit statement.)
+    Invoke-LoopAggregateExit -Context 'bottom'
 } finally {
     Write-RetainedSummary
 }
