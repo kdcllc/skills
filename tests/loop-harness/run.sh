@@ -47,7 +47,9 @@ if [[ ! -f "$REPO_ROOT/_loop/loop.sh" ]]; then
 fi
 
 BREAKER_SH="$REPO_ROOT/skills/setup/templates/loop/breaker.sh"
+BREAKER_PS1="$REPO_ROOT/skills/setup/templates/loop/breaker.ps1"
 LOOP_SH="$REPO_ROOT/skills/setup/templates/loop/loop.sh"
+LOOP_PS1="$REPO_ROOT/skills/setup/templates/loop/loop.ps1"
 INSTANCE_LOOP_SH="$REPO_ROOT/_loop/loop.sh"
 INSTANCE_LOOP_PS1="$REPO_ROOT/_loop/loop.ps1"
 INSTANCE_BREAKER_SH="$REPO_ROOT/_loop/breaker.sh"
@@ -233,26 +235,45 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 11. corrupted JSON (not JSON-like at all) -> fresh CLOSED + stderr warning
+# 11 (UPDATED, story-009 fail-safe inversion, task-03): corrupted JSON (not
+# JSON-like at all -- no keys at all, so _breaker_valid_fields fails outright,
+# no retry) -> the NEW contract is fail-SAFE to OPEN (never fresh CLOSED,
+# which would have re-armed a full-rate retry silently). openedAt is set from
+# the injected `now`; chain is seeded from the <chain> ARGUMENT (the garbage
+# has no parseable chain key at all); currentModel is DERIVED as
+# chain[fallbackIndex] (0) = modelA, never blindly re-pinned; exactly ONE
+# stderr warning containing "failing SAFE to OPEN" (the new message text --
+# "unparseable" is no longer part of it).
 # ---------------------------------------------------------------------------
 S11="$TMP/corrupted.json"
 printf 'not json at all\njust garbage\n' > "$S11"
-stderr_out="$(breaker_load "$S11" "$CHAIN" 2>&1 >/dev/null)"
+T11=9000000
+stderr_file11="$TMP/11-stderr.txt"
+breaker_load "$S11" "$CHAIN" "$T11" >/dev/null 2>"$stderr_file11"
 state="$(_breaker_get "$S11" state)"; chain="$(_breaker_get "$S11" chain)"
-model="$(_breaker_get "$S11" currentModel)"
-if [[ "$state" == "CLOSED" && "$chain" == "$CHAIN" && "$model" == "modelA" \
-      && "$stderr_out" == *"unparseable"* ]]; then
-  report PASS "11: corrupted (non-JSON) state -> fresh CLOSED + stderr warning"
+model="$(_breaker_get "$S11" currentModel)"; opened="$(_breaker_get "$S11" openedAt)"
+warn_lines11=$(wc -l < "$stderr_file11")
+if [[ "$state" == "OPEN" && "$opened" == "$T11" && "$opened" -gt 0 && "$chain" == "$CHAIN" \
+      && "$model" == "modelA" && "$warn_lines11" -eq 1 \
+      && "$(grep -c "failing SAFE to OPEN" "$stderr_file11")" -eq 1 ]]; then
+  report PASS "11: corrupted (non-JSON) state -> fail-safe OPEN, openedAt>0 (=$T11), chain seeded from argument, currentModel derived (modelA), ONE stderr warning ('failing SAFE to OPEN')"
 else
-  report FAIL "11: corrupted (non-JSON) state -> fresh CLOSED + stderr warning" \
-    "state=$state chain=$chain model=$model stderr='$stderr_out'"
+  report FAIL "11: corrupted (non-JSON) state -> fail-safe OPEN, openedAt>0, chain seeded from argument, currentModel derived, ONE stderr warning" \
+    "state=$state opened=$opened chain=$chain model=$model warn_lines=$warn_lines11 stderr='$(cat "$stderr_file11")'"
 fi
 
 # ---------------------------------------------------------------------------
-# 11b (BINDING carry-forward, task-01 judgment): a state file whose STATE
-# VALUE carries a leading CR inside the quotes (e.g. "state": "\rCLOSED",) ->
-# fresh CLOSED + exactly one stderr warning, wrapped in `timeout 10` as an
-# infinite-spin regression guard.
+# 11b (UPDATED, story-009 fail-safe inversion, task-03; carries forward the
+# task-01 infinite-spin regression guard verbatim): a state file whose STATE
+# VALUE carries a leading CR inside the quotes (e.g. "state": "\rCLOSED",) --
+# the state enum comparison fails so _breaker_valid_fields is invalid for a
+# reason OTHER than the terminator (no retry loop entered) -> the NEW
+# contract is fail-SAFE to OPEN (never fresh CLOSED): openedAt set from the
+# injected `now`; chain/fallbackIndex/currentModel are all PRESERVED here
+# because those key lines parse fine in this fixture (only "state" itself is
+# corrupted) -- chain stays $CHAIN, currentModel stays "modelA"; exactly ONE
+# stderr warning containing "failing SAFE to OPEN"; still wrapped in
+# `timeout 10` as the infinite-spin regression guard (unchanged from task-01).
 # ---------------------------------------------------------------------------
 S11B="$TMP/leading_cr.json"
 {
@@ -269,17 +290,19 @@ S11B="$TMP/leading_cr.json"
   printf '}\n'
 } > "$S11B"
 
+T11B=9100000
 stderr_file="$TMP/11b-stderr.txt"
-timeout 10 bash -c "source '$BREAKER_SH'; breaker_load '$S11B' '$CHAIN'" 2>"$stderr_file"
+timeout 10 bash -c "source '$BREAKER_SH'; breaker_load '$S11B' '$CHAIN' '$T11B'" 2>"$stderr_file"
 rc=$?
 warn_lines=$(wc -l < "$stderr_file")
-state="$(_breaker_get "$S11B" state)"
-if [[ "$rc" -eq 0 && "$warn_lines" -eq 1 && "$(grep -c "unparseable" "$stderr_file")" -eq 1 \
-      && "$state" == "CLOSED" ]]; then
-  report PASS "11b: leading-CR corrupted value -> fresh CLOSED + ONE warning, terminates under timeout 10 (infinite-spin regression)"
+state="$(_breaker_get "$S11B" state)"; chain="$(_breaker_get "$S11B" chain)"
+model="$(_breaker_get "$S11B" currentModel)"; opened="$(_breaker_get "$S11B" openedAt)"
+if [[ "$rc" -eq 0 && "$warn_lines" -eq 1 && "$(grep -c "failing SAFE to OPEN" "$stderr_file")" -eq 1 \
+      && "$state" == "OPEN" && "$opened" == "$T11B" && "$chain" == "$CHAIN" && "$model" == "modelA" ]]; then
+  report PASS "11b: leading-CR corrupted value -> fail-safe OPEN (openedAt=$T11B, chain/currentModel preserved) + ONE warning, terminates under timeout 10 (infinite-spin regression)"
 else
-  report FAIL "11b: leading-CR corrupted value -> fresh CLOSED + ONE warning, terminates under timeout 10 (infinite-spin regression)" \
-    "rc=$rc warn_lines=$warn_lines state=$state ($( [[ $rc -eq 124 ]] && echo 'TIMED OUT -- infinite spin regressed!'))"
+  report FAIL "11b: leading-CR corrupted value -> fail-safe OPEN + ONE warning, terminates under timeout 10 (infinite-spin regression)" \
+    "rc=$rc warn_lines=$warn_lines state=$state opened=$opened chain=$chain model=$model ($( [[ $rc -eq 124 ]] && echo 'TIMED OUT -- infinite spin regressed!'))"
 fi
 
 # ---------------------------------------------------------------------------
@@ -680,10 +703,26 @@ fi
 # 18-mutation-proof: a copy carrying a decoy `exit 127` elsewhere in the file
 # (not inside any Get-Command guard) must FAIL the coupled check even though
 # the old two-independent-greps form would have PASSED it.
+# FIX-CYCLE-2 (routed from task 04's escalation, seam inherited via the
+# instance re-emit, not a defect introduced here): task 02's 126/127
+# documentation clause puts a plain-text `exit 127` inside a COMMENT ahead of
+# the real Get-Command guard, so the old FIRST-textual-hit neutralization
+# below (`sed -i '0,/exit 127/{...}'`) silently neutralized the COMMENT's
+# occurrence instead of the real guard's, leaving the real guard's own
+# `exit 127` intact -- the decoy then satisfied the coupled check via the
+# untouched real guard, and the mutation-proof FAILed. Fixed by anchoring the
+# neutralization at the guard itself (content-anchored on 'Get-Command git',
+# a small window forward), the same anchoring style already used by
+# t1a_check/the assertion-23 row-scoped precedent -- this survives future
+# line drift (e.g. more comment text landing above the guard) because it
+# locates the guard by content, never by an absolute line number or a
+# first-textual-hit assumption.
 t18_decoy="$TMP/loop_decoy.ps1"
 cp "$INSTANCE_LOOP_PS1" "$t18_decoy"
-# neutralize the real guard's own exit 127 so only the decoy remains
-sed -i '0,/exit 127/{s/exit 127/exit 99/}' "$t18_decoy"
+# neutralize the real guard's own exit 127 (content-anchored at the guard, not
+# a first-textual-hit assumption) so only the decoy remains
+guard_ln="$(grep -n 'Get-Command git' "$t18_decoy" | head -1 | cut -d: -f1)"
+sed -i "${guard_ln},$((guard_ln + 5)){s/exit 127/exit 99/}" "$t18_decoy"
 printf '\nexit 127  # decoy, unrelated to any git guard\n' >> "$t18_decoy"
 if t1a_check "$t18_decoy"; then
   report FAIL "18-mutation-proof: decoy exit 127 (uncoupled) must FAIL the coupled check" "decoy copy incorrectly PASSED"
@@ -934,6 +973,340 @@ else
   fi
 
   chmod 755 "$ro_tmpdir" 2>/dev/null || true
+fi
+
+# ---------------------------------------------------------------------------
+# 29 (NEW, story-009 task-03 hardening): torn-file retry/fail-safe. A valid
+# OPEN state (chain "modelA,modelB", fallbackIndex 1, currentModel modelB) has
+# EXACTLY its final `}` line deleted -- all nine keys stay intact, only the
+# terminator is missing (the ONLY shape that reaches the terminator-only
+# retry branch, per the goal pin). The file never heals on its own, so all
+# 3 retries (3x~50ms backoff) exhaust and fall through to fail-safe OPEN:
+# openedAt is set from the injected `now` (NOT preserved from the pre-tear
+# file); chain/fallbackIndex/currentModel are all PRESERVED (their key lines
+# parse fine). Elapsed time is loosely checked >= ~100ms to prove the retry
+# loop actually ran (contrasts with 30's ~0ms immediate path).
+# ---------------------------------------------------------------------------
+S29_valid="$TMP/torn_valid.json"
+_breaker_write "$S29_valid" OPEN "modelA,modelB" 1 modelB 600 555000 0 1 0
+S29="$TMP/torn.json"
+cp "$S29_valid" "$S29"
+sed -i '$d' "$S29"   # delete EXACTLY the final `}` line
+
+T29=20000000
+stderr_file29="$TMP/29-stderr.txt"
+start_ns=$(date +%s%N)
+breaker_load "$S29" "$CHAIN" "$T29" 2>"$stderr_file29"
+end_ns=$(date +%s%N)
+elapsed_ms29=$(( (end_ns - start_ns) / 1000000 ))
+
+state="$(_breaker_get "$S29" state)"; chain="$(_breaker_get "$S29" chain)"
+idx="$(_breaker_get "$S29" fallbackIndex)"; model="$(_breaker_get "$S29" currentModel)"
+opened="$(_breaker_get "$S29" openedAt)"
+warn_lines29=$(wc -l < "$stderr_file29")
+if [[ "$state" == "OPEN" && "$opened" == "$T29" && "$chain" == "modelA,modelB" \
+      && "$idx" == "1" && "$model" == "modelB" && "$elapsed_ms29" -ge 100 \
+      && "$warn_lines29" -eq 1 ]]; then
+  report PASS "29: torn-file (final \`}\` line deleted, nine keys intact) -> after ~3 retries seeds fail-safe OPEN (openedAt=$T29), preserved chain/fallbackIndex/currentModel (=modelB), elapsed=${elapsed_ms29}ms (>=100ms loose bound proves retries ran)"
+else
+  report FAIL "29: torn-file (final \`}\` line deleted, nine keys intact) -> after ~3 retries seeds fail-safe OPEN, preserved chain/fallbackIndex/currentModel" \
+    "state=$state opened=$opened chain=$chain idx=$idx model=$model elapsed_ms=$elapsed_ms29 warn_lines=$warn_lines29"
+fi
+
+# ---------------------------------------------------------------------------
+# 30 (NEW, story-009 task-03 hardening; "the common real tear"): key-dropping
+# truncation. A writer process killed almost immediately after opening the
+# file leaves only `{` and the state line on disk -- chain and every field
+# after it, INCLUDING chain itself, never made it out. _breaker_valid_fields
+# fails OUTRIGHT (multiple required keys absent, not merely the terminator),
+# so breaker_load takes the IMMEDIATE fail-safe path with NO retry sleep at
+# all (elapsed checked < 100ms -- fix-cycle-1: loosened from <50ms, which had
+# only 1.7x margin under CPU saturation [worst observed 29ms]; 100ms still
+# sits far under the retry path's hard 150ms sleep floor [3x50ms], so
+# discrimination from 29's >=100ms is fully preserved). Because the chain key
+# itself never made it to disk, chain is seeded
+# from the <chain> ARGUMENT (not preserved), and currentModel is DERIVED as
+# chain[0] = modelA.
+# ---------------------------------------------------------------------------
+S30_valid="$TMP/trunc_valid.json"
+_breaker_write "$S30_valid" OPEN "modelA,modelB" 1 modelB 600 555000 0 1 0
+S30="$TMP/trunc.json"
+head -n 2 "$S30_valid" > "$S30"   # only `{` and the state line survive
+
+T30=21000000
+stderr_file30="$TMP/30-stderr.txt"
+start_ns=$(date +%s%N)
+breaker_load "$S30" "$CHAIN" "$T30" 2>"$stderr_file30"
+end_ns=$(date +%s%N)
+elapsed_ms30=$(( (end_ns - start_ns) / 1000000 ))
+
+state="$(_breaker_get "$S30" state)"; chain="$(_breaker_get "$S30" chain)"
+model="$(_breaker_get "$S30" currentModel)"; opened="$(_breaker_get "$S30" openedAt)"
+warn_lines30=$(wc -l < "$stderr_file30")
+if [[ "$state" == "OPEN" && "$opened" == "$T30" && "$chain" == "$CHAIN" && "$model" == "modelA" \
+      && "$elapsed_ms30" -lt 100 && "$warn_lines30" -eq 1 \
+      && "$(grep -c "failing SAFE to OPEN" "$stderr_file30")" -eq 1 ]]; then
+  report PASS "30: key-dropping truncation (chain + trailing keys missing) -> IMMEDIATE fail-safe OPEN, chain seeded from argument, currentModel derived (modelA), NO retry (elapsed=${elapsed_ms30}ms < 100ms)"
+else
+  report FAIL "30: key-dropping truncation (chain + trailing keys missing) -> IMMEDIATE fail-safe OPEN, chain seeded from argument, NO retry" \
+    "state=$state chain=$chain model=$model opened=$opened elapsed_ms=$elapsed_ms30 warn_lines=$warn_lines30"
+fi
+
+# ---------------------------------------------------------------------------
+# 31 (NEW, story-009 task-03 hardening; FIX-CYCLE-1 REWORK -- deterministic,
+# no wall-clock dependence): retry-RECOVERY. The file is torn exactly as in
+# 29 (final `}` deleted). Fix-cycle-1 instrumented proof: the goal pin's
+# `sleep 0.03` background-restore recipe is NOT "generous" in practice -- the
+# INITIAL `_breaker_valid` check inside breaker_load (9 greps + 6
+# `_breaker_get` forks) alone costs ~30ms on this box, so a 0.03s background
+# restore can land INSIDE that initial check's own window and heal the file
+# before the retry loop is ever entered at all -- coin-flip-at-best coverage
+# of the actual retry branch (judge-measured: retry-block deletion still
+# passed 5/8 runs; the exact retry-never-recovers defect passed 2/4). Fixed
+# by shadowing `sleep` for this assertion's scope ONLY: a bash function named
+# `sleep` shadows the external command for anything executing in THIS shell
+# -- including breaker_load's own bare `sleep 0.05` call inside its retry
+# loop, since breaker_load runs in-process here (no subshell). The shadow
+# performs the atomic restore (goal-judge's atomic recipe: `cp` to a
+# `.restore.$$` sibling, then `mv -f` onto the live path -- a bare `cp` onto
+# the live path would reproduce the very race under test) on its FIRST
+# invocation and increments a counter, then delegates to the real `sleep` via
+# `command sleep`. Because the restore can now ONLY happen inside a `sleep`
+# call, and `sleep` can only be called from INSIDE the retry loop, the retry
+# loop is GUARANTEED to run at least once before recovery -- zero wall-clock
+# race, zero flakiness. `retry_sleep_calls31 >= 1` is asserted IN ADDITION TO
+# (not instead of) the existing checksum/openedAt-unchanged/no-warning
+# proofs, so this assertion now proves the retry loop itself ran and itself
+# recovered mid-loop, not merely that some code path left the state healed.
+# The shadow is `unset -f` immediately after use so it cannot leak into any
+# later assertion.
+# ---------------------------------------------------------------------------
+S31_valid="$TMP/recovery_valid.json"
+_breaker_write "$S31_valid" OPEN "modelA,modelB" 1 modelB 600 777000 0 1 0
+valid_sum31="$(sha256sum "$S31_valid" | cut -d' ' -f1)"
+
+S31="$TMP/recovery.json"
+cp "$S31_valid" "$S31"
+sed -i '$d' "$S31"   # tear: delete EXACTLY the final `}` line
+
+retry_sleep_calls31=0
+sleep() { # shadow, scoped to this assertion only -- unset immediately below
+  retry_sleep_calls31=$((retry_sleep_calls31 + 1))
+  if [[ "$retry_sleep_calls31" -eq 1 ]]; then
+    cp "$S31_valid" "$S31.restore.$$"
+    mv -f "$S31.restore.$$" "$S31"
+  fi
+  command sleep "$@"
+}
+
+T31=22000000
+stderr_file31="$TMP/31-stderr.txt"
+breaker_load "$S31" "$CHAIN" "$T31" 2>"$stderr_file31"
+unset -f sleep   # restore the real `sleep` immediately -- no leakage downstream
+
+sum_after31="$(sha256sum "$S31" | cut -d' ' -f1)"
+warn_lines31=$(wc -l < "$stderr_file31")
+state="$(_breaker_get "$S31" state)"; model="$(_breaker_get "$S31" currentModel)"
+opened="$(_breaker_get "$S31" openedAt)"
+if [[ "$sum_after31" == "$valid_sum31" && "$warn_lines31" -eq 0 && "$opened" == "777000" \
+      && "$retry_sleep_calls31" -ge 1 ]]; then
+  report PASS "31: retry-RECOVERY (deterministic, shadowed-sleep) -- torn file restored ATOMICALLY on the retry loop's FIRST sleep(0.05) invocation (retry_sleep_calls=$retry_sleep_calls31, proving the retry branch itself ran -- not merely the initial validity check) -> restored state preserved (checksum == valid source, state=$state, currentModel=$model, openedAt UNCHANGED=$opened -- itself proof the fail-safe path did not fire), NO stderr warning, NO fail-safe reseed"
+else
+  report FAIL "31: retry-RECOVERY (deterministic, shadowed-sleep)" \
+    "sum_match=$([[ "$sum_after31" == "$valid_sum31" ]] && echo yes || echo no) state=$state model=$model opened=$opened stderr='$(cat "$stderr_file31")' warn_lines=$warn_lines31 retry_sleep_calls=$retry_sleep_calls31"
+fi
+
+# ---------------------------------------------------------------------------
+# 32 (NEW, story-009 task-03 hardening): atomic write. Behavioral half: after
+# a real breaker_record transition (CLOSED+RL -> OPEN, which writes), no
+# `*.tmp.*` sibling of the state file remains and the resulting file still
+# parses (_breaker_valid). Structural half: the canonical breaker.sh source
+# itself is grepped -- _breaker_write's schema block redirects to `"$tmp"`,
+# never a bare `> "$file"` (the pre-story non-atomic truncate-then-write this
+# story closed).
+# ---------------------------------------------------------------------------
+S32="$TMP/atomic.json"
+S32_dir="$(dirname "$S32")"; S32_base="$(basename "$S32")"
+breaker_load "$S32" "$CHAIN" 30000000
+tmp_before32=$(find "$S32_dir" -maxdepth 1 -name "${S32_base}.tmp.*" 2>/dev/null | wc -l)
+breaker_record "$S32" 1 30000100
+tmp_after32=$(find "$S32_dir" -maxdepth 1 -name "${S32_base}.tmp.*" 2>/dev/null | wc -l)
+parses_ok32=0
+_breaker_valid "$S32" && parses_ok32=1
+
+write_func_body="$(sed -n '/^_breaker_write() {/,/^}/p' "$BREAKER_SH")"
+structural_ok32=0
+if grep -qF '} > "$tmp"' <<< "$write_func_body" && ! grep -qE '> "\$file"' <<< "$write_func_body"; then
+  structural_ok32=1
+fi
+
+if [[ "$tmp_before32" -eq 0 && "$tmp_after32" -eq 0 && "$parses_ok32" -eq 1 && "$structural_ok32" -eq 1 ]]; then
+  report PASS "32: atomic write -- no *.tmp.* sibling remains after breaker_record's OPEN transition (state still parses), and _breaker_write's source redirects the schema block to \"\$tmp\" (mv -f onto the target) with no stray '> \"\$file\"' bare redirect remaining"
+else
+  report FAIL "32: atomic write" "tmp_before=$tmp_before32 tmp_after=$tmp_after32 parses_ok=$parses_ok32 structural_ok=$structural_ok32"
+fi
+
+# ---------------------------------------------------------------------------
+# 33 (NEW, story-009 task-03, routed addendum item a): 126/127 contract-clause
+# parity. Extracts the appended 126/127 clause from BOTH canonical loop
+# twins' exit-code contract blocks (marker-normalized: leading `# ` comment
+# markers stripped before compare, since the twins otherwise differ in
+# comment-marker convention on other lines) and requires the clause text be
+# byte-identical, plus that both extracted blocks literally mention "126"
+# and "127".
+# ---------------------------------------------------------------------------
+extract_126127_clause() { # extract_126127_clause <file>
+  awk '/^# 126\/127 \(shell-propagated edge cases/{flag=1} flag{print} /\(the 126 case is Unix-host-only\)\.$/{if (flag) exit}' "$1"
+}
+clause_sh33="$(extract_126127_clause "$LOOP_SH")"
+clause_ps133="$(extract_126127_clause "$LOOP_PS1")"
+norm_sh33="$(sed 's/^# \{0,1\}//' <<< "$clause_sh33")"
+norm_ps133="$(sed 's/^# \{0,1\}//' <<< "$clause_ps133")"
+
+if [[ -z "$clause_sh33" || -z "$clause_ps133" ]]; then
+  report FAIL "33 setup: extract 126/127 clause from canonical loop twins" \
+    "clause_sh empty=$([[ -z "$clause_sh33" ]] && echo yes || echo no) clause_ps1 empty=$([[ -z "$clause_ps133" ]] && echo yes || echo no)"
+elif [[ "$norm_sh33" == "$norm_ps133" && "$norm_sh33" == *"126"* && "$norm_sh33" == *"127"* \
+        && "$norm_ps133" == *"126"* && "$norm_ps133" == *"127"* ]]; then
+  report PASS "33: 126/127 contract-clause parity -- canonical loop.sh + loop.ps1 exit-code contract blocks carry a byte-identical (marker-normalized) appended clause, both mentioning 126 and 127"
+else
+  report FAIL "33: 126/127 contract-clause parity" "clause_sh='$clause_sh33' clause_ps1='$clause_ps133'"
+fi
+
+# ---------------------------------------------------------------------------
+# 34 (NEW, story-009 task-03, cycle-1 MAJOR-3 / Check-G-parity-guard
+# deviation landing site; FIX-CYCLE-1: t34_move_check re-scoped): ps1
+# mechanics structural guard. The canonical breaker.ps1 is grepped for three
+# mechanics, block-scoped per the assertion-18 coupling precedent (a
+# line-window anchored at the relevant function/message, not independent
+# file-wide greps a decoy could satisfy):
+#   - ::Move( with the overwrite argument ($true), inside the
+#     Write-BreakerState function body (fix-cycle-1: a file-wide grep was
+#     mutation-proven decoy-satisfiable -- breaker.ps1:138 is a COMMENT
+#     containing this exact literal; deleting the real :171 call left the
+#     old check green, so it is now anchored at `function Write-BreakerState`
+#     the same way the other two sub-checks below are already anchored);
+#   - the terminator condition (-eq '}') inside Test-BreakerTerminatorOk;
+#   - the fail-safe OPEN branch: the "failing SAFE to OPEN" warning coupled
+#     (within a few lines) to the New-BreakerFailsafeOpen call, and that
+#     function's own body in turn coupled to -State 'OPEN'.
+# ---------------------------------------------------------------------------
+t34_move_check() {
+  local f="$1" ln window
+  ln="$(grep -n 'function Write-BreakerState' "$f" | head -1 | cut -d: -f1)"
+  [[ -z "$ln" ]] && return 1
+  window="$(sed -n "${ln},$((ln + 35))p" "$f")"
+  grep -qF '::Move($tmp, $Path, $true)' <<< "$window"
+}
+t34_term_check() {
+  local f="$1" ln window
+  ln="$(grep -n 'function Test-BreakerTerminatorOk' "$f" | head -1 | cut -d: -f1)"
+  [[ -z "$ln" ]] && return 1
+  window="$(sed -n "${ln},$((ln + 15))p" "$f")"
+  grep -qE -- "-eq '\}'" <<< "$window"
+}
+t34_failsafe_msg_check() {
+  local f="$1" ln window
+  ln="$(grep -n 'failing SAFE to OPEN' "$f" | head -1 | cut -d: -f1)"
+  [[ -z "$ln" ]] && return 1
+  window="$(sed -n "${ln},$((ln + 5))p" "$f")"
+  grep -qF 'New-BreakerFailsafeOpen' <<< "$window"
+}
+t34_failsafe_state_check() {
+  local f="$1" ln window
+  ln="$(grep -n 'function New-BreakerFailsafeOpen' "$f" | head -1 | cut -d: -f1)"
+  [[ -z "$ln" ]] && return 1
+  window="$(sed -n "${ln},$((ln + 30))p" "$f")"
+  grep -qE -- "-State 'OPEN'" <<< "$window"
+}
+if t34_move_check "$BREAKER_PS1" && t34_term_check "$BREAKER_PS1" \
+   && t34_failsafe_msg_check "$BREAKER_PS1" && t34_failsafe_state_check "$BREAKER_PS1"; then
+  report PASS "34: ps1 mechanics structural guard -- canonical breaker.ps1 carries ::Move( with the overwrite arg (\$true), the terminator condition (-eq '}') inside Test-BreakerTerminatorOk, and the fail-safe OPEN branch (New-BreakerFailsafeOpen coupled to the 'failing SAFE to OPEN' warning, itself writing -State 'OPEN') -- not runtime-verified, pwsh absent"
+else
+  report FAIL "34: ps1 mechanics structural guard" \
+    "move=$(t34_move_check "$BREAKER_PS1" && echo ok || echo FAIL) term=$(t34_term_check "$BREAKER_PS1" && echo ok || echo FAIL) failsafe_msg=$(t34_failsafe_msg_check "$BREAKER_PS1" && echo ok || echo FAIL) failsafe_state=$(t34_failsafe_state_check "$BREAKER_PS1" && echo ok || echo FAIL)"
+fi
+
+# ---------------------------------------------------------------------------
+# 35 (NEW, story-009 task-03, routed addendum item b): CRLF prompt parity --
+# bash behavioral. The read line (`p="$(cat "$PROMPT_FILE")"`) and the strip
+# line (the both-CR/LF iterative while-loop) are extracted LIVE from the
+# canonical loop.sh by CONTENT match (never a reimplementation, never line
+# numbers -- the task pin explicitly warns these lines move), wrapped in a
+# minimal script that repoints PROMPT_FILE at each fixture. All seven pinned
+# tail vectors (\n, \r\n, \r\r\n, \r, \r\n\r\n, \n\r\n, \r\n\r\n\r\n) must
+# yield exactly "text" -- the \r\n\r\n and \n\r\n tails are the discriminating
+# cases a CR-only strip would fail (goal.md's empirically-disproven original
+# pin).
+# ---------------------------------------------------------------------------
+read_ln_num35="$(grep -nF 'cat "$PROMPT_FILE"' "$LOOP_SH" | head -1 | cut -d: -f1)"
+strip_ln_num35="$(grep -nF 'p%?' "$LOOP_SH" | head -1 | cut -d: -f1)"
+read_line35="$( [[ -n "$read_ln_num35" ]] && sed -n "${read_ln_num35}p" "$LOOP_SH" )"
+strip_line35="$( [[ -n "$strip_ln_num35" ]] && sed -n "${strip_ln_num35}p" "$LOOP_SH" )"
+
+if [[ -z "$read_line35" || -z "$strip_line35" ]]; then
+  report FAIL "35 setup: extract read+strip lines from canonical loop.sh" \
+    "read_line='$read_line35' strip_line='$strip_line35' -- loop.sh structure changed?"
+else
+  crlf_script35="$TMP/35_crlf.sh"
+  {
+    printf '#!/usr/bin/env bash\n'
+    printf 'PROMPT_FILE="$1"\n'
+    printf '%s\n' "$read_line35"
+    printf '%s\n' "$strip_line35"
+    printf 'printf %%s "$p"\n'
+  } > "$crlf_script35"
+
+  declare -a tail_names35=('\n' '\r\n' '\r\r\n' '\r' '\r\n\r\n' '\n\r\n' '\r\n\r\n\r\n')
+  declare -a tails35=($'\n' $'\r\n' $'\r\r\n' $'\r' $'\r\n\r\n' $'\n\r\n' $'\r\n\r\n\r\n')
+  all_ok35=1
+  declare -a fail_details35=()
+  for i in "${!tails35[@]}"; do
+    vec_file35="$TMP/35_vec_${i}.txt"
+    printf 'text%s' "${tails35[$i]}" > "$vec_file35"
+    result35="$(bash "$crlf_script35" "$vec_file35")"
+    if [[ "$result35" != "text" ]]; then
+      all_ok35=0
+      fail_details35+=("tail='${tail_names35[$i]}' got='$result35'")
+    fi
+  done
+
+  if [[ "$all_ok35" -eq 1 ]]; then
+    report PASS "35: CRLF prompt parity (bash) -- all seven tail vectors (\\n, \\r\\n, \\r\\r\\n, \\r, \\r\\n\\r\\n, \\n\\r\\n, \\r\\n\\r\\n\\r\\n) yield 'text' through the LIVE-extracted canonical loop.sh read+strip lines"
+  else
+    report FAIL "35: CRLF prompt parity (bash)" "${fail_details35[*]}"
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# 36 (NEW, story-009 task-03, routed addendum item b; FIX-CYCLE-1: TrimEnd
+# check re-scoped): CRLF prompt parity -- ps1 structural. The canonical
+# loop.ps1 is grepped for the corrected comment (the original CR-only-strip
+# pin was empirically disproven at cycle 1; the comment now accurately
+# states both twins strip trailing CR/LF) and the TrimEnd("`r", "`n") line
+# itself, which strips BOTH characters -- exact parity with the bash twin's
+# iterative both-char strip loop verified behaviorally in 35. Fix-cycle-1: a
+# file-wide grep for the TrimEnd(...) literal was mutation-proven
+# decoy-satisfiable -- loop.ps1:168 applies the SAME TrimEnd("`r", "`n") call
+# to the CLI OUTPUT (not the PROMPT.md read); deleting the prompt-side :153
+# line left the old check green. Now block-scoped: anchored at the line that
+# reads PROMPT.md into $raw (Get-Content -Raw -LiteralPath $PromptFile), a
+# small window forward to the TrimEnd call that consumes that same $raw.
+# ---------------------------------------------------------------------------
+comment_ok36=0
+grep -qF 'both twins strip trailing CR/LF from the prompt tail' "$LOOP_PS1" && comment_ok36=1
+
+trimend_ok36=0
+prompt_read_ln36="$(grep -nF 'Get-Content -Raw -LiteralPath $PromptFile' "$LOOP_PS1" | head -1 | cut -d: -f1)"
+if [[ -n "$prompt_read_ln36" ]]; then
+  prompt_window36="$(sed -n "${prompt_read_ln36},$((prompt_read_ln36 + 5))p" "$LOOP_PS1")"
+  grep -qF 'TrimEnd("`r", "`n")' <<< "$prompt_window36" && trimend_ok36=1
+fi
+
+if [[ "$comment_ok36" -eq 1 && "$trimend_ok36" -eq 1 ]]; then
+  report PASS "36: CRLF prompt parity (ps1 structural) -- canonical loop.ps1 carries the corrected comment ('both twins strip trailing CR/LF from the prompt tail') and the TrimEnd(\`r,\`n) line matching bash's iterative both-char strip -- not runtime-verified, pwsh absent"
+else
+  report FAIL "36: CRLF prompt parity (ps1 structural)" "comment_ok=$comment_ok36 trimend_ok=$trimend_ok36"
 fi
 
 echo

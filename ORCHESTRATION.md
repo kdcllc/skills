@@ -6,7 +6,7 @@ every install:
 **[`skills/setup/templates/ORCHESTRATION.md`](skills/setup/templates/ORCHESTRATION.md)**
 
 It describes the orchestrator/worker/judge system as a template with `{{TOKEN}}`
-placeholders and `<!-- BOOTSTRAP: ... -->` guidance. As of kit v0.9.0 that covers:
+placeholders and `<!-- BOOTSTRAP: ... -->` guidance. As of kit v0.10.0 that covers:
 
 - the **seven-phase feature flow** — alignment, goal creation, goal judgment, task
   execution, final audit, docs alignment (`align-docs`), and an approval-gated pull

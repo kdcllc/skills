@@ -19,6 +19,12 @@
 # completion; 2 = circuit breaker — no commit for 3 consecutive iterations; 3 = circuit
 # breaker — same failure signature 5 times consecutively; 4 = protected-path
 # modification detected (iteration reverted).
+# 126/127 (shell-propagated edge cases, not loop-owned codes): command-not-found
+# propagates as exit 127 and found-but-not-executable as exit 126 (bash) —
+# standard shell convention, distinct from the four codes above. The
+# PowerShell twin's Get-Command guard does not attempt to distinguish the two
+# and exits 127 for both — a stated, knowingly-accepted platform difference
+# (the 126 case is Unix-host-only).
 
 param(
     [Parameter(Position = 0)]
@@ -134,7 +140,8 @@ for ($i = 1; $i -le $MaxIterations; $i++) {
     }
 
     # Get-Content -Raw does not strip trailing newlines the way bash's $(cat ...) command
-    # substitution does; TrimEnd restores that parity so the prompt argument matches.
+    # substitution does; both twins strip trailing CR/LF from the prompt tail — TrimEnd
+    # here, an iterative both-character strip loop in loop.sh — interior content untouched.
     # Read inside the loop (not hoisted before it) so a mid-run edit to PROMPT.md is
     # picked up on the next iteration, matching bash's per-iteration $(cat "$PROMPT_FILE").
     # T1b: a 0-byte PROMPT.md makes -Raw return $null (not ''), which would throw a

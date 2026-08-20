@@ -18,6 +18,12 @@
 # completion; 2 = circuit breaker — no commit for 3 consecutive iterations; 3 = circuit
 # breaker — same failure signature 5 times consecutively; 4 = protected-path
 # modification detected (iteration reverted).
+# 126/127 (shell-propagated edge cases, not loop-owned codes): command-not-found
+# propagates as exit 127 and found-but-not-executable as exit 126 (bash) —
+# standard shell convention, distinct from the four codes above. The
+# PowerShell twin's Get-Command guard does not attempt to distinguish the two
+# and exits 127 for both — a stated, knowingly-accepted platform difference
+# (the 126 case is Unix-host-only).
 set -euo pipefail
 
 MAX_ITER="${1:-10}"
@@ -88,7 +94,13 @@ for ((i = 1; i <= MAX_ITER; i++)); do
   fi
 
   set +e
-  output="$($LOOP_CLI $model_arg "$(cat "$PROMPT_FILE")" 2>&1)"
+  p="$(cat "$PROMPT_FILE")"
+  # CRLF parity (twin: loop.ps1's TrimEnd): strip BOTH trailing CR and LF, not CR alone
+  # — command substitution above already strips trailing newlines, so a \n before a \r
+  # (e.g. a CRLF file ending "text\r\n\r\n") would otherwise re-expose a trailing \r
+  # that a CR-only strip misses.
+  while [[ "$p" == *$'\r' || "$p" == *$'\n' ]]; do p="${p%?}"; done
+  output="$($LOOP_CLI $model_arg "$p" 2>&1)"
   status=$?
   set -e
   printf '%s\n' "$output" | tail -n 25

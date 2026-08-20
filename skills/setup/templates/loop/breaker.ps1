@@ -43,11 +43,18 @@
 # (which would reorder/re-escape/nest and break the byte-for-byte parity with the
 # bash twin) — and parsed back with plain string ops, never Invoke-Expression, so
 # the state file is read strictly as inert data: a corrupted or adversarially-edited
-# file can only fail validation, never execute anything.
+# file can only fail validation, never execute anything. Persistence adds
+# [System.IO.File]::Move (atomic rename on write) and Start-Sleep (torn-read retry
+# backoff); Breaker-Load's optional -Now falls back to a wall-clock read only as a
+# default-parameter fallback at the API boundary.
 #
-# Testability: all timestamps are passed in as [long] `-Now` epoch-seconds
-# parameters — no wall-clock reads inside any transition logic. Wall-clock anomaly
-# guard: the remaining-cooldown value is CLAMPED to [0, cooldownSeconds] so a system
+# Testability: transition logic (Breaker-ShouldSkip, Breaker-Record) takes
+# timestamps as parameters — no wall-clock reads inside any transition logic.
+# Breaker-Load's fail-safe seed is the one exception at the API boundary: its
+# optional `-Now` parameter (0 sentinel) defaults to a wall-clock read only when
+# the caller does not inject one, so every existing call site stays valid and the
+# harness can still inject a timestamp for determinism. Wall-clock anomaly guard:
+# the remaining-cooldown value is CLAMPED to [0, cooldownSeconds] so a system
 # clock that jumps backward or forward can never produce a negative or absurdly
 # long skip.
 #
@@ -73,9 +80,12 @@ function Get-BreakerField {
 }
 
 # Return $true iff every required key is present and every typed field parses
-# (state is one of the three enum values; numeric fields are numeric). This is the
-# "parseable" gate Breaker-Load uses to decide reset-vs-keep.
-function Test-BreakerStateValid {
+# (state is one of the three enum values; numeric fields are numeric). This is
+# everything Test-BreakerStateValid checked before the terminator condition below
+# was added; split out so Breaker-Load can tell a torn read (fields fine,
+# terminator missing) apart from a genuinely invalid one (some field itself
+# doesn't parse) — the two get different retry behavior.
+function Test-BreakerFieldsValid {
     param([Parameter(Mandatory)] [string]$Path)
     $requiredKeys = @('state', 'chain', 'fallbackIndex', 'currentModel', 'cooldownSeconds',
                        'openedAt', 'halfOpenSuccesses', 'totalFallbacks', 'totalRecoveries')
@@ -94,9 +104,41 @@ function Test-BreakerStateValid {
     return $true
 }
 
+# Return $true iff the file's final non-empty line is exactly `}` (the schema's
+# terminator, breaker.ps1:124), comparing AFTER stripping a trailing CR so a
+# CRLF-normalized but otherwise valid file still passes (harness 11c is the
+# regression this guards). tail-equivalent only — no new runtime dep. A reader
+# that fails only this check knows it caught a write mid-flight (torn), not a
+# corrupt file.
+function Test-BreakerTerminatorOk {
+    param([Parameter(Mandatory)] [string]$Path)
+    $lines = Get-Content -LiteralPath $Path
+    $last = ''
+    foreach ($line in $lines) {
+        $trimmed = $line.TrimEnd("`r")
+        if ($trimmed -ne '') { $last = $trimmed }
+    }
+    return $last -eq '}'
+}
+
+# Return $true iff Test-BreakerFieldsValid passes AND the terminator line is
+# intact. This is the "parseable" gate Breaker-Load uses to decide
+# return-untouched vs retry-or-fail-safe.
+function Test-BreakerStateValid {
+    param([Parameter(Mandatory)] [string]$Path)
+    if (-not (Test-BreakerFieldsValid -Path $Path)) { return $false }
+    if (-not (Test-BreakerTerminatorOk -Path $Path)) { return $false }
+    return $true
+}
+
 # The ONE place that serializes the schema — every transition below funnels
 # through this so the on-disk layout never drifts. LF-only, no BOM, to stay a
-# byte-for-byte match with the bash twin's `printf`-written file.
+# byte-for-byte match with the bash twin's `printf`-written file. Atomicity
+# rationale: writes go to a sibling temp file first, then
+# [System.IO.File]::Move($tmp, $Path, $true) (overwrite variant, PowerShell 7+ /
+# .NET Core) — atomic on NTFS via ReplaceFile semantics, so a concurrent reader
+# can never observe a zero-length or partially-written file (the torn-read race
+# this story closes). The temp name is colon-free (templates/loop/SKILL.md:27).
 function Write-BreakerState {
     param(
         [Parameter(Mandatory)] [string]$Path,
@@ -124,7 +166,9 @@ function Write-BreakerState {
         '}'
     )
     $text = ($lines -join "`n") + "`n"
-    [System.IO.File]::WriteAllText($Path, $text, [System.Text.UTF8Encoding]::new($false))
+    $tmp = "$Path.tmp.$PID"
+    [System.IO.File]::WriteAllText($tmp, $text, [System.Text.UTF8Encoding]::new($false))
+    [System.IO.File]::Move($tmp, $Path, $true)
 }
 
 # Writes a fresh CLOSED state seeded from -Chain. currentModel = first chain
@@ -176,18 +220,77 @@ function Step-BreakerChain {
     }
 }
 
+# New-BreakerFailsafeOpen -Path <file> -Chain <chain-arg> -Now <now> -> seeds
+# OPEN with openedAt=<now> and the full cooldown, carrying the COMPLETE field
+# disposition (goal.md, cycle-1 MAJOR-4 fix): chain/fallbackIndex preserved if
+# they individually parse, else <chain-arg>/0; currentModel preserved if it
+# parses, else DERIVED as chain[fallbackIndex] (empty past chain end, per the
+# omit-the-pin rule at breaker.ps1's Step-BreakerChain — never blindly
+# chain[0], which would re-pin the just-rate-limited model and undo half the
+# harm the inversion prevents); halfOpenSuccesses always resets to 0;
+# totalFallbacks/totalRecoveries preserved if they parse, else 0. Called only
+# from Breaker-Load's still-invalid branch below.
+function New-BreakerFailsafeOpen {
+    param(
+        [Parameter(Mandatory)] [string]$Path,
+        [Parameter(Mandatory)] [AllowEmptyString()] [string]$Chain,
+        [Parameter(Mandatory)] [long]$Now
+    )
+    $rawChain = Get-BreakerField -Path $Path -Key 'chain'
+    $chain = if ($null -ne $rawChain) { $rawChain } else { $Chain }
+
+    $idx = 0
+    $rawIdx = Get-BreakerField -Path $Path -Key 'fallbackIndex'
+    if ($rawIdx -match '^[0-9]+$') { $idx = [int]$rawIdx }
+
+    $rawModel = Get-BreakerField -Path $Path -Key 'currentModel'
+    if ($null -ne $rawModel) {
+        $model = $rawModel
+    } else {
+        $entries = @()
+        if ($chain -ne '') { $entries = $chain -split ',' }
+        $model = if ($idx -lt $entries.Length) { $entries[$idx] } else { '' }
+    }
+
+    $fb = 0
+    $rawFb = Get-BreakerField -Path $Path -Key 'totalFallbacks'
+    if ($rawFb -match '^[0-9]+$') { $fb = [int]$rawFb }
+
+    $rec = 0
+    $rawRec = Get-BreakerField -Path $Path -Key 'totalRecoveries'
+    if ($rawRec -match '^[0-9]+$') { $rec = [int]$rawRec }
+
+    Write-BreakerState -Path $Path -State 'OPEN' -Chain $chain -FallbackIndex $idx `
+        -CurrentModel $model -CooldownSeconds 600 -OpenedAt $Now -HalfOpenSuccesses 0 `
+        -TotalFallbacks $fb -TotalRecoveries $rec
+}
+
 # --- pinned API --------------------------------------------------------------
 
-# Breaker-Load -Path <state-file> -Chain <chain>
-# Missing file -> create fresh CLOSED seeded from -Chain, silently.
-# Unparseable file -> rewrite fresh CLOSED (same seeding) + one stderr warning.
-# Parseable file -> left untouched (-Chain is ignored in this case; only a fresh
-# file is ever seeded from it).
+# Breaker-Load -Path <state-file> -Chain <chain> [-Now <now-epoch>]
+# -Now is OPTIONAL ([long]$Now = 0, where 0 means "read now") and defaults to a
+# wall-clock read at the API boundary when the caller does not inject one —
+# every existing call site stays valid.
+# Three branches (design §3.2 part 3):
+#   - file absent -> seed fresh CLOSED from -Chain, silently (unchanged).
+#   - present but failing ONLY the terminator check (torn — a write caught
+#     mid-flight) -> re-read up to 3 times with a ~50ms backoff
+#     (Start-Sleep -Milliseconds 50); a retry that becomes fully valid returns
+#     silently, nothing rewritten, no warning.
+#   - present and still invalid after that (or invalid for reasons beyond the
+#     terminator, e.g. a dropped key -> no retry) -> FAIL SAFE, not fail
+#     CLOSED-erasing: one stderr warning, then seed OPEN via
+#     New-BreakerFailsafeOpen (openedAt=<now>, full cooldown, complete
+#     per-field-preserved-if-parse disposition). This inverts the one branch
+#     that could weaken protection: a lost/torn read now costs one cooldown
+#     instead of silently erasing one.
 function Breaker-Load {
     param(
         [Parameter(Mandatory)] [string]$Path,
-        [Parameter(Mandatory)] [AllowEmptyString()] [string]$Chain
+        [Parameter(Mandatory)] [AllowEmptyString()] [string]$Chain,
+        [long]$Now = 0
     )
+    if ($Now -eq 0) { $Now = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds() }
     if (-not (Test-Path -LiteralPath $Path)) {
         New-BreakerSeed -Path $Path -Chain $Chain
         return
@@ -195,8 +298,14 @@ function Breaker-Load {
     if (Test-BreakerStateValid -Path $Path) {
         return
     }
-    [Console]::Error.WriteLine("breaker: $Path is unparseable — resetting to fresh CLOSED state")
-    New-BreakerSeed -Path $Path -Chain $Chain
+    if (Test-BreakerFieldsValid -Path $Path) {
+        for ($attempt = 0; $attempt -lt 3; $attempt++) {
+            Start-Sleep -Milliseconds 50
+            if (Test-BreakerStateValid -Path $Path) { return }
+        }
+    }
+    [Console]::Error.WriteLine("breaker: $Path is unreadable — failing SAFE to OPEN")
+    New-BreakerFailsafeOpen -Path $Path -Chain $Chain -Now $Now
 }
 
 # Breaker-CurrentModel -Path <state-file> -> echoes currentModel (may be empty).

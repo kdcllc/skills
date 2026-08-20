@@ -66,8 +66,16 @@ contain no spaces or glob characters (bash twin: unquoted expansion word-splits,
 an unmatched glob MAY expand; the PowerShell twin splats an array and is immune —
 making this a cross-twin parity requirement, not a PS limitation).
 
-Corrupted/unparseable state resets to a fresh CLOSED state (with a stderr warning)
-rather than blocking the loop.
+Corrupted/unparseable state now fails SAFE instead of silently erasing protection.
+Three outcomes: a state file that is **absent** still seeds a fresh CLOSED state,
+unchanged; one that is **present but torn** (a concurrent writer caught mid-flight —
+fails only the schema's terminator check) is re-read up to 3 times with a short
+backoff before being treated as still-invalid; a file that is **still invalid**
+after that — hand-corrupted, truncated, or missing a key — seeds **OPEN** with a
+fresh 600s cooldown (never CLOSED) plus a stderr warning, preserving whatever
+chain/model/counter fields still parse. Consequence, stated honestly: a
+hand-corrupted state file now costs one full cooldown before iteration 1 under
+mechanism B — delete `_goals/breaker-state.json` to clear it.
 
 Recovery keeps the model that proved itself: HALF-OPEN's 2nd consecutive success
 closes onto the current (already-fallen-back) model — no snap-back to the chain's

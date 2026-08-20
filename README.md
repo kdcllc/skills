@@ -2,7 +2,7 @@
 
 [![skills.sh installs](https://skills.sh/b/kdcllc/skills)](https://skills.sh/kdcllc/skills)
 
-> Kit version: **0.9.0** (`skills/setup/VERSION`) · The install badge above applies
+> Kit version: **0.10.0** (`skills/setup/VERSION`) · The install badge above applies
 > only if the repo is made public: [skills.sh](https://www.skills.sh/) filters private
 > repos out of its public index by design
 > ([vercel-labs/skills#381](https://github.com/vercel-labs/skills/issues/381)), so it
@@ -67,8 +67,9 @@ skills/setup/                 # The installable skill (the compiler)
     └── loop/                 # Optional autonomous loop: SKILL.md (one iteration),
                               #   loop.sh + loop.ps1 (guarded drivers), PROMPT.md, backlog.md
 tests/
-└── loop-harness/run.sh        # Tracked behavioral test suite (breaker state machine,
-                              #   SIGPIPE regressions, checks J/K mutations; 37 assertions);
+└── loop-harness/run.sh        # Tracked behavioral test suite (breaker state machine +
+                              #   torn-read/fail-safe hardening, SIGPIPE regressions,
+                              #   checks J/K mutations; 45 assertions);
                               #   requires a self-install (_loop/ present) — SKIPs cleanly
                               #   otherwise; run: bash tests/loop-harness/run.sh
 ```

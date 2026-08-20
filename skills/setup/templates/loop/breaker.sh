@@ -38,17 +38,25 @@
 # chain" row) — this file never reads that token itself; the chain always
 # arrives as a plain argument.
 #
-# Zero runtime deps: no jq/python/other JSON library. Parsing relies only on bash
-# builtins plus grep (line presence) — never `eval`, never `source`s the state file
-# — because the flat, one-key-per-line layout above is simple enough that a real
-# JSON parser buys nothing but a new dependency. This also means the state file is
-# read as inert data: its bytes are never treated as code, so a corrupted or
-# adversarially-edited file can only fail validation, not execute anything.
+# Zero runtime deps: no jq/python/other JSON library. Parsing and persistence rely
+# only on bash builtins plus grep (line presence), mv (atomic rename on write),
+# sleep (torn-read retry backoff), and date — the latter only as breaker_load's
+# default-parameter fallback when the caller does not inject a `now` — never
+# `eval`, never `source`s the state file — because the flat, one-key-per-line
+# layout above is simple enough that a real JSON parser buys nothing but a new
+# dependency. This also means the state file is read as inert data: its bytes are
+# never treated as code, so a corrupted or adversarially-edited file can only fail
+# validation, not execute anything.
 #
-# Testability: all timestamps are passed in as `<now-epoch>` parameters — no
-# wall-clock reads inside any transition logic. Wall-clock anomaly guard: the
-# remaining-cooldown value is CLAMPED to [0, cooldownSeconds] so a system clock that
-# jumps backward or forward can never produce a negative or absurdly long skip.
+# Testability: transition logic (breaker_should_skip, breaker_record) takes
+# timestamps as parameters — no wall-clock reads inside any transition logic.
+# breaker_load's fail-safe seed is the one exception at the API boundary: its
+# third parameter, `now`, is OPTIONAL and defaults to a wall-clock read
+# (`date +%s`) only when the caller does not inject one, so every existing call
+# site stays valid under `set -u` and the harness can still inject a timestamp for
+# determinism. Wall-clock anomaly guard: the remaining-cooldown value is CLAMPED to
+# [0, cooldownSeconds] so a system clock that jumps backward or forward can never
+# produce a negative or absurdly long skip.
 #
 # Sourcing this file has zero side effects: it only defines functions.
 
@@ -72,10 +80,13 @@ _breaker_get() {
   printf '%s' "$value"
 }
 
-# _breaker_valid <file> -> return 0 iff every required key is present and every
-# typed field parses (state is one of the three enum values; numeric fields are
-# numeric). This is the "parseable" gate breaker_load uses to decide reset-vs-keep.
-_breaker_valid() {
+# _breaker_valid_fields <file> -> return 0 iff every required key is present and
+# every typed field parses (state is one of the three enum values; numeric fields
+# are numeric). This is everything _breaker_valid checked before the terminator
+# condition below was added; split out so breaker_load can tell a torn read
+# (fields fine, terminator missing) apart from a genuinely invalid one (some
+# field itself doesn't parse) — the two get different retry behavior.
+_breaker_valid_fields() {
   local file="$1" key
   for key in state chain fallbackIndex currentModel cooldownSeconds openedAt \
              halfOpenSuccesses totalFallbacks totalRecoveries; do
@@ -96,13 +107,43 @@ _breaker_valid() {
   return 0
 }
 
+# _breaker_terminator_ok <file> -> return 0 iff the file's final non-empty line is
+# exactly `}` (the schema's terminator, breaker.sh:117), comparing AFTER stripping
+# a trailing CR so a CRLF-normalized but otherwise valid file still passes
+# (harness 11c is the regression this guards). tail-equivalent only, via a plain
+# bash read loop — no new runtime dep. A reader that fails only this check knows
+# it caught a write mid-flight (torn), not a corrupt file.
+_breaker_terminator_ok() {
+  local file="$1" line last=""
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%$'\r'}"
+    [[ -n "$line" ]] && last="$line"
+  done < "$file"
+  [[ "$last" == "}" ]]
+}
+
+# _breaker_valid <file> -> return 0 iff _breaker_valid_fields passes AND the
+# terminator line is intact. This is the "parseable" gate breaker_load uses to
+# decide return-untouched vs retry-or-fail-safe.
+_breaker_valid() {
+  local file="$1"
+  _breaker_valid_fields "$file" || return 1
+  _breaker_terminator_ok "$file" || return 1
+  return 0
+}
+
 # _breaker_write <file> <state> <chain> <idx> <model> <cooldown> <openedAt> <half>
 #                <totalFallbacks> <totalRecoveries>
 # The ONE place that serializes the schema — every transition below funnels through
-# this so the on-disk layout never drifts.
+# this so the on-disk layout never drifts. Atomicity rationale: writes go to a
+# sibling temp file first, then `mv -f` onto the target — POSIX rename(2) on the
+# same filesystem is atomic, so a concurrent reader can never observe a
+# zero-length or partially-written file (the torn-read race this story closes).
+# The temp name is colon-free (templates/loop/SKILL.md:27).
 _breaker_write() {
   local file="$1" state="$2" chain="$3" idx="$4" model="$5" cooldown="$6" \
         opened="$7" half="$8" fb="$9" rec="${10}"
+  local tmp="$file.tmp.$$"
   {
     printf '{\n'
     printf '"state": "%s",\n' "$state"
@@ -115,7 +156,8 @@ _breaker_write() {
     printf '"totalFallbacks": %s,\n' "$fb"
     printf '"totalRecoveries": %s\n' "$rec"
     printf '}\n'
-  } > "$file"
+  } > "$tmp"
+  mv -f "$tmp" "$file"
 }
 
 # _breaker_seed <file> <chain> -> writes a fresh CLOSED state seeded from <chain>.
@@ -162,15 +204,71 @@ _breaker_advance_chain() {
   fi
 }
 
+# _breaker_failsafe_open <file> <chain-arg> <now> -> seeds OPEN with
+# openedAt=<now> and the full cooldown, carrying the COMPLETE field disposition
+# (goal.md, cycle-1 MAJOR-4 fix): chain/fallbackIndex preserved if they
+# individually parse, else <chain-arg>/0; currentModel preserved if it parses,
+# else DERIVED as chain[fallbackIndex] (empty past chain end, per the
+# omit-the-pin rule at breaker.sh:146-150 — never blindly chain[0], which would
+# re-pin the just-rate-limited model and undo half the harm the inversion
+# prevents); halfOpenSuccesses always resets to 0; totalFallbacks/totalRecoveries
+# preserved if they parse, else 0. Called only from breaker_load's still-invalid
+# branch below.
+_breaker_failsafe_open() {
+  local file="$1" chain_arg="$2" now="$3"
+  local chain idx model fb rec
+  local -a entries=()
+
+  if grep -q '"chain":' "$file" 2>/dev/null; then
+    chain="$(_breaker_get "$file" chain)"
+  else
+    chain="$chain_arg"
+  fi
+
+  idx="$(_breaker_get "$file" fallbackIndex)"
+  [[ "$idx" =~ ^[0-9]+$ ]] || idx=0
+
+  if grep -q '"currentModel":' "$file" 2>/dev/null; then
+    model="$(_breaker_get "$file" currentModel)"
+  else
+    [[ -n "$chain" ]] && IFS=',' read -r -a entries <<< "$chain"
+    if (( idx < ${#entries[@]} )); then
+      model="${entries[$idx]}"
+    else
+      model=""
+    fi
+  fi
+
+  fb="$(_breaker_get "$file" totalFallbacks)"
+  [[ "$fb" =~ ^[0-9]+$ ]] || fb=0
+
+  rec="$(_breaker_get "$file" totalRecoveries)"
+  [[ "$rec" =~ ^[0-9]+$ ]] || rec=0
+
+  _breaker_write "$file" OPEN "$chain" "$idx" "$model" 600 "$now" 0 "$fb" "$rec"
+}
+
 # --- pinned API --------------------------------------------------------------
 
-# breaker_load <state-file> <chain>
-# Missing file -> create fresh CLOSED seeded from <chain>, silently.
-# Unparseable file -> rewrite fresh CLOSED (same seeding) + one stderr warning.
-# Parseable file -> left untouched (the chain argument is ignored in this case;
-# only a fresh file is ever seeded from it).
+# breaker_load <state-file> <chain> [now-epoch]
+# `now` is OPTIONAL and defaults to `$(date +%s)` at the API boundary when the
+# caller does not inject one — every existing call site (loop.sh, run.sh) stays
+# valid under `set -u`, and the harness can still inject a timestamp.
+# Three branches (design §3.2 part 3):
+#   - file absent -> seed fresh CLOSED from <chain>, silently (unchanged).
+#   - present but failing ONLY the terminator check (torn — a write caught
+#     mid-flight) -> re-read up to 3 times with a ~50ms backoff (`sleep 0.05`);
+#     a retry that becomes fully valid returns silently, nothing rewritten, no
+#     warning.
+#   - present and still invalid after that (or invalid for reasons beyond the
+#     terminator, e.g. a dropped key -> no retry) -> FAIL SAFE, not fail
+#     CLOSED-erasing: one stderr warning, then seed OPEN via
+#     _breaker_failsafe_open (openedAt=<now>, full cooldown, complete
+#     per-field-preserved-if-parse disposition). This inverts the one branch
+#     that could weaken protection: a lost/torn read now costs one cooldown
+#     instead of silently erasing one.
 breaker_load() {
-  local state_file="$1" chain="$2"
+  local state_file="$1" chain="$2" now="${3:-$(date +%s)}"
   if [[ ! -f "$state_file" ]]; then
     _breaker_seed "$state_file" "$chain"
     return 0
@@ -178,8 +276,16 @@ breaker_load() {
   if _breaker_valid "$state_file"; then
     return 0
   fi
-  echo "breaker: $state_file is unparseable — resetting to fresh CLOSED state" >&2
-  _breaker_seed "$state_file" "$chain"
+  if _breaker_valid_fields "$state_file"; then
+    local attempt=0
+    while (( attempt < 3 )); do
+      sleep 0.05
+      attempt=$(( attempt + 1 ))
+      _breaker_valid "$state_file" && return 0
+    done
+  fi
+  echo "breaker: $state_file is unreadable — failing SAFE to OPEN" >&2
+  _breaker_failsafe_open "$state_file" "$chain" "$now"
 }
 
 # breaker_current_model <state-file> -> echoes currentModel (may be empty).

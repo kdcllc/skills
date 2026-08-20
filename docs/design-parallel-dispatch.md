@@ -1,9 +1,12 @@
 # Design: Bounded-Concurrency Dispatch for the Autonomous Loop
 
-**Status**: DESIGN ONLY — everything below marked *Proposed* is a proposal, not shipped
-behavior. No file under `skills/setup/templates/` or `_loop/` changes in this story
-(`_goals/backlog.md:109`). Implementation is a follow-up; see the Scope section for
-honest sizing.
+**Status**: DESIGN ONLY for everything below still marked *Proposed* — a proposal, not
+shipped behavior. **Exception**: §3.2 parts 1–3 (write-temp-then-rename, the terminator
+check, and torn-retry/fail-safe-OPEN) shipped in STORY-009 (kit v0.10.0) and are marked
+Shipped in place below; §3.2 part 4, §3.3, and everything outside §3 remain
+unimplemented. No other file under `skills/setup/templates/` or `_loop/` changed for
+this story (`_goals/backlog.md:109`). Implementation of the remaining *Proposed*
+material is a follow-up; see the Scope section for honest sizing.
 
 **Pattern source**: squad's WIP-limited self-refilling dispatch —
 `available-slots = max(0, 3 - active PRs)`, refill on merge
@@ -224,38 +227,63 @@ requirement, not an open question.
 
 Two independently verified facts combine into a silent-cooldown-erasure bug:
 
-1. **The write is a non-atomic truncate.** `_breaker_write` is "The ONE place that
-   serializes the schema" and its body is a brace group redirected with `>` into the
-   state file: eleven separate `printf` calls between `{` and `} > "$file"`
-   (`breaker.sh:103-119`). The `>` truncates the file to zero length *before* the first
-   `printf` runs, and there is no rename, no `fsync`, no temp file. Between truncation
-   and the final `printf '}\n'` there is a window in which the on-disk file is a
-   zero-length or partially-written prefix of a valid state. The PowerShell twin has the
-   same shape — a single `[System.IO.File]::WriteAllText(...)` at `breaker.ps1:127`,
-   which also truncates before writing.
-2. **An unparseable read reseeds a fresh CLOSED state.** `breaker_load`'s contract is
-   "Unparseable file -> rewrite fresh CLOSED (same seeding) + one stderr warning"
-   (`breaker.sh:169`), implemented as `echo "breaker: $state_file is unparseable —
-   resetting to fresh CLOSED state" >&2` followed by `_breaker_seed "$state_file"
-   "$chain"` (`breaker.sh:181-182`). `_breaker_seed` writes `CLOSED`, `fallbackIndex` 0,
-   `currentModel` = the *first* chain entry, `openedAt` 0 (`breaker.sh:123-127`). The
-   validity gate it fails is `_breaker_valid`, which requires all nine keys to be
-   present and typed (`breaker.sh:78-97`) — a truncated file fails it trivially. The
-   twin is identical: `Test-BreakerStateValid` false ⇒ `New-BreakerSeed`
-   (`breaker.ps1:195-199`).
+1. **The write was a non-atomic truncate — fixed by STORY-009 (v0.10.0).** Before
+   STORY-009, `_breaker_write` — "The ONE place that serializes the schema" — wrote a
+   brace group redirected with `>` directly into the state file: ten `printf` calls
+   between `{` and `} > "$file"`. The `>` truncated the file to zero length *before* the
+   first `printf` ran, and there was no rename, no `fsync`, no temp file. Between
+   truncation and the final `printf '}\n'` there was a window in which the on-disk file
+   was a zero-length or partially-written prefix of a valid state. The PowerShell twin
+   had the same shape — a single `[System.IO.File]::WriteAllText(...)`, which also
+   truncated before writing. **Shipped fix**: `_breaker_write` (`breaker.sh:143-161`)
+   now writes the same ten `printf` calls (`breaker.sh:148-158`) to a sibling temp file
+   `"$file.tmp.$$"` (`breaker.sh:159`) and then `mv -f`s it onto the target
+   (`breaker.sh:160`) — POSIX `rename(2)` on the same filesystem is atomic, so no reader
+   can ever observe a partial file. The twin writes to `"$Path.tmp.$PID"` via
+   `[System.IO.File]::WriteAllText` (`breaker.ps1:142-172`, write call `breaker.ps1:170`)
+   and then atomically `[System.IO.File]::Move($tmp, $Path, $true)` (`breaker.ps1:171`).
+2. **An unparseable read reseeded a fresh CLOSED state — fixed by STORY-009 (v0.10.0).**
+   Before STORY-009, `breaker_load`'s contract was "Unparseable file -> rewrite fresh
+   CLOSED (same seeding) + one stderr warning", implemented as `echo "breaker:
+   $state_file is unparseable — resetting to fresh CLOSED state" >&2` followed by
+   `_breaker_seed "$state_file" "$chain"` — neither string exists in the shipped file;
+   both are quoted here as the pre-fix text. `_breaker_seed` writes `CLOSED`,
+   `fallbackIndex` 0, `currentModel` = the *first* chain entry, `openedAt` 0
+   (`breaker.sh:165-169`, unchanged by this story). The validity gate it failed is now
+   split into two helpers: `_breaker_valid_fields` (`breaker.sh:89-108`), which requires
+   all nine keys to be present and typed, and `_breaker_terminator_ok`
+   (`breaker.sh:116-123`), combined by `_breaker_valid` (`breaker.sh:128-133`) — a
+   truncated file still fails trivially. The twin was identical: `Test-BreakerStateValid`
+   false ⇒ `New-BreakerSeed`; today `Test-BreakerStateValid` (`breaker.ps1:127-132`)
+   combines `Test-BreakerFieldsValid` (`breaker.ps1:88-105`) and
+   `Test-BreakerTerminatorOk` (`breaker.ps1:113-122`).
 
-**The race**: with two drivers (or, before this design, any second process) touching
-`_goals/breaker-state.json` (`loop.sh:28`), a reader that greps the file
-(`_breaker_get`'s `grep -m1`, `breaker.sh:62`) *during* another process's truncate-write
-observes a torn file, declares it unparseable, and **reseeds a fresh CLOSED state that
-erases an OPEN cooldown**. The damage is not a lost counter: it resets `state` to CLOSED
-(so the loop immediately resumes full-rate calls against a provider that just rate-
-limited it), resets `openedAt` to 0 (so the 600s cooldown at `breaker.sh:14` never
-elapses because it never started), and resets `fallbackIndex` to 0 and `currentModel` to
-the chain's *preferred* entry — the exact model that was just rate-limited, undoing the
-fallback that `breaker_record` had just performed (`breaker.sh:248-256`). The observable
-symptom is a loop that hammers a limited provider on its most expensive model while
-printing a warning that looks like benign corruption recovery.
+**The race (as it stood before STORY-009)**: with two drivers (or, before this design,
+any second process) touching `_goals/breaker-state.json` (`loop.sh:28`), a reader that
+grepped the file (`_breaker_get`'s `grep -m1`, `breaker.sh:70`) *during* another
+process's truncate-write observed a torn file, declared it unparseable, and **reseeded a
+fresh CLOSED state that erased an OPEN cooldown**. The damage was not a lost counter: it
+reset `state` to CLOSED (so the loop immediately resumed full-rate calls against a
+provider that had just rate-limited it), reset `openedAt` to 0 (so the 600s cooldown at
+`breaker.sh:14` never elapsed because it never started), and reset `fallbackIndex` to 0
+and `currentModel` to the chain's *preferred* entry — the exact model that had just been
+rate-limited, undoing the fallback that `breaker_record` had just performed
+(`breaker.sh:353-362`). The observable symptom was a loop that hammered a limited
+provider on its most expensive model while printing a warning that looked like benign
+corruption recovery.
+
+**Shipped fix (STORY-009, v0.10.0)**: `breaker_load` no longer reseeds CLOSED on an
+unparseable read. A torn read (fields fine, terminator missing) gets up to three
+retries with a ~50ms backoff (`breaker.sh:279-286`; twin `breaker.ps1:301-306`); a read
+that is still invalid after that fails SAFE to OPEN — `echo "breaker: $state_file is
+unreadable — failing SAFE to OPEN" >&2` (`breaker.sh:287`) followed by
+`_breaker_failsafe_open` (`breaker.sh:217-249`, called at `breaker.sh:288`), which seeds
+`OPEN` with `openedAt = now` and the full cooldown while preserving any
+`chain`/`fallbackIndex`/`currentModel`/`totalFallbacks`/`totalRecoveries` fields that do
+parse (deriving `currentModel` as `chain[fallbackIndex]` rather than blindly `chain[0]`
+when it does not parse). The twin is identical:
+`[Console]::Error.WriteLine(...)` (`breaker.ps1:307`) followed by
+`New-BreakerFailsafeOpen` (`breaker.ps1:233-266`, called at `breaker.ps1:308`).
 
 **Therefore a write-side lock is insufficient.** Serializing writers still leaves the
 reader free to observe a torn file, because the torn file is a legal intermediate state
@@ -266,32 +294,36 @@ that no writer-side mutual exclusion removes from the reader's view.
 Four parts. Parts 2 and 3 are the read-side closure; part 1 alone is the tempting
 half-fix.
 
-1. *(write side, necessary but not sufficient)* **Write-temp-then-rename.**
-   `_breaker_write` writes to `"$file.tmp.$$"` and then `mv -f` onto the target. POSIX
-   `rename(2)` on the same filesystem is atomic, so no reader can ever observe a
-   partial file. Twin: `[System.IO.File]::WriteAllText` to the temp path, then
-   `[System.IO.File]::Move($tmp, $path, $true)` (overwrite variant, PowerShell 7+ /
-   .NET Core) — atomic on NTFS via `ReplaceFile` semantics. The temp name must stay
+1. *(write side, necessary but not sufficient)* **Write-temp-then-rename — Shipped,
+   STORY-009 (v0.10.0).** `_breaker_write` writes to `"$file.tmp.$$"` and then `mv -f`
+   onto the target. POSIX `rename(2)` on the same filesystem is atomic, so no reader can
+   ever observe a partial file. Twin: `[System.IO.File]::WriteAllText` to the temp path,
+   then `[System.IO.File]::Move($tmp, $path, $true)` (overwrite variant, PowerShell 7+ /
+   .NET Core) — atomic on NTFS via `ReplaceFile` semantics. The temp name stays
    colon-free per `templates/loop/SKILL.md:27`.
-2. **A terminator-line integrity check on read.** The schema's last line is `}`
-   (`breaker.sh:117`; twin `breaker.ps1:124`). *Proposed*: `_breaker_valid` gains one
-   condition — the file's final non-empty line must be exactly `}`. A reader that does
-   not see the terminator knows it read a *torn* file rather than a *corrupt* one. This
-   costs one `tail -n1`-equivalent and adds no dependency, honoring the helper's
-   standing rule of "Zero runtime deps: no jq/python/other JSON library"
-   (`breaker.sh:41-46`).
-3. **Torn ⇒ retry; still-unparseable ⇒ fail SAFE, not fail OPEN-erasing.** *Proposed*:
-   `breaker_load` splits today's single unparseable branch (`breaker.sh:178-183`) into
-   three:
-   - file absent ⇒ seed fresh CLOSED (unchanged, `breaker.sh:174-177`);
+2. **A terminator-line integrity check on read — Shipped, STORY-009 (v0.10.0).** The
+   schema's last line is `}` (the write's final `printf '}\n'`, `breaker.sh:158`; twin
+   the `'}'` element, `breaker.ps1:166`). `_breaker_valid` (`breaker.sh:128-133`) gains
+   this exact condition via `_breaker_terminator_ok` (`breaker.sh:116-123`): the file's
+   final non-empty line must be exactly `}`, compared after stripping a trailing CR. A
+   reader that does not see the terminator knows it read a *torn* file rather than a
+   *corrupt* one. This costs one `tail -n1`-equivalent and adds no dependency, honoring
+   the helper's standing rule of "Zero runtime deps: no jq/python/other JSON library"
+   (`breaker.sh:41-49`).
+3. **Torn ⇒ retry; still-unparseable ⇒ fail SAFE, not fail OPEN-erasing — Shipped,
+   STORY-009 (v0.10.0).** `breaker_load` (`breaker.sh:270-289`) splits the old single
+   unparseable branch into three:
+   - file absent ⇒ seed fresh CLOSED (unchanged, `breaker.sh:272-275`);
    - present but failing only the terminator check ⇒ re-read up to 3 times with a
-     ~50 ms backoff, then fall through;
-   - present and *still* invalid ⇒ **do not seed CLOSED**. Seed `OPEN` with
-     `openedAt = now` and the full cooldown, keeping any `chain`/`fallbackIndex` values
+     ~50 ms backoff (`breaker.sh:279-286`), then fall through;
+   - present and *still* invalid ⇒ **does not seed CLOSED**. Seeds `OPEN` with
+     `openedAt = now` and the full cooldown via `_breaker_failsafe_open`
+     (`breaker.sh:217-249`, called at `breaker.sh:288`), keeping any
+     `chain`/`fallbackIndex`/`currentModel`/`totalFallbacks`/`totalRecoveries` values
      that did parse. This inverts the failure default: a lost read now costs one
-     cooldown, where today it erases one. Reseeding to CLOSED is the only branch of the
-     whole state machine that can *weaken* protection, and it is the branch a race can
-     force.
+     cooldown, where before it erased one. Reseeding to CLOSED was the only branch of
+     the whole state machine that could *weaken* protection, and it was the branch a
+     race could force.
 4. **Single ownership makes the race unreachable in the steady state.** *Proposed*: the
    breaker moves entirely into the driver process. Only the driver calls
    `breaker_load` / `breaker_should_skip` / `breaker_record` (`loop.sh:32,72-77,101`);
@@ -386,8 +418,8 @@ once.
 
 *Twin note*: the claim table is an in-process associative structure — a bash associative
 array (bash 4+) or parallel indexed arrays (bash 3.2-safe, matching the constraint the
-breaker already documents at `breaker.sh:130-132`), and a `[hashtable]` in PowerShell,
-consistent with `Read-BreakerState`'s existing use of one (`breaker.ps1:146-159`).
+breaker already documents at `breaker.sh:172-173`), and a `[hashtable]` in PowerShell,
+consistent with `Read-BreakerState`'s existing use of one (`breaker.ps1:190-203`).
 **If** a future story ever permits two concurrent *drivers* (explicitly not this design),
 in-memory claims are insufficient and an on-disk claim becomes necessary; the twin
 primitives would be `set -o noclobber` with `> "$claim"` for bash and
@@ -458,7 +490,7 @@ supervises with background jobs and `wait -n`; PowerShell uses `Start-ThreadJob`
 `Start-Process` with `Wait-Job -Any`. The concrete portability hazard: `wait -n` requires
 bash 4.3+, and the kit already commits to bash 3.2 compatibility elsewhere — the breaker
 avoids `local -n` explicitly because "bash 3.2 on stock macOS has no `local -n`"
-(`breaker.sh:130-132`). *Proposed portable primitive*: a poll loop over recorded child
+(`breaker.sh:172-173`). *Proposed portable primitive*: a poll loop over recorded child
 PIDs using `kill -0 "$pid"` plus a short `sleep`, which is POSIX and works on bash 3.2;
 `wait -n` may be used as a fast path when `${BASH_VERSINFO[0]}` permits. The PowerShell
 twin's `Wait-Job -Any` has no such constraint, so parity is achieved by the bash side
@@ -765,7 +797,7 @@ both twins.
 
 1. **bash 3.2 supervision floor.** Is the `kill -0` poll loop (§5) acceptable as the
    bash primitive, or should the kit raise its bash floor to 4.3 and use `wait -n`? The
-   breaker currently accommodates 3.2 explicitly (`breaker.sh:130-132`), so raising the
+   breaker currently accommodates 3.2 explicitly (`breaker.sh:172-173`), so raising the
    floor is a kit-wide policy decision, not a loop-local one.
 2. **Windows worktree removal under a live handle.** `git worktree remove` can fail on
    Windows when a child process still holds a file open. The §2 mitigation
