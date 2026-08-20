@@ -39,7 +39,7 @@ description = "Coverage-obsessed test writer, external services mocked. Read .co
 config_file = "agents/test-writer.toml"
 
 [agents.terminal]
-description = "Compact command runner — noisy test/build/git output only, never edits. Read .codex/agents/terminal.md first."
+description = "Command runner — any Bash or PowerShell command; returns only the result the caller asked for. Read .codex/agents/terminal.md first."
 config_file = "agents/terminal.toml"
 ```
 

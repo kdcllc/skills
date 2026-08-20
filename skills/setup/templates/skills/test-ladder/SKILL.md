@@ -106,7 +106,7 @@ re-run everything immediately.
 | `test-writer` | 1 then 2. Rung 3 only when executing the goal's designated closer task (see the carve-out below). |
 | `judge` (via `task-criteria`) | Requires evidence of 1 then 2. Does **not** fail a task for skipping rung 3 (see the carve-out below for a closer task's mandated run). |
 | `feature` orchestrator (and ad-hoc main-session work) | After every task is PASS and the final audit is APPROVED: **spawn `terminal`** for rung 3 — the orchestrator's rung-3 authority (when it runs) is unchanged, only its execution is delegated. Never run rung 3 itself in this session. |
-| `terminal` | Rung 3 / noisy read-only commands only, when spawned. No edits. Returns a compact `{exit; excerpt; log path}` — nothing more. |
+| `terminal` | Executes any Bash or PowerShell command it is spawned with. No Edit/Write tools. Returns only the result the caller asked for (default: compact `{exit; excerpt; log path}`). Rung 3 is always a spawn of this agent. |
 | `qa-judge` | Behavioral evidence only. Does not replace the ladder. |
 
 ## Closer-task carve-out (delegated rung 3)

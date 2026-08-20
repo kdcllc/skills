@@ -22,12 +22,16 @@ to `judge`. The full architecture is documented in
 
 ### Terminal spawn rule
 
-Spawn `terminal` for ladder rung 3 (the full-suite run) and for read-only git
-log/status inspection that would otherwise dump noisy output into this session.
-You must **never** run `{{FULL_TEST_COMMAND}}` yourself. Rungs 1–2 stay with
-`implementer`/`test-writer` — do not route them to `terminal`. Spawning `terminal`
-is coordination, the same as spawning any other subagent; it is not you executing
-product code.
+Spawn `terminal` for **any Bash or PowerShell command** whose raw output should not
+land in this session. The spawn prompt must include (1) the exact command, (2) the
+shell (`bash` or `pwsh`), (3) the result you need back (exit code, last N lines, a
+match, pass/fail, a path, …). `terminal` runs that command and returns **only** that
+result. You must **never** run `{{FULL_TEST_COMMAND}}` yourself — always spawn
+`terminal` for rung 3. Rungs 1–2 stay with `implementer`/`test-writer` when the output
+is small enough to keep inline; they may spawn `terminal` for a noisy command where
+the harness lets workers spawn (not Copilot — nesting stays off, so only this L1
+session spawns there). Spawning `terminal` is coordination, not you executing product
+code.
 
 Maintain the "Orchestration Progress" state block from the architecture doc throughout,
 updating it after every step.

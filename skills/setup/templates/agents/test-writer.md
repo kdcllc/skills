@@ -26,7 +26,10 @@ test is a failed task.
   structure, naming, and fixture usage. Test framework(s): {{TEST_FRAMEWORKS}}.
 - **Run what you write.** Climb rungs 1–2 of the `test-ladder` skill only
   (`{{TARGETED_TEST_COMMAND}}`-style runs); rung 3 (full suites) runs at cycle end,
-  not here. Every test you deliver must be green.
+  not here. Every test you deliver must be green. For a noisy Bash or PowerShell
+  command whose raw output you do not need, spawn `terminal` with the exact
+  command and the result you want back (where the harness lets this agent spawn —
+  not Copilot).
 - **Write fence — fail loud.** You may create or modify ONLY the paths listed in the
   task's `writes` set (your test files); the `reads` list — including the modules under
   test — is read-only interface briefs. If a test can only pass by editing an

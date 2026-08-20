@@ -77,24 +77,24 @@ Copilot as first-class agents, plus a Codex `[agents.terminal]` registration
 so the glob-copied `terminal.md` is not dangling. Canonical Claude source:
 `templates/agents/terminal.md`.
 
-- **Tools:** Bash + Read. No edit/write.
+- **Tools:** Bash (which also invokes `pwsh` / `powershell.exe` when the spawn
+  prompt is PowerShell) + Read. No Edit/Write tools. Any Bash or PowerShell
+  command the caller asked for — not limited to tests or git.
 - **Model:** light (`haiku` / `{{MODEL_LIGHT}}` / `{{COPILOT_MODEL_LIGHT}}`).
   Cursor: pin on the translated `.cursor/agents/terminal.md` (no skill model key).
   Codex: `.codex/agents/terminal.toml` gets the same light pin via
   `[agents.terminal]` in `config.toml`.
-- **Return:** exit code; ≤30-line failure excerpt (kit convention filling this
-  doc's ≤N-line — not a vendor constant) or “all passed”; path to a full log
-  on disk — mandatory whenever the excerpt was truncated or the exit code is
-  non-zero. No code edits, no extra commands.
-- **Spawn:** the orchestrator spawns `terminal` for ladder rung 3 (full suite)
-  and for read-only inspection (git log/status) so that output stays out of
-  the frontier session — that is delegation, not the orchestrator executing
-  product code; rung-3 **authority** (when it runs) stays Phase 5 after
-  APPROVED. On a truncated or non-zero result, the orchestrator **Reads** the
-  returned log path (or a targeted slice) to route a fix, rather than dumping
-  the full suite into its own session or re-running it unchanged; a re-spawn
-  only narrows the command. `implementer` / `test-writer` keep rungs 1–2
-  inline and never spawn `terminal` themselves.
+- **Return:** only the result the spawn prompt asked for (exit code, last N
+  lines, a match, pass/fail, a path). Default if unspecified: exit code; ≤30-line
+  excerpt (kit convention for ≤N-line) or “all passed”; log path when truncated
+  or non-zero. No Edit/Write, no extra commands, no advice.
+- **Spawn:** any calling agent sends an exact Bash or PowerShell command plus
+  the result shape it needs. Rung 3 is always a `terminal` spawn so the full
+  suite never lands in the frontier session. That is delegation, not the
+  orchestrator executing product code; rung-3 **authority** stays Phase 5 after
+  APPROVED. On a truncated or non-zero result, the caller **Reads** the log
+  path (or a targeted slice). `implementer` / `test-writer` keep small rungs 1–2
+  inline and may spawn `terminal` for a noisy command where nesting exists.
 - **Copilot nesting** is off by default
   (`chat.subagents.allowInvocationsFromSubagents`) and this goal does **not**
   turn it on as a kit default. Until nesting is a kit default or an installer

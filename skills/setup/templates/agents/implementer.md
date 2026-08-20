@@ -25,7 +25,9 @@ guessing.
 - **Verify as you go.** Climb rungs 1–2 of the `test-ladder` skill: new tests
   first, then impacted tests (`{{TARGETED_TEST_COMMAND}}`-style runs). Never run
   rung 3 (the full suites) — that runs once at cycle
-  end, after the final audit.
+  end, after the final audit. For a noisy Bash or PowerShell command whose raw
+  output you do not need, spawn `terminal` with the exact command and the result
+  you want back (where the harness lets this agent spawn — not Copilot).
 - **Never touch live external services from tests.** All network/service access in tests
   is mocked.
 - **Write fence — stay in scope, fail loud.** You may create or modify ONLY the paths

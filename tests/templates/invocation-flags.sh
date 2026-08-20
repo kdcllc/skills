@@ -190,14 +190,16 @@ if [[ -s "$term" ]]; then
     report FAIL "terminal.md frontmatter: name: terminal, {{MODEL_LIGHT}}, tools: Bash, Read"
   fi
 
-  if grep -qiF 'never edit, write' "$term"; then
-    report PASS "terminal.md body forbids editing/writing files"
+  if grep -qiF 'No Edit/Write tools' "$term" \
+     && grep -qiF 'PowerShell' "$term" \
+     && grep -qiF 'Bash' "$term"; then
+    report PASS "terminal.md body: Bash or PowerShell, no Edit/Write tools"
   else
-    report FAIL "terminal.md body forbids editing/writing files"
+    report FAIL "terminal.md body: Bash or PowerShell, no Edit/Write tools"
   fi
 else
   report FAIL "templates/agents/terminal.md exists and is non-empty" "file missing or empty"
-  report FAIL "terminal.md body forbids editing/writing files" "file missing or empty"
+  report FAIL "terminal.md body: Bash or PowerShell, no Edit/Write tools" "file missing or empty"
 fi
 
 # ===========================================================================

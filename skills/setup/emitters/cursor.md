@@ -42,8 +42,9 @@ without a judge PASS.
   `templates/agents/*.md` glob row above, no separate emit row needed. Cursor **drops**
   `tools:` on the translated copy per that row's rule unless the live schema documents an
   equivalent by the time you check `cursor.com/docs/subagents`; when it drops, the
-  Bash/Read guard lives only in `terminal.md`'s prose, not in frontmatter — do not add a
-  `tools:` key back in to compensate. The nesting note above (tell L1 to spawn) already
+  Bash/shell + Read guard lives only in `terminal.md`'s prose, not in frontmatter — do not add a
+  `tools:` key back in to compensate. The agent runs Bash or PowerShell (`pwsh` via the
+  shell tool). The nesting note above (tell L1 to spawn) already
   covers `terminal`; do not add a second rule file for it.
 - **Silent model fallback**: under team-admin/plan restrictions Cursor substitutes a
   model without erroring. The judge templates already self-report their model; keep that.

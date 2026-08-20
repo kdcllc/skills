@@ -29,8 +29,8 @@ resolved templates.
    ```
 3. Orchestrator spawn allowlists use
    `tools: Agent(implementer, test-writer, judge, qa-judge, terminal)` comma-string
-   syntax where needed — `terminal` joins the allowlist so the orchestrator can spawn it
-   for noisy rung-3 / read-only output.
+   syntax where needed — `terminal` joins the allowlist so any allowed caller can spawn
+   it with a Bash or PowerShell command and get back only the requested result.
 4. Model values: Claude aliases (`opus`, `sonnet`, `haiku`, `fable`) or full IDs are both
    valid; `inherit` is the frontmatter default if a tier is deliberately unpinned.
 5. **Loop invocation is per-OS** — both drivers are always emitted; the user runs

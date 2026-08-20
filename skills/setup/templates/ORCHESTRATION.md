@@ -130,11 +130,12 @@ ON subagent invocation failure:
 | `qa-judge` | Skeptical, user-perspective | Behavioral QA of user-facing surfaces | frontier — `{{MODEL_FRONTIER}}`, effort high |
 | `implementer` | Focused, checklist-driven | Implementation + fixes | light — `{{MODEL_LIGHT}}`, effort medium |
 | `test-writer` | Coverage-obsessed | Test creation, all external services mocked | light — `{{MODEL_LIGHT}}`, effort medium |
-| `terminal` | Compact command runner | Noisy test/build/git commands — runs the command, returns a summary | light — `{{MODEL_LIGHT}}`, effort medium |
+| `terminal` | Compact command runner | Any Bash or PowerShell command — returns only the result the caller asked for | light — `{{MODEL_LIGHT}}`, effort medium |
 
-The orchestrator spawns `terminal` for ladder rung 3 (full-suite runs) and for
-read-only git log/status inspection, so that noisy command output stays out of the
-frontier session instead of accumulating in this conversation.
+The orchestrator (and any worker that can spawn) sends `terminal` an exact Bash or
+PowerShell command plus the result shape it needs; `terminal` executes it and returns
+only that result, so the raw stream never lands in the caller. Rung 3 is always a
+`terminal` spawn.
 
 **Model tiers:** The orchestrator (main session) and both judges run the **frontier**
 tier (`{{MODEL_FRONTIER}}`) — delegation and judging have a capability floor. The
@@ -515,7 +516,7 @@ drifting run early. Headless entry point: `_loop/loop.sh [max-iterations]` (bash
 │   ├── qa-judge.md                 # Skeptical user-facing QA reviewer
 │   ├── implementer.md  # Focused implementer
 │   ├── test-writer.md           # Test creator (external services mocked)
-│   └── terminal.md              # Compact command runner (rung 3, noisy read-only)
+│   └── terminal.md              # Bash/PowerShell runner — returns only the asked-for result
 │
 ├── skills/
 │   ├── feature/       # Feature coordination
