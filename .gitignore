@@ -4,6 +4,8 @@
 # .agents/skills/). Re-runnable at any time; nothing here is source of truth.
 .claude/
 .cursor/skills/
+.cursor/agents/
+.cursor/rules/
 .agents/skills/
 _goals/
 _loop/
