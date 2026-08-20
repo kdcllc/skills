@@ -2,7 +2,7 @@
 
 [![skills.sh installs](https://skills.sh/b/kdcllc/skills)](https://skills.sh/kdcllc/skills)
 
-> Kit version: **0.11.0** (`skills/setup/VERSION`) · The install badge above applies
+> Kit version: **0.12.0** (`skills/setup/VERSION`) · The install badge above applies
 > only if the repo is made public: [skills.sh](https://www.skills.sh/) filters private
 > repos out of its public index by design
 > ([vercel-labs/skills#381](https://github.com/vercel-labs/skills/issues/381)), so it
@@ -37,10 +37,12 @@ What an install gives a project:
   one backlog story per fresh-context iteration, judge-gated commits, circuit breakers
   (no-progress, repeated-error, and protected-path violations enforced in the loop
   drivers, not prose), memory size gates, and a single human-approved PR at run end.
-  Slot-supervision knobs — `LOOP_SLOTS` (design default 2, dark-launch guarded to 1
-  until driver-owned dispatch ships) and `LOOP_WORKTREE` (default 0, main-tree
-  iteration; `=1` opts into a driver-managed worktree) — sit alongside the existing
-  five exit codes (0–4) as a new exit code 5 for setup/integration failures.
+  Slot-supervision knobs — `LOOP_SLOTS` (default 2, clamped `[1,3]`; live under the
+  N>1-iff-worktree rule shipped in v0.12.0: honored when `LOOP_WORKTREE=1`, clamps to
+  effective 1 when `LOOP_WORKTREE=0` (with a stderr note only when `LOOP_SLOTS>1` was
+  set explicitly)) and `LOOP_WORKTREE` (default 0, main-tree iteration; `=1` opts into
+  a driver-managed worktree) — sit alongside the existing five exit codes (0–4) as a
+  new exit code 5 for setup/integration failures.
 
 ## Layout
 
@@ -73,7 +75,7 @@ skills/setup/                 # The installable skill (the compiler)
 tests/
 └── loop-harness/run.sh        # Tracked behavioral test suite (breaker state machine +
                               #   torn-read/fail-safe hardening, SIGPIPE regressions,
-                              #   checks J/K mutations; 45 assertions);
+                              #   checks J/K mutations; 82 assertions (as of v0.12.0));
                               #   requires a self-install (_loop/ present) — SKIPs cleanly
                               #   otherwise; run: bash tests/loop-harness/run.sh
 ```
@@ -127,9 +129,12 @@ Everything is generated with project-specific content — layer order, test comm
 judge auto-fail triggers, and model IDs are derived from the codebase and your answers,
 never left generic. Start your first feature with `/feature`; start an unattended run
 (sandboxed!) with `_loop/loop.sh 10` (or `pwsh _loop/loop.ps1 10` — PowerShell 7+).
-`LOOP_SLOTS` stays dark-launch guarded to 1 and `LOOP_WORKTREE` defaults to 0
-(main-tree iteration; `=1` requires a tracked-instance preflight) until STORY-011's
-driver-owned dispatch ships; a new exit code 5 covers setup/integration failures.
+Driver-owned dispatch, write-set admission, and the single-writer integrator shipped in
+v0.12.0. `LOOP_WORKTREE` still defaults to 0 (main-tree iteration; `=1` requires a
+tracked-instance preflight); `LOOP_SLOTS` is live under the N>1-iff-worktree rule
+(LOOP_WORKTREE=1 honors the configured value; LOOP_WORKTREE=0 clamps to effective 1,
+with a stderr note only when `LOOP_SLOTS>1` was set explicitly). A new exit code 5
+covers setup/integration failures.
 
 ### Self-install (local development of the kit itself)
 

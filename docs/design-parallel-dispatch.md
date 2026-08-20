@@ -12,15 +12,41 @@ defaulting to `0` (main-tree iteration unchanged) — both held back until STORY
 driver-owned dispatch, goal-judged because no backlog story yet declares a `writes:`
 set (§6 is unimplemented, so nothing prevents two slots double-dispatching the same
 story) and because worktree execution is inoperable in gitignored-instance repos
-without the preflight this story added; (ii) §5's closing note that the kill-0 poll
+without the preflight this story added *(STORY-011 shipped, v0.12.0: the double-dark-launch
+hold is resolved — see the STORY-011 additions below)*; (ii) §5's closing note that the kill-0 poll
 loop "must be reflected in the parity heuristic at `.claude/checks.sh:26-35`" was
 deliberately **not** done — `.claude/checks.sh` is untracked instance tooling, not the
 parity home; the tracked harness (`tests/loop-harness/run.sh`, assertion 53 and others)
 carries this parity instead. §3.2 part 4, §3.3, §4, §6, §7, and everything else marked
-*Proposed* remain unimplemented; STORY-010 also ships quarantine-lite only (branch
+*Proposed* remain unimplemented *(as of STORY-010; see STORY-011 scope below)*;
+STORY-010 also ships quarantine-lite only (branch
 retained, not integrated, and reported at exit — no marker file) — full quarantine
 remains STORY-012. No other file under
-`skills/setup/templates/` or `_loop/` changed beyond what STORY-010 required.
+`skills/setup/templates/` or `_loop/` changed beyond what STORY-010 required
+*(STORY-011 also changed `loop/SKILL.md`, `PROMPT.md`, and `backlog.md`)*.
+
+**STORY-011 scope (kit v0.12.0)**: §4 (driver-owned story selection/dispatch), §6
+(write-set admission and single-writer integration), §3.2 part 4 (single-ownership
+breaker — breaker moves entirely into driver process), §3.3 (per-slot CB1/CB2 counters
+with driver-table state under N>1 dispatch), and §7.1/§7.2 partially (see the in-place
+deviation notes at the relevant sections below) — §4, §6, §3.2 part 4 and §3.3 each
+marked **Shipped — STORY-011, v0.12.0** in place; §7.1/§7.2 carry in-place deviation
+notes only. Recorded deviations from the design: (i) **dual-mode auto-loop
+skill** — `auto-loop` now handles both manual and dispatched invocations; (ii)
+**protected-path writes REFUSED** at dispatch, not deferred (admission test runs before
+the slot runs, not after); (iii) **N>1-iff-worktree guard** replaces STORY-010's
+dark-launch: `LOOP_SLOTS>1` is honored iff `LOOP_WORKTREE=1`; at `LOOP_WORKTREE=0`
+`EFFECTIVE_SLOTS` clamps to 1, with a one-line stderr note fired only when `LOOP_SLOTS>1`
+was explicitly requested (supersedes the
+double-dark-launch); (iv) **compaction/archival deferred to manual**, with a driver-side
+slot prohibition — the driver does not compact or archive; manual compaction must not
+run while slots are live. **PRECONDITION note** (§6's fast-forward narrative and §2's
+discussion at :250): same-round sibling branches diverge after the first integration
+commit, so the integrator rebases then ff-merges; a rebase conflict aborts → exit 5
+with artifacts retained. This is recorded near the §6 fold-back summary at :766-777
+rather than as a deviation, because `:250` already permits "fast-forward-or-rebase". §7.3
+(exit-code aggregation) and all remaining *Proposed* items remain design-only; full
+quarantine remains STORY-012.
 
 **Pattern source**: squad's WIP-limited self-refilling dispatch —
 `available-slots = max(0, 3 - active PRs)`, refill on merge
@@ -100,6 +126,9 @@ configured value, warning on stderr when `LOOP_SLOTS>1` is explicitly requested,
 STORY-011's driver-owned dispatch (§4/§6) exists — running two live slots today would
 double-dispatch the same backlog story with no admission rule (§6) to stop it, since no
 story yet declares a `writes:` set. See the Status block above for the full argument.
+*(Superseded by STORY-011, v0.12.0: the dark-launch guard is replaced by the
+N>1-iff-worktree rule — `LOOP_SLOTS>1` is honored iff `LOOP_WORKTREE=1`; see the
+guard replacement comment at `loop.sh:93-112`.)*
 
 **(c) Current behavior.** The driver is a strictly serial `for` loop:
 `for ((i = 1; i <= MAX_ITER; i++))` with `MAX_ITER="${1:-10}"` (`loop.sh:23,66`; twin at
@@ -182,6 +211,8 @@ default this design originally argued for — the same double-dark-launch reason
 §1 (no `writes:` admission yet, and worktree execution is inoperable in
 gitignored-instance repos like this one's self-install without the preflight this
 story added) until STORY-011's driver-owned dispatch. See the Status block above.
+*(STORY-011 shipped, v0.12.0: this hold is resolved; the N>1-iff-worktree rule
+replaced the double-dark-launch.)*
 
 **(c) Current behavior.** Every iteration runs in the driver's own working tree.
 `head_before="$(git rev-parse HEAD)"` (`loop.sh:79`; twin `loop.ps1:127`) captures a
@@ -361,9 +392,10 @@ half-fix.
      cooldown, where before it erased one. Reseeding to CLOSED was the only branch of
      the whole state machine that could *weaken* protection, and it was the branch a
      race could force.
-4. **Single ownership makes the race unreachable in the steady state.** *Proposed*: the
-   breaker moves entirely into the driver process. Only the driver calls
-   `breaker_load` / `breaker_should_skip` / `breaker_record` (`loop.sh:32,72-77,101`);
+4. **Single ownership makes the race unreachable in the steady state — Shipped,
+   STORY-011 (v0.12.0).** The breaker moves entirely into the driver process. Only the
+   driver calls `breaker_load` / `breaker_should_skip` / `breaker_record`
+   (`loop.sh:32,72-77,101`);
    slot children never open the state file. Because the driver is one process, the
    breaker is single-writer *by construction* — the research doc's "Actor model / single
    owner of a resource" row (`docs/research-designing-conflict-free-multi-agents.md:64`)
@@ -376,6 +408,9 @@ class where a concurrency bug degrades safety *silently* because the recovery pa
 like normal corruption handling.
 
 ### 3.3 The iteration counters, which are a different problem
+
+**Shipped — STORY-011, v0.12.0** (extends the per-slot CB1/CB2 counters shipped in
+STORY-010, see the §5 marker at :508-510, with driver-table state under N>1 dispatch).
 
 `no_progress`, `same_error`, and `last_error_sig` are plain shell locals initialized once
 before the loop (`loop.sh:62-64`; twin `loop.ps1:77-79`). They are per-*driver*, and
@@ -394,6 +429,8 @@ PowerShell keeps an array of hashtables. Both are language-native; no new primit
 ---
 
 ## 4. Story admission and claiming
+
+**Shipped — STORY-011, v0.12.0.**
 
 **Delineation from §6 — the two sections share a word and must not share a meaning.**
 **This section (§4) answers: *which* story a given slot takes, and how exclusive
@@ -472,7 +509,8 @@ adopted here.
 Worktree-local rollback, CB0-stays-fatal, and per-slot CB1/CB2 counters shipped as
 designed (`loop.sh:213-445`; twin `loop.ps1:295-586`); slot *retirement*
 (retire-without-ending-the-run) did **not** ship — CB1/CB2 remain run-fatal `exit
-2`/`exit 3` at the dark-launched N=1 (`loop.sh:440-445`), retirement bookkeeping
+2`/`exit 3` at the dark-launched N=1 (`loop.sh:440-445`) *(the dark-launch guard was
+replaced by the N>1-iff-worktree rule in STORY-011, v0.12.0)*, retirement bookkeeping
 deferred to STORY-012 alongside full quarantine (`loop.sh:415-418`). The quarantine
 mechanic shipped as **quarantine-lite**: an abnormally-exiting slot's branch is
 retained rather than integrated (the `retainedBranches` bookkeeping; its worktree is
@@ -562,6 +600,8 @@ codes (0–4), and the default iteration count; it was not extended to assert `L
 ---
 
 ## 6. Inter-story conflict admission and shared memory
+
+**Shipped — STORY-011, v0.12.0.**
 
 **Scope of this section (contrast with §4).** §4 assigned each slot a distinct story.
 This section decides whether two *already-claimed, distinct* stories are permitted to be
@@ -729,6 +769,13 @@ case: admission guarantees no two in-flight branches touched the same one, so
 integration is a fast-forward. Fold-back's only real job is the subset verification
 described in §6.1 and the sequencing of outbox appends.
 
+**PRECONDITION note (shipped, STORY-011; cross-ref :277 and :250)**: same-round sibling
+branches diverge after the first integration commit lands on the target branch, so the
+integrator rebases the next slot's branch then ff-merges it — the design at :250 already
+permits "fast-forward-or-rebase". A rebase conflict aborts with exit 5 and artifacts
+retained (the branch is quarantine-lite rather than integrated). Admission keeps the
+normal case conflict-free, so rebase is a safety net, not the expected path.
+
 *Twin note*: outboxes are ordinary files and appends are ordinary redirects (`>>` /
 `Add-Content`); the integrator is a function inside the driver, so it is the same
 single-process construct on both twins. No new primitive, hence no twin divergence and
@@ -769,10 +816,18 @@ would therefore terminate a run with work still in flight and work still to do.
 advisory signal**, and the exit decision moves to the driver:
 
 - A slot printing the sentinel is marked `drained` and is not refilled.
+  **Deviation (STORY-011, v0.12.0)**: in dispatched runs, a sentinel-emitting slot is
+  treated as an ITERATION-mismatch and quarantined rather than marked `drained`
+  (`loop.sh:905-906`) — the sentinel-from-dispatched-slot rule, because a correctly
+  dispatched slot runs its pinned story, not an eligibility re-scan.
 - The driver exits 0 only when **all three** hold: (i) every slot is `drained` or idle;
   (ii) the driver's *own* re-scan of `_goals/backlog.md` finds no eligible story under
   the pinned fields (`_goals/backlog.md:3-6`); (iii) every integration has been applied
   and no branch remains quarantined (§5).
+  **Deviation (STORY-011, v0.12.0)**: condition (iii) did not ship — exit 0 is NOT
+  gated on quarantined branches. `retained_branches` is reported-only via an EXIT trap
+  that fires after the literal `exit` statement and cannot alter the pending exit status
+  (`loop.sh:243-256, :1145-1151`). Full quarantine gating deferred to STORY-012.
 - The sentinel string itself does not change — it is checked by both twins and by the
   parity heuristic at `.claude/checks.sh:26-28`, so changing it would be a gratuitous
   compatibility break. Only its *interpretation* moves.
@@ -798,6 +853,10 @@ contract's terminal lines already carry a story id — `ITERATION: <story-id> pa
   `.loop-worktrees/slot-<n>/iteration-<i>.log`, and parsed independently — so
   attribution never depends on parsing an interleaved stream at all. Console output is
   a tee with a `[slot <n>]` prefix per line, for humans only.
+  **Deviation (STORY-011, v0.12.0)**: captures are per-slot `mktemp` files
+  (`loop.sh:827`), not `.loop-worktrees/slot-<n>/iteration-<i>.log`; there is no
+  prefixed tee — the slot's last 25 lines are printed to the console without a
+  `[slot <n>]` prefix.
 - The driver then **cross-checks** the story id on the `ITERATION:` line against the id
   it dispatched to that slot (§4). A match is authoritative. A mismatch means the slot
   ignored its pinned story — a contract violation — and the slot is quarantined (§5)
@@ -806,6 +865,11 @@ contract's terminal lines already carry a story id — `ITERATION: <story-id> pa
   recorded as `failed` for its dispatched story, matching the intent behind incrementing
   `attempts` up front so "a crashed iteration still counts"
   (`templates/loop/SKILL.md:89-90`).
+  **Deviation (STORY-011, v0.12.0)**: a capture with no terminal `ITERATION:` line
+  becomes an ITERATION-mismatch (`loop.sh:895-896`) with no backlog transition
+  (`loop.sh:925-926`), rather than a `failed` record — the `attempts` counter was
+  already incremented at dispatch, so the story is correctly charged without a
+  separate transition.
 
 **(b) Failure mode prevented.** Misattributed outcomes: marking story X `passed` because
 slot 2's success line was read while parsing slot 1's stream — which would set
@@ -1028,8 +1092,10 @@ reference coverage, `.claude/checks.sh:6-40`), so a green suite proves this docu
 broke nothing, not that this document is correct.
 
 **Accepted consequence**: root `ORCHESTRATION.md` indexes `docs/`
-(`ORCHESTRATION.md:29-32`) and is out of scope here, so this design note ships unindexed
-until a follow-up links it.
+(`ORCHESTRATION.md:29-32` *(stale — after v0.12.0 docs alignment the index line is at
+`:45-50`)* ) and is out of scope here, so this design note ships unindexed until a
+follow-up links it. *(Now resolved: `ORCHESTRATION.md:45-50` indexes this design as of
+STORY-011 (v0.12.0) docs alignment.)*
 
 ### Implementation follow-up: plausibly 3–4 stories
 

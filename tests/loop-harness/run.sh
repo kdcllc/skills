@@ -518,6 +518,29 @@ exit 0
 STUBEOF
   chmod +x "$CB1_DIR/_loop/stub-cli.sh"
 
+  # Backlog required by the task-01 gate (missing/unreadable -> exit 5).
+  # Two eligible stories provide 4 dispatch slots before attempts-exhaustion
+  # so the loop reaches MAX_ITER=4 and exits 1 (not 0 "no eligible stories"):
+  # STORY-CB1A gets 3 dispatches (attempts 0->1->2->3 = exhausted), then
+  # STORY-CB1B gets dispatch 4 (MAX_ITER reached after reap -> exit 1).
+  # Each dispatch is rate-limited -> CB1-exempt (no_progress counter never
+  # increments), so the run proves CB1 never fires even with 4 exempt passes.
+  cat > "$CB1_DIR/_goals/backlog.md" <<'BACKLOGEOF'
+# backlog
+
+## STORY-CB1A: rate-limit carve-out test story A
+- priority: 1
+- passes: false
+- attempts: 0
+- blocked: false
+
+## STORY-CB1B: rate-limit carve-out test story B
+- priority: 2
+- passes: false
+- attempts: 0
+- blocked: false
+BACKLOGEOF
+
   cat > "$CB1_DIR/_goals/breaker-state.json" <<STATEEOF
 {
 "state": "CLOSED",
@@ -1310,17 +1333,35 @@ else
 fi
 
 # ===========================================================================
-# STORY-010 slot-supervision coverage (assertions 37-53). Shared fixture
-# helpers: sandbox_write_loop substitutes the three instance tokens
-# ({{PROJECT_NAME}}/{{LOOP_MODEL_CHAIN}}/{{IDE_DIR}}) into COPIES of the
-# CANONICAL loop.sh/breaker.sh BEFORE any run (pinned) -- these fixtures never
-# drive the instance _loop/ files (that remains assertion 15's own lane, and
-# the goal's extraction-survival requirement is already proven by assertions
-# 13/14/13b/13c/16/33/35 above, which re-extract against these same canonical
-# files on every run of this harness). make_sandbox wraps the substituted
-# copy in a throwaway git repo under this run's mktemp workdir, with
-# independently-controllable tracked/gitignored _goals and {{IDE_DIR}} state
-# (needed by the two preflight-failure fixtures, 44/45).
+# STORY-010/011 slot-supervision + driver-dispatch coverage (assertions
+# 37-53, extended by task 05's 54+). Shared fixture helpers: sandbox_write_loop
+# substitutes the three instance tokens ({{PROJECT_NAME}}/{{LOOP_MODEL_CHAIN}}/
+# {{IDE_DIR}}) into COPIES of the CANONICAL loop.sh/breaker.sh BEFORE any run
+# (pinned) -- these fixtures never drive the instance _loop/ files (that
+# remains assertion 15's own lane, and the goal's extraction-survival
+# requirement is already proven by assertions 13/14/13b/13c/16/33/35 above,
+# which re-extract against these same canonical files on every run of this
+# harness). make_sandbox wraps the substituted copy in a throwaway git repo
+# under this run's mktemp workdir, with independently-controllable
+# tracked/gitignored _goals and {{IDE_DIR}} state (needed by the two
+# preflight-failure fixtures, 44/45).
+#
+# STORY-011 note (task 05): PROMPT.md now carries the two dispatch-time
+# substitution points (%%STORY_ID%%/%%OUTBOX_DIR%%) the driver requires --
+# their ABSENCE is a loud exit-5 setup failure (see 61 below), so every
+# sandbox needs them present pre-substitution, same as the shipped template.
+# The fixture prompt no longer instructs a stub to print the sentinel (a
+# dispatched slot emitting the sentinel is now itself an ITERATION-mismatch,
+# per the sentinel-from-dispatched-slot rule) -- it documents the ITERATION:
+# line contract instead, matching the shipped PROMPT.md's own dispatch text.
+# _goals/backlog.md now seeds N generic eligible story blocks (STORY-101,
+# STORY-102, ...) in the shipped seed shape (priority/passes/attempts/blocked
+# pinned fields; writes: omitted -- writes-absent runs alone, the simplest
+# admission outcome), so driver-owned selection has something to dispatch;
+# n_stories defaults to 1 for fixtures needing exactly one dispatch, and is
+# raised for fixtures whose per-SLOT circuit-breaker counters (CB1/CB2) need
+# more consecutive dispatches than the 3-attempts eligibility cap would allow
+# a single story to survive (51/52, below).
 # ===========================================================================
 sandbox_write_loop() { # sandbox_write_loop <dest_dir> <ide_dir_name>
   local dest="$1" ide="$2"
@@ -1332,11 +1373,11 @@ sandbox_write_loop() { # sandbox_write_loop <dest_dir> <ide_dir_name>
   chmod +x "$dest/_loop/loop.sh"
   sed -e 's/{{PROJECT_NAME}}/sandbox-project/g' \
       "$BREAKER_SH" > "$dest/_loop/breaker.sh"
-  printf 'Fixture prompt: do the task; print the sentinel when done.\n' > "$dest/_loop/PROMPT.md"
+  printf 'Fixture prompt for %%%%STORY_ID%%%%: do the task; outbox %%%%OUTBOX_DIR%%%%; end with an ITERATION: %%%%STORY_ID%%%% <verdict> line.\n' > "$dest/_loop/PROMPT.md"
 }
 
-make_sandbox() { # make_sandbox <dest_dir> <ide_dir_name> <track_goals:0|1> <track_ide:0|1>
-  local dest="$1" ide="$2" track_goals="$3" track_ide="$4"
+make_sandbox() { # make_sandbox <dest_dir> <ide_dir_name> <track_goals:0|1> <track_ide:0|1> [n_stories:1]
+  local dest="$1" ide="$2" track_goals="$3" track_ide="$4" n_stories="${5:-1}"
   rm -rf "$dest"
   mkdir -p "$dest"
   sandbox_write_loop "$dest" "$ide"
@@ -1346,7 +1387,15 @@ make_sandbox() { # make_sandbox <dest_dir> <ide_dir_name> <track_goals:0|1> <tra
     git config user.email test@example.com
     git config user.name "story010-test"
     mkdir -p _goals "$ide"
-    printf '# backlog\n' > _goals/backlog.md
+    {
+      printf '# backlog\n'
+      i=1
+      while [[ "$i" -le "$n_stories" ]]; do
+        printf '\n## STORY-1%02d: fixture story %d\n\n' "$i" "$i"
+        printf -- '- priority: %d\n- passes: false\n- attempts: 0\n- blocked: false\n' "$i"
+        i=$((i + 1))
+      done
+    } > _goals/backlog.md
     printf 'placeholder\n' > "$ide/.keep"
     : > .gitignore
     if [[ "$track_goals" != "1" ]]; then printf '_goals/\n' >> .gitignore; fi
@@ -1381,7 +1430,7 @@ run_slots_probe() { # run_slots_probe <value|__UNSET__> -> sets slots_out/slots_
 
 # 37: LOOP_SLOTS=0 -> effective 1, NO warning.
 run_slots_probe "0"
-if grep -qF 'slots: 1 — dark launch; design default 2 activates in STORY-011' <<< "$slots_out" \
+if grep -qF 'slots: 1 (mode: main-tree)' <<< "$slots_out" \
    && [[ -z "$slots_err" ]]; then
   report PASS "37: LOOP_SLOTS=0 -> effective 1, banner correct, stderr empty (no warning)"
 else
@@ -1401,8 +1450,8 @@ t38_clamp_check() { # t38_clamp_check <file> -> 0 if SLOTS>3 clamp-to-3 exists, 
 }
 run_slots_probe "5"
 if t38_clamp_check "$LOOP_SH" \
-   && grep -qF 'slots: 1 — dark launch; design default 2 activates in STORY-011' <<< "$slots_out" \
-   && grep -qF 'LOOP_SLOTS>1 requires driver-owned dispatch (STORY-011); running with 1' <<< "$slots_err"; then
+   && grep -qF 'slots: 1 (mode: main-tree)' <<< "$slots_out" \
+   && grep -qF 'LOOP_SLOTS>1 requires LOOP_WORKTREE=1 (worktree isolation); running with 1' <<< "$slots_err"; then
   report PASS "38: LOOP_SLOTS=5 -> structural clamp-to-3 present in canonical loop.sh, effective 1 WITH the STORY-011 warning"
 else
   report FAIL "38: LOOP_SLOTS=5 -> clamp 3 -> guard 1 WITH warning" \
@@ -1412,8 +1461,8 @@ fi
 # 39: LOOP_SLOTS=3 -> warning + effective 1 (in-range, no upper clamp needed,
 # still >1 so the dark-launch guard applies).
 run_slots_probe "3"
-if grep -qF 'slots: 1 — dark launch; design default 2 activates in STORY-011' <<< "$slots_out" \
-   && grep -qF 'LOOP_SLOTS>1 requires driver-owned dispatch (STORY-011); running with 1' <<< "$slots_err"; then
+if grep -qF 'slots: 1 (mode: main-tree)' <<< "$slots_out" \
+   && grep -qF 'LOOP_SLOTS>1 requires LOOP_WORKTREE=1 (worktree isolation); running with 1' <<< "$slots_err"; then
   report PASS "39: LOOP_SLOTS=3 -> effective 1 WITH the STORY-011 warning"
 else
   report FAIL "39: LOOP_SLOTS=3 -> warning + effective 1" "stdout='$slots_out' stderr='$slots_err'"
@@ -1422,22 +1471,27 @@ fi
 # 40: UNSET -> effective 1, PLAIN banner, stderr COMPLETELY warning-free (the
 # anti-warning-fatigue contract: the default path never warns).
 run_slots_probe "__UNSET__"
-if grep -qF 'slots: 1 — dark launch; design default 2 activates in STORY-011' <<< "$slots_out" \
+if grep -qF 'slots: 1 (mode: main-tree)' <<< "$slots_out" \
    && [[ -z "$slots_err" ]]; then
   report PASS "40: LOOP_SLOTS unset -> effective 1, plain banner, stderr entirely warning-free (anti-warning-fatigue)"
 else
   report FAIL "40: LOOP_SLOTS unset -> effective 1, warning-free stderr" "stdout='$slots_out' stderr='$slots_err'"
 fi
 
-# 40-mutation-proof: delete the dark-launch guard (the SLOTS>1 collapse-to-1
-# block) in a COPY, content-anchored (not by line number) -> with an in-range
-# explicit value (3), the banner must now show >1 (i.e. 3, unclamped by the
-# removed guard) -- proving the guard, not some other code path, is what
-# holds the banner at 1 above.
+# 40-mutation-proof: delete the dark-launch guard (the SLOTS>1-AND-WORKTREE!=1
+# collapse-to-1 block, STORY-011's guard REPLACEMENT shape) in a COPY,
+# content-anchored (not by line number) -> with an in-range explicit value
+# (3) and LOOP_WORKTREE left unset, the banner must now show >1 (i.e. 3,
+# unclamped by the removed guard) -- proving the guard, not some other code
+# path, is what holds the banner at 1 above. Anchor updated (STORY-011): the
+# guard's own condition line now reads `if (( SLOTS > 1 )) && (( WORKTREE !=
+# 1 )); then` (was a bare `SLOTS > 1` test pre-story) -- the 5-line
+# if/EFFECTIVE_SLOTS=1/else/EFFECTIVE_SLOTS=$SLOTS/fi shape itself is
+# unchanged, so skip=4 still swallows the whole block.
 MUT40_DIR="$TMP/clamp-sandbox-mut40"
 rm -rf "$MUT40_DIR"; mkdir -p "$MUT40_DIR/_goals" "$MUT40_DIR/_loop"
 awk '
-  /^if \(\( SLOTS > 1 \)\); then$/ && !done {
+  /^if \(\( SLOTS > 1 \)\) && \(\( WORKTREE != 1 \)\); then$/ && !done {
     print "EFFECTIVE_SLOTS=$SLOTS   # mutation (test 40): dark-launch guard removed"
     skip=4; done=1; next
   }
@@ -1448,7 +1502,7 @@ chmod +x "$MUT40_DIR/_loop/loop.sh"
 cp "$CLAMP_DIR/_loop/breaker.sh" "$MUT40_DIR/_loop/breaker.sh"
 mut40_guard_removed=0
 grep -qF 'EFFECTIVE_SLOTS=$SLOTS   # mutation (test 40)' "$MUT40_DIR/_loop/loop.sh" && \
-  ! grep -qE '^if \(\( SLOTS > 1 \)\); then$' "$MUT40_DIR/_loop/loop.sh" && mut40_guard_removed=1
+  ! grep -qE '^if \(\( SLOTS > 1 \)\) && \(\( WORKTREE != 1 \)\); then$' "$MUT40_DIR/_loop/loop.sh" && mut40_guard_removed=1
 mut40_out="$TMP/mut40_stdout.txt"
 ( cd "$MUT40_DIR" && LOOP_SLOTS=3 bash ./_loop/loop.sh 0 ) >"$mut40_out" 2>/dev/null
 mut40_banner="$(grep -oE 'slots: [0-9]+' "$mut40_out" | head -1 | grep -oE '[0-9]+')"
@@ -1467,24 +1521,48 @@ fi
 # -- is covered by the CB fixtures below: 50-52 run at these SAME default
 # flags (49 is the flag=1 CB0-scoped fixture, not a default-flags proof).
 # Item (f) is assertion 42 (its own literal enumeration proof, below).
+#
+# STORY-011 fixture-input update (task 05): driver-owned selection means a
+# dispatch only happens when the backlog has an eligible story (the new seed
+# shape, via make_sandbox's default single STORY-101), and a dispatched slot
+# emitting the sentinel is now itself an ITERATION-mismatch, so the old
+# stub-sentinel.sh is replaced with a stub that commits real progress and
+# ends with a matching `ITERATION: STORY-101 passed` line -- proving the
+# "attempts+passes end state driver-written" half of the equivalence
+# contract actually happens, not merely a vacuous no-dispatch run. Invoked
+# with MAX_ITER=2 (one round to dispatch+integrate STORY-101, a second round
+# to observe the driver's own no-eligible-stories completion once the story
+# has passed) rather than 1, so exit 0 (today's real "backlog complete"
+# code) is reachable at all under the new one-dispatch-per-MAX_ITER-unit
+# accounting. env -u hardened (addendum 3d): strips any LOOP_SLOTS/
+# LOOP_WORKTREE leaking in from the CALLER's environment before this
+# default-flags run, same hardening applied to every 41-52 invocation below.
 # ---------------------------------------------------------------------------
 EQUIV_DIR="$TMP/equiv-sandbox"
 make_sandbox "$EQUIV_DIR" ".claude" 1 1
 cat > "$EQUIV_DIR/_loop/stub-sentinel.sh" <<'STUBEOF'
 #!/usr/bin/env bash
-# Deterministic single-pass stub: no commit, prints the sentinel immediately.
-echo "<promise>COMPLETE</promise>"
+# Deterministic single-pass stub: commits real progress (so the driver's
+# no-progress counter never fires) and reports success via the ITERATION:
+# line the driver now requires -- never the sentinel (a dispatched slot
+# printing it is itself an ITERATION-mismatch under STORY-011).
+echo "committing progress" > progress.txt
+git add progress.txt
+git commit -qm "equivalence-contract progress"
+echo "ITERATION: STORY-101 passed"
 exit 0
 STUBEOF
 chmod +x "$EQUIV_DIR/_loop/stub-sentinel.sh"
 
 equiv_out_a="$TMP/equiv_a_stdout.txt"; equiv_err_a="$TMP/equiv_a_stderr.txt"
-( cd "$EQUIV_DIR" && LOOP_CLI="$EQUIV_DIR/_loop/stub-sentinel.sh" bash ./_loop/loop.sh 1 ) \
+( cd "$EQUIV_DIR" && env -u LOOP_SLOTS -u LOOP_WORKTREE \
+    LOOP_CLI="$EQUIV_DIR/_loop/stub-sentinel.sh" bash ./_loop/loop.sh 2 ) \
   >"$equiv_out_a" 2>"$equiv_err_a"
 equiv_rc_a=$?
 
 equiv_out_b="$TMP/equiv_b_stdout.txt"; equiv_err_b="$TMP/equiv_b_stderr.txt"
-( cd "$EQUIV_DIR" && LOOP_CLI="$EQUIV_DIR/_loop/stub-sentinel.sh" bash ./_loop/loop.sh 1 ) \
+( cd "$EQUIV_DIR" && env -u LOOP_SLOTS -u LOOP_WORKTREE \
+    LOOP_CLI="$EQUIV_DIR/_loop/stub-sentinel.sh" bash ./_loop/loop.sh 2 ) \
   >"$equiv_out_b" 2>"$equiv_err_b"
 equiv_rc_b=$?
 
@@ -1493,9 +1571,9 @@ no_new_branch=1
 equiv_branch_count="$(git -C "$EQUIV_DIR" branch --list 'loop/*' | wc -l)"
 [[ "$equiv_branch_count" -ne 0 ]] && no_new_branch=0
 identical_exit=0
-[[ "$equiv_rc_a" -eq "$equiv_rc_b" ]] && identical_exit=1
+[[ "$equiv_rc_a" -eq "$equiv_rc_b" && "$equiv_rc_a" -eq 0 ]] && identical_exit=1
 stderr_warning_free=1
-grep -qF 'LOOP_SLOTS>1 requires driver-owned dispatch' "$equiv_err_a" && stderr_warning_free=0
+grep -qF 'LOOP_SLOTS>1 requires LOOP_WORKTREE=1' "$equiv_err_a" && stderr_warning_free=0
 
 if [[ "$no_worktree_dir" -eq 1 && "$no_new_branch" -eq 1 && "$identical_exit" -eq 1 \
       && "$stderr_warning_free" -eq 1 ]]; then
@@ -1514,11 +1592,12 @@ fi
 # placeholder (marker-normalization precedent: this file's own sed-based
 # clause normalization at assertion 33, run.sh:1163-1164 pre-story).
 # ---------------------------------------------------------------------------
-expected_f42="slots: 1 — dark launch; design default 2 activates in STORY-011
-=== iteration 1/1 <TS> ===
-<promise>COMPLETE</promise>
-=== backlog complete after 1 iteration(s) ==="
-normalized_f42="$(sed -E 's/=== iteration ([0-9]+\/[0-9]+) [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[+-][0-9]{2}:[0-9]{2} ===/=== iteration \1 <TS> ===/' "$equiv_out_a")"
+expected_f42="slots: 1 (mode: main-tree)
+=== fill round: dispatched=0/2 active=0 <TS> ===
+ITERATION: STORY-101 passed
+=== fill round: dispatched=1/2 active=0 <TS> ===
+=== no eligible stories remain -- exiting ==="
+normalized_f42="$(sed -E 's|=== fill round: dispatched=([0-9]+/[0-9]+) active=[0-9]+ [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}[+-][0-9]{2}:[0-9]{2} ===|=== fill round: dispatched=\1 active=0 <TS> ===|g' "$equiv_out_a")"
 if [[ "$normalized_f42" == "$expected_f42" ]]; then
   report PASS "42: flag=0 equivalence contract (f) -- normalized stdout exactly matches the literally-enumerated expected line set (banner + iteration + tail-25 CLI output + completion line), timestamp normalized"
 else
@@ -1544,7 +1623,9 @@ pwd > "$lifecycle_probe"
 echo "progress" > progress.txt
 git add progress.txt
 git commit -qm "lifecycle progress"
-echo "<promise>COMPLETE</promise>"
+# STORY-011 fixture-input update: dispatched slots must emit ITERATION: <id> <verdict>
+# (not the sentinel -- a dispatched slot emitting it is itself an ITERATION-mismatch).
+echo "ITERATION: STORY-101 passed"
 exit 0
 STUBEOF
 chmod +x "$LIFECYCLE_DIR/_loop/stub-lifecycle.sh"
@@ -1552,8 +1633,11 @@ chmod +x "$LIFECYCLE_DIR/_loop/stub-lifecycle.sh"
 ( cd "$LIFECYCLE_DIR" && git add -A && git commit -qm "add stub CLI" )
 
 lifecycle_log="$TMP/lifecycle-run.log"
-( cd "$LIFECYCLE_DIR" && LOOP_WORKTREE=1 LOOP_CLI="$LIFECYCLE_DIR/_loop/stub-lifecycle.sh" \
-    bash ./_loop/loop.sh 1 ) >"$lifecycle_log" 2>&1
+# MAX_ITER=2: budget for fill-round-1 (dispatch STORY-101) + fill-round-2
+# (no eligible stories remain -> exit 0). MAX_ITER=1 exits 1 "max iterations
+# reached" because the while condition fails before the "no eligible" branch.
+( cd "$LIFECYCLE_DIR" && env -u LOOP_SLOTS LOOP_WORKTREE=1 LOOP_CLI="$LIFECYCLE_DIR/_loop/stub-lifecycle.sh" \
+    bash ./_loop/loop.sh 2 ) >"$lifecycle_log" 2>&1
 lifecycle_rc=$?
 
 expected_wt_path="$LIFECYCLE_DIR/.loop-worktrees/slot-1"
@@ -1578,7 +1662,7 @@ zero_litter=1
 if [[ -d "$LIFECYCLE_DIR/.loop-worktrees" ]]; then
   [[ -z "$(ls -A "$LIFECYCLE_DIR/.loop-worktrees" 2>/dev/null)" ]] || zero_litter=0
 fi
-litter_status="$(git -C "$LIFECYCLE_DIR" status --porcelain -- . ':(exclude)_goals/breaker-state.json')"
+litter_status="$(git -C "$LIFECYCLE_DIR" status --porcelain -- . ':(exclude)_goals/breaker-state.json' ':(exclude)_goals/backlog.md')"
 [[ -n "$litter_status" ]] && zero_litter=0
 
 worktree_list_count="$(git -C "$LIFECYCLE_DIR" worktree list | wc -l)"
@@ -1618,7 +1702,7 @@ STUBEOF
 chmod +x "$PREFLIGHT_I_DIR/_loop/stub-never.sh"
 
 preflight_i_log="$TMP/preflight-i-run.log"
-( cd "$PREFLIGHT_I_DIR" && LOOP_WORKTREE=1 LOOP_CLI="$PREFLIGHT_I_DIR/_loop/stub-never.sh" \
+( cd "$PREFLIGHT_I_DIR" && env -u LOOP_SLOTS LOOP_WORKTREE=1 LOOP_CLI="$PREFLIGHT_I_DIR/_loop/stub-never.sh" \
     bash ./_loop/loop.sh 1 ) >"$preflight_i_log" 2>&1
 preflight_i_rc=$?
 
@@ -1660,7 +1744,7 @@ STUBEOF
 chmod +x "$PREFLIGHT_II_DIR/_loop/stub-never.sh"
 
 preflight_ii_log="$TMP/preflight-ii-run.log"
-( cd "$PREFLIGHT_II_DIR" && LOOP_WORKTREE=1 LOOP_CLI="$PREFLIGHT_II_DIR/_loop/stub-never.sh" \
+( cd "$PREFLIGHT_II_DIR" && env -u LOOP_SLOTS LOOP_WORKTREE=1 LOOP_CLI="$PREFLIGHT_II_DIR/_loop/stub-never.sh" \
     bash ./_loop/loop.sh 1 ) >"$preflight_ii_log" 2>&1
 preflight_ii_rc=$?
 
@@ -1705,7 +1789,7 @@ STUBEOF
 chmod +x "$ABNORMAL_DIR/_loop/stub-abnormal.sh"
 
 abnormal_log="$TMP/abnormal-run.log"
-( cd "$ABNORMAL_DIR" && LOOP_WORKTREE=1 LOOP_CLI="$ABNORMAL_DIR/_loop/stub-abnormal.sh" \
+( cd "$ABNORMAL_DIR" && env -u LOOP_SLOTS LOOP_WORKTREE=1 LOOP_CLI="$ABNORMAL_DIR/_loop/stub-abnormal.sh" \
     bash ./_loop/loop.sh 1 ) >"$abnormal_log" 2>&1
 abnormal_rc=$?
 
@@ -1731,18 +1815,27 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 47: available_slots accounting + refill-on-exit, structural (block-scoped,
-# each anchored at its own site, matching the assertion-18/34 coupling
-# precedent). Behavioral coverage at N=1 is implicit throughout 41-46/50-52 --
-# every one of those runs completes its dispatched iteration(s) via this
-# exact accounting.
-# ---------------------------------------------------------------------------
-t47_accounting_check() { # available_slots expression + negative-clamp, block-scoped
+# 47 (RE-ANCHORED, task 05 -- STORY-011 restructure note): the STORY-010
+# accounting shape this assertion originally pinned (an explicit
+# `available_slots=$(( EFFECTIVE_SLOTS - active_slots ))` expression with its
+# own negative-clamp) no longer exists in the canonical driver: task 02's
+# fill/poll/reap/integrate/refill restructure replaced it with a per-row FILL
+# loop that tests `slot_state[SLOT]` directly, row by row, so an
+# over-subscription is impossible BY CONSTRUCTION (a "running" row is simply
+# skipped -- there is no separate counter left to go negative). Meaning
+# preserved: this still proves "one dispatch per idle row, never
+# over-subscribed" -- now via the per-row gate instead of a counter+clamp --
+# plus the SAME refill-on-slot-exit site as before (active_slots decrement +
+# 'refill trigger' comment, byte-unchanged).
+t47_accounting_check() { # per-row running-skip gate, block-scoped at the FILL
+  # loop's own running-check (NOT the shared `for ((SLOT = 0; ...))` header,
+  # which also appears at the slot-table init/poll/reap loops -- anchoring
+  # there would grab the wrong occurrence via `head -1`).
   local f="$1" ln window
-  ln="$(grep -n 'available_slots=\$(( EFFECTIVE_SLOTS - active_slots ))' "$f" | head -1 | cut -d: -f1)"
+  ln="$(grep -n 'if \[\[ "\${slot_state\[SLOT\]}" == "running" \]\]; then' "$f" | head -1 | cut -d: -f1)"
   [[ -z "$ln" ]] && return 1
-  window="$(sed -n "${ln},$((ln + 4))p" "$f")"
-  grep -qE 'available_slots < 0' <<< "$window"
+  window="$(sed -n "${ln},$((ln + 3))p" "$f")"
+  grep -qF 'slot_state[SLOT]' <<< "$window" && grep -qF 'continue' <<< "$window"
 }
 t47_refill_check() { # refill-on-slot-exit, block-scoped at the decrement site
   local f="$1" ln window
@@ -1752,9 +1845,9 @@ t47_refill_check() { # refill-on-slot-exit, block-scoped at the decrement site
   grep -qF 'refill trigger' <<< "$window"
 }
 if t47_accounting_check "$LOOP_SH" && t47_refill_check "$LOOP_SH"; then
-  report PASS "47: available_slots/refill -- accounting expression (EFFECTIVE_SLOTS - active_slots) + negative-clamp, and refill-on-slot-exit (active_slots decrement + 'refill trigger' comment), both present in canonical loop.sh, block-scoped"
+  report PASS "47: per-row FILL gate (slot_state[SLOT]=='running' -> continue, over-subscription impossible by construction -- re-anchored from STORY-010's explicit available_slots counter, meaning preserved) + refill-on-slot-exit (active_slots decrement + 'refill trigger' comment), both present in canonical loop.sh, block-scoped"
 else
-  report FAIL "47: available_slots/refill" \
+  report FAIL "47: per-row FILL gate / refill" \
     "accounting=$(t47_accounting_check "$LOOP_SH" && echo ok || echo FAIL) refill=$(t47_refill_check "$LOOP_SH" && echo ok || echo FAIL)"
 fi
 
@@ -1777,16 +1870,22 @@ echo "slot progress" > slot-progress.txt
 git add slot-progress.txt
 git commit -qm "slot-side commit (never integrated)"
 # Simulate an EXTERNAL, concurrent commit landing on the sandbox's MAIN tree
-# (a separate checkout of the SAME repo, not this worktree) while the slot
-# was running -- this is what makes the eventual ff-only merge non-fast-forward.
-git -C "$FFONLY_DIR" commit --allow-empty -qm "external main-tree commit (concurrent)"
-echo "no sentinel this iteration"
+# that modifies the SAME file as the slot -- this creates a rebase CONFLICT
+# when the driver attempts the pre-merge rebase (judged deviation, task-02
+# accepted) so the ff-only merge fails. Uses non-empty content to guarantee
+# a real content conflict (not just an --allow-empty commit, which would
+# rebase cleanly and make the merge succeed).
+echo "conflict from main" > "$FFONLY_DIR/slot-progress.txt"
+git -C "$FFONLY_DIR" add slot-progress.txt
+git -C "$FFONLY_DIR" commit -qm "external main-tree commit (concurrent, conflicting)"
+# STORY-011: dispatched slot must emit ITERATION: <id> <verdict> (not sentinel)
+echo "ITERATION: STORY-101 passed"
 exit 0
 STUBEOF
 chmod +x "$FFONLY_DIR/_loop/stub-ffonly.sh"
 
 ffonly_log="$TMP/ffonly-run.log"
-( cd "$FFONLY_DIR" && LOOP_WORKTREE=1 LOOP_CLI="$FFONLY_DIR/_loop/stub-ffonly.sh" \
+( cd "$FFONLY_DIR" && env -u LOOP_SLOTS LOOP_WORKTREE=1 LOOP_CLI="$FFONLY_DIR/_loop/stub-ffonly.sh" \
     bash ./_loop/loop.sh 1 ) >"$ffonly_log" 2>&1
 ffonly_rc=$?
 
@@ -1825,7 +1924,7 @@ STUBEOF
 chmod +x "$CB0_DIR/_loop/stub-cb0.sh"
 
 cb0_log="$TMP/cb0-run.log"
-( cd "$CB0_DIR" && LOOP_WORKTREE=1 LOOP_CLI="$CB0_DIR/_loop/stub-cb0.sh" \
+( cd "$CB0_DIR" && env -u LOOP_SLOTS LOOP_WORKTREE=1 LOOP_CLI="$CB0_DIR/_loop/stub-cb0.sh" \
     bash ./_loop/loop.sh 1 ) >"$cb0_log" 2>&1
 cb0_rc=$?
 
@@ -1872,7 +1971,8 @@ STUBEOF
 chmod +x "$CB1_CANON_DIR/_loop/stub-cb1.sh"
 
 cb1c_log="$TMP/cb1-canonical-run.log"
-( cd "$CB1_CANON_DIR" && LOOP_CLI="$CB1_CANON_DIR/_loop/stub-cb1.sh" bash ./_loop/loop.sh 5 ) \
+( cd "$CB1_CANON_DIR" && env -u LOOP_SLOTS -u LOOP_WORKTREE \
+    LOOP_CLI="$CB1_CANON_DIR/_loop/stub-cb1.sh" bash ./_loop/loop.sh 5 ) \
   >"$cb1c_log" 2>&1
 cb1c_rc=$?
 
@@ -1891,7 +1991,7 @@ fi
 # -> the per-slot same-error counter reaches 5 -> exit 3.
 # ---------------------------------------------------------------------------
 CB2_DIR="$TMP/cb2-sandbox"
-make_sandbox "$CB2_DIR" ".claude" 1 1
+make_sandbox "$CB2_DIR" ".claude" 1 1 2
 cb2_counter_file="$TMP/cb2-counter.txt"
 rm -f "$cb2_counter_file"
 
@@ -1911,7 +2011,8 @@ STUBEOF
 chmod +x "$CB2_DIR/_loop/stub-cb2.sh"
 
 cb2_log="$TMP/cb2-run.log"
-( cd "$CB2_DIR" && LOOP_CLI="$CB2_DIR/_loop/stub-cb2.sh" bash ./_loop/loop.sh 6 ) >"$cb2_log" 2>&1
+( cd "$CB2_DIR" && env -u LOOP_SLOTS -u LOOP_WORKTREE \
+    LOOP_CLI="$CB2_DIR/_loop/stub-cb2.sh" bash ./_loop/loop.sh 6 ) >"$cb2_log" 2>&1
 cb2_rc=$?
 
 if [[ "$cb2_rc" -eq 3 ]] && grep -qF 'circuit breaker: same error 5 times' "$cb2_log" \
@@ -1928,7 +2029,7 @@ fi
 # run must NOT exit 3 (it exhausts MAX_ITER=5 and exits 1).
 # ---------------------------------------------------------------------------
 CB2_CTRL_DIR="$TMP/cb2-control-sandbox"
-make_sandbox "$CB2_CTRL_DIR" ".claude" 1 1
+make_sandbox "$CB2_CTRL_DIR" ".claude" 1 1 2
 cb2_ctrl_counter_file="$TMP/cb2-control-counter.txt"
 rm -f "$cb2_ctrl_counter_file"
 
@@ -1952,7 +2053,8 @@ STUBEOF
 chmod +x "$CB2_CTRL_DIR/_loop/stub-cb2-control.sh"
 
 cb2_ctrl_log="$TMP/cb2-control-run.log"
-( cd "$CB2_CTRL_DIR" && LOOP_CLI="$CB2_CTRL_DIR/_loop/stub-cb2-control.sh" bash ./_loop/loop.sh 5 ) \
+( cd "$CB2_CTRL_DIR" && env -u LOOP_SLOTS -u LOOP_WORKTREE \
+    LOOP_CLI="$CB2_CTRL_DIR/_loop/stub-cb2-control.sh" bash ./_loop/loop.sh 5 ) \
   >"$cb2_ctrl_log" 2>&1
 cb2_ctrl_rc=$?
 
@@ -1977,7 +2079,7 @@ t53_slots_check() { # $env:LOOP_SLOTS read + clamp, block-scoped
   grep -qF '$Slots -lt 1' <<< "$window" && grep -qF '$Slots -gt 3' <<< "$window"
 }
 t53_worktree_check() { grep -qF '$env:LOOP_WORKTREE' "$1"; }
-t53_guard_msg_check() { grep -qF 'LOOP_SLOTS>1 requires driver-owned dispatch' "$1"; }
+t53_guard_msg_check() { grep -qF 'LOOP_SLOTS>1 requires LOOP_WORKTREE=1' "$1"; }
 t53_preflight_check() { # two-path preflight, block-scoped
   local f="$1" ln window
   ln="$(grep -n 'backlogOk = Test-Path' "$f" | head -1 | cut -d: -f1)"
@@ -1985,11 +2087,19 @@ t53_preflight_check() { # two-path preflight, block-scoped
   window="$(sed -n "${ln},$((ln + 6))p" "$f")"
   grep -qF 'ideDirOk = Test-Path' <<< "$window" && grep -qF 'PathType Container' <<< "$window"
 }
-t53_startjob_wait_check() { # Start-Job/process wait, block-scoped
+t53_startjob_wait_check() { # Start-Job dispatch + Wait-Job reap -- RE-ANCHORED
+  # (task 05, STORY-011 restructure note): task 03's fill/reap split moved
+  # Wait-Job out of Start-Job's own neighborhood (dispatch and reap are now
+  # separate functions, mirroring the bash twin's _loop_fill_slot/
+  # _loop_reap_slot split), so a small fixed-line window from Start-Job no
+  # longer reaches it. Re-scoped to each mechanic's OWN function: Start-Job
+  # anywhere (dispatch exists) + Wait-Job inside Invoke-LoopReapSlot's own
+  # body (reap actually waits for the job).
   local f="$1" ln window
-  ln="$(grep -n 'Start-Job -ScriptBlock' "$f" | head -1 | cut -d: -f1)"
+  grep -qF 'Start-Job -ScriptBlock' "$f" || return 1
+  ln="$(grep -n 'function Invoke-LoopReapSlot' "$f" | head -1 | cut -d: -f1)"
   [[ -z "$ln" ]] && return 1
-  window="$(sed -n "${ln},$((ln + 30))p" "$f")"
+  window="$(sed -n "${ln},$((ln + 40))p" "$f")"
   grep -qF 'Wait-Job' <<< "$window"
 }
 t53_removal_ordering_check() { # wait-then-remove comment + --force/prune fallback
@@ -2000,24 +2110,1295 @@ t53_removal_ordering_check() { # wait-then-remove comment + --force/prune fallba
   grep -qF 'Wait-Job' <<< "$window" || return 1
   grep -qF -- '--force' "$f" && grep -qF 'prune' "$f"
 }
-t53_abnormal_check() { # abnormal-exit branch, block-scoped
+t53_abnormal_check() { # abnormal-exit branch, block-scoped -- anchor updated
+  # (task 05): the message interpolates $Slot BETWEEN "slot" and "exited"
+  # ("slot $Slot exited abnormally"), so the old literal 'slot exited
+  # abnormally' (no variable) never matches; anchored on the
+  # variable-agnostic remainder 'exited abnormally' instead, window widened
+  # to reach the retainedBranches append a few lines later.
   local f="$1" ln window
-  ln="$(grep -n 'slot exited abnormally' "$f" | head -1 | cut -d: -f1)"
+  ln="$(grep -n 'exited abnormally' "$f" | head -1 | cut -d: -f1)"
   [[ -z "$ln" ]] && return 1
-  window="$(sed -n "${ln},$((ln + 6))p" "$f")"
+  window="$(sed -n "${ln},$((ln + 10))p" "$f")"
   grep -qF 'retainedBranches +=' <<< "$window"
 }
 t53_capacity_check() { grep -qF 'Capacity-contention rationale' "$1"; }
 t53_exit5_check() { grep -qF 'Exit 5 = setup or integration failure' "$1"; }
+# New mechanics (STORY-011): block-scoped checks anchored on each construct's
+# own function/call site (not whole-file single-token greps).
+t53_parser_check() { # ConvertTo-LoopBacklogEntry: function defined with param block
+  local f="$1" ln window
+  ln="$(grep -n 'function ConvertTo-LoopBacklogEntry' "$f" | head -1 | cut -d: -f1)"
+  [[ -z "$ln" ]] && return 1
+  window="$(sed -n "${ln},$((ln + 5))p" "$f")"
+  grep -qF 'param(' <<< "$window"
+}
+t53_admission_fn_check() { # Select-LoopStory: function + conflict calls inside body
+  local f="$1" ln window
+  ln="$(grep -n 'function Select-LoopStory' "$f" | head -1 | cut -d: -f1)"
+  [[ -z "$ln" ]] && return 1
+  window="$(sed -n "${ln},$((ln + 40))p" "$f")"
+  grep -qF 'Test-LoopWritesConflict' <<< "$window" && grep -qF 'Test-LoopHotspotConflict' <<< "$window"
+}
+t53_claim_hashtable_check() { # $slots[Slot].Story and .Writes assigned on consecutive rows
+  local f="$1" ln window
+  ln="$(grep -n '\$slots\[.*\]\.Story = ' "$f" | head -1 | cut -d: -f1)"
+  [[ -z "$ln" ]] && return 1
+  window="$(sed -n "${ln},$((ln + 3))p" "$f")"
+  grep -qF '.Story =' <<< "$window" && grep -qF '.Writes =' <<< "$window"
+}
+t53_substitution_check() { # Replace('%%STORY_ID%%'...) and Replace('%%OUTBOX_DIR%%'...) at substitution site
+  local f="$1" ln window
+  ln="$(grep -n "Replace.*'%%STORY_ID%%'" "$f" | head -1 | cut -d: -f1)"
+  [[ -z "$ln" ]] && return 1
+  window="$(sed -n "${ln},$((ln + 2))p" "$f")"
+  grep -qF '%%STORY_ID%%' <<< "$window" && grep -qF '%%OUTBOX_DIR%%' <<< "$window"
+}
+t53_integrator_mismatch_check() { # $mismatch = $true scoped to ITERATION-validation block (anchored on $mismatch = $false)
+  local f="$1" ln window
+  ln="$(grep -n '\$mismatch = \$false' "$f" | head -1 | cut -d: -f1)"
+  [[ -z "$ln" ]] && return 1
+  window="$(sed -n "${ln},$((ln + 20))p" "$f")"
+  grep -qF '$mismatch = $true' <<< "$window"
+}
+t53_subset_check() { # Get-LoopSubsetViolation at its pre-merge call site, gated on $mismatch
+  local f="$1" ln window
+  ln="$(grep -n 'Get-LoopSubsetViolation.*-Tree' "$f" | head -1 | cut -d: -f1)"
+  [[ -z "$ln" ]] && return 1
+  window="$(sed -n "$((ln - 2)),$((ln + 2))p" "$f")"
+  grep -qF 'Get-LoopSubsetViolation' <<< "$window" && grep -qF '$mismatch' <<< "$window"
+}
+t53_prune_gate_check() { # $pruneRc = $LASTEXITCODE after git worktree prune
+  local f="$1" ln window
+  ln="$(grep -n '\$pruneRc = \$LASTEXITCODE' "$f" | head -1 | cut -d: -f1)"
+  [[ -z "$ln" ]] && return 1
+  window="$(sed -n "$((ln - 1)),$((ln + 3))p" "$f")"
+  grep -qF 'worktree prune' <<< "$window" && grep -qF '$pruneRc' <<< "$window"
+}
+t53_guard_replacement_check() { # $LoopSlotsExplicit = $env:LOOP_SLOTS, coupled to guard message in same block
+  local f="$1" ln window
+  ln="$(grep -n '\$LoopSlotsExplicit = \$env:LOOP_SLOTS' "$f" | head -1 | cut -d: -f1)"
+  [[ -z "$ln" ]] && return 1
+  window="$(sed -n "${ln},$((ln + 50))p" "$f")"
+  grep -qF '$LoopSlotsExplicit' <<< "$window" && grep -qF 'LOOP_SLOTS>1' <<< "$window"
+}
 
 if t53_slots_check "$LOOP_PS1" && t53_worktree_check "$LOOP_PS1" && t53_guard_msg_check "$LOOP_PS1" \
    && t53_preflight_check "$LOOP_PS1" && t53_startjob_wait_check "$LOOP_PS1" \
    && t53_removal_ordering_check "$LOOP_PS1" && t53_abnormal_check "$LOOP_PS1" \
-   && t53_capacity_check "$LOOP_PS1" && t53_exit5_check "$LOOP_PS1"; then
-  report PASS "53: ps1 structural parity -- \$env:LOOP_SLOTS+clamp, \$env:LOOP_WORKTREE, the STORY-011 guard message, the two-path preflight (backlogOk/ideDirOk, Container test), Start-Job/Wait-Job, removal ordering (wait-then-remove + --force/prune fallback), the abnormal-exit branch (retainedBranches +=), the capacity-contention comment, and the appended exit-5 sentence all present in canonical loop.ps1 -- not runtime-verified, pwsh absent"
+   && t53_capacity_check "$LOOP_PS1" && t53_exit5_check "$LOOP_PS1" \
+   && t53_parser_check "$LOOP_PS1" && t53_admission_fn_check "$LOOP_PS1" \
+   && t53_claim_hashtable_check "$LOOP_PS1" && t53_substitution_check "$LOOP_PS1" \
+   && t53_integrator_mismatch_check "$LOOP_PS1" && t53_subset_check "$LOOP_PS1" \
+   && t53_prune_gate_check "$LOOP_PS1" && t53_guard_replacement_check "$LOOP_PS1"; then
+  report PASS "53: ps1 structural parity -- \$env:LOOP_SLOTS+clamp, \$env:LOOP_WORKTREE, the STORY-011 guard message, the two-path preflight (backlogOk/ideDirOk, Container test), Start-Job/Wait-Job, removal ordering (wait-then-remove + --force/prune fallback), the abnormal-exit branch (retainedBranches +=), the capacity-contention comment, the appended exit-5 sentence, AND new mechanics (parser ConvertTo-LoopBacklogEntry, admission Select-LoopStory, claim-hashtable \$slots[...].Story, %%STORY_ID%%/%%OUTBOX_DIR%% substitution, integrator \$mismatch, subset-check Get-LoopSubsetViolation, prune-gate \$pruneRc, guard-replacement \$LoopSlotsExplicit) all present in canonical loop.ps1 -- not runtime-verified, pwsh absent"
 else
   report FAIL "53: ps1 structural parity" \
-    "slots=$(t53_slots_check "$LOOP_PS1" && echo ok || echo FAIL) worktree=$(t53_worktree_check "$LOOP_PS1" && echo ok || echo FAIL) guard_msg=$(t53_guard_msg_check "$LOOP_PS1" && echo ok || echo FAIL) preflight=$(t53_preflight_check "$LOOP_PS1" && echo ok || echo FAIL) startjob_wait=$(t53_startjob_wait_check "$LOOP_PS1" && echo ok || echo FAIL) removal_ordering=$(t53_removal_ordering_check "$LOOP_PS1" && echo ok || echo FAIL) abnormal=$(t53_abnormal_check "$LOOP_PS1" && echo ok || echo FAIL) capacity=$(t53_capacity_check "$LOOP_PS1" && echo ok || echo FAIL) exit5=$(t53_exit5_check "$LOOP_PS1" && echo ok || echo FAIL)"
+    "slots=$(t53_slots_check "$LOOP_PS1" && echo ok || echo FAIL) worktree=$(t53_worktree_check "$LOOP_PS1" && echo ok || echo FAIL) guard_msg=$(t53_guard_msg_check "$LOOP_PS1" && echo ok || echo FAIL) preflight=$(t53_preflight_check "$LOOP_PS1" && echo ok || echo FAIL) startjob_wait=$(t53_startjob_wait_check "$LOOP_PS1" && echo ok || echo FAIL) removal_ordering=$(t53_removal_ordering_check "$LOOP_PS1" && echo ok || echo FAIL) abnormal=$(t53_abnormal_check "$LOOP_PS1" && echo ok || echo FAIL) capacity=$(t53_capacity_check "$LOOP_PS1" && echo ok || echo FAIL) exit5=$(t53_exit5_check "$LOOP_PS1" && echo ok || echo FAIL) parser=$(t53_parser_check "$LOOP_PS1" && echo ok || echo FAIL) admission=$(t53_admission_fn_check "$LOOP_PS1" && echo ok || echo FAIL) claim=$(t53_claim_hashtable_check "$LOOP_PS1" && echo ok || echo FAIL) subst=$(t53_substitution_check "$LOOP_PS1" && echo ok || echo FAIL) mismatch=$(t53_integrator_mismatch_check "$LOOP_PS1" && echo ok || echo FAIL) subset=$(t53_subset_check "$LOOP_PS1" && echo ok || echo FAIL) prune=$(t53_prune_gate_check "$LOOP_PS1" && echo ok || echo FAIL) guard_rep=$(t53_guard_replacement_check "$LOOP_PS1" && echo ok || echo FAIL)"
+fi
+
+# ===========================================================================
+# 54-70+: STORY-011 new driver mechanics -- selection/prompt pinning/guard
+# replacement/structural/chain[fallbackIndex]/mid-path glob/refused-ids/
+# integrator/admission(a-e)/subset-check. Every mechanic has a behavioral or
+# structural assertion; mutation-proven where the task file requires it.
+# ===========================================================================
+
+# ---------------------------------------------------------------------------
+# 54: Selection -- priority order, eligibility filter, attempts incremented
+# driver-side BEFORE stub runs, passes:true driver-written. Sandbox (main-
+# tree mode) with 4 stories: STORY-101 (priority=1, eligible), STORY-102
+# (priority=2, passes=true -> ineligible), STORY-103 (priority=3,
+# attempts=3 -> ineligible), STORY-104 (priority=4, eligible).
+# MAX_ITER=1 to dispatch exactly one story; assert STORY-101 dispatched.
+# ---------------------------------------------------------------------------
+SEL_DIR="$TMP/selection-sandbox"
+rm -rf "$SEL_DIR"; mkdir -p "$SEL_DIR"
+sandbox_write_loop "$SEL_DIR" ".claude"
+(
+  cd "$SEL_DIR"
+  git init -q
+  git config user.email test@example.com
+  git config user.name "sel-test"
+  mkdir -p _goals .claude
+  cat > _goals/backlog.md << 'EOF'
+# backlog
+
+## STORY-101: first eligible by priority
+- priority: 1
+- passes: false
+- attempts: 0
+- blocked: false
+
+## STORY-102: passes=true, ineligible
+- priority: 2
+- passes: true
+- attempts: 1
+- blocked: false
+
+## STORY-103: attempts=3, ineligible
+- priority: 3
+- passes: false
+- attempts: 3
+- blocked: false
+
+## STORY-104: second eligible (lower priority)
+- priority: 4
+- passes: false
+- attempts: 0
+- blocked: false
+EOF
+  printf 'placeholder\n' > .claude/.keep
+  : > .gitignore
+  git add -A
+  git commit -qm init
+)
+
+sel_dispatched_file="$TMP/sel-dispatched.txt"
+sel_attempts_file="$TMP/sel-attempts-at-dispatch.txt"
+rm -f "$sel_dispatched_file" "$sel_attempts_file"
+cat > "$SEL_DIR/_loop/stub-sel.sh" <<STUBEOF
+#!/usr/bin/env bash
+# Record story id; read attempts from backlog AT DISPATCH TIME (driver increments
+# attempts at claim, before the stub runs -- this proves the ordering).
+story_id="\$(echo "\$1" | grep -oE 'STORY-[0-9]+' | head -1)"
+echo "\$story_id" >> "$sel_dispatched_file"
+# cwd == sandbox root in main-tree mode; _goals/backlog.md is accessible directly
+grep -A5 "## \$story_id" _goals/backlog.md 2>/dev/null | grep -oE 'attempts: [0-9]+' | head -1 \
+  >> "$sel_attempts_file"
+echo "ITERATION: \$story_id passed"
+exit 0
+STUBEOF
+chmod +x "$SEL_DIR/_loop/stub-sel.sh"
+
+( cd "$SEL_DIR" && env -u LOOP_SLOTS -u LOOP_WORKTREE \
+    LOOP_CLI="$SEL_DIR/_loop/stub-sel.sh" bash ./_loop/loop.sh 1 ) >/dev/null 2>&1
+
+dispatched_id="$(cat "$sel_dispatched_file" 2>/dev/null | head -1)"
+priority_ok=0
+[[ "$dispatched_id" == "STORY-101" ]] && priority_ok=1
+attempts_ok=0
+grep -A5 '## STORY-101' "$SEL_DIR/_goals/backlog.md" 2>/dev/null | grep -q 'attempts: 1' \
+  && attempts_ok=1
+passes_ok=0
+grep -A5 '## STORY-101' "$SEL_DIR/_goals/backlog.md" 2>/dev/null | grep -q 'passes: true' \
+  && passes_ok=1
+elig_filter_ok=0
+[[ "$dispatched_id" != "STORY-102" && "$dispatched_id" != "STORY-103" ]] && elig_filter_ok=1
+# Ordering proof: stub saw attempts: 1 AT dispatch time (claim precedes stub invocation)
+attempts_before_dispatch_ok=0
+grep -qF 'attempts: 1' "$sel_attempts_file" 2>/dev/null && attempts_before_dispatch_ok=1
+
+if [[ "$priority_ok" -eq 1 && "$attempts_ok" -eq 1 && "$passes_ok" -eq 1 && "$elig_filter_ok" -eq 1 \
+      && "$attempts_before_dispatch_ok" -eq 1 ]]; then
+  report PASS "54: selection (priority order + eligibility filter + attempts/passes driver-written) -- STORY-101 (priority=1) dispatched, STORY-102 (passes=true) and STORY-103 (attempts=3) correctly skipped, stub observed attempts:1 AT dispatch time (proves claim-before-run ordering), passes:true written after success"
+else
+  report FAIL "54: selection" \
+    "priority_ok=$priority_ok attempts_ok=$attempts_ok passes_ok=$passes_ok elig_filter_ok=$elig_filter_ok attempts_before_dispatch_ok=$attempts_before_dispatch_ok dispatched='$dispatched_id'"
+fi
+
+# ---------------------------------------------------------------------------
+# 55: Prompt pinning -- stub receives the substituted story id + outbox dir;
+# assert both %%STORY_ID%% and %%OUTBOX_DIR%% are ABSENT in the received
+# prompt (substitution actually happened), and that the actual story id IS
+# present. Uses the same selection sandbox (post-54 run has STORY-101 done;
+# STORY-104 is the only eligible story for a second run, proving the
+# substitution uses the actual dispatched story, not a static token).
+# ---------------------------------------------------------------------------
+PINNING_DIR="$TMP/pinning-sandbox"
+rm -rf "$PINNING_DIR"; mkdir -p "$PINNING_DIR"
+sandbox_write_loop "$PINNING_DIR" ".claude"
+(
+  cd "$PINNING_DIR"
+  git init -q
+  git config user.email test@example.com
+  git config user.name "pinning-test"
+  mkdir -p _goals .claude
+  {
+    printf '# backlog\n\n## STORY-201: pinning test story\n'
+    printf -- '- priority: 1\n- passes: false\n- attempts: 0\n- blocked: false\n'
+  } > _goals/backlog.md
+  printf 'placeholder\n' > .claude/.keep
+  : > .gitignore
+  git add -A
+  git commit -qm init
+)
+
+pinning_received="$TMP/pinning-received-prompt.txt"
+rm -f "$pinning_received"
+cat > "$PINNING_DIR/_loop/stub-pinning.sh" <<STUBEOF
+#!/usr/bin/env bash
+# Write the full received prompt to a file for the harness to inspect
+printf '%s' "\$1" > "$pinning_received"
+story_id="\$(echo "\$1" | grep -oE 'STORY-[0-9]+' | head -1)"
+echo "ITERATION: \$story_id passed"
+exit 0
+STUBEOF
+chmod +x "$PINNING_DIR/_loop/stub-pinning.sh"
+
+( cd "$PINNING_DIR" && env -u LOOP_SLOTS -u LOOP_WORKTREE \
+    LOOP_CLI="$PINNING_DIR/_loop/stub-pinning.sh" bash ./_loop/loop.sh 1 ) >/dev/null 2>&1
+
+pin_no_story_token=1; pin_no_outbox_token=1; pin_has_story_id=0; pin_has_outbox_path=0
+if [[ -f "$pinning_received" ]]; then
+  received_prompt="$(cat "$pinning_received")"
+  grep -qF '%%STORY_ID%%' "$pinning_received" && pin_no_story_token=0
+  grep -qF '%%OUTBOX_DIR%%' "$pinning_received" && pin_no_outbox_token=0
+  grep -qF 'STORY-201' "$pinning_received" && pin_has_story_id=1
+  grep -qE '/tmp/' "$pinning_received" && pin_has_outbox_path=1
+fi
+if [[ "$pin_no_story_token" -eq 1 && "$pin_no_outbox_token" -eq 1 \
+      && "$pin_has_story_id" -eq 1 && "$pin_has_outbox_path" -eq 1 ]]; then
+  report PASS "55: prompt pinning -- %%STORY_ID%% and %%OUTBOX_DIR%% absent in received prompt (substitution happened), STORY-201 id and actual outbox path present"
+else
+  report FAIL "55: prompt pinning" \
+    "no_story_token=$pin_no_story_token no_outbox_token=$pin_no_outbox_token has_story_id=$pin_has_story_id has_outbox_path=$pin_has_outbox_path"
+fi
+
+# ---------------------------------------------------------------------------
+# 56: Guard replacement -- LOOP_SLOTS=2 + LOOP_WORKTREE=1 -> effective 2,
+# banner "slots: 2 (mode: worktree)", no guard warning. Completes the guard-
+# replacement coverage (37-40 cover the flag=0 and unset cases; this is the
+# flag=1 N>1 ACTIVATION case — guard does NOT apply when WORKTREE=1).
+# ---------------------------------------------------------------------------
+( cd "$CLAMP_DIR" && LOOP_SLOTS=2 LOOP_WORKTREE=1 bash ./_loop/loop.sh 0 ) \
+  >"$TMP/guard56_out.txt" 2>"$TMP/guard56_err.txt"
+guard56_out="$(cat "$TMP/guard56_out.txt")"
+guard56_err="$(cat "$TMP/guard56_err.txt")"
+if grep -qF 'slots: 2 (mode: worktree)' <<< "$guard56_out" \
+   && ! grep -qF 'requires LOOP_WORKTREE=1' <<< "$guard56_err"; then
+  report PASS "56: guard replacement -- LOOP_SLOTS=2 + LOOP_WORKTREE=1 -> effective 2, banner 'slots: 2 (mode: worktree)', no guard warning (N>1 activation path, guard does not fire)"
+else
+  report FAIL "56: guard replacement (LOOP_SLOTS=2 + LOOP_WORKTREE=1)" \
+    "stdout='$guard56_out' stderr='$guard56_err'"
+fi
+
+# ---------------------------------------------------------------------------
+# 57: §3.2-part-4 structural -- no breaker_* call inside the child subshell
+# block (driver/child boundary pin: the child only cd's + runs the CLI, the
+# breaker calls live OUTSIDE at driver level). Block-scoped on the child
+# subshell's CLI invocation line in canonical loop.sh and canonical loop.ps1
+# (the Start-Job scriptblock is also breaker-free by construction).
+# ---------------------------------------------------------------------------
+t57_no_breaker_in_bash_child() {
+  local f="$1" ln window
+  ln="$(grep -n '\$LOOP_CLI \$model_arg "\$p" > "\$out_file"' "$f" | head -1 | cut -d: -f1)"
+  [[ -z "$ln" ]] && return 1
+  window="$(sed -n "$((ln - 3)),$((ln + 3))p" "$f")"
+  ! grep -qF 'breaker_' <<< "$window"
+}
+t57_no_breaker_in_ps1_job() {
+  # The Start-Job scriptblock in loop.ps1 should not contain breaker calls
+  local f="$1" ln window
+  ln="$(grep -n 'Start-Job -ScriptBlock' "$f" | head -1 | cut -d: -f1)"
+  [[ -z "$ln" ]] && return 1
+  window="$(sed -n "${ln},$((ln + 10))p" "$f")"
+  ! grep -qF 'breaker' <<< "$window"
+}
+if t57_no_breaker_in_bash_child "$LOOP_SH" && t57_no_breaker_in_ps1_job "$LOOP_PS1"; then
+  report PASS "57: §3.2-part-4 structural -- no breaker_* call inside the bash child subshell (CLI-invocation window) and no breaker call inside the ps1 Start-Job scriptblock; boundary discipline intact after dispatch restructure"
+else
+  report FAIL "57: §3.2-part-4 structural" \
+    "bash_child=$(t57_no_breaker_in_bash_child "$LOOP_SH" && echo ok || echo FAIL) ps1_job=$(t57_no_breaker_in_ps1_job "$LOOP_PS1" && echo ok || echo FAIL)"
+fi
+
+# ---------------------------------------------------------------------------
+# 58 + 58-mutation-proof: chain[fallbackIndex] fixture (standing note, attaches
+# here). A valid OPEN state file with currentModel KEY ABSENT + fallbackIndex=2
+# (non-zero) -> fail-safe derives chain[2] (not chain[0]).
+# Mutation-prove: a blind-chain[0] mutant of a COPY of breaker.sh (where the
+# fail-safe always uses entries[0] regardless of fallbackIndex) -> fixture
+# model becomes "modelA" (chain[0]), not "modelC" (chain[2]) -> assertion FAILS
+# on the mutant, confirming the guard is load-bearing.
+# ---------------------------------------------------------------------------
+S58="$TMP/chainfix-absent-model.json"
+{
+  printf '{\n'
+  printf '"state": "OPEN",\n'
+  printf '"chain": "modelA,modelB,modelC,modelD",\n'
+  printf '"fallbackIndex": 2,\n'
+  printf '"cooldownSeconds": 600,\n'
+  printf '"openedAt": 1000000,\n'
+  printf '"halfOpenSuccesses": 0,\n'
+  printf '"totalFallbacks": 3,\n'
+  printf '"totalRecoveries": 1\n'
+  printf '}\n'
+} > "$S58"
+T58=2000000
+stderr58="$TMP/58-stderr.txt"
+breaker_load "$S58" "modelA,modelB,modelC,modelD" "$T58" 2>"$stderr58"
+model58="$(_breaker_get "$S58" currentModel)"
+warn_count58="$(wc -l < "$stderr58")"
+
+if [[ "$model58" == "modelC" && "$warn_count58" -eq 1 \
+      && "$(grep -c 'failing SAFE to OPEN' "$stderr58")" -eq 1 ]]; then
+  report PASS "58: chain[fallbackIndex] fixture -- valid OPEN state with currentModel KEY ABSENT + fallbackIndex=2 -> fail-safe derives chain[2]=modelC (not chain[0]=modelA), one warning 'failing SAFE to OPEN'"
+else
+  report FAIL "58: chain[fallbackIndex] fixture" \
+    "model=$model58(expected modelC) warn_count=$warn_count58(expected 1) stderr='$(cat "$stderr58")'"
+fi
+
+# 58-mutation-proof: blind-chain[0] mutant always uses entries[0], ignoring
+# fallbackIndex -> model becomes modelA, proving assertion 58 would FAIL.
+MUT58_BREAKER="$TMP/breaker-blind-chain0-mutant.sh"
+awk '
+  /if \(\( idx < \$\{#entries\[@\]\} \)\); then$/ && !done {
+    print "  if (( ${#entries[@]} > 0 )); then   # mutation: blind-chain[0] (always entries[0])"
+    print "    model=\"${entries[0]}\""
+    skip_lines = 2; done = 1; next
+  }
+  skip_lines > 0 { skip_lines--; next }
+  { print }
+' "$BREAKER_SH" > "$MUT58_BREAKER"
+chmod +x "$MUT58_BREAKER"
+S58_MUT="$TMP/chainfix-mut-model.json"
+{
+  printf '{\n'
+  printf '"state": "OPEN",\n'
+  printf '"chain": "modelA,modelB,modelC,modelD",\n'
+  printf '"fallbackIndex": 2,\n'
+  printf '"cooldownSeconds": 600,\n'
+  printf '"openedAt": 1000000,\n'
+  printf '"halfOpenSuccesses": 0,\n'
+  printf '"totalFallbacks": 3,\n'
+  printf '"totalRecoveries": 1\n'
+  printf '}\n'
+} > "$S58_MUT"
+bash -c "source '$MUT58_BREAKER'; breaker_load '$S58_MUT' 'modelA,modelB,modelC,modelD' '$T58'" \
+  2>/dev/null
+model58_mut="$(_breaker_get "$S58_MUT" currentModel)"
+mut58_flipped=0
+[[ "$model58_mut" != "modelC" ]] && mut58_flipped=1
+
+if [[ "$mut58_flipped" -eq 1 ]]; then
+  report PASS "58-mutation-proof: blind-chain[0] mutant of breaker.sh (COPY) -> fail-safe derives chain[0]=$model58_mut (NOT chain[2]=modelC) -- proves assertion 58 would FAIL on the mutant, making the guard load-bearing"
+else
+  report FAIL "58-mutation-proof: blind-chain[0] mutant" \
+    "expected model != modelC but got model=$model58_mut"
+fi
+
+# ---------------------------------------------------------------------------
+# 59: Mid-path glob rejection -- a story declaring `skills/*/SKILL.md` (a
+# `*` NOT in a trailing position) triggers a loud parse rejection naming
+# story+glob; the story runs alone (treated as writes-absent) -- not refused
+# or skipped, just admitted in isolation with a stderr note.
+# ---------------------------------------------------------------------------
+MIDGLOB_DIR="$TMP/midglob-sandbox"
+rm -rf "$MIDGLOB_DIR"; mkdir -p "$MIDGLOB_DIR"
+sandbox_write_loop "$MIDGLOB_DIR" ".claude"
+(
+  cd "$MIDGLOB_DIR"
+  git init -q
+  git config user.email test@example.com
+  git config user.name "midglob-test"
+  mkdir -p _goals .claude
+  {
+    printf '# backlog\n\n## STORY-301: mid-path glob story\n'
+    printf -- '- priority: 1\n- passes: false\n- attempts: 0\n- blocked: false\n'
+    printf -- '- writes: skills/*/SKILL.md\n'
+  } > _goals/backlog.md
+  printf 'placeholder\n' > .claude/.keep
+  : > .gitignore
+  git add -A
+  git commit -qm init
+)
+
+midglob_log="$TMP/midglob-run.log"
+cat > "$MIDGLOB_DIR/_loop/stub-midglob.sh" <<'STUBEOF'
+#!/usr/bin/env bash
+story_id="$(echo "$1" | grep -oE 'STORY-[0-9]+' | head -1)"
+echo "ITERATION: $story_id passed"
+exit 0
+STUBEOF
+chmod +x "$MIDGLOB_DIR/_loop/stub-midglob.sh"
+
+( cd "$MIDGLOB_DIR" && env -u LOOP_SLOTS -u LOOP_WORKTREE \
+    LOOP_CLI="$MIDGLOB_DIR/_loop/stub-midglob.sh" bash ./_loop/loop.sh 1 ) \
+  >"$TMP/midglob-stdout.txt" 2>"$midglob_log"
+
+midglob_names_story=0
+grep -qF 'STORY-301' "$midglob_log" && midglob_names_story=1
+midglob_names_glob=0
+grep -qF 'skills/*/SKILL.md' "$midglob_log" && midglob_names_glob=1
+midglob_dispatched=0
+grep -qF 'STORY-301' "$TMP/midglob-stdout.txt" && midglob_dispatched=1
+
+if [[ "$midglob_names_story" -eq 1 && "$midglob_names_glob" -eq 1 \
+      && "$midglob_dispatched" -eq 1 ]]; then
+  report PASS "59: mid-path glob rejection -- story declaring 'skills/*/SKILL.md' triggers loud parse rejection naming story+glob (stderr names both), story still dispatched (writes-absent treatment, runs alone)"
+else
+  report FAIL "59: mid-path glob rejection" \
+    "names_story=$midglob_names_story names_glob=$midglob_names_glob dispatched=$midglob_dispatched"
+  sed 's/^/    /' "$midglob_log" >&2
+fi
+
+# ---------------------------------------------------------------------------
+# 60: Refused-ids completion visibility -- a run whose ONLY story has a
+# protected-path writes: (_loop/) -> exit 0 (completion, not an error) AND
+# the no-eligible completion output names the refused story id. No attempts
+# increment (assert backlog unchanged after run).
+# ---------------------------------------------------------------------------
+REFUSEDCOMP_DIR="$TMP/refusedcomp-sandbox"
+rm -rf "$REFUSEDCOMP_DIR"; mkdir -p "$REFUSEDCOMP_DIR"
+sandbox_write_loop "$REFUSEDCOMP_DIR" ".claude"
+(
+  cd "$REFUSEDCOMP_DIR"
+  git init -q
+  git config user.email test@example.com
+  git config user.name "refused-test"
+  mkdir -p _goals .claude
+  {
+    printf '# backlog\n\n## STORY-401: protected-path story\n'
+    printf -- '- priority: 1\n- passes: false\n- attempts: 0\n- blocked: false\n'
+    printf -- '- writes: _loop/loop.sh\n'
+  } > _goals/backlog.md
+  printf 'placeholder\n' > .claude/.keep
+  : > .gitignore
+  git add -A
+  git commit -qm init
+)
+
+backlog_sha_before="$(sha256sum "$REFUSEDCOMP_DIR/_goals/backlog.md" | cut -d' ' -f1)"
+refusedcomp_out="$TMP/refusedcomp-stdout.txt"
+refusedcomp_err="$TMP/refusedcomp-stderr.txt"
+( cd "$REFUSEDCOMP_DIR" && env -u LOOP_SLOTS -u LOOP_WORKTREE \
+    bash ./_loop/loop.sh 1 ) >"$refusedcomp_out" 2>"$refusedcomp_err"
+refusedcomp_rc=$?
+backlog_sha_after="$(sha256sum "$REFUSEDCOMP_DIR/_goals/backlog.md" | cut -d' ' -f1)"
+
+refusedcomp_exit0=0; [[ "$refusedcomp_rc" -eq 0 ]] && refusedcomp_exit0=1
+refusedcomp_names_id=0
+grep -qF 'STORY-401' "$refusedcomp_out" && refusedcomp_names_id=1
+refusedcomp_names_refused_stderr=0
+grep -qF 'STORY-401' "$refusedcomp_err" && grep -qF 'REFUSED' "$refusedcomp_err" \
+  && refusedcomp_names_refused_stderr=1
+refusedcomp_backlog_unchanged=0
+[[ "$backlog_sha_before" == "$backlog_sha_after" ]] && refusedcomp_backlog_unchanged=1
+
+if [[ "$refusedcomp_exit0" -eq 1 && "$refusedcomp_names_id" -eq 1 \
+      && "$refusedcomp_names_refused_stderr" -eq 1 && "$refusedcomp_backlog_unchanged" -eq 1 ]]; then
+  report PASS "60: refused-ids completion visibility -- run with only a protected-path story (STORY-401, writes:_loop/loop.sh) -> exit 0 (completion), stdout names STORY-401 as refused, stderr loud REFUSED notice, backlog unchanged (no attempts increment)"
+else
+  report FAIL "60: refused-ids completion visibility" \
+    "exit0=$refusedcomp_exit0 names_id=$refusedcomp_names_id names_refused_stderr=$refusedcomp_names_refused_stderr backlog_unchanged=$refusedcomp_backlog_unchanged"
+fi
+
+# ---------------------------------------------------------------------------
+# 61: Integrator -- passes/blocked transitions driver-written, verified by
+# content; also covers ITERATION-mismatch -> no backlog transition (story
+# fields unchanged). One sandbox, two runs:
+#   Run A: stub emits ITERATION: STORY-501 passed -> driver writes passes:true
+#   Run B: stub emits ITERATION: STORY-502 blocked -> driver writes blocked:true
+# A third story (STORY-503) in the backlog has NO eligible run (the stub for
+# run A doesn't dispatch it); checked only to confirm driver leaves it alone.
+# ---------------------------------------------------------------------------
+INTEG_DIR="$TMP/integrator-sandbox"
+rm -rf "$INTEG_DIR"; mkdir -p "$INTEG_DIR"
+sandbox_write_loop "$INTEG_DIR" ".claude"
+(
+  cd "$INTEG_DIR"
+  git init -q
+  git config user.email test@example.com
+  git config user.name "integ-test"
+  mkdir -p _goals .claude
+  {
+    printf '# backlog\n\n'
+    printf '## STORY-501: will be passed\n'
+    printf -- '- priority: 1\n- passes: false\n- attempts: 0\n- blocked: false\n\n'
+    printf '## STORY-502: will be blocked\n'
+    printf -- '- priority: 2\n- passes: false\n- attempts: 0\n- blocked: false\n\n'
+    printf '## STORY-503: untouched\n'
+    printf -- '- priority: 3\n- passes: false\n- attempts: 0\n- blocked: false\n'
+  } > _goals/backlog.md
+  printf 'placeholder\n' > .claude/.keep
+  : > .gitignore
+  git add -A
+  git commit -qm init
+)
+# Stub: cycles through stories in dispatch order, emitting appropriate verdicts
+cat > "$INTEG_DIR/_loop/stub-integ.sh" <<'STUBEOF'
+#!/usr/bin/env bash
+story_id="$(echo "$1" | grep -oE 'STORY-[0-9]+' | head -1)"
+case "$story_id" in
+  STORY-501) echo "ITERATION: STORY-501 passed"; exit 0 ;;
+  STORY-502) echo "ITERATION: STORY-502 blocked"; exit 0 ;;
+  *)         echo "ITERATION: $story_id passed"; exit 0 ;;
+esac
+STUBEOF
+chmod +x "$INTEG_DIR/_loop/stub-integ.sh"
+
+( cd "$INTEG_DIR" && env -u LOOP_SLOTS -u LOOP_WORKTREE \
+    LOOP_CLI="$INTEG_DIR/_loop/stub-integ.sh" bash ./_loop/loop.sh 2 ) \
+  >/dev/null 2>/dev/null
+
+# Check transitions: passes:true for STORY-501, blocked:true for STORY-502
+integ_passes_ok=0
+grep -A5 '## STORY-501' "$INTEG_DIR/_goals/backlog.md" | grep -q 'passes: true' \
+  && integ_passes_ok=1
+integ_blocked_ok=0
+grep -A5 '## STORY-502' "$INTEG_DIR/_goals/backlog.md" | grep -q 'blocked: true' \
+  && integ_blocked_ok=1
+# STORY-503 should be untouched (still passes:false, attempts:0)
+integ_503_untouched=0
+story503_passes="$(grep -A5 '## STORY-503' "$INTEG_DIR/_goals/backlog.md" | grep 'passes:' | head -1)"
+story503_attempts="$(grep -A5 '## STORY-503' "$INTEG_DIR/_goals/backlog.md" | grep 'attempts:' | head -1)"
+[[ "$story503_passes" == *"false"* && "$story503_attempts" == *": 0"* ]] && integ_503_untouched=1
+
+if [[ "$integ_passes_ok" -eq 1 && "$integ_blocked_ok" -eq 1 && "$integ_503_untouched" -eq 1 ]]; then
+  report PASS "61: integrator passes/blocked transitions driver-written -- STORY-501 verdict 'passed' -> passes:true in backlog (driver-written, not stub); STORY-502 verdict 'blocked' -> blocked:true; STORY-503 untouched (not dispatched in MAX_ITER=2)"
+else
+  report FAIL "61: integrator transitions" \
+    "passes_ok=$integ_passes_ok blocked_ok=$integ_blocked_ok 503_untouched=$integ_503_untouched"
+fi
+
+# ---------------------------------------------------------------------------
+# 62: ITERATION-mismatch -> quarantine-lite: story fields unchanged (no
+# backlog transition), branch retained (flag=1 / LOOP_WORKTREE=1). Asserts
+# the mismatch itself as well as that the backlog is bytewise unchanged after
+# the quarantined run.
+# ---------------------------------------------------------------------------
+MISMATCH_DIR="$TMP/mismatch-sandbox"
+make_sandbox "$MISMATCH_DIR" ".claude" 1 1
+
+cat > "$MISMATCH_DIR/_loop/stub-mismatch.sh" <<'STUBEOF'
+#!/usr/bin/env bash
+# Stub that emits the WRONG story id in its ITERATION line -> mismatch
+echo "progress" > progress.txt
+git add progress.txt
+git commit -qm "mismatch-test progress"
+echo "ITERATION: STORY-WRONG passed"
+exit 0
+STUBEOF
+chmod +x "$MISMATCH_DIR/_loop/stub-mismatch.sh"
+( cd "$MISMATCH_DIR" && git add -A && git commit -qm "add stub" )
+
+mismatch_log="$TMP/mismatch-run.log"
+( cd "$MISMATCH_DIR" && env -u LOOP_SLOTS LOOP_WORKTREE=1 \
+    LOOP_CLI="$MISMATCH_DIR/_loop/stub-mismatch.sh" bash ./_loop/loop.sh 1 ) \
+  >"$mismatch_log" 2>&1
+mismatch_rc=$?
+
+mismatch_logged=0
+grep -qF 'ITERATION-mismatch' "$mismatch_log" && mismatch_logged=1
+mismatch_branch_retained=0
+[[ -n "$(git -C "$MISMATCH_DIR" branch --list 'loop/iter-1')" ]] && mismatch_branch_retained=1
+# Story-scoped checks (house pattern: grep -A5 '## STORY-ID'):
+# (a) attempts: 1 -- driver incremented at claim time before dispatch
+# (b) passes: false -- no passes transition (mismatch quarantine skipped it)
+# (c) blocked: false -- no blocked transition
+mismatch_attempts_incremented=0
+grep -A5 '## STORY-101' "$MISMATCH_DIR/_goals/backlog.md" | grep -qF 'attempts: 1' \
+  && mismatch_attempts_incremented=1
+mismatch_no_passes_transition=0
+grep -A5 '## STORY-101' "$MISMATCH_DIR/_goals/backlog.md" | grep -qF 'passes: false' \
+  && mismatch_no_passes_transition=1
+mismatch_no_blocked_transition=0
+grep -A5 '## STORY-101' "$MISMATCH_DIR/_goals/backlog.md" | grep -qF 'blocked: false' \
+  && mismatch_no_blocked_transition=1
+
+if [[ "$mismatch_logged" -eq 1 && "$mismatch_branch_retained" -eq 1 \
+      && "$mismatch_attempts_incremented" -eq 1 \
+      && "$mismatch_no_passes_transition" -eq 1 && "$mismatch_no_blocked_transition" -eq 1 ]]; then
+  report PASS "62: ITERATION-mismatch quarantine-lite (flag=1) -- mismatch logged (wrong story id), branch loop/iter-1 retained, STORY-101 scoped: attempts:1 (claim at dispatch time), passes:false + blocked:false (no transition on mismatch, confirmed story-scoped)"
+else
+  report FAIL "62: ITERATION-mismatch quarantine" \
+    "mismatch_logged=$mismatch_logged branch_retained=$mismatch_branch_retained attempts_incremented=$mismatch_attempts_incremented no_passes_transition=$mismatch_no_passes_transition no_blocked_transition=$mismatch_no_blocked_transition"
+  sed 's/^/    /' "$mismatch_log" >&2
+fi
+
+# ---------------------------------------------------------------------------
+# 63 + 63-mutation-proof: Subset-check violation -- stub commits a file
+# OUTSIDE its declared writes: (_goals/extra.txt declared only src/widget.txt)
+# -> quarantine-lite, loud naming of offending path, NOT integrated.
+# Mutation-prove: delete the subset check in a COPY of loop.sh -> the
+# violating branch integrates (observable as the offending commit landing on
+# main), confirming the check is load-bearing.
+# ---------------------------------------------------------------------------
+SUBSET_DIR="$TMP/subset-sandbox"
+rm -rf "$SUBSET_DIR"; mkdir -p "$SUBSET_DIR"
+sandbox_write_loop "$SUBSET_DIR" ".claude"
+(
+  cd "$SUBSET_DIR"
+  git init -q
+  git config user.email test@example.com
+  git config user.name "subset-test"
+  mkdir -p _goals .claude
+  {
+    printf '# backlog\n\n## STORY-601: subset-check story\n'
+    printf -- '- priority: 1\n- passes: false\n- attempts: 0\n- blocked: false\n'
+    printf -- '- writes: src/widget.txt\n'
+  } > _goals/backlog.md
+  printf 'placeholder\n' > .claude/.keep
+  : > .gitignore
+  git add -A
+  git commit -qm init
+)
+
+cat > "$SUBSET_DIR/_loop/stub-subset.sh" <<'STUBEOF'
+#!/usr/bin/env bash
+# Commit a file OUTSIDE declares writes: (declared: src/widget.txt;
+# actual commit: _goals/extra.txt -> subset violation)
+mkdir -p _goals
+echo "outside writes" > _goals/extra.txt
+git add _goals/extra.txt
+git commit -qm "subset-violation commit (outside declared writes:)"
+story_id="$(echo "$1" | grep -oE 'STORY-[0-9]+' | head -1)"
+echo "ITERATION: $story_id passed"
+exit 0
+STUBEOF
+chmod +x "$SUBSET_DIR/_loop/stub-subset.sh"
+
+subset_main_before="$(git -C "$SUBSET_DIR" rev-parse HEAD)"
+subset_log="$TMP/subset-run.log"
+( cd "$SUBSET_DIR" && env -u LOOP_SLOTS LOOP_WORKTREE=1 \
+    LOOP_CLI="$SUBSET_DIR/_loop/stub-subset.sh" bash ./_loop/loop.sh 1 ) \
+  >"$subset_log" 2>&1
+subset_main_after="$(git -C "$SUBSET_DIR" rev-parse HEAD)"
+
+subset_quarantined=0
+grep -qF 'touched paths outside its declared writes:' "$subset_log" && subset_quarantined=1
+subset_names_path=0
+grep -qF '_goals/extra.txt' "$subset_log" && subset_names_path=1
+subset_not_integrated=0
+[[ "$subset_main_before" == "$subset_main_after" ]] && subset_not_integrated=1
+
+if [[ "$subset_quarantined" -eq 1 && "$subset_names_path" -eq 1 && "$subset_not_integrated" -eq 1 ]]; then
+  report PASS "63: subset-check violation -- stub commits '_goals/extra.txt' outside declared 'writes: src/widget.txt' -> quarantine-lite (not integrated, main HEAD unchanged), loud naming of offending path"
+else
+  report FAIL "63: subset-check violation" \
+    "quarantined=$subset_quarantined names_path=$subset_names_path not_integrated=$subset_not_integrated"
+  sed 's/^/    /' "$subset_log" >&2
+fi
+
+# 63-mutation-proof: delete the subset check in a COPY of the sandbox driver
+# -> the violating branch integrates (commit lands on main)
+MUT63_DIR="$TMP/subset-sandbox-mut63"
+rm -rf "$MUT63_DIR"; mkdir -p "$MUT63_DIR"
+sandbox_write_loop "$MUT63_DIR" ".claude"
+(
+  cd "$MUT63_DIR"
+  git init -q
+  git config user.email test@example.com
+  git config user.name "subset-mut-test"
+  mkdir -p _goals .claude
+  {
+    printf '# backlog\n\n## STORY-601: subset-check story\n'
+    printf -- '- priority: 1\n- passes: false\n- attempts: 0\n- blocked: false\n'
+    printf -- '- writes: src/widget.txt\n'
+  } > _goals/backlog.md
+  printf 'placeholder\n' > .claude/.keep
+  : > .gitignore
+  git add -A
+  git commit -qm init
+)
+cp "$SUBSET_DIR/_loop/stub-subset.sh" "$MUT63_DIR/_loop/stub-subset.sh"
+# Mutate loop.sh: remove the subset-violation early-exit by replacing the
+# subset_bad computation with a forced-empty result (same approach as the
+# content-anchored mutation proofs above).
+awk '
+  /subset_bad=.*_loop_subset_violation/ && !done {
+    print "  subset_bad=\"\"   # mutation-63: subset check deleted"
+    done = 1; next
+  }
+  { print }
+' "$MUT63_DIR/_loop/loop.sh" > "$TMP/loop-mut63.sh"
+mv "$TMP/loop-mut63.sh" "$MUT63_DIR/_loop/loop.sh"
+chmod +x "$MUT63_DIR/_loop/loop.sh"
+
+mut63_log="$TMP/subset-mut63-run.log"
+( cd "$MUT63_DIR" && env -u LOOP_SLOTS LOOP_WORKTREE=1 \
+    LOOP_CLI="$MUT63_DIR/_loop/stub-subset.sh" bash ./_loop/loop.sh 1 ) \
+  >"$mut63_log" 2>&1
+mut63_main_after="$(git -C "$MUT63_DIR" rev-parse HEAD)"
+mut63_integrated=0
+git -C "$MUT63_DIR" log --oneline | grep -qF "subset-violation commit" && mut63_integrated=1
+
+if [[ "$mut63_integrated" -eq 1 ]]; then
+  report PASS "63-mutation-proof: subset-check deleted in a COPY -> violating branch integrates (subset-violation commit lands on main), confirming the check is load-bearing"
+else
+  report FAIL "63-mutation-proof: subset-check delete did not integrate violating branch" \
+    "integrated=$mut63_integrated"
+  sed 's/^/    /' "$mut63_log" >&2
+fi
+
+# ---------------------------------------------------------------------------
+# 64: Admission (e) -- protected-path writes: REFUSED loudly, no attempts
+# increment, stderr names story+glob. The stub NEVER runs (no dispatch).
+# (Covered structurally by assertion 60 for a run-as-only-story scenario;
+# this asserts the specific stderr content and no-dispatch outcome.)
+# ---------------------------------------------------------------------------
+ADMIT_E_DIR="$TMP/admit-e-sandbox"
+rm -rf "$ADMIT_E_DIR"; mkdir -p "$ADMIT_E_DIR"
+sandbox_write_loop "$ADMIT_E_DIR" ".claude"
+(
+  cd "$ADMIT_E_DIR"
+  git init -q
+  git config user.email test@example.com
+  git config user.name "admit-e-test"
+  mkdir -p _goals .claude
+  {
+    printf '# backlog\n\n'
+    printf '## STORY-701: protected-path story\n'
+    printf -- '- priority: 1\n- passes: false\n- attempts: 0\n- blocked: false\n'
+    printf -- '- writes: _loop/loop.sh\n\n'
+    printf '## STORY-702: normal story\n'
+    printf -- '- priority: 2\n- passes: false\n- attempts: 0\n- blocked: false\n'
+  } > _goals/backlog.md
+  printf 'placeholder\n' > .claude/.keep
+  : > .gitignore
+  git add -A
+  git commit -qm init
+)
+
+admit_e_marker="$TMP/admit-e-stub-ran.marker"
+rm -f "$admit_e_marker"
+cat > "$ADMIT_E_DIR/_loop/stub-admit-e.sh" <<STUBEOF
+#!/usr/bin/env bash
+touch "$admit_e_marker"
+story_id="\$(echo "\$1" | grep -oE 'STORY-[0-9]+' | head -1)"
+echo "ITERATION: \$story_id passed"
+exit 0
+STUBEOF
+chmod +x "$ADMIT_E_DIR/_loop/stub-admit-e.sh"
+
+admit_e_out="$TMP/admit-e-out.txt"
+admit_e_err="$TMP/admit-e-err.txt"
+backlog_before_e="$(sha256sum "$ADMIT_E_DIR/_goals/backlog.md" | cut -d' ' -f1)"
+( cd "$ADMIT_E_DIR" && env -u LOOP_SLOTS -u LOOP_WORKTREE \
+    LOOP_CLI="$ADMIT_E_DIR/_loop/stub-admit-e.sh" bash ./_loop/loop.sh 1 ) \
+  >"$admit_e_out" 2>"$admit_e_err"
+
+# STORY-701 should be refused (no dispatch for it); STORY-702 dispatched
+e_refused_loud=0
+grep -qF 'STORY-701' "$admit_e_err" && grep -qF 'REFUSED' "$admit_e_err" && e_refused_loud=1
+e_no_attempts_increment=0
+backlog_after_e="$(sha256sum "$ADMIT_E_DIR/_goals/backlog.md" | cut -d' ' -f1)"
+# attempts for STORY-701 must remain 0 (no increment on refused story)
+grep -A5 '## STORY-701' "$ADMIT_E_DIR/_goals/backlog.md" | grep -q 'attempts: 0' \
+  && e_no_attempts_increment=1
+# STORY-702 should have been dispatched (stub ran, marker exists)
+e_702_dispatched=0
+[[ -f "$admit_e_marker" ]] && e_702_dispatched=1
+
+if [[ "$e_refused_loud" -eq 1 && "$e_no_attempts_increment" -eq 1 && "$e_702_dispatched" -eq 1 ]]; then
+  report PASS "64: admission (e) -- STORY-701 with writes:_loop/loop.sh -> REFUSED loudly (stderr names story+REFUSED), no attempts increment (STORY-701 attempts stays 0), STORY-702 (non-protected) dispatched normally"
+else
+  report FAIL "64: admission (e) protected-path refused" \
+    "refused_loud=$e_refused_loud no_attempts=$e_no_attempts_increment 702_dispatched=$e_702_dispatched"
+fi
+
+# ---------------------------------------------------------------------------
+# 65: Admission (d) -- empty-writes story runs alone: a story with NO
+# writes: field declared is treated as intersecting-everything, so a
+# disjoint second story is NOT co-dispatched even with LOOP_SLOTS=2 +
+# LOOP_WORKTREE=1. MAX_ITER=2: both stories complete serially (never
+# concurrently). Inflight marker + bounded poll proves peak is always 1.
+# ---------------------------------------------------------------------------
+ADMIT_D_DIR="$TMP/admit-d-sandbox"
+rm -rf "$ADMIT_D_DIR"; mkdir -p "$ADMIT_D_DIR"
+sandbox_write_loop "$ADMIT_D_DIR" ".claude"
+(
+  cd "$ADMIT_D_DIR"
+  git init -q
+  git config user.email test@example.com
+  git config user.name "admit-d-test"
+  mkdir -p _goals .claude
+  {
+    printf '# backlog\n\n'
+    printf '## STORY-801: empty-writes (runs alone)\n'
+    printf -- '- priority: 1\n- passes: false\n- attempts: 0\n- blocked: false\n\n'
+    printf '## STORY-802: disjoint writes\n'
+    printf -- '- priority: 2\n- passes: false\n- attempts: 0\n- blocked: false\n'
+    printf -- '- writes: src/widget.txt\n'
+  } > _goals/backlog.md
+  printf 'placeholder\n' > .claude/.keep
+  : > .gitignore
+  git add -A
+  git commit -qm init
+)
+
+admit_d_dispatched_file="$TMP/admit-d-dispatched.txt"
+admit_d_inflight_dir="$TMP/admit-d-inflight"; mkdir -p "$admit_d_inflight_dir"
+admit_d_overlap_log="$TMP/admit-d-overlap.txt"
+rm -f "$admit_d_dispatched_file" "$admit_d_overlap_log"
+cat > "$ADMIT_D_DIR/_loop/stub-admit-d.sh" <<STUBEOF
+#!/usr/bin/env bash
+sid="\$(echo "\$1" | grep -oE 'STORY-[0-9]+' | head -1)"
+echo "\$sid" >> "$admit_d_dispatched_file"
+touch "${admit_d_inflight_dir}/inflight.\$\$"
+c=0; while (( c < 25 )); do
+  n=\$(ls "${admit_d_inflight_dir}"/inflight.* 2>/dev/null | wc -l)
+  (( n >= 2 )) && break
+  sleep 0.1; c=\$((c + 1))
+done
+echo "peak=\$(ls "${admit_d_inflight_dir}"/inflight.* 2>/dev/null | wc -l)" >> "$admit_d_overlap_log"
+case "\$sid" in
+  STORY-801) mkdir -p src; echo "p \$sid" > src/progress-801.txt; git add src/progress-801.txt ;;
+  STORY-802) mkdir -p src; echo "p \$sid" > src/widget.txt; git add src/widget.txt ;;
+  *) : ;;
+esac
+git commit -qm "dispatch of \$sid"
+rm -f "${admit_d_inflight_dir}/inflight.\$\$"
+echo "ITERATION: \$sid passed"
+exit 0
+STUBEOF
+chmod +x "$ADMIT_D_DIR/_loop/stub-admit-d.sh"
+
+# MAX_ITER=2: STORY-801 fills round 1 alone (absent writes: intersects everything,
+# STORY-802 deferred); STORY-802 fills round 2 after STORY-801 integrates. Serial.
+admit_d_log="$TMP/admit-d-run.log"
+( cd "$ADMIT_D_DIR" && LOOP_SLOTS=2 LOOP_WORKTREE=1 \
+    LOOP_CLI="$ADMIT_D_DIR/_loop/stub-admit-d.sh" bash ./_loop/loop.sh 2 ) \
+  >"$TMP/admit-d-out.txt" 2>"$admit_d_log"
+
+dispatched_d_count="$(wc -l < "$admit_d_dispatched_file" 2>/dev/null || echo 0)"
+dispatched_d_head="$(head -1 "$admit_d_dispatched_file" 2>/dev/null)"
+dispatched_d_tail="$(tail -1 "$admit_d_dispatched_file" 2>/dev/null)"
+d_both_dispatched=0; d_order_ok=0; d_no_overlap=0
+[[ "$dispatched_d_count" -eq 2 ]] && d_both_dispatched=1
+[[ "$dispatched_d_head" == "STORY-801" && "$dispatched_d_tail" == "STORY-802" ]] && d_order_ok=1
+grep -qF 'peak=2' "$admit_d_overlap_log" 2>/dev/null || d_no_overlap=1
+
+if [[ "$d_both_dispatched" -eq 1 && "$d_order_ok" -eq 1 && "$d_no_overlap" -eq 1 ]]; then
+  report PASS "65: admission (d) empty-writes runs alone -- STORY-801 (no writes:) dispatched first, STORY-802 (writes: src/widget.txt) deferred until STORY-801 completes; both dispatched serially (peak always 1, priority order preserved)"
+else
+  report FAIL "65: admission (d) empty-writes runs alone" \
+    "both_dispatched=$d_both_dispatched(count=$dispatched_d_count) order_ok=$d_order_ok(head='$dispatched_d_head' tail='$dispatched_d_tail') no_overlap=$d_no_overlap"
+  sed 's/^/    /' "$admit_d_log" >&2
+fi
+
+# ---------------------------------------------------------------------------
+# 66 + 66-mutation-proof: Admission (b) -- INTERSECTING writes: -> only ONE
+# dispatched per fill round (deferred-then-serial). Two stories both declare
+# writes: src/shared.txt (intersection). LOOP_SLOTS=2, LOOP_WORKTREE=1.
+# Mutation-prove: delete the admission check in a COPY -> BOTH stories
+# dispatched concurrently (interleaved start markers observable).
+# ---------------------------------------------------------------------------
+ADMIT_B_DIR="$TMP/admit-b-sandbox"
+rm -rf "$ADMIT_B_DIR"; mkdir -p "$ADMIT_B_DIR"
+sandbox_write_loop "$ADMIT_B_DIR" ".claude"
+(
+  cd "$ADMIT_B_DIR"
+  git init -q
+  git config user.email test@example.com
+  git config user.name "admit-b-test"
+  mkdir -p _goals .claude
+  {
+    printf '# backlog\n\n'
+    printf '## STORY-901: intersecting writes\n'
+    printf -- '- priority: 1\n- passes: false\n- attempts: 0\n- blocked: false\n'
+    printf -- '- writes: src/shared.txt\n\n'
+    printf '## STORY-902: same intersecting writes\n'
+    printf -- '- priority: 2\n- passes: false\n- attempts: 0\n- blocked: false\n'
+    printf -- '- writes: src/shared.txt\n'
+  } > _goals/backlog.md
+  printf 'placeholder\n' > .claude/.keep
+  : > .gitignore
+  git add -A
+  git commit -qm init
+)
+
+admit_b_dispatched_file="$TMP/admit-b-dispatched.txt"
+admit_b_inflight_dir="$TMP/admit-b-inflight"; mkdir -p "$admit_b_inflight_dir"
+admit_b_overlap_log="$TMP/admit-b-overlap.txt"
+rm -f "$admit_b_dispatched_file" "$admit_b_overlap_log"
+cat > "$ADMIT_B_DIR/_loop/stub-admit-b.sh" <<STUBEOF
+#!/usr/bin/env bash
+sid="\$(echo "\$1" | grep -oE 'STORY-[0-9]+' | head -1)"
+echo "\$sid" >> "$admit_b_dispatched_file"
+touch "${admit_b_inflight_dir}/inflight.\$\$"
+c=0; while (( c < 25 )); do
+  n=\$(ls "${admit_b_inflight_dir}"/inflight.* 2>/dev/null | wc -l)
+  (( n >= 2 )) && break
+  sleep 0.1; c=\$((c + 1))
+done
+echo "peak=\$(ls "${admit_b_inflight_dir}"/inflight.* 2>/dev/null | wc -l)" >> "$admit_b_overlap_log"
+mkdir -p src; echo "p \$sid" > src/shared.txt; git add src/shared.txt
+git commit -qm "progress from \$sid"
+rm -f "${admit_b_inflight_dir}/inflight.\$\$"
+echo "ITERATION: \$sid passed"
+exit 0
+STUBEOF
+chmod +x "$ADMIT_B_DIR/_loop/stub-admit-b.sh"
+
+# MAX_ITER=2: STORY-901 fills round 1 (STORY-902 deferred -- same writes: intersection);
+# STORY-902 fills round 2 after STORY-901 integrates. Serial, never concurrent.
+admit_b_log="$TMP/admit-b-run.log"
+( cd "$ADMIT_B_DIR" && LOOP_SLOTS=2 LOOP_WORKTREE=1 \
+    LOOP_CLI="$ADMIT_B_DIR/_loop/stub-admit-b.sh" bash ./_loop/loop.sh 2 ) \
+  >/dev/null 2>"$admit_b_log"
+
+dispatched_b_count="$(wc -l < "$admit_b_dispatched_file" 2>/dev/null || echo 0)"
+dispatched_b_head="$(head -1 "$admit_b_dispatched_file" 2>/dev/null)"
+dispatched_b_tail="$(tail -1 "$admit_b_dispatched_file" 2>/dev/null)"
+# Both dispatched serially, priority order (901 first, 902 second), peak never 2
+b_both_dispatched=0; b_order_ok=0; b_no_overlap=0
+[[ "$dispatched_b_count" -eq 2 ]] && b_both_dispatched=1
+[[ "$dispatched_b_head" == "STORY-901" && "$dispatched_b_tail" == "STORY-902" ]] && b_order_ok=1
+grep -qF 'peak=2' "$admit_b_overlap_log" 2>/dev/null || b_no_overlap=1
+
+if [[ "$b_both_dispatched" -eq 1 && "$b_order_ok" -eq 1 && "$b_no_overlap" -eq 1 ]]; then
+  report PASS "66: admission (b) intersecting writes deferred-then-serial -- STORY-901 and STORY-902 both declare 'writes: src/shared.txt' (intersection); STORY-901 dispatched first, STORY-902 deferred until STORY-901 completes, both finish serially (peak always 1, priority order preserved)"
+else
+  report FAIL "66: admission (b) intersecting writes deferred" \
+    "both_dispatched=$b_both_dispatched(count=$dispatched_b_count) order_ok=$b_order_ok(head='$dispatched_b_head' tail='$dispatched_b_tail') no_overlap=$b_no_overlap"
+  sed 's/^/    /' "$admit_b_log" >&2
+fi
+
+# 66-mutation-proof: delete the admission conflict check in a COPY -> STORY-901
+# dispatched to BOTH slots concurrently. Two discriminators per judge spec:
+# (i) grep -q 'peak=2' overlap_log -- concurrent dispatch of intersecting stories
+# (ii) sort -u dispatch_log == "STORY-901" -- double-claim, not STORY-902
+# Both FAIL on the real driver (ids=[901,902], peaks=[1,1]) and HOLD on the mutant.
+MUT66_DIR="$TMP/admit-b-sandbox-mut66"
+rm -rf "$MUT66_DIR"; mkdir -p "$MUT66_DIR"
+sandbox_write_loop "$MUT66_DIR" ".claude"
+(
+  cd "$MUT66_DIR"
+  git init -q
+  git config user.email test@example.com
+  git config user.name "admit-b-mut66-test"
+  mkdir -p _goals .claude
+  {
+    printf '# backlog\n\n'
+    printf '## STORY-901: intersecting writes\n'
+    printf -- '- priority: 1\n- passes: false\n- attempts: 0\n- blocked: false\n'
+    printf -- '- writes: src/shared.txt\n\n'
+    printf '## STORY-902: same intersecting writes\n'
+    printf -- '- priority: 2\n- passes: false\n- attempts: 0\n- blocked: false\n'
+    printf -- '- writes: src/shared.txt\n'
+  } > _goals/backlog.md
+  printf 'placeholder\n' > .claude/.keep
+  : > .gitignore
+  git add -A
+  git commit -qm init
+)
+
+mut66_dispatch_log="$TMP/mut66-dispatch.log"
+mut66_inflight_dir="$TMP/mut66-inflight"; mkdir -p "$mut66_inflight_dir"
+mut66_overlap_log="$TMP/mut66-overlap.txt"
+rm -f "$mut66_dispatch_log" "$mut66_overlap_log"
+cat > "$MUT66_DIR/_loop/stub-admit-b-mut.sh" <<STUBEOF
+#!/usr/bin/env bash
+story_id="\$(echo "\$1" | grep -oE 'STORY-[0-9]+' | head -1)"
+echo "\$story_id" >> "$mut66_dispatch_log"
+touch "${mut66_inflight_dir}/inflight.\$\$"
+c=0; while (( c < 25 )); do
+  n=\$(ls "${mut66_inflight_dir}"/inflight.* 2>/dev/null | wc -l)
+  (( n >= 2 )) && break
+  sleep 0.1; c=\$((c + 1))
+done
+echo "peak=\$(ls "${mut66_inflight_dir}"/inflight.* 2>/dev/null | wc -l)" >> "$mut66_overlap_log"
+mkdir -p src
+echo "progress from \$story_id" > src/shared.txt
+git add src/shared.txt
+git commit -qm "progress from \$story_id"
+rm -f "${mut66_inflight_dir}/inflight.\$\$"
+echo "ITERATION: \$story_id passed"
+exit 0
+STUBEOF
+chmod +x "$MUT66_DIR/_loop/stub-admit-b-mut.sh"
+
+# Mutate loop.sh: remove the admission conflict check (writes/hotspot guard)
+# by zeroing defer inside _loop_select_story's admission block.
+awk '
+  /if _loop_writes_conflict "\$writes" "\$\{slot_writes\[/ && !done {
+    print "      # mutation-66: admission conflict check deleted"
+    skip_lines = 4; done = 1; next
+  }
+  skip_lines > 0 { skip_lines--; next }
+  { print }
+' "$MUT66_DIR/_loop/loop.sh" > "$TMP/loop-mut66.sh"
+mv "$TMP/loop-mut66.sh" "$MUT66_DIR/_loop/loop.sh"
+chmod +x "$MUT66_DIR/_loop/loop.sh"
+
+mut66_log="$TMP/admit-b-mut66-run.log"
+# MAX_ITER=2: conflict check deleted -> STORY-901 fills BOTH slots in round 1
+# (double-dispatch), both run concurrently producing peak=2.
+( cd "$MUT66_DIR" && LOOP_SLOTS=2 LOOP_WORKTREE=1 \
+    LOOP_CLI="$MUT66_DIR/_loop/stub-admit-b-mut.sh" bash ./_loop/loop.sh 2 ) \
+  >/dev/null 2>"$mut66_log"
+
+# Predicate (i): peak=2 observed (concurrent dispatch of intersecting stories)
+mut66_peak_2=0; grep -qF 'peak=2' "$mut66_overlap_log" && mut66_peak_2=1
+# Predicate (ii): only STORY-901 in dispatch log (double-claim, not STORY-902)
+mut66_only_901=0
+[[ "$(sort -u "$mut66_dispatch_log" 2>/dev/null)" == "STORY-901" ]] && mut66_only_901=1
+
+if [[ "$mut66_peak_2" -eq 1 && "$mut66_only_901" -eq 1 ]]; then
+  report PASS "66-mutation-proof: admission-check deleted in a COPY -> STORY-901 dispatched concurrently to BOTH slots (peak=2 in overlap log, sort-u dispatch log == 'STORY-901' proves double-claim), confirming the conflict guard is load-bearing against concurrent intersecting-writes dispatch"
+else
+  report FAIL "66-mutation-proof: admission-check delete did not yield concurrent dispatch" \
+    "peak_2=$mut66_peak_2 only_901=$mut66_only_901"
+  sed 's/^/    /' "$mut66_log" >&2
+fi
+
+# ---------------------------------------------------------------------------
+# 67: Admission (a) -- DISJOINT writes: -> CONCURRENT dispatch (N=2 slots
+# both filled in the same fill round). Two stories with disjoint writes:
+# (src/foo.txt vs src/bar.txt). Stubs coordinate via marker files + bounded
+# polling to prove they ran SIMULTANEOUSLY (STORY-010 (b)-fixture pattern
+# extended). Both integrated, both passes:true, LEARNINGS carries outbox
+# lines in reap order.
+# ---------------------------------------------------------------------------
+ADMIT_A_DIR="$TMP/admit-a-sandbox"
+rm -rf "$ADMIT_A_DIR"; mkdir -p "$ADMIT_A_DIR"
+sandbox_write_loop "$ADMIT_A_DIR" ".claude"
+(
+  cd "$ADMIT_A_DIR"
+  git init -q
+  git config user.email test@example.com
+  git config user.name "admit-a-test"
+  mkdir -p _goals .claude src
+  {
+    printf '# backlog\n\n'
+    printf '## STORY-001A: disjoint-writes foo\n'
+    printf -- '- priority: 1\n- passes: false\n- attempts: 0\n- blocked: false\n'
+    printf -- '- writes: src/foo.txt\n\n'
+    printf '## STORY-002A: disjoint-writes bar\n'
+    printf -- '- priority: 2\n- passes: false\n- attempts: 0\n- blocked: false\n'
+    printf -- '- writes: src/bar.txt\n'
+  } > _goals/backlog.md
+  printf 'placeholder\n' > .claude/.keep
+  : > .gitignore
+  git add -A
+  git commit -qm init
+)
+
+a_mark1="$TMP/admit-a-mark-001A.txt"
+a_mark2="$TMP/admit-a-mark-002A.txt"
+rm -f "$a_mark1" "$a_mark2"
+
+cat > "$ADMIT_A_DIR/_loop/stub-admit-a.sh" <<STUBEOF
+#!/usr/bin/env bash
+story_id="\$(echo "\$1" | grep -oE 'STORY-[0-9A-Z]+' | head -1)"
+outbox_dir="\$(echo "\$1" | sed 's/.*outbox \\([^;]*\\).*/\\1/')"
+mark1="$a_mark1"
+mark2="$a_mark2"
+
+case "\$story_id" in
+  STORY-001A)
+    touch "\$mark1"
+    # Bounded poll: wait up to 5s for STORY-002A's mark (proves overlap)
+    count=0
+    while [[ ! -f "\$mark2" ]] && (( count < 50 )); do
+      sleep 0.1; count=\$((count + 1))
+    done
+    mkdir -p src; echo "foo" > src/foo.txt
+    git add src/foo.txt; git commit -qm "progress from STORY-001A"
+    [[ -n "\$outbox_dir" ]] && printf 'learning from slot-001A\n' > "\$outbox_dir/learnings.md"
+    echo "ITERATION: STORY-001A passed"
+    ;;
+  STORY-002A)
+    touch "\$mark2"
+    count=0
+    while [[ ! -f "\$mark1" ]] && (( count < 50 )); do
+      sleep 0.1; count=\$((count + 1))
+    done
+    mkdir -p src; echo "bar" > src/bar.txt
+    git add src/bar.txt; git commit -qm "progress from STORY-002A"
+    [[ -n "\$outbox_dir" ]] && printf 'learning from slot-002A\n' > "\$outbox_dir/learnings.md"
+    echo "ITERATION: STORY-002A passed"
+    ;;
+  *) echo "ITERATION: \$story_id passed" ;;
+esac
+exit 0
+STUBEOF
+chmod +x "$ADMIT_A_DIR/_loop/stub-admit-a.sh"
+
+admit_a_log="$TMP/admit-a-run.log"
+( cd "$ADMIT_A_DIR" && LOOP_SLOTS=2 LOOP_WORKTREE=1 \
+    LOOP_CLI="$ADMIT_A_DIR/_loop/stub-admit-a.sh" bash ./_loop/loop.sh 2 ) \
+  >"$TMP/admit-a-out.txt" 2>"$admit_a_log"
+admit_a_rc=$?
+
+a_both_markers=0; [[ -f "$a_mark1" && -f "$a_mark2" ]] && a_both_markers=1
+a_both_integrated=0
+git -C "$ADMIT_A_DIR" log --oneline 2>/dev/null | grep -qF "STORY-001A" \
+  && git -C "$ADMIT_A_DIR" log --oneline 2>/dev/null | grep -qF "STORY-002A" \
+  && a_both_integrated=1
+a_both_passes=0
+grep -A5 '## STORY-001A' "$ADMIT_A_DIR/_goals/backlog.md" 2>/dev/null | grep -q 'passes: true' \
+  && grep -A5 '## STORY-002A' "$ADMIT_A_DIR/_goals/backlog.md" 2>/dev/null | grep -q 'passes: true' \
+  && a_both_passes=1
+a_learnings_ok=0
+[[ -f "$ADMIT_A_DIR/_goals/LEARNINGS.md" ]] \
+  && grep -q 'slot-001A' "$ADMIT_A_DIR/_goals/LEARNINGS.md" \
+  && grep -q 'slot-002A' "$ADMIT_A_DIR/_goals/LEARNINGS.md" \
+  && a_learnings_ok=1
+
+if [[ "$a_both_markers" -eq 1 && "$a_both_integrated" -eq 1 \
+      && "$a_both_passes" -eq 1 && "$a_learnings_ok" -eq 1 ]]; then
+  report PASS "67: admission (a) disjoint-writes CONCURRENT -- STORY-001A (src/foo.txt) and STORY-002A (src/bar.txt) both dispatched simultaneously (interleaved start-markers prove overlap via bounded poll), both integrated into main, both passes:true, LEARNINGS carries both outbox lines in reap order"
+else
+  report FAIL "67: admission (a) disjoint concurrent" \
+    "both_markers=$a_both_markers(rc=$admit_a_rc) both_integrated=$a_both_integrated both_passes=$a_both_passes learnings_ok=$a_learnings_ok"
+  sed 's/^/    /' "$admit_a_log" >&2
+fi
+
+# ---------------------------------------------------------------------------
+# 68 + 68-mutation-proof: Admission (c) -- HOTSPOT serialization: two stories
+# with DISJOINT writes under _loop_writes_conflict that BOTH intersect the
+# ORCHESTRATION.md hotspot member are serialized by _loop_hotspot_conflict
+# (loop.sh:383-391) alone. STORY-950 writes: ORCHESTRATION.md.bak,
+# STORY-951 writes: ORCHESTRATION.mdx. Neither literal is a prefix of the
+# other (disjoint under _loop_writes_conflict), while ORCHESTRATION.md IS a
+# prefix of both (shared hotspot member, prefix-promotion conservatism) --
+# the only shape where the hotspot rule is independently observable from the
+# writes-conflict rule.
+# Mutation-prove: replace the _loop_hotspot_conflict condition with `false`
+# in a COPY -> both dispatched concurrently (peak=2).
+# ---------------------------------------------------------------------------
+ADMIT_C_DIR="$TMP/admit-c-sandbox"
+rm -rf "$ADMIT_C_DIR"; mkdir -p "$ADMIT_C_DIR"
+sandbox_write_loop "$ADMIT_C_DIR" ".claude"
+(
+  cd "$ADMIT_C_DIR"
+  git init -q
+  git config user.email test@example.com
+  git config user.name "admit-c-test"
+  mkdir -p _goals .claude
+  {
+    printf '# backlog\n\n'
+    printf '## STORY-950: hotspot holder A\n'
+    printf -- '- priority: 1\n- passes: false\n- attempts: 0\n- blocked: false\n'
+    printf -- '- writes: ORCHESTRATION.md.bak\n\n'
+    printf '## STORY-951: hotspot holder B\n'
+    printf -- '- priority: 2\n- passes: false\n- attempts: 0\n- blocked: false\n'
+    printf -- '- writes: ORCHESTRATION.mdx\n'
+  } > _goals/backlog.md
+  printf 'placeholder\n' > .claude/.keep
+  : > .gitignore
+  git add -A
+  git commit -qm init
+)
+
+admit_c_dispatched_file="$TMP/admit-c-dispatched.txt"
+admit_c_inflight_dir="$TMP/admit-c-inflight"; mkdir -p "$admit_c_inflight_dir"
+admit_c_overlap_log="$TMP/admit-c-overlap.txt"
+rm -f "$admit_c_dispatched_file" "$admit_c_overlap_log"
+cat > "$ADMIT_C_DIR/_loop/stub-admit-c.sh" <<STUBEOF
+#!/usr/bin/env bash
+sid="\$(echo "\$1" | grep -oE 'STORY-[0-9]+' | head -1)"
+echo "\$sid" >> "$admit_c_dispatched_file"
+touch "${admit_c_inflight_dir}/inflight.\$\$"
+c=0; while (( c < 25 )); do
+  n=\$(ls "${admit_c_inflight_dir}"/inflight.* 2>/dev/null | wc -l)
+  (( n >= 2 )) && break
+  sleep 0.1; c=\$((c + 1))
+done
+echo "peak=\$(ls "${admit_c_inflight_dir}"/inflight.* 2>/dev/null | wc -l)" >> "$admit_c_overlap_log"
+case "\$sid" in
+  STORY-950) echo "p \$sid" > ORCHESTRATION.md.bak; git add ORCHESTRATION.md.bak ;;
+  STORY-951) echo "p \$sid" > ORCHESTRATION.mdx; git add ORCHESTRATION.mdx ;;
+  *) : ;;
+esac
+git commit -qm "progress from \$sid"
+rm -f "${admit_c_inflight_dir}/inflight.\$\$"
+echo "ITERATION: \$sid passed"
+exit 0
+STUBEOF
+chmod +x "$ADMIT_C_DIR/_loop/stub-admit-c.sh"
+
+# LOOP_SLOTS=2, LOOP_WORKTREE=1, MAX_ITER=2: STORY-950 fills round 1 (STORY-951
+# deferred by hotspot conflict with ORCHESTRATION.md); STORY-951 fills round 2.
+admit_c_log="$TMP/admit-c-run.log"
+( cd "$ADMIT_C_DIR" && LOOP_SLOTS=2 LOOP_WORKTREE=1 \
+    LOOP_CLI="$ADMIT_C_DIR/_loop/stub-admit-c.sh" bash ./_loop/loop.sh 2 ) \
+  >"$TMP/admit-c-out.txt" 2>"$admit_c_log"
+
+dispatched_c_count="$(wc -l < "$admit_c_dispatched_file" 2>/dev/null || echo 0)"
+dispatched_c_head="$(head -1 "$admit_c_dispatched_file" 2>/dev/null)"
+dispatched_c_tail="$(tail -1 "$admit_c_dispatched_file" 2>/dev/null)"
+c_both_dispatched=0; c_order_ok=0; c_no_overlap=0
+[[ "$dispatched_c_count" -eq 2 ]] && c_both_dispatched=1
+[[ "$dispatched_c_head" == "STORY-950" && "$dispatched_c_tail" == "STORY-951" ]] && c_order_ok=1
+grep -qF 'peak=2' "$admit_c_overlap_log" 2>/dev/null || c_no_overlap=1
+
+if [[ "$c_both_dispatched" -eq 1 && "$c_order_ok" -eq 1 && "$c_no_overlap" -eq 1 ]]; then
+  report PASS "68: admission (c) hotspot serialization -- STORY-950 (writes: ORCHESTRATION.md.bak) and STORY-951 (writes: ORCHESTRATION.mdx) are disjoint under _loop_writes_conflict but share ORCHESTRATION.md hotspot; _loop_hotspot_conflict serializes them (STORY-951 deferred until STORY-950 completes, peak always 1, both dispatched serially in priority order)"
+else
+  report FAIL "68: admission (c) hotspot serialization" \
+    "both_dispatched=$c_both_dispatched(count=$dispatched_c_count) order_ok=$c_order_ok(head='$dispatched_c_head' tail='$dispatched_c_tail') no_overlap=$c_no_overlap"
+  sed 's/^/    /' "$admit_c_log" >&2
+fi
+
+# 68-mutation-proof: replace the _loop_hotspot_conflict condition with `false`
+# in a COPY -> both stories admitted concurrently (peak=2 in overlap log).
+# Judge-verified awk: exactly one match in the current loop.sh.
+MUT68_DIR="$TMP/admit-c-sandbox-mut68"
+rm -rf "$MUT68_DIR"; mkdir -p "$MUT68_DIR"
+sandbox_write_loop "$MUT68_DIR" ".claude"
+(
+  cd "$MUT68_DIR"
+  git init -q
+  git config user.email test@example.com
+  git config user.name "admit-c-mut68-test"
+  mkdir -p _goals .claude
+  {
+    printf '# backlog\n\n'
+    printf '## STORY-950: hotspot holder A\n'
+    printf -- '- priority: 1\n- passes: false\n- attempts: 0\n- blocked: false\n'
+    printf -- '- writes: ORCHESTRATION.md.bak\n\n'
+    printf '## STORY-951: hotspot holder B\n'
+    printf -- '- priority: 2\n- passes: false\n- attempts: 0\n- blocked: false\n'
+    printf -- '- writes: ORCHESTRATION.mdx\n'
+  } > _goals/backlog.md
+  printf 'placeholder\n' > .claude/.keep
+  : > .gitignore
+  git add -A
+  git commit -qm init
+)
+
+mut68_dispatch_log="$TMP/mut68-dispatch.log"
+mut68_inflight_dir="$TMP/mut68-inflight"; mkdir -p "$mut68_inflight_dir"
+mut68_overlap_log="$TMP/mut68-overlap.txt"
+rm -f "$mut68_dispatch_log" "$mut68_overlap_log"
+cat > "$MUT68_DIR/_loop/stub-admit-c-mut.sh" <<STUBEOF
+#!/usr/bin/env bash
+sid="\$(echo "\$1" | grep -oE 'STORY-[0-9]+' | head -1)"
+echo "\$sid" >> "$mut68_dispatch_log"
+touch "${mut68_inflight_dir}/inflight.\$\$"
+c=0; while (( c < 25 )); do
+  n=\$(ls "${mut68_inflight_dir}"/inflight.* 2>/dev/null | wc -l)
+  (( n >= 2 )) && break
+  sleep 0.1; c=\$((c + 1))
+done
+echo "peak=\$(ls "${mut68_inflight_dir}"/inflight.* 2>/dev/null | wc -l)" >> "$mut68_overlap_log"
+case "\$sid" in
+  STORY-950) echo "p \$sid" > ORCHESTRATION.md.bak; git add ORCHESTRATION.md.bak ;;
+  STORY-951) echo "p \$sid" > ORCHESTRATION.mdx; git add ORCHESTRATION.mdx ;;
+  *) : ;;
+esac
+git commit -qm "progress from \$sid"
+rm -f "${mut68_inflight_dir}/inflight.\$\$"
+echo "ITERATION: \$sid passed"
+exit 0
+STUBEOF
+chmod +x "$MUT68_DIR/_loop/stub-admit-c-mut.sh"
+
+# Verify the awk pattern matches exactly one line (single-match guard)
+_mut68_match_count="$(grep -cF '|| _loop_hotspot_conflict "$writes"' "$MUT68_DIR/_loop/loop.sh")"
+# Mutate: replace the _loop_hotspot_conflict condition with `false` (hotspot rule deleted)
+awk '{ if ($0 ~ /\|\| _loop_hotspot_conflict "\$writes"/) print "         false; then   # mutation-68: hotspot rule deleted"; else print }' \
+  "$MUT68_DIR/_loop/loop.sh" > "$TMP/loop-mut68.sh"
+mv "$TMP/loop-mut68.sh" "$MUT68_DIR/_loop/loop.sh"
+chmod +x "$MUT68_DIR/_loop/loop.sh"
+
+mut68_log="$TMP/admit-c-mut68-run.log"
+( cd "$MUT68_DIR" && LOOP_SLOTS=2 LOOP_WORKTREE=1 \
+    LOOP_CLI="$MUT68_DIR/_loop/stub-admit-c-mut.sh" bash ./_loop/loop.sh 2 ) \
+  >/dev/null 2>"$mut68_log"
+
+mut68_peak_2=0
+grep -qF 'peak=2' "$mut68_overlap_log" && mut68_peak_2=1
+
+if [[ "$mut68_peak_2" -eq 1 && "$_mut68_match_count" -eq 1 ]]; then
+  report PASS "68-mutation-proof: hotspot-check deleted in a COPY (awk matched $_mut68_match_count line, bash -n clean) -> STORY-950 and STORY-951 dispatched concurrently (peak=2 in overlap log), confirming _loop_hotspot_conflict is the sole serializer for disjoint-writes / shared-hotspot story pairs"
+else
+  report FAIL "68-mutation-proof: hotspot deletion did not yield concurrent dispatch" \
+    "peak_2=$mut68_peak_2 awk_match_count=$_mut68_match_count"
+  sed 's/^/    /' "$mut68_log" >&2
 fi
 
 echo

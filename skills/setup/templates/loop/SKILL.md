@@ -103,16 +103,38 @@ preferred model (upward recovery without deleting the file is a future story).
 `totalFallbacks` counts CLOSED→OPEN trips only — a HALF-OPEN re-trip advances the
 chain without incrementing it (a diagnostics caveat, not a bug).
 
+## Dispatch mode
+
+Check your prompt before doing anything else. If it names BOTH a story id and
+an outbox directory (the driver always supplies both together), you are
+**driver-dispatched**: run exactly that story WITHOUT re-evaluating
+eligibility — the driver already validated it, so never print
+`<promise>COMPLETE</promise>` in this mode. Do NOT pick a story, do NOT
+increment `attempts`, do NOT write `passes`/`blocked` to the backlog, and do
+NOT append to `_goals/LEARNINGS.md` or `_goals/ESCALATIONS.md` directly —
+instead write your learning and escalation lines to `<outbox>/learnings.md`
+and `<outbox>/escalations.md` (file names pinned); the driver owns every
+backlog transition and shared-memory append. A prompt naming a story WITHOUT
+an outbox directory is **manual mode** running that named story —
+self-contained behavior, direct writes, exactly as below. If no story id was
+supplied at all (a human invoked this skill directly), you are also in
+**manual mode**: the flow below applies unchanged, and it assumes no driver
+run is in flight against this repo.
+
 ## 1. Load state
 
-- `_goals/backlog.md` — the story list. Pick the highest-priority story with
-  `passes: false` and `attempts < 3`. If none exists (all passed or blocked):
-  print `<promise>COMPLETE</promise>` as your final output and stop.
+- `_goals/backlog.md` — the story list. **Manual mode only**: pick the
+  highest-priority story with `passes: false` and `attempts < 3`. If none
+  exists (all passed or blocked): print `<promise>COMPLETE</promise>` as your
+  final output and stop — this branch never fires in driver-dispatched mode.
+  **Driver-dispatched**: use the story id named in your prompt; skip
+  selection entirely.
 - `ORCHESTRATION.md` ({{IDE_DIR}}/) — the flow you must follow.
 - `_goals/ESCALATIONS.md` — check the story isn't already escalated.
 
-Increment the story's `attempts` counter in the backlog **now** (so a crashed
-iteration still counts).
+**Manual mode only**: increment the story's `attempts` counter in the backlog
+**now** (so a crashed iteration still counts). Driver-dispatched mode never
+writes this counter — the driver already incremented it at claim time.
 
 ## 2. Run the orchestration flow for the story
 
@@ -121,7 +143,9 @@ acceptance criteria replace Phase 1 alignment** (there is no user to ask), and
 **Phase 7 (pull request) is deferred to the end of the whole run** — the loop never
 pushes; a human (or an explicitly enabled final step) runs `ship-pr` once to
 ship the branch as a single PR. If the story is too ambiguous to derive a goal from,
-treat that as a blocking issue (step 4).
+treat that as a blocking issue (step 4). If the derived goal's tasks need to write
+outside the story's declared `writes:` set, that is also a blocking issue (step
+4) — escalate it; never silently widen scope past what was declared.
 
 All invariants hold unchanged: implementer/test-writer execute, `judge` verifies every
 task and the final audit, fixes are always re-judged, 3 judge cycles max per task,
@@ -135,17 +159,28 @@ Commit **only** when the final audit is APPROVED, the ladder rungs are green, an
 Phase 6 doc alignment is APPROVED:
 
 - One commit for the story: `feat: <story-id> <story title>` (include the story id).
-- Set the story's `passes: true` in `_goals/backlog.md` (same commit).
-- Append one line to `_goals/LEARNINGS.md`: anything the next iteration should know
-  (gotchas, commands, conventions discovered). Keep it one line per learning.
-- **Memory size gates** (hard, check after appending): `_goals/LEARNINGS.md` ≥ 15 KB →
-  compact now (merge duplicates, summarize older entries; keep it one-read useful);
-  `_goals/ESCALATIONS.md` ≥ 20 KB → move resolved entries to `_goals/archive/`.
+- **Manual mode only**: set the story's `passes: true` in `_goals/backlog.md`
+  (same commit). Driver-dispatched mode never writes backlog fields — the
+  driver applies `passes`/`blocked` itself from your `ITERATION:` line.
+- **Manual mode only**: append one line to `_goals/LEARNINGS.md`: anything the
+  next iteration should know (gotchas, commands, conventions discovered). Keep
+  it one line per learning. **Driver-dispatched**: write that same line to
+  `<outbox>/learnings.md` instead (path supplied in your prompt) — never
+  append to `_goals/LEARNINGS.md` directly; the driver's integrator appends
+  it in order.
+- **Memory size gates, manual mode only** (hard, check after appending):
+  `_goals/LEARNINGS.md` ≥ 15 KB → compact now (merge duplicates, summarize
+  older entries; keep it one-read useful); `_goals/ESCALATIONS.md` ≥ 20 KB →
+  move resolved entries to `_goals/archive/`. Driver-dispatched mode never
+  runs these gates and never compacts either file itself — the driver checks
+  size after integrating your outbox and, on breach, defers the rewrite to
+  the next manual iteration instead of compacting inside a slot.
 - Subagent silent-success rule: an empty subagent response is verified by artifacts
   before being treated as failure (see the `feature` skill's Phase 4 step 2).
 - Never stage `_goals/breaker-state.json` — runtime scratch, gitignored by setup.
 
-Never push. Never touch stories other than the one you picked.
+Never push. Manual mode never touches stories other than the one you picked;
+driver-dispatched mode never touches any story but the one named in your prompt.
 
 ## 4. On failure
 
@@ -153,11 +188,15 @@ If judge cycles exhaust or the story is blocked:
 
 - Do NOT commit implementation work; leave the tree clean (`git checkout .` /
   `git clean -fd` limited to files you created for this story).
-- If `attempts` has reached 3: set `blocked: true` on the story and append an entry to
-  `_goals/ESCALATIONS.md` (story id, what failed, judge verdicts, what a human must
-  decide). Commit ONLY the backlog + escalation change:
-  `chore: block <story-id> after 3 attempts`.
-- End the iteration normally — the next iteration picks the next story.
+- **Manual mode only**: if `attempts` has reached 3, set `blocked: true` on the
+  story and append an entry to `_goals/ESCALATIONS.md` (story id, what failed,
+  judge verdicts, what a human must decide); commit ONLY the backlog +
+  escalation change: `chore: block <story-id> after 3 attempts`.
+  **Driver-dispatched**: write that same entry to `<outbox>/escalations.md`
+  instead — never set `blocked` or touch `_goals/ESCALATIONS.md` directly;
+  the driver applies the transition and appends your entry itself.
+- End the iteration normally — manual mode's next iteration picks the next
+  story; driver-dispatched mode simply reports via the `ITERATION:` line below.
 
 ## Output contract (the loop driver parses this)
 

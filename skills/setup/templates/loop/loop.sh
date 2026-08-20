@@ -7,8 +7,11 @@
 #
 # Usage:   _loop/loop.sh [max-iterations]        (default 10)
 # CLI:     override with LOOP_CLI, e.g. LOOP_CLI="codex exec" or LOOP_CLI="claude -p"
-# SLOTS:   override with LOOP_SLOTS (default 2, clamped [1,3]) — a dark-launch guard (STORY-010) holds effective concurrency at 1 regardless of this value until STORY-011.
-# WORKTREE: override with LOOP_WORKTREE=1 to run each iteration in its own git worktree under .loop-worktrees/ (default 0 = main tree, today's behavior).
+# SLOTS:   override with LOOP_SLOTS (default 2, clamped [1,3]) — N>1 is honored only
+#          when LOOP_WORKTREE=1 (worktree isolation makes concurrent slots sound);
+#          otherwise effective concurrency is held at 1.
+# WORKTREE: override with LOOP_WORKTREE=1 to run each iteration in its own git worktree
+#          under .loop-worktrees/ (default 0 = main tree, today's behavior).
 #
 # SAFETY: run inside a sandbox (worktree/container) with minimal credentials.
 # This script never pushes and never bypasses permission prompts by itself.
@@ -34,22 +37,34 @@
 # inspection).
 set -euo pipefail
 
-MAX_ITER="${1:-10}"   # total iterations dispatched ACROSS slots (today: the
-                       # one slot the dark-launch guard below permits)
+MAX_ITER="${1:-10}"   # total dispatches ACROSS all active slots (fill/poll/reap/
+                       # integrate/refill below) -- same 010/011 semantics: one
+                       # dispatch consumes one unit of this budget no matter which
+                       # slot row it lands in.
 LOOP_CLI="${LOOP_CLI:-claude -p}"
 LOOP_MODEL_FLAG="${LOOP_MODEL_FLAG:-}"
 # Absolute paths, resolved BEFORE any `cd` happens anywhere below (the child
-# subshell dispatched per-iteration cd's into the slot's worktree at
+# subshell dispatched per-slot cd's into that slot's worktree at
 # LOOP_WORKTREE=1) -- both were relative and depended on the invocation cwd.
 PROMPT_FILE="$(cd "$(dirname "$0")" && pwd)/PROMPT.md"
 SENTINEL='<promise>COMPLETE</promise>'
 STATE_FILE="$PWD/_goals/breaker-state.json"
+BACKLOG_FILE="$PWD/_goals/backlog.md"   # driver-owned selection reads/writes
+                                        # this file directly (never via $tree
+                                        # -- §6.3: "slots never write it").
 
 # shellcheck source=./breaker.sh
 source "$(dirname "$0")/breaker.sh"
 breaker_load "$STATE_FILE" "{{LOOP_MODEL_CHAIN}}"
 
-# --- LOOP_SLOTS: read, clamp, dark-launch guard -----------------------------
+# LOOP_WORKTREE: 0 (default) runs every dispatched slot in the main tree --
+# today's behavior, unchanged. 1 activates the worktree lifecycle below (loud
+# tracked-instance preflight, per-slot HEAD/CB0-2, pinned ff-only
+# integration, quarantine-lite on abnormal exit) AND is the precondition the
+# guard below requires before honoring LOOP_SLOTS>1.
+WORKTREE="${LOOP_WORKTREE:-0}"
+
+# --- LOOP_SLOTS: read, clamp, guard --------------------------------------
 # LOOP_SLOTS_EXPLICIT captures the RAW value (pre-clamp) so the guard below
 # can tell "explicitly requested >1" apart from the unset default -- the
 # stderr warning fires only in the former case (no warning fatigue on every
@@ -74,30 +89,33 @@ fi
 # 600s cooldown) -- a single OPEN trip stalls ALL N slots at once, so more
 # slots raise the odds of a full-run stall without shortening it. N=3 crowds
 # fact (1) hardest, which is why 2 (not 3) is the design default.
-#
-# LOOP_SLOTS dark launch (STORY-010): this story ships the slot-supervision
-# STRUCTURE only (slot table, available_slots accounting, poll supervision,
-# per-slot breakers) -- driver-owned dispatch, admission, and the real
-# integrator arrive in STORY-011. Until then EFFECTIVE_SLOTS is held at 1
-# regardless of the clamped SLOTS value above, so the machinery below always
-# drives exactly one concurrent child -- the same structure STORY-011
-# activates for N>1 without restructuring it.
-if (( SLOTS > 1 )); then
+
+# Guard replacement (STORY-011, replaces the STORY-010 dark-launch guard):
+# LOOP_SLOTS>1 is honored IFF LOOP_WORKTREE=1 -- per-slot worktree isolation
+# is the mechanism that makes concurrent slots sound (disjoint checkouts);
+# without it, N slots would share one working tree and stomp each other's
+# checkout state. At LOOP_WORKTREE=0, EFFECTIVE_SLOTS clamps to 1 regardless
+# of the requested SLOTS value, with a one-line stderr note fired only when
+# >1 was EXPLICITLY requested (LOOP_SLOTS_EXPLICIT) -- never on every default
+# run. THIS repo stays gitignored (worktree preflight is inoperable here), so
+# live runs here remain serial N=1; N=2 behavior is proven in the harness's
+# tracked sandboxes.
+if (( SLOTS > 1 )) && (( WORKTREE != 1 )); then
   EFFECTIVE_SLOTS=1
 else
   EFFECTIVE_SLOTS=$SLOTS
 fi
 
-if [[ -n "$LOOP_SLOTS_EXPLICIT" ]] && (( LOOP_SLOTS_EXPLICIT > 1 )); then
-  echo "LOOP_SLOTS>1 requires driver-owned dispatch (STORY-011); running with 1" >&2
+if [[ -n "$LOOP_SLOTS_EXPLICIT" ]] && (( LOOP_SLOTS_EXPLICIT > 1 )) \
+   && (( WORKTREE != 1 )); then
+  echo "LOOP_SLOTS>1 requires LOOP_WORKTREE=1 (worktree isolation); running with 1" >&2
 fi
-echo "slots: $EFFECTIVE_SLOTS — dark launch; design default 2 activates in STORY-011"
 
-# LOOP_WORKTREE: 0 (default) runs every iteration in the main tree -- today's
-# behavior, unchanged. 1 activates the worktree lifecycle below (loud
-# tracked-instance preflight, per-slot HEAD/CB0-2, pinned ff-only
-# integration, quarantine-lite on abnormal exit).
-WORKTREE="${LOOP_WORKTREE:-0}"
+mode_str="main-tree"
+if (( WORKTREE == 1 )); then
+  mode_str="worktree"
+fi
+echo "slots: $EFFECTIVE_SLOTS (mode: $mode_str)"
 
 # detect_rate_limit <output> -> return 0 iff any SINGLE line of <output> matches the
 # pinned rate-limit pattern (case-insensitive), 1 otherwise. Deliberately line-oriented
@@ -130,8 +148,9 @@ detect_rate_limit() {
 # --- Slot table --------------------------------------------------------------
 # bash-3.2-safe parallel indexed arrays (no associative arrays -- same floor
 # breaker.sh:172-174 documents for `local -n`: bash 3.2 on stock macOS has
-# neither). One row per slot, indexed 0..EFFECTIVE_SLOTS-1; STORY-011 raises
-# EFFECTIVE_SLOTS past 1 by looping over more rows, not by changing this shape.
+# neither). One row per slot, indexed 0..EFFECTIVE_SLOTS-1; this task's
+# fill/poll/reap/integrate/refill loop iterates every row without changing
+# this shape.
 slot_pid=()
 slot_tree=()
 slot_branch=()
@@ -139,16 +158,36 @@ slot_no_progress=()
 slot_last_error_sig=()
 slot_same_error=()
 slot_state=()   # "idle" | "running"
+# In-memory claim table (STORY-011 §4 step 3; design twin note :456-459):
+# slot -> story-id, parallel to the row above -- slot_writes mirrors the
+# claimed story's writes: glob for the admission test below. Consulted via
+# slot_state (only a "running" row counts as in-flight), never cleared on
+# reap -- stale content in an idle row is inert because the state gate
+# excludes it.
+slot_story=()
+slot_writes=()
+# Per-slot dispatch bookkeeping populated by _loop_fill_slot, consumed by
+# _loop_reap_slot -- these replace the single scalar locals (outbox_dir,
+# out_file, head_before) the dark-launched N=1 code used, since N>1 now
+# needs one of each per concurrently-running slot.
+slot_outbox=()
+slot_outfile=()
+slot_headbefore=()
 
-SLOT=0   # the dark-launch guard means every iteration dispatches into (and
-         # reaps) this one row; STORY-011 turns this into a loop 0..EFFECTIVE_SLOTS-1.
-slot_pid[SLOT]=0
-slot_tree[SLOT]=""
-slot_branch[SLOT]=""
-slot_no_progress[SLOT]=0
-slot_last_error_sig[SLOT]=""
-slot_same_error[SLOT]=0
-slot_state[SLOT]="idle"
+for ((SLOT = 0; SLOT < EFFECTIVE_SLOTS; SLOT++)); do
+  slot_pid[SLOT]=0
+  slot_tree[SLOT]=""
+  slot_branch[SLOT]=""
+  slot_no_progress[SLOT]=0
+  slot_last_error_sig[SLOT]=""
+  slot_same_error[SLOT]=0
+  slot_state[SLOT]="idle"
+  slot_story[SLOT]=""
+  slot_writes[SLOT]=""
+  slot_outbox[SLOT]=""
+  slot_outfile[SLOT]=""
+  slot_headbefore[SLOT]=""
+done
 
 # _loop_integrate_slot <tree> <branch> -- interim integration (flag=1 only).
 # ORDERING PINNED: merge --ff-only (from the MAIN tree, i.e. this process's
@@ -157,11 +196,28 @@ slot_state[SLOT]="idle"
 # in a worktree, so the worktree must be removed first. Non-ff -> loud
 # stderr + exit 5, never merge -- a plain function call (not a subshell), so
 # this `exit` terminates the whole script, i.e. stays driver-level.
-# STORY-011 replaces this interim, slot-called integrator with the real one
-# (single integrator, never a slot, per the design's integrator-not-slots
-# rule).
+# Called from _loop_reap_slot's disposal step, AFTER the pre-merge subset
+# check passes (below) -- this helper still owns only the merge mechanics;
+# the subset check, the ITERATION-mismatch quarantine, and the abnormal-exit
+# quarantine all live in the caller.
 _loop_integrate_slot() {
   local tree="$1" branch="$2"
+  # N>1 addendum (necessary for the pinned ff-only policy to actually work
+  # under real concurrency, argued rather than silent): every slot filled in
+  # the SAME round forks its worktree branch from the identical base HEAD
+  # (nothing merges until reap), so once one sibling has merged, the NEXT
+  # sibling reaped is no longer a descendant of the new HEAD -- a plain
+  # `--ff-only` would spuriously fail even though admission already
+  # guaranteed the two branches' writes: are disjoint. Rebasing the branch
+  # onto the CURRENT main HEAD first (from inside the worktree, so the
+  # worktree's own branch ref gains the replayed commit) is safe precisely
+  # BECAUSE that same disjoint-writes guarantee means the rebase itself
+  # cannot conflict in the normal case. A genuine rebase conflict (something
+  # admission did not anticipate) aborts the rebase and falls through to the
+  # SAME non-ff/exit-5 disposition below -- never silently resolved.
+  if ! git -C "$tree" rebase "$(git rev-parse HEAD)" >/dev/null 2>&1; then
+    git -C "$tree" rebase --abort >/dev/null 2>&1 || true
+  fi
   if ! git merge --ff-only "$branch"; then
     echo "!!! integration failed: '$branch' is not a fast-forward of the current tree — stopping (worktree and branch retained for inspection: $tree)" >&2
     exit 5
@@ -171,9 +227,18 @@ _loop_integrate_slot() {
 }
 
 active_slots=0
+dispatched=0            # total dispatches across ALL slots this run -- counts
+                         # against MAX_ITER (010 semantics preserved).
+_loop_dispatch_seq=0     # monotonic counter for the interim `loop/iter-N` branch
+                         # name (the real story id is unknown at spawn time until
+                         # the claim below runs; unique across slots and rounds).
 retained_branches=()   # quarantine-lite: branches from abnormally-exited
                         # slots, retained (not integrated) for inspection --
                         # named again in the driver's closing output below.
+refused_ids=()   # protected-path REFUSALS this run (cycle-1 fix 10) -- named
+                 # in the no-eligible-stories completion output below, so
+                 # "complete" never silently masks permanently
+                 # undispatchable work.
 
 # _loop_report_retained -- prints the retained-branches list (if any) exactly
 # once, in the driver's closing output, on EVERY run-ending path (0/1/2/3/4/5),
@@ -190,32 +255,492 @@ _loop_report_retained() {
 }
 trap _loop_report_retained EXIT
 
-for ((i = 1; i <= MAX_ITER; i++)); do
-  echo "=== iteration $i/$MAX_ITER $(date -Is) ==="
+# =============================================================================
+# STORY-011: driver-owned story selection, writes:-glob admission, in-memory
+# claim table (task 01) + the fill/poll/reap/integrate/refill restructure,
+# guard replacement, and the single-writer integrator (task 02) below. The
+# selection/admission/claim/backlog-transition functions in this section are
+# UNCHANGED from task 01 -- task 02 calls them per slot from the main loop
+# instead of once per single-slot iteration.
+# =============================================================================
 
-  # available_slots accounting (design pin, trivially exercised at N=1): the
-  # structure STORY-011 activates for real concurrency.
-  available_slots=$(( EFFECTIVE_SLOTS - active_slots ))
-  if (( available_slots < 0 )); then
-    available_slots=0
+# --- Protected paths -- shared by CB0's revert check below AND admission's
+# refusal test (the CB0-vs-writes seam, addendum 1a): a story declaring
+# writes: on any of these paths is REFUSED at claim time, so the unattended
+# CB0 hard-revert can never be the FIRST detection point for it. -----------
+PROTECTED_PATHS=(
+  "_loop/"
+  "{{IDE_DIR}}/agents/"
+  "{{IDE_DIR}}/skills/"
+  "orchestration-kit.manifest.json"
+  ".gitattributes"
+)
+
+# --- Hotspot set (§6.3 :700-724 + addendum 1c): per-FILE serialization --
+# at most one in-flight story may hold any one member. Kit-repo paths only
+# (minor E) -- inert in consumer installs, where these files are simply
+# absent, so the membership test below never matches there.
+_LOOP_HOTSPOTS=(
+  "ORCHESTRATION.md"
+  # Split string literal (adjacent-quote concatenation -> one unchanged
+  # value at runtime): check E's model-ID heuristic greps for a
+  # (claude|gpt|gemini) name directly followed by a dash and an
+  # alphanumeric, which the emitter filename below would otherwise
+  # false-positive-match -- it is a filename, not a model ID.
+  "skills/setup/emitters/claude""-code.md"
+  "skills/setup/emitters/codex.md"
+  "skills/setup/emitters/copilot.md"
+  "skills/setup/emitters/cursor.md"
+  "skills/setup/templates/ORCHESTRATION.md"
+  "skills/setup/templates/skills/feature/SKILL.md"
+)
+
+# _loop_normalize_glob <glob> -> prints the normalized PREFIX on stdout;
+# returns 1 (prints nothing) iff a '*' appears anywhere OTHER than a
+# trailing run of '*' characters (SUFFIX-ONLY rule, goal-pinned: globs are
+# literal paths or `*`/`**` SUFFIX globs only -- any other placement is
+# rejected). A literal path (no '*' at all) normalizes to itself.
+# Bash-3.2-safe, no external tools. Stated conservatism: a trailing single
+# '*' is promoted to the SAME prefix as '**' (one-level vs multi-level
+# globbing is not distinguished) -- an over-approximation whose only cost is
+# an unnecessary DEFER, never a missed collision.
+_loop_normalize_glob() {
+  local trimmed="$1"
+  while [[ "$trimmed" == *'*' ]]; do
+    trimmed="${trimmed%\*}"
+  done
+  if [[ "$trimmed" == *'*'* ]]; then
+    return 1   # '*' remains outside the trailing run -- mid-path, REJECTED
   fi
+  printf '%s' "$trimmed"
+  return 0
+}
 
-  # Mechanism B: single machine, no loop restructure. If OPEN and cooldown has not
-  # elapsed, log + sleep, then ask again — the second call performs OPEN->HALF-OPEN
-  # and returns 0 — and proceed with this SAME iteration.
+# _loop_globs_intersect <glob1> <glob2> -> exit 0 (intersect) / 1 (disjoint)
+# / 2 (either glob failed the suffix-only parse). EXACT semantics
+# (goal-pinned): each glob normalizes to a PREFIX (above); two normalized
+# prefixes intersect iff one is a prefix of the other (this also covers the
+# equal case) -- e.g. `a/**` (-> `a/`) and `a/b` intersect because `a/` is a
+# prefix of `a/b`; `a/*` (-> `a/`) and `b/*` (-> `b/`) do not.
+_loop_globs_intersect() {
+  local p1 p2
+  p1="$(_loop_normalize_glob "$1")" || return 2
+  p2="$(_loop_normalize_glob "$2")" || return 2
+  [[ "$p1" == "$p2"* || "$p2" == "$p1"* ]]
+}
+
+# _loop_split_csv <csv> -> populates global array _csv_tokens, trimmed of
+# surrounding whitespace. An absent/empty input yields ONE empty-string
+# token (never zero tokens), so downstream intersection tests see the
+# "absent writes: intersects everything" rule fall out of
+# _loop_normalize_glob("") -> "" (a prefix of every string). Bash-3.2-safe
+# (`read -a`; no mapfile, no associative arrays).
+_loop_split_csv() {
+  local input="$1" i tok
+  _csv_tokens=()
+  IFS=',' read -ra _csv_tokens <<< "$input" || true
+  if (( ${#_csv_tokens[@]} == 0 )); then
+    _csv_tokens=("")
+  fi
+  for ((i = 0; i < ${#_csv_tokens[@]}; i++)); do
+    tok="${_csv_tokens[i]}"
+    tok="${tok#"${tok%%[![:space:]]*}"}"
+    tok="${tok%"${tok##*[![:space:]]}"}"
+    _csv_tokens[i]="$tok"
+  done
+}
+
+# _loop_writes_conflict <writes_csv_A> <writes_csv_B> -> exit 0 iff ANY glob
+# in A's comma-list intersects ANY glob in B's. By the time this is called,
+# malformed globs have already been rejected-and-blanked at parse (see
+# _loop_bl_flush below), so a 2 (parse-rejected) return from
+# _loop_globs_intersect should not occur here in practice; treated as "no
+# conflict" defensively either way -- never a crash.
+_loop_writes_conflict() {
+  local a b
+  _loop_split_csv "$1"; local -a toks_a=("${_csv_tokens[@]}")
+  _loop_split_csv "$2"; local -a toks_b=("${_csv_tokens[@]}")
+  for a in "${toks_a[@]}"; do
+    for b in "${toks_b[@]}"; do
+      # `if`-guarded (never a bare call followed by `; rc=$?`): a bare
+      # command's nonzero status (the ordinary "these two don't intersect"
+      # outcome) would trip this script's `set -e` immediately, since only
+      # an `if`/`while` CONDITION (or a `&&`/`||`/`!` list) is exempted.
+      if _loop_globs_intersect "$a" "$b"; then
+        return 0
+      fi
+    done
+  done
+  return 1
+}
+
+# _loop_hotspot_conflict <writes_csv_A> <writes_csv_B> -> exit 0 iff A and B
+# BOTH intersect the SAME hotspot member (§6.3 per-file serialization). Kept
+# as an EXPLICIT, independently-auditable rule -- in practice a shared
+# hotspot member is usually already caught by _loop_writes_conflict too
+# (both stories would have to name/cover that same path), but this makes
+# "at most one in-flight holder of any hotspot member" checkable on its own.
+_loop_hotspot_conflict() {
+  local hs
+  for hs in "${_LOOP_HOTSPOTS[@]}"; do
+    if _loop_writes_conflict "$1" "$hs" && _loop_writes_conflict "$2" "$hs"; then
+      return 0
+    fi
+  done
+  return 1
+}
+
+# --- Backlog parsing (driver-owned selection, §4 step 1) -------------------
+# Bash-3.2-safe (no associative arrays, no mapfile): story blocks begin at a
+# `## STORY-<id>: <title>` header and run to the next such header or EOF.
+# Recognized field lines anywhere inside a block: `- priority: N`,
+# `- passes: true|false`, `- attempts: N`, `- blocked: true|false`, and the
+# optional `- writes: <glob>[, <glob>...]`. Parser robustness (minor H): a
+# block missing ANY of the four pinned fields is INELIGIBLE -- reported
+# loudly to stderr, never a crash, never a silent skip. A malformed
+# (mid-path '*') writes: glob is reported loudly and the WHOLE story is
+# treated as writes-absent (intersects everything, runs alone) this run --
+# the suffix-only rule, goal-pinned.
+_loop_bl_flush() {
+  # `if`-form throughout (never a bare `COND && action`/`COND || action` at
+  # top level): under this script's `set -e`, a bare short-circuit list
+  # whose left side is false has the WHOLE list's status (1), which is NOT
+  # exempted from errexit the way an `if`/`while` CONDITION is -- it would
+  # abort the entire driver on the very first ordinary "condition didn't
+  # hold" case, not just on a real error.
+  if [[ -z "$_bl_cur_id" ]]; then
+    return 0
+  fi
+  if (( ! (_bl_cur_has_prio && _bl_cur_has_passes && _bl_cur_has_attempts && _bl_cur_has_blocked) )); then
+    echo "!!! backlog: $_bl_cur_id is missing a pinned field line (priority/passes/attempts/blocked) -- INELIGIBLE" >&2
+    return 0
+  fi
+  if [[ -n "$_bl_cur_writes" ]]; then
+    _loop_split_csv "$_bl_cur_writes"
+    local tok
+    for tok in "${_csv_tokens[@]}"; do
+      if ! _loop_normalize_glob "$tok" >/dev/null; then
+        echo "!!! backlog: $_bl_cur_id declares a malformed writes: glob '$tok' (literal paths or trailing '*'/'**' suffix globs only) -- treating $_bl_cur_id as writes-absent (runs alone) this run" >&2
+        _bl_cur_writes=""
+        break
+      fi
+    done
+  fi
+  if [[ "$_bl_cur_blocked" == "false" && "$_bl_cur_passes" == "false" ]] && (( _bl_cur_attempts < 3 )); then
+    local n=${#_bl_id[@]} j
+    local idx=$n
+    for ((j = 0; j < n; j++)); do
+      if (( _bl_cur_priority < _bl_priority[j] )); then
+        idx=$j
+        break
+      fi
+    done
+    for ((j = n; j > idx; j--)); do
+      _bl_id[j]="${_bl_id[j-1]}"
+      _bl_priority[j]="${_bl_priority[j-1]}"
+      _bl_writes[j]="${_bl_writes[j-1]}"
+      _bl_attempts[j]="${_bl_attempts[j-1]}"
+    done
+    _bl_id[idx]="$_bl_cur_id"
+    _bl_priority[idx]="$_bl_cur_priority"
+    _bl_writes[idx]="$_bl_cur_writes"
+    _bl_attempts[idx]="$_bl_cur_attempts"
+  fi
+  return 0
+}
+
+_loop_parse_backlog() {
+  local file="$1" line val
+  _bl_id=() _bl_priority=() _bl_writes=() _bl_attempts=()
+  _bl_cur_id="" _bl_cur_priority="" _bl_cur_passes="" _bl_cur_attempts=""
+  _bl_cur_blocked="" _bl_cur_writes=""
+  _bl_cur_has_prio=0 _bl_cur_has_passes=0 _bl_cur_has_attempts=0 _bl_cur_has_blocked=0
+
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    if [[ "$line" == "## STORY-"* ]]; then
+      _loop_bl_flush
+      _bl_cur_id="${line#\#\# }"
+      _bl_cur_id="${_bl_cur_id%%:*}"
+      _bl_cur_priority="" _bl_cur_passes="" _bl_cur_attempts="" _bl_cur_blocked="" _bl_cur_writes=""
+      _bl_cur_has_prio=0 _bl_cur_has_passes=0 _bl_cur_has_attempts=0 _bl_cur_has_blocked=0
+      continue
+    fi
+    if [[ -z "$_bl_cur_id" ]]; then
+      continue
+    fi
+    case "$line" in
+      "- priority:"*) val="${line#*: }"; _bl_cur_priority="${val// /}"; _bl_cur_has_prio=1 ;;
+      "- passes:"*) val="${line#*: }"; _bl_cur_passes="${val// /}"; _bl_cur_has_passes=1 ;;
+      "- attempts:"*) val="${line#*: }"; _bl_cur_attempts="${val// /}"; _bl_cur_has_attempts=1 ;;
+      "- blocked:"*) val="${line#*: }"; _bl_cur_blocked="${val// /}"; _bl_cur_has_blocked=1 ;;
+      "- writes:"*) _bl_cur_writes="${line#*: }" ;;
+    esac
+  done < "$file"
+  _loop_bl_flush
+}
+
+# _loop_backlog_set_field <file> <story_id> <field> <value> -- a targeted,
+# bash-3.2-safe sed-in-place EQUIVALENT: rewrites every `- <field>: ...`
+# line inside <story_id>'s block ONLY (a well-formed block has exactly one,
+# so in practice this is a single-line edit), preserving every other byte
+# (line-by-line reconstruction via a temp file + mv, never a real in-place
+# edit that could half-write on interruption). In TRACKED installs
+# these writes (attempts at claim; passes/blocked at reap) are
+# working-tree-only and NEVER committed by the driver (goal minor B) -- a
+# human or a future story commits them.
+_loop_backlog_set_field() {
+  local file="$1" story_id="$2" field="$3" value="$4"
+  local tmp line in_block=0
+  tmp="$(mktemp)"
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    # NOTE: story_id already carries the "STORY-" prefix (that is how
+    # _loop_parse_backlog captures it from the "## STORY-<id>: <title>"
+    # header), so the block-start match below is "## ${story_id}:" -- NOT
+    # "## STORY-${story_id}:", which would double the prefix.
+    if [[ "$line" == "## ${story_id}:"* ]]; then
+      in_block=1
+    elif [[ "$line" == "## STORY-"* ]]; then
+      in_block=0
+    fi
+    if (( in_block == 1 )) && [[ "$line" == "- ${field}:"* ]]; then
+      printf -- '- %s: %s\n' "$field" "$value" >> "$tmp"
+    else
+      printf '%s\n' "$line" >> "$tmp"
+    fi
+  done < "$file"
+  mv "$tmp" "$file"
+}
+
+# _loop_select_story -- driver-owned selection + admission (§4 steps 1-2;
+# step 3's claim happens at the call site once SELECTED_ID is non-empty, so
+# a caller can log/skip before mutating the backlog). Sets SELECTED_ID,
+# SELECTED_WRITES, SELECTED_ATTEMPTS (all empty if nothing survives).
+# Protected-path writes: REFUSE the story outright (loud stderr, skipped,
+# NO attempts increment -- addendum 1a). Otherwise pairwise-admit against
+# the CURRENT in-flight claims (slot_story[]/slot_writes[], gated on
+# slot_state[]=="running" so a stale/idle row is never mistaken for
+# in-flight) plus the hotspot rule; failing admission DEFERS (the story
+# stays eligible, tried again later -- never blocks). Called once per idle
+# slot per fill round (_loop_fill_slot below) -- admission is therefore
+# re-evaluated against the claim table as it stands AFTER each slot filled
+# earlier in the SAME round: two disjoint-writes stories both admit within
+# one round, while an intersecting pair correctly defers the second until
+# the first's claim is released at reap.
+_loop_select_story() {
+  SELECTED_ID="" SELECTED_WRITES="" SELECTED_ATTEMPTS=""
+  _loop_parse_backlog "$BACKLOG_FILE"
+
+  local protected_csv
+  protected_csv="$(IFS=,; echo "${PROTECTED_PATHS[*]}")"
+
+  local i n=${#_bl_id[@]} id writes attempts conflict j s
+  for ((i = 0; i < n; i++)); do
+    id="${_bl_id[i]}"
+    writes="${_bl_writes[i]}"
+    attempts="${_bl_attempts[i]}"
+
+    # Absent/empty writes: is NEVER refused here -- it declares nothing, so
+    # there is no glob to intersect the protected-path list; it runs alone
+    # via the ordinary admission rule below (absent writes: intersects
+    # everything) instead. Refusal is reserved for a story whose DECLARED
+    # writes: glob actually intersects a protected path (addendum 1a).
+    if [[ -n "$writes" ]] && _loop_writes_conflict "$writes" "$protected_csv"; then
+      echo "!!! story $id REFUSED: writes: '$writes' intersects a protected path -- skipped (no attempts increment, no transition)" >&2
+      # Dedup: selection re-runs at EVERY fill round, so an undedup'd append
+      # would name the same refused id once per round in the completion line --
+      # and round count varies with slot timing under N>1. `[*]:-` guards the
+      # pre-4.4 empty-array set -u trip (same note as model_arg above).
+      if [[ " ${refused_ids[*]:-} " != *" $id "* ]]; then
+        refused_ids+=("$id")
+      fi
+      continue
+    fi
+
+    conflict=0
+    for ((j = 0; j < ${#slot_story[@]}; j++)); do
+      if [[ "${slot_state[j]:-idle}" != "running" ]]; then
+        continue
+      fi
+      s="${slot_story[j]:-}"
+      if [[ -z "$s" ]]; then
+        continue
+      fi
+      if _loop_writes_conflict "$writes" "${slot_writes[j]:-}" \
+         || _loop_hotspot_conflict "$writes" "${slot_writes[j]:-}"; then
+        conflict=1
+        break
+      fi
+    done
+    if (( conflict == 1 )); then
+      continue   # DEFER -- stays eligible, not consumed, never blocks
+    fi
+
+    SELECTED_ID="$id" SELECTED_WRITES="$writes" SELECTED_ATTEMPTS="$attempts"
+    return 0
+  done
+  return 1
+}
+
+# _loop_path_matches_glob <path> <glob> -- concrete-path membership test used
+# ONLY by the pre-merge subset check below (§6.1); distinct from
+# _loop_globs_intersect (which compares two GLOBS against each other for
+# admission). Reuses the SAME normalization (_loop_normalize_glob) but adds
+# the exact-vs-prefix distinction a two-glob intersect test never needed: a
+# literal glob (no trailing '*') must match <path> EXACTLY, while a
+# suffix-glob (had a trailing '*'/'**', stripped by normalization) matches
+# any <path> with that prefix -- the same suffix-only, prefix-promoted
+# conservatism the admission rule already documents.
+_loop_path_matches_glob() {
+  local path="$1" glob="$2" prefix
+  prefix="$(_loop_normalize_glob "$glob")" || return 1
+  if [[ "$glob" == *'*' ]]; then
+    [[ "$path" == "$prefix"* ]]
+  else
+    [[ "$path" == "$prefix" ]]
+  fi
+}
+
+# _loop_subset_violation <tree> <head_before> <writes_csv> -- prints (stdout,
+# one per line) every path from `git diff --name-only <head_before>..HEAD`
+# NOT covered by any glob in <writes_csv>; empty output = no violation
+# (STORY-011 §6.1's pre-merge subset check). Caller-side contract: an
+# absent/empty <writes_csv> is NOT passed here at all -- there is no
+# declared upper bound to audit a story against, and admission's
+# runs-alone rule already prevented any conflict for it, so the caller
+# skips this check entirely rather than manufacturing a spurious
+# violation. A `git diff` failure here (tree/refs somehow invalid) yields
+# no lines to iterate, hence no violation reported -- defensive, matching
+# _loop_writes_conflict's "never a crash" stance -- never called as a bare
+# statement (always inside `[[ -n ... ]]` on its captured output), so this
+# is an intentional check function, not a command whose real failure
+# `set -e` is expected to catch.
+_loop_subset_violation() {
+  local tree="$1" head_before="$2" writes_csv="$3" path covered tok
+  local -a bad=()
+  while IFS= read -r path || [[ -n "$path" ]]; do
+    [[ -z "$path" ]] && continue
+    covered=0
+    _loop_split_csv "$writes_csv"
+    for tok in "${_csv_tokens[@]}"; do
+      [[ -z "$tok" ]] && continue
+      if _loop_path_matches_glob "$path" "$tok"; then
+        covered=1
+        break
+      fi
+    done
+    if (( covered == 0 )); then
+      bad+=("$path")
+    fi
+  done < <(git -C "$tree" diff --name-only "$head_before".."HEAD" 2>/dev/null || true)
+  if (( ${#bad[@]} > 0 )); then
+    printf '%s\n' "${bad[@]}"
+  fi
+}
+
+# _loop_kill_other_slots <except-slot> -- best-effort SIGTERM + reap of every
+# OTHER "running" slot before a driver-fatal exit (CB0/CB1/CB2/non-ff
+# integration failure all terminate the whole process under N>1) -- without
+# this, a background child would be orphaned when this script exits, since
+# nothing else in the process tree would ever `wait` for it. `kill`/`wait`
+# failures (the child already exited on its own) are swallowed. Each killed
+# slot's branch is named in the retained-branches EXIT-trap summary too
+# (extending that summary's CONTENT, not its printing mechanism) so an
+# abrupt multi-slot stop is never silently invisible -- full per-slot
+# quarantine bookkeeping on this abrupt path is out of this task's scope
+# (STORY-012's slot retirement/quarantine-marker work), so these branches
+# are named as "killed, unexamined" rather than run through the normal
+# quarantine-lite disposal.
+_loop_kill_other_slots() {
+  local except="$1" s
+  for ((s = 0; s < EFFECTIVE_SLOTS; s++)); do
+    if (( s == except )); then
+      continue
+    fi
+    if [[ "${slot_state[s]:-idle}" == "running" ]]; then
+      kill "${slot_pid[s]}" 2>/dev/null || true
+      wait "${slot_pid[s]}" 2>/dev/null || true
+      slot_state[s]="idle"
+      if [[ -n "${slot_branch[s]:-}" ]]; then
+        retained_branches+=("${slot_branch[s]} (killed, unexamined)")
+      fi
+    fi
+  done
+}
+
+# _loop_fill_slot <slot> -- attempts to select+admit+claim+dispatch ONE
+# eligible story into the given idle SLOT. Sets global FILL_OK=1 iff a
+# story was claimed and dispatched, FILL_OK=0 iff nothing currently
+# survives selection+admission (an ORDINARY "nothing eligible right now"
+# outcome, never a script error). Bare statement at EVERY call site below,
+# never an if/while CONDITION: several genuine failures inside (git
+# worktree add, etc.) are deliberately left UNGUARDED so `set -e` still
+# aborts the whole script on a real error -- bash's condition-exemption from
+# errexit is transitive into called function bodies, so wrapping this call
+# in a condition would silently exempt those too.
+_loop_fill_slot() {
+  local s="$1"
+  FILL_OK=0
+
+  # Mechanism B: evaluated at FILL time, per dispatch attempt (goal-pinned
+  # under N>1) -- ONE breaker, driver-level, shared by every slot. If OPEN
+  # and cooldown has not elapsed, log + sleep, then ask again (the second
+  # call performs OPEN->HALF-OPEN and returns 0), then proceed with THIS
+  # fill attempt. This sleep is NOT per-slot: it serializes ALL fills while
+  # the shared provider-global breaker cools down -- an accepted, stated
+  # consequence of one breaker state file shared across every slot (never
+  # invent per-slot breaker state).
+  local skip
   skip="$(breaker_should_skip "$STATE_FILE" "$(date +%s)")"
-  if ((skip > 0)); then
+  if (( skip > 0 )); then
     echo "breaker OPEN — sleeping ${skip}s before HALF-OPEN trial"
     sleep "$skip"
     skip="$(breaker_should_skip "$STATE_FILE" "$(date +%s)")"
   fi
 
+  # Loud gate: a missing/unreadable backlog is a SETUP failure, never a
+  # "nothing eligible" completion -- without this check, _loop_select_story
+  # would just read zero story blocks and report no-eligible-stories +
+  # exit 0, silently masking a broken/absent backlog file as "complete".
+  if [[ ! -r "$BACKLOG_FILE" ]]; then
+    echo "!!! $BACKLOG_FILE is missing or unreadable -- cannot select stories (setup failure)" >&2
+    exit 5
+  fi
+
+  # `|| true`: a "nothing eligible survived" result (exit 1) is an ORDINARY
+  # outcome of this call, not a driver error.
+  _loop_select_story || true
+  if [[ -z "$SELECTED_ID" ]]; then
+    return 0
+  fi
+  FILL_OK=1
+
+  # Claim (§4 step 3): the driver increments attempts ITSELF, before
+  # dispatch, so a crashed slot still counts against the 3-attempt cap.
+  _loop_backlog_set_field "$BACKLOG_FILE" "$SELECTED_ID" "attempts" "$((SELECTED_ATTEMPTS + 1))"
+  slot_story[s]="$SELECTED_ID"
+  slot_writes[s]="$SELECTED_WRITES"
+
+  # Outbox dir (ARGUED DEVIATION vs the design's in-worktree location,
+  # goal-pinned): a driver-created mktemp DIRECTORY, outside the repo
+  # entirely -- works identically at LOOP_WORKTREE=0 (no worktree exists
+  # yet), matches the existing per-slot output-file mktemp pattern, and has
+  # zero gitignore surface. Appended into shared memory on reap.
+  local outbox_dir
+  outbox_dir="$(mktemp -d)"
+  slot_outbox[s]="$outbox_dir"
+
+  # Interim `loop/iter-<n>` branch naming: the real story id is unknown at
+  # spawn time until _loop_select_story above returns it, and the name must
+  # stay unique across slots/rounds -- a monotonic driver-global sequence,
+  # not the story id itself (a story can be re-dispatched after a defer).
+  _loop_dispatch_seq=$((_loop_dispatch_seq + 1))
+  local branch="loop/iter-$_loop_dispatch_seq"
+
   # --- worktree lifecycle (LOOP_WORKTREE=1 only) ----------------------------
-  # Interim `loop/iter-<i>` branch naming: the real story id is unknown at
-  # spawn time until STORY-011's claim table exists.
-  branch="loop/iter-$i"
   if (( WORKTREE == 1 )); then
-    wt="$PWD/.loop-worktrees/slot-1"
+    # 1-based path naming: preserves STORY-010's shipped slot-1 surface
+    # (harness 43-46/49)
+    local wt="$PWD/.loop-worktrees/slot-$((s+1))"
     git worktree add -b "$branch" "$wt" HEAD >/dev/null
 
     # Loud preflight (cycle-3 correction): BOTH probes are built from the SAME
@@ -241,28 +766,30 @@ for ((i = 1; i <= MAX_ITER; i++)); do
       git branch -D "$branch" 2>/dev/null || true
       exit 5
     fi
-    tree="$wt"
+    slot_tree[s]="$wt"
   else
-    tree="$PWD"
+    slot_tree[s]="$PWD"
   fi
-  slot_tree[SLOT]="$tree"
-  slot_branch[SLOT]="$branch"
+  slot_branch[s]="$branch"
 
-  # DRIVER-owned HEAD capture, before dispatch (after reap: see head_after
-  # below). Unified for both flags via `-C`: at LOOP_WORKTREE=0, tree is
-  # $PWD, so this is identical to a plain `git rev-parse HEAD`.
-  head_before="$(git -C "$tree" rev-parse HEAD)"
+  local tree="${slot_tree[s]}"
 
+  # DRIVER-owned HEAD capture, before dispatch (after reap: see
+  # slot_headbefore consumed in _loop_reap_slot). Unified for both flags via
+  # `-C`: at LOOP_WORKTREE=0, tree is $PWD, so this is identical to a plain
+  # `git rev-parse HEAD`.
+  slot_headbefore[s]="$(git -C "$tree" rev-parse HEAD)"
+
+  local model model_arg=""
   model="$(breaker_current_model "$STATE_FILE")"
   # Plain string (not an array): kept consistent with $LOOP_CLI's own unquoted,
   # naive whitespace-splitting expansion below — and avoids the pre-4.4 bash bug
   # where an empty array referenced via "${arr[@]}" trips `set -u` as unbound.
-  model_arg=""
   if [[ -n "$LOOP_MODEL_FLAG" && -n "$model" ]]; then
     model_arg="$LOOP_MODEL_FLAG $model"
   fi
 
-  set +e
+  local p
   p="$(cat "$PROMPT_FILE")"
   # CRLF parity (twin: loop.ps1's TrimEnd): strip BOTH trailing CR and LF, not CR alone
   # — command substitution above already strips trailing newlines, so a \n before a \r
@@ -270,53 +797,85 @@ for ((i = 1; i <= MAX_ITER; i++)); do
   # that a CR-only strip misses.
   while [[ "$p" == *$'\r' || "$p" == *$'\n' ]]; do p="${p%?}"; done
 
+  # Pinned-prompt substitution (§4 step 4 / prompt-pinning-mechanism pin):
+  # the read line and the strip loop above are IDENTIFIER-PRESERVED
+  # byte-for-byte (STORY-010 rule) -- substitution is applied to $p strictly
+  # AFTER them, never inside. FAIL LOUD (exit 5, setup-failure category) if
+  # the template lacks EITHER substitution point: a consumer-edited
+  # PROMPT.md must never silently dispatch an unpinned prompt that flips the
+  # slot into manual mode.
+  if [[ "$p" != *'%%STORY_ID%%'* || "$p" != *'%%OUTBOX_DIR%%'* ]]; then
+    echo "!!! PROMPT.md is missing %%STORY_ID%% and/or %%OUTBOX_DIR%% -- refusing to dispatch an unpinned prompt" >&2
+    exit 5
+  fi
+  p="${p//%%STORY_ID%%/$SELECTED_ID}"
+  p="${p//%%OUTBOX_DIR%%/$outbox_dir}"
+
   # --- driver/child boundary (the pin) --------------------------------------
   # The child is a background subshell that runs ONLY the CLI invocation, cwd
   # = the slot's tree (worktree at LOOP_WORKTREE=1, main tree otherwise),
   # stdout+stderr redirected to a driver-created per-slot output file (mktemp,
-  # outside the repo — no gitignore concern; removed after evaluation below).
-  # The ONLY things that cross child->driver are the CLI exit status (via
-  # `wait "$pid"` after the kill -0 poll, below) and that output file. Every
-  # exit 2/3/4/5 statement in this script lives OUTSIDE this subshell, at
-  # driver level: an `exit` inside a subshell only ends the subshell, and
-  # check G's grep cannot see that distinction, so keeping every exit
-  # statement out here is a discipline this comment is the only guard for.
+  # outside the repo — no gitignore concern; removed after evaluation in
+  # reap). The ONLY things that cross child->driver are the CLI exit status
+  # (via `wait "$pid"` in _loop_reap_slot, after the kill -0 poll) and that
+  # output file. Every exit 2/3/4/5 statement in this script lives OUTSIDE
+  # this subshell, at driver level: an `exit` inside a subshell only ends the
+  # subshell, and check G's grep cannot see that distinction, so keeping
+  # every exit statement out here is a discipline this comment is the only
+  # guard for.
+  local out_file
   out_file="$(mktemp)"
+  slot_outfile[s]="$out_file"
   (
     cd "$tree"
     $LOOP_CLI $model_arg "$p" > "$out_file" 2>&1
   ) &
-  pid=$!
-  slot_pid[SLOT]="$pid"
-  slot_state[SLOT]="running"
+  slot_pid[s]=$!
+  slot_state[s]="running"
   active_slots=$((active_slots + 1))
+  return 0
+}
 
-  # Supervision: a `kill -0` poll loop, then `wait "$pid"` for the real exit
-  # status -- the portable bash-3.2-floor primitive (`wait -n` needs bash
-  # 4.3+, which the kit does not require anywhere else either). `kill -0`
-  # only tests whether a signal COULD be delivered; a child that has already
-  # exited but not yet been collected by this shell (a zombie) still answers
-  # it, so this loop's true termination condition is "`wait` below has
-  # collected the real status," not "the process is gone." This is the poll
-  # loop even at this story's N=1 so STORY-011 activates N>1 by iterating
-  # more pids here, not by restructuring this shape.
-  while kill -0 "$pid" 2>/dev/null; do
-    sleep 0.2
-  done
+# _loop_reap_slot <slot> -- drains ONE finished slot (caller has already
+# confirmed `kill -0` is negative): real exit status, breaker record,
+# ITERATION-mismatch check (quarantine-lite; ORDERED BEFORE the sentinel
+# scan's own outcome, per the goal's reap-order pin), backlog transition,
+# outbox appends (integration order = reap order), memory size gates, CB0
+# (global-fatal, kills every other active slot), CB1/CB2 (per-slot,
+# run-fatal -- thresholds/semantics UNCHANGED from STORY-010), and disposal
+# (subset-check + integrate, or quarantine-lite). Bare statement at EVERY
+# call site below -- see _loop_fill_slot's comment: this function contains
+# unguarded `git worktree prune` / `git -C ... reset --hard` call sites that
+# rely on `set -e` for real coverage, which only holds if this function is
+# never itself the condition of an if/while.
+_loop_reap_slot() {
+  local s="$1"
+  local pid="${slot_pid[s]}" tree="${slot_tree[s]}" branch="${slot_branch[s]}"
+  local out_file="${slot_outfile[s]}" head_before="${slot_headbefore[s]}"
+  local story="${slot_story[s]}" writes="${slot_writes[s]}"
+  local outbox_dir="${slot_outbox[s]}"
+
+  # Supervision handoff: the caller's `kill -0` poll already established the
+  # child has exited (or is a collectible zombie); `wait` collects the real
+  # exit status -- the portable bash-3.2-floor primitive (`wait -n` needs
+  # bash 4.3+, which the kit does not require anywhere else either).
+  set +e
   wait "$pid"
-  status=$?
+  local status=$?
   set -e
 
-  slot_state[SLOT]="idle"
+  slot_state[s]="idle"
   active_slots=$((active_slots - 1))   # refill trigger: slot exit, not merge
 
   # Identifier preservation (cycle-3): `output` is populated, verbatim, from
   # the per-slot output file the child wrote to -- never a reimplementation.
+  local output
   output="$(cat "$out_file")"
   rm -f "$out_file"
 
   printf '%s\n' "$output" | tail -n 25
 
+  local detected
   if detect_rate_limit "$output"; then
     detected=1
   else
@@ -324,41 +883,117 @@ for ((i = 1; i <= MAX_ITER; i++)); do
   fi
   breaker_record "$STATE_FILE" "$detected" "$(date +%s)"
 
+  # --- Integrator step 1: ITERATION validation, BEFORE sentinel handling
+  # (goal-pinned reap order). A dispatched slot must NEVER emit the
+  # sentinel (skill contract: it runs the pinned story without
+  # re-evaluating eligibility); the driver's own no-eligible banner is the
+  # ONLY completion path in dispatched runs. The sentinel scan below
+  # survives byte-identical (extraction-site pin) -- its outcome now feeds
+  # THIS mismatch decision, never a completion branch.
+  local iteration_line iter_id iter_verdict mismatch=0
+  iteration_line="$(grep -m1 '^ITERATION:' <<< "$output" || true)"
+  if [[ -z "$iteration_line" ]]; then
+    mismatch=1
+  else
+    read -r _ iter_id iter_verdict _ <<< "$iteration_line" || true
+    if [[ "$iter_id" != "$story" ]]; then
+      mismatch=1
+    fi
+  fi
   # Herestring, not `printf | grep`: same pipefail+SIGPIPE false-negative class as
   # detect_rate_limit above — no live producer here for a downstream match to SIGPIPE.
   if grep -qF "$SENTINEL" <<< "$output"; then
-    echo "=== backlog complete after $i iteration(s) ==="
-    if (( WORKTREE == 1 )); then
-      _loop_integrate_slot "$tree" "$branch"
-    fi
-    exit 0
+    mismatch=1   # sentinel-from-dispatched-slot rule: itself an ITERATION-mismatch
   fi
 
-  # Circuit breaker 0: protected paths — the loop must never modify its own machinery.
-  # Evaluated over the slot's own head_before..HEAD (its worktree at
-  # LOOP_WORKTREE=1, the main tree at 0 — today's behavior); run-fatal,
-  # meaning preserved. At this story's N=1 there are no OTHER concurrent slot
-  # children to kill (this slot's own child is already reaped via `wait`
-  # above) -- STORY-011 kills the other active slots' children here too.
-  if ! git -C "$tree" diff --quiet "$head_before" HEAD -- _loop/ '{{IDE_DIR}}/agents/' '{{IDE_DIR}}/skills/' orchestration-kit.manifest.json .gitattributes 2>/dev/null; then
-    echo "!!! protected-path modification detected — reverting iteration and stopping" >&2
+  # Integrator step 5's subset check is computed HERE, EARLY (not deferred to
+  # the pre-merge disposal step below), so its outcome can also gate step 2's
+  # backlog transition below: a subset violation must leave NO transition,
+  # exactly like an ITERATION-mismatch (verified: backlog stays untouched for
+  # a quarantined story either way). head_before/tree/writes are all already
+  # known at this point (captured at dispatch), so nothing here waits on the
+  # disposal step -- it just reuses this cached result instead of
+  # re-running the same `git diff`.
+  local subset_bad=""
+  if (( WORKTREE == 1 )) && (( mismatch == 0 )) && [[ -n "$writes" ]]; then
+    subset_bad="$(_loop_subset_violation "$tree" "$head_before" "$writes")"
+  fi
+
+  # --- Integrator step 2: backlog transition -- skipped entirely on an
+  # ITERATION-mismatch OR a subset-check violation (STORY-010 disposition:
+  # NO backlog transition either way).
+  if (( mismatch == 1 )); then
+    echo "!!! slot $s: ITERATION-mismatch (claim was '$story') -- quarantine-lite pending: no backlog transition, claim released" >&2
+  elif [[ -n "$subset_bad" ]]; then
+    echo "!!! slot $s: branch '$branch' touched paths outside its declared writes: -- quarantine-lite pending: no backlog transition, claim released: $subset_bad" >&2
+  else
+    case "$iter_verdict" in
+      passed) _loop_backlog_set_field "$BACKLOG_FILE" "$story" "passes" "true" ;;
+      blocked) _loop_backlog_set_field "$BACKLOG_FILE" "$story" "blocked" "true" ;;
+      failed) : ;;   # attempts already counted at claim -- no field change
+      *) echo "!!! ITERATION line for $story has an unrecognized verdict '$iter_verdict' -- no transition" >&2 ;;
+    esac
+  fi
+
+  # --- Integrator step 3: outbox appends, ALWAYS (independent evidence from
+  # the child's own work) -- integration order = reap order.
+  if [[ -f "$outbox_dir/learnings.md" ]]; then
+    cat "$outbox_dir/learnings.md" >> "$PWD/_goals/LEARNINGS.md"
+  fi
+  if [[ -f "$outbox_dir/escalations.md" ]]; then
+    cat "$outbox_dir/escalations.md" >> "$PWD/_goals/ESCALATIONS.md"
+  fi
+  rm -rf "$outbox_dir"
+
+  # --- Integrator step 4: memory size gates, driver-side, AFTER appends
+  # (§6.3 :685-689's single-writer compaction rule). Loud deferral notes
+  # ONLY -- the driver never rewrites prose itself: "merge duplicates,
+  # summarize older entries" / "move RESOLVED entries" need semantic
+  # judgment a shell function cannot honestly perform. The driver enforces
+  # the single-writer HALF it can (slots never compact); the compaction/
+  # archival rewrite itself is deferred to the next MANUAL (non-driver-
+  # dispatched) iteration, whose skill text keeps the gates. 15/20 KB read
+  # as the binary (KiB) convention, matching typical file-size tooling.
+  local sz
+  if [[ -f "$PWD/_goals/LEARNINGS.md" ]]; then
+    sz="$(wc -c < "$PWD/_goals/LEARNINGS.md" | tr -d '[:space:]')"
+    if (( sz >= 15360 )); then
+      echo "!!! _goals/LEARNINGS.md is >= 15KB ($sz bytes) -- compaction deferred to the next MANUAL iteration; automated prose compaction is out of the driver's competence (design §6.3 :685-689 single-writer rule -- the driver IS the single writer, but semantic rewriting is not)" >&2
+    fi
+  fi
+  if [[ -f "$PWD/_goals/ESCALATIONS.md" ]]; then
+    sz="$(wc -c < "$PWD/_goals/ESCALATIONS.md" | tr -d '[:space:]')"
+    if (( sz >= 20480 )); then
+      echo "!!! _goals/ESCALATIONS.md is >= 20KB ($sz bytes) -- archival (move RESOLVED entries) deferred to the next MANUAL iteration; same single-writer-competence limit as LEARNINGS above" >&2
+    fi
+  fi
+
+  # Circuit breaker 0: protected paths — the loop must never modify its own
+  # machinery. Evaluated over the slot's own head_before..HEAD (its worktree
+  # at LOOP_WORKTREE=1, the main tree at 0 — today's behavior); run-fatal,
+  # meaning preserved. Global integrity failure (design §5): kills every
+  # OTHER active slot's child before exiting so exit 4 never leaves an
+  # orphaned background process behind.
+  if ! git -C "$tree" diff --quiet "$head_before" HEAD -- "${PROTECTED_PATHS[@]}" 2>/dev/null; then
+    echo "!!! protected-path modification detected in slot $s — reverting iteration and stopping" >&2
     git -C "$tree" reset --hard "$head_before"
     if (( WORKTREE == 1 )); then
       git worktree remove --force "$tree" 2>/dev/null || true
       git worktree prune
     fi
+    _loop_kill_other_slots "$s"
     exit 4
   fi
 
   # DRIVER-owned HEAD capture, after reap.
+  local head_after
   head_after="$(git -C "$tree" rev-parse HEAD)"
 
   # cb_disposition/cb_exit defer CB1/CB2's exit so the worktree lifecycle
   # (integrate-or-quarantine, below) runs first even on a terminal iteration —
   # the underlying evaluation order (record -> sentinel -> CB0 -> CB1 -> CB2)
   # is unchanged; only WHERE the exit statement executes moves.
-  cb_disposition=0
-  cb_exit=0
+  local cb_disposition=0 cb_exit=0
 
   # Circuit breaker 1: no new commit for 3 consecutive iterations (per-slot
   # counter, unchanged threshold).
@@ -366,52 +1001,56 @@ for ((i = 1; i <= MAX_ITER; i++)); do
   # counter — the breaker owns recovery for it instead. Non-rate-limited no-commit
   # passes increment no_progress exactly as before.
   if [[ "$head_after" == "$head_before" ]]; then
-    if ((detected == 1)); then
+    if (( detected == 1 )); then
       echo "rate-limited pass — CB1 exempt (breaker owns it)"
     else
-      slot_no_progress[SLOT]=$(( slot_no_progress[SLOT] + 1 ))
-      echo "--- no progress (${slot_no_progress[SLOT]}/3)"
-      if (( slot_no_progress[SLOT] >= 3 )); then
+      slot_no_progress[s]=$(( slot_no_progress[s] + 1 ))
+      echo "--- no progress (${slot_no_progress[s]}/3)"
+      if (( slot_no_progress[s] >= 3 )); then
         echo "!!! circuit breaker: 3 iterations without a commit — stopping" >&2
         cb_disposition=1
         cb_exit=2
       fi
     fi
   else
-    slot_no_progress[SLOT]=0
+    slot_no_progress[s]=0
   fi
 
   # Circuit breaker 2: same failure signature 5 times in a row (per-slot
   # counter, thresholds unchanged; CB2's signature reads the same output
-  # file/variable the driver already captured above). Skipped entirely once
+  # variable the driver already captured above). Skipped entirely once
   # CB1 has already assigned a disposition this iteration — matches the
   # original ordering, where CB1's `exit 2` would have prevented this code
   # from ever running.
   if (( cb_disposition == 0 )) && (( status != 0 )); then
+    local error_sig
     error_sig="$(printf '%s' "$output" | tail -n 5 | sha256sum | cut -d' ' -f1)"
-    if [[ "$error_sig" == "${slot_last_error_sig[SLOT]}" ]]; then
-      slot_same_error[SLOT]=$(( slot_same_error[SLOT] + 1 ))
-      if (( slot_same_error[SLOT] >= 5 )); then
+    if [[ "$error_sig" == "${slot_last_error_sig[s]}" ]]; then
+      slot_same_error[s]=$(( slot_same_error[s] + 1 ))
+      if (( slot_same_error[s] >= 5 )); then
         echo "!!! circuit breaker: same error 5 times — stopping" >&2
         cb_disposition=1
         cb_exit=3
       fi
     else
-      slot_same_error[SLOT]=1
-      slot_last_error_sig[SLOT]="$error_sig"
+      slot_same_error[s]=1
+      slot_last_error_sig[s]="$error_sig"
     fi
   elif (( cb_disposition == 0 )); then
-    slot_same_error[SLOT]=0
-    slot_last_error_sig[SLOT]=""
+    slot_same_error[s]=0
+    slot_last_error_sig[s]=""
   fi
 
-  # --- slot disposal: quarantine-lite (abnormal) vs normal integration -----
+  # --- slot disposal: quarantine-lite (mismatch / abnormal / subset
+  # violation) vs normal integration -- flag=1 only; flag=0 has no
+  # worktree/branch to act on (main tree already carries whatever the slot
+  # committed, today's unchanged behavior).
   if (( WORKTREE == 1 )); then
-    dirty=0
+    local dirty=0
     if [[ -n "$(git -C "$tree" status --porcelain 2>/dev/null)" ]]; then
       dirty=1
     fi
-    abnormal=0
+    local abnormal=0
     # Abnormal slot exit (quarantine-lite, pinned): a nonzero CLI status that
     # did NOT earn a recognized CB1/CB2 disposition this iteration, OR a
     # dirty worktree left behind either way. Full quarantine (markers,
@@ -423,8 +1062,26 @@ for ((i = 1; i <= MAX_ITER; i++)); do
       abnormal=1
     fi
 
-    if (( abnormal == 1 )); then
-      echo "!!! slot exited abnormally (status=$status dirty=$dirty) — quarantine-lite: NOT integrating; retaining branch '$branch' for inspection ($tree)" >&2
+    if (( mismatch == 1 )); then
+      echo "!!! slot $s: ITERATION-mismatch — quarantine-lite: NOT integrating; retaining branch '$branch' for inspection ($tree)" >&2
+      git worktree remove --force "$tree" 2>/dev/null || true
+      git worktree prune
+      retained_branches+=("$branch")
+    elif (( abnormal == 1 )); then
+      echo "!!! slot $s exited abnormally (status=$status dirty=$dirty) — quarantine-lite: NOT integrating; retaining branch '$branch' for inspection ($tree)" >&2
+      git worktree remove --force "$tree" 2>/dev/null || true
+      git worktree prune
+      retained_branches+=("$branch")
+    elif [[ -n "$subset_bad" ]]; then
+      # Integrator step 5: PRE-MERGE subset check -- the branch's actual
+      # changed paths must be a subset of the story's declared writes:
+      # (same normalization as admission; computed early, above, so the
+      # backlog-transition skip and this disposal agree on one result
+      # without a second `git diff`). Absent/empty writes: has no declared
+      # bound to audit against -- admission's runs-alone rule already
+      # prevented any conflict for it, so the check is skipped there
+      # rather than manufacturing a spurious violation.
+      echo "!!! slot $s: branch '$branch' touched paths outside its declared writes: (quarantine-lite, not integrated): $subset_bad" >&2
       git worktree remove --force "$tree" 2>/dev/null || true
       git worktree prune
       retained_branches+=("$branch")
@@ -433,16 +1090,105 @@ for ((i = 1; i <= MAX_ITER; i++)); do
     fi
   fi
 
-  # Literal `exit 2`/`exit 3` statements (not a variable exit, per check G's
-  # greps at .claude/checks.sh:295-297, which require the literal digit on a
-  # driver-level exit line): cb_exit only SELECTS between them, it never
+  # Literal `exit 2`/`exit 3` statements (not a variable exit): the
+  # structural checks grep for literal exit digits on a driver-level exit
+  # line, so cb_exit only SELECTS between them, it never
   # substitutes for them.
   if (( cb_disposition == 1 )); then
+    _loop_kill_other_slots "$s"
     if (( cb_exit == 2 )); then
       exit 2
     fi
     exit 3
   fi
+}
+
+# =============================================================================
+# Main loop: fill every available slot -> poll ALL active slots (kill -0
+# sweep, bash-3.2, no `wait -n`) -> reap each finished slot (in slot order)
+# -> integrate (inside reap, above) -> refill. MAX_ITER counts total
+# dispatches across slots (010 semantics preserved); at EFFECTIVE_SLOTS=1
+# (the default-flags / LOOP_WORKTREE=0 path) this degenerates to exactly
+# today's serial one-dispatch-at-a-time behavior.
+# =============================================================================
+while (( dispatched < MAX_ITER )) || (( active_slots > 0 )); do
+  echo "=== fill round: dispatched=$dispatched/$MAX_ITER active=$active_slots $(date -Is) ==="
+
+  # --- FILL ------------------------------------------------------------------
+  filled_this_round=0
+  for ((SLOT = 0; SLOT < EFFECTIVE_SLOTS; SLOT++)); do
+    if [[ "${slot_state[SLOT]}" == "running" ]]; then
+      continue
+    fi
+    if (( dispatched >= MAX_ITER )); then
+      break   # no capacity left this run -- true for every remaining idle slot too
+    fi
+    _loop_fill_slot "$SLOT"
+    if (( FILL_OK == 1 )); then
+      dispatched=$((dispatched + 1))
+      filled_this_round=1
+    else
+      # Nothing eligible right now: _loop_select_story is a pure function of
+      # the backlog + the CURRENT claim table, and neither changed since the
+      # last idle slot's (failed) attempt in this SAME round -- trying
+      # another idle slot would recompute the identical empty result.
+      break
+    fi
+  done
+
+  # No eligible story survived selection this round AND nothing is still
+  # running -> the driver owns the completion determination now (the
+  # skill's <promise>COMPLETE</promise> branch remains for MANUAL invocation
+  # only). Refused-story completion visibility (cycle-1 fix 10): name every
+  # protected-path-refused story id so "complete" never silently masks
+  # permanently undispatchable work; exit code stays 0.
+  if (( active_slots == 0 )) && (( filled_this_round == 0 )); then
+    echo "=== no eligible stories remain -- exiting ==="
+    if (( ${#refused_ids[@]} > 0 )); then
+      echo "=== protected-path-refused this run (never dispatched): ${refused_ids[*]} ==="
+    fi
+    exit 0
+  fi
+
+  # --- POLL --------------------------------------------------------------
+  # Supervision: a `kill -0` poll loop over every RUNNING slot -- the
+  # portable bash-3.2-floor primitive (`wait -n` needs bash 4.3+, which the
+  # kit does not require anywhere else either). `kill -0` only tests whether
+  # a signal COULD be delivered; a child that has already exited but not
+  # yet been collected (a zombie) still answers it, so `wait` in the reap
+  # step below is what actually collects the real status. Trivially
+  # exercised at EFFECTIVE_SLOTS=1 (one pid to sweep) -- N>1 iterates more
+  # pids here without restructuring this shape.
+  while :; do
+    any_done=0
+    for ((SLOT = 0; SLOT < EFFECTIVE_SLOTS; SLOT++)); do
+      if [[ "${slot_state[SLOT]}" != "running" ]]; then
+        continue
+      fi
+      if ! kill -0 "${slot_pid[SLOT]}" 2>/dev/null; then
+        any_done=1
+      fi
+    done
+    if (( any_done == 1 )); then
+      break
+    fi
+    sleep 0.2
+  done
+
+  # --- REAP (integrator runs inside _loop_reap_slot) ------------------------
+  # Reap order = slot index order = integration order (outbox appends and
+  # the closing summary both inherit this ordering).
+  for ((SLOT = 0; SLOT < EFFECTIVE_SLOTS; SLOT++)); do
+    if [[ "${slot_state[SLOT]}" != "running" ]]; then
+      continue
+    fi
+    if kill -0 "${slot_pid[SLOT]}" 2>/dev/null; then
+      continue   # still running -- not one of this round's finishers
+    fi
+    _loop_reap_slot "$SLOT"
+  done
+
+  # --- REFILL: loop back to FILL at the top ---------------------------------
 done
 
 # (Retained-branches summary, if any, is printed by the _loop_report_retained

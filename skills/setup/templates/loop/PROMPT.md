@@ -1,6 +1,8 @@
-Invoke the `auto-loop` skill and follow it for exactly ONE iteration: pick one story
-from `_goals/backlog.md`, run it through the orchestration flow with judge gates,
-commit only on an APPROVED audit with green targeted tests, update the backlog and
-learnings, then stop. Obey the skill's output contract — end with an `ITERATION:` line,
-or `<promise>COMPLETE</promise>` if no eligible stories remain. Do exactly one story.
-Never push.
+Invoke the `auto-loop` skill in driver-dispatched mode: run story `%%STORY_ID%%`
+from `_goals/backlog.md` through ONE iteration — orchestration flow, judge gates,
+commit only on an APPROVED audit with green targeted tests, then stop. This story
+was already selected and validated by the driver: never re-evaluate eligibility
+or pick another. Write learning/escalation lines to `%%OUTBOX_DIR%%/learnings.md`
+and `%%OUTBOX_DIR%%/escalations.md` (names pinned) — never the shared memory
+files directly. The driver fills `%%STORY_ID%%`/`%%OUTBOX_DIR%%` at dispatch, not
+setup: end with the `ITERATION:` line naming `%%STORY_ID%%`. Never push.

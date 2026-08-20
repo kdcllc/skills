@@ -124,7 +124,8 @@ appendix **unedited** — "The Coordinator may not rewrite raw agent outputs"
   predictive breaker on the last 10 samples) if we ever run parallel loops.
 - **WIP-limited self-refilling dispatch**: `available-slots = max(0, 3 - active PRs)`,
   refill on merge (`workflows/squad.md`) — the pattern for parallelizing our loop
-  beyond one story at a time.
+  beyond one story at a time. *(Shipped through STORY-010 (v0.11.0) + STORY-011
+  (v0.12.0) per `docs/design-parallel-dispatch.md`.)*
 - **Judge-timeout semantics**: Rai's "timeout ⇒ 🟡 Unknown, never silently approve"
   with a 5-second budget — relevant if we ever bound judge latency.
 - **Skill confidence/source frontmatter + reskill compaction** (extraction thresholds:
