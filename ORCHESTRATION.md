@@ -6,7 +6,7 @@ every install:
 **[`skills/setup/templates/ORCHESTRATION.md`](skills/setup/templates/ORCHESTRATION.md)**
 
 It describes the orchestrator/worker/judge system as a template with `{{TOKEN}}`
-placeholders and `<!-- BOOTSTRAP: ... -->` guidance. As of kit v0.16.0 that covers:
+placeholders and `<!-- BOOTSTRAP: ... -->` guidance. As of kit v0.17.0 that covers:
 
 - the **seven-phase feature flow** — alignment, goal creation, goal judgment, task
   execution, final audit, docs alignment (`align-docs`), and an approval-gated pull
@@ -22,6 +22,10 @@ placeholders and `<!-- BOOTSTRAP: ... -->` guidance. As of kit v0.16.0 that cove
 - the **staged test ladder** (rungs 1–2 mid-cycle, full suites at cycle end);
 - an append-only **orchestration log** per goal, silent-success artifact verification,
   and untrusted-input rules in every agent;
+- a **GREENFIELD ONLY** `BOOTSTRAP:` comment in the canonical template that, on a
+  greenfield `/setup`, adds an **Engineering practices** subsection (test-first / TDD
+  and SOLID — documentation-only conventions, not judge auto-fail triggers), keyed off
+  this install's greenfield decision / `options.greenfield`;
 - the optional **autonomous loop** with structural guards — protected paths enforced by
   the loop drivers (`loop.sh`/`loop.ps1`, PowerShell 7+), circuit breakers, memory size
   gates, one human-approved PR per run;

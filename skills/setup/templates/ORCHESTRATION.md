@@ -13,6 +13,24 @@ including subagent delegation, judgment cycles, and retry mechanisms.
 >      (backend/frontend/CLI/etc.), and where the canonical domain reference lives
 >      (domain skill and/or docs file). -->
 
+<!-- BOOTSTRAP: GREENFIELD ONLY — resolve from this install's in-session greenfield
+     decision, i.e. the Step 2a accept-and-confirm path. That decision is persisted as
+     the manifest's `options.greenfield`, but this resolution step (Step 4) runs
+     *before* Step 6 writes the manifest, so key off the decision recorded in this
+     session and never off a not-yet-written or stale manifest file. When that
+     decision is true, add an **Engineering practices** subsection here, at a heading
+     level that fits this top-matter site: 4–8 sentences, stack-agnostic, stating that
+     new behavior is developed test-first — a failing test is written before the
+     production code that satisfies it — and that
+     modules follow SOLID: one reason to change per unit, dependencies declared
+     against ports/abstractions rather than concretions, and no god-files that
+     accumulate unrelated responsibilities. Name no language, runtime, or package
+     manager; the stack note above already carries that. These are authoring
+     conventions for a fresh codebase, not judge auto-fail triggers — do not add them
+     to the auto-fail table or to any judge criteria. When `options.greenfield` is
+     false or absent — an existing-project install, a declined scaffold, or a Step 2a
+     that was skipped as not sparse — delete this comment and add no subsection. -->
+
 ---
 
 ## Table of Contents

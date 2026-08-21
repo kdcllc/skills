@@ -1,6 +1,6 @@
 ---
 name: setup
-description: Install the orchestrator/worker/judge multi-agent system into the current project, compiled for its AI coding harness(es) — Claude Code, Cursor, GitHub Copilot (VS Code), and/or OpenAI Codex. Generates the five subagents (judge, qa-judge, implementer, test-writer, terminal) with tiered model pins — terminal is light-tier: it runs any Bash or PowerShell command and returns only the result the caller asked for — plus the orchestrator skills (feature, research), the criteria skills, an optional autonomous feature loop, and a project-specific ORCHESTRATION.md. Run once per project; re-run to upgrade or re-target.
+description: Install the orchestrator/worker/judge multi-agent system into the current project, compiled for its AI coding harness(es) — Claude Code, Cursor, GitHub Copilot (VS Code), and/or OpenAI Codex. Generates the five subagents (judge, qa-judge, implementer, test-writer, terminal) with tiered model pins — terminal is light-tier: it runs any Bash or PowerShell command and returns only the result the caller asked for — plus the orchestrator skills (feature, research), the criteria skills, an optional autonomous feature loop, and a project-specific ORCHESTRATION.md. On empty or near-empty (greenfield) directories it first asks whether to scaffold a project tree and creates nothing until the user confirms. Run once per project; re-run to upgrade or re-target.
 ---
 
 # Setup (Orchestration Kit Compiler)
@@ -23,7 +23,138 @@ Present what you detected and ask which harnesses to target — **multiple is no
 matrix). If any destination file exists, list collisions and ask before overwriting —
 unless a kit manifest exists (see Upgrading below).
 
+## Step 2a — Greenfield gate
+
+**Run order (hard):** run this step after Step 1 and **before** Step 2, despite the
+`2a` label. Evaluate it **once per `/setup` session** — evaluate the sparse heuristic
+and ask at most once per invocation. After a confirmed generic tree (paths that sit on
+the allowlist below), do not re-enter Step 2a; the only hand-back target is Step 2,
+never Step 2a.
+
+### Sparse heuristic
+
+The workspace is sparse **only if every present file** is on this allowlist:
+
+- `.git/` (any contents)
+- `.gitignore`
+- `LICENSE`
+- `README*` (any suffix)
+- `.editorconfig`
+- `.gitattributes`
+- `.DS_Store`
+- `Thumbs.db`
+- empty directories
+
+**Any other file** means **not sparse** — including `skills/setup/SKILL.md`, anything
+under `tests/`, `docs/`, `scripts/`, or `src/`, a language manifest,
+`orchestration-kit.manifest.json`, `notes.md`, or `main.py`.
+
+Worked negative example: a repo containing `skills/setup/SKILL.md`, or a non-empty
+`tests/` directory, is **not** sparse and must skip Step 2a.
+
+**Hard rule — not sparse:** skip **entirely** `## Step 2a — Greenfield gate` (no
+scaffold offer, no skills.sh install step) and continue with Step 2 inspect below.
+
+**Hard rule — sparse:** **always ask** whether to scaffold a new project. Never
+silently scaffold; never skip the question.
+
+### Decline path
+
+If the user declines the scaffold: create no scaffold files, do not run the skills.sh
+step, set `options.greenfield` to `false` at emit time (Step 6), and continue with the
+normal inspect → interview → emit path.
+
+### Accept path — guide, then confirm
+
+1. Interview the stack with three choices only: **TypeScript/Node**, **Python**, or
+   **Other**.
+2. Present the matching frozen tree below as a list of paths — do not create anything
+   yet. **Guide-then-confirm (hard):**
+   create nothing until the user explicitly confirms that tree.
+   No Write and no `mkdir` of scaffold paths before that confirmation. If they reject
+   the presented tree, revise it and wait again — still create nothing.
+3. After confirmation, create **exactly** the confirmed paths.
+4. **Never overwrite:** if a confirmed path already exists, skip it and report the
+   skip.
+
+Frozen trees — create these after confirm and nothing else (no sample production
+module, no failing test file, no CI):
+
+| Stack | Paths to create after confirmation |
+|-------|------------------------------------|
+| **TypeScript/Node** | `package.json` (minimal: `name` from the project/folder name, `"private": true`), `tsconfig.json` (minimal `compilerOptions` sufficient for `src/`), `.gitignore` (at least `node_modules/` and `dist/`), `README.md` (title), `src/`, `tests/` |
+| **Python** | `pyproject.toml` (minimal `[project]` name + version), `.gitignore` (at least `__pycache__/`, `.venv/`, `*.egg-info/`), `README.md` (title), `src/`, `tests/` |
+| **Other / generic** | `.gitignore`, `README.md` (title), `src/`, `tests/` — no language manifest |
+
+### Accept path — skills.sh stack skills (greenfield only)
+
+Runs on the accept path only, after the tree exists and the stack is known. Search the
+skills.sh leaderboard first, then `npx skills find` for the chosen stack (`typescript`
+/ `node`, or `python`). Workflow reference:
+https://www.skills.sh/vercel-labs/skills/find-skills
+
+Offer a skill only if its install count is 1000 or more. Prefer listings whose GitHub
+owner is `vercel-labs` or `anthropics`; also prefer a listing whose owner is
+`microsoft` when it meets the floor. Still show other publishers that meet the floor.
+Never list a skill under 1000.
+
+Present each candidate with: skill name, what it does, install count, source
+(`owner/repo`), install command, and a skills.sh link. The user picks zero or more.
+Install **project-local** with exactly:
+
+`npx skills add <owner>/<repo> --skill <picked-skill> -y`
+Never pass -g (project-local only).
+
+**Why `--skill` is required:** `-y` skips confirmation and accepts defaults — without
+`--skill` the CLI installs **every** skill in that source, which is auto-install and
+out of scope. Optional `-a <agent>` only when the CLI agent id for a Step 1 harness is
+known; otherwise omit `-a` (do not guess). Do not vendor installed copies into the
+kit's `templates/` tree.
+
+**Fail-open:** if `npx` is missing, the command exits non-zero, or the network is
+unavailable, do not abort `/setup`. Print the exact `npx skills add …` commands for the
+user to run later, then continue — never stop before inspect/emit.
+
+### Accept-path hand-back (hard)
+
+After confirmed tree creation **and** after the skills.sh step (including its
+fail-open branch), the flow continues at Step 2 — Inspect the repo on the newly
+created tree, then Step 3 interview, then Steps 4–6 emit. This gate never ends the
+skill.
+
+### Greenfield token disposition (hard)
+
+The frozen trees include **no** test runner and no failing test file, so nothing about
+testing can be inferred from them. Step 3 **must ask** for the targeted and full test
+commands, the setup commands, and the test framework name(s), and **must never invent**
+`npm test` / `pytest`. Then resolve the four inference-only tokens by this table. Every
+`{{TOKEN}}` in the scratch copy must be replaced or its containing row/sentence
+deleted, so Step 6's grep for `{{` stays at zero hits.
+
+| Token | User supplied a value | User has none |
+|-------|----------------------|---------------|
+| `{{TARGETED_TEST_COMMAND}}` | replace **every** occurrence under `templates/` (today 5 sites: `ORCHESTRATION.md` code block, `agents/implementer.md`, `agents/test-writer.md`, `skills/test-ladder/SKILL.md`, `skills/task-criteria/SKILL.md` — **none** is a table row) | there is no token-only table row for this token; replace every occurrence with the literal `(not configured)` |
+| `{{FULL_TEST_COMMAND}}` | replace **every** occurrence (today 9 sites; the only token-only table row among these four tokens is the `templates/ORCHESTRATION.md` Quality-checks / rung-3 row, plus 8 prose/code-block sites) | delete that table row if its cell is only this token; replace every remaining occurrence with `(not configured)` |
+| `{{TEST_FRAMEWORKS}}` | replace the occurrence (`agents/test-writer.md` prose) | replace with `not configured` |
+| `{{SETUP_COMMANDS}}` | replace the occurrence (`ORCHESTRATION.md` code block) | TypeScript/Node accept path: `npm install`; Python accept path: `pip install -e .`; Other or decline: `(not configured)` |
+
+Do **not** analogize to the lint/typecheck "remove the row" rule: `{{LINT_COMMAND}}`
+and `{{TYPECHECK_COMMAND}}` each occupy **exactly one** table row, so deleting the row
+is complete. Every test/setup/framework token above has at least one **non-table** site
+(prose or code block), so row-deletion alone always leaves a `{{` behind. The counts
+above are a snapshot — the rule is replace every occurrence, not a frozen inventory.
+
+### Greenfield signal (hard)
+
+Record the branch in the Step 6 manifest `options`: `"greenfield": true` **only** when
+the user accepted **and** confirmed a tree; otherwise `"greenfield": false`. Downstream
+`<!-- BOOTSTRAP: ... -->` resolution keys off that flag — do not rely on remembering
+which branch ran.
+
 ## Step 2 — Inspect the repo
+
+Step 2a has already run (sparse workspace) or was skipped entirely (not sparse); either
+way, inspect now and never re-enter the gate.
 
 Establish from the code (do not ask what you can read):
 
@@ -146,11 +277,14 @@ branching).
      "kitVersion": "<contents of VERSION>",
      "installedAt": "<ISO date>",
      "harnesses": ["claude-code", "..."],
-     "options": { "research": true, "loop": false },
+     "options": { "research": true, "loop": false, "greenfield": false },
      "files": { "<emitted path>": "<sha256>" },
      "seedFiles": ["_goals/backlog.md"]
    }
    ```
+   `options.greenfield` is `true` **only** when Step 2a's accept path ran and the user
+   confirmed a tree; on the decline path, or when Step 2a was skipped as not sparse, it
+   is `false`.
    `seedFiles` lists the emitted paths that are seeds (today exactly one): their hash
    is recorded in `files` at emit time and is EXEMPT from the upgrade diff-confirm
    flow. Semantics:

@@ -509,6 +509,267 @@ else
 fi
 
 # ===========================================================================
+# Greenfield-setup contract assertions (100-114, no _loop/loop.sh required).
+# Static structural greps against skills/setup/SKILL.md,
+# skills/setup/templates/ORCHESTRATION.md, skills/setup/VERSION, and
+# README.md -- lock the Step 2a greenfield gate, its GREENFIELD ONLY
+# BOOTSTRAP template hook, and the 0.17.0 / 1000-install claims. Mutations
+# (108-110) run ONLY on copies under $TMP; the real repo files are read-only.
+# ===========================================================================
+ORCH_TPL="$REPO_ROOT/skills/setup/templates/ORCHESTRATION.md"
+VERSION_FILE="$REPO_ROOT/skills/setup/VERSION"
+README_MD="$REPO_ROOT/README.md"
+
+# ---------------------------------------------------------------------------
+# 100. SKILL.md carries the Step 2a heading and the options.greenfield flag.
+# ---------------------------------------------------------------------------
+_100_heading=0; _100_flag=0
+grep -qE -- '^## Step 2a — Greenfield gate$' "$SETUP_SKILL_MD" && _100_heading=1
+grep -qF -- 'options.greenfield' "$SETUP_SKILL_MD" && _100_flag=1
+if [[ "$_100_heading" -eq 1 && "$_100_flag" -eq 1 ]]; then
+  report PASS "100: SKILL.md has the '## Step 2a — Greenfield gate' heading and 'options.greenfield'"
+else
+  report FAIL "100: SKILL.md Step 2a heading + options.greenfield" "heading=$_100_heading flag=$_100_flag"
+fi
+
+# ---------------------------------------------------------------------------
+# 101. SKILL.md guide-then-confirm: create nothing until the tree is
+#      explicitly confirmed.
+# ---------------------------------------------------------------------------
+_101_sentence=0
+grep -qF -- 'create nothing until the user explicitly confirms that tree' "$SETUP_SKILL_MD" \
+  && _101_sentence=1
+if [[ "$_101_sentence" -eq 1 ]]; then
+  report PASS "101: SKILL.md guide-then-confirm sentence present"
+else
+  report FAIL "101: SKILL.md guide-then-confirm sentence" "sentence=$_101_sentence"
+fi
+
+# ---------------------------------------------------------------------------
+# 102. SKILL.md frozen trees: TypeScript/Node and Python are first-class,
+#      plus a generic Other/src+tests fallback.
+# ---------------------------------------------------------------------------
+_102_ts=0; _102_py=0; _102_generic=0; _102_src=0; _102_tests=0
+grep -qF -- 'TypeScript/Node' "$SETUP_SKILL_MD" && _102_ts=1
+grep -qF -- '**Python**' "$SETUP_SKILL_MD" && _102_py=1
+grep -qF -- 'Other / generic' "$SETUP_SKILL_MD" && _102_generic=1
+grep -qF -- '`src/`' "$SETUP_SKILL_MD" && _102_src=1
+grep -qF -- '`tests/`' "$SETUP_SKILL_MD" && _102_tests=1
+if [[ "$_102_ts" -eq 1 && "$_102_py" -eq 1 && "$_102_generic" -eq 1 \
+      && "$_102_src" -eq 1 && "$_102_tests" -eq 1 ]]; then
+  report PASS "102: SKILL.md names TypeScript/Node and Python frozen trees plus a generic src//tests/ fallback"
+else
+  report FAIL "102: SKILL.md stack trees" \
+    "ts=$_102_ts py=$_102_py generic=$_102_generic src=$_102_src tests=$_102_tests"
+fi
+
+# ---------------------------------------------------------------------------
+# 103. SKILL.md 1000-install floor sentence, naming vercel-labs and
+#      anthropics.
+# ---------------------------------------------------------------------------
+_103_sentence=0; _103_vercel=0; _103_anthropic=0
+grep -qF -- 'Offer a skill only if its install count is 1000 or more.' "$SETUP_SKILL_MD" \
+  && _103_sentence=1
+grep -qF -- 'vercel-labs' "$SETUP_SKILL_MD" && _103_vercel=1
+grep -qF -- 'anthropics' "$SETUP_SKILL_MD" && _103_anthropic=1
+if [[ "$_103_sentence" -eq 1 && "$_103_vercel" -eq 1 && "$_103_anthropic" -eq 1 ]]; then
+  report PASS "103: SKILL.md 1000-install floor sentence names vercel-labs and anthropics"
+else
+  report FAIL "103: SKILL.md 1000-install floor sentence" \
+    "sentence=$_103_sentence vercel=$_103_vercel anthropic=$_103_anthropic"
+fi
+
+# ---------------------------------------------------------------------------
+# 104. SKILL.md fail-open on missing npx/non-zero/no-network; the install
+#      command has --skill and -y; no 'npx skills add' line contains ' -g'
+#      (a prose prohibition elsewhere in Step 2a must not fail this check).
+# ---------------------------------------------------------------------------
+_104_failopen=0; _104_npxskills=0; _104_skillflag=0; _104_yflag=0; _104_no_g=1
+_104_y_needs_skill=1
+{ grep -qF -- 'Fail-open' "$SETUP_SKILL_MD" || grep -qiF -- 'do not abort' "$SETUP_SKILL_MD"; } \
+  && _104_failopen=1
+grep -qF -- 'npx skills' "$SETUP_SKILL_MD" && _104_npxskills=1
+grep -qF -- '--skill' "$SETUP_SKILL_MD" && _104_skillflag=1
+grep -qF -- ' -y' "$SETUP_SKILL_MD" && _104_yflag=1
+while IFS= read -r _104_line; do
+  [[ "$_104_line" == *' -g'* ]] && _104_no_g=0
+  if [[ "$_104_line" == *' -y'* && "$_104_line" != *'--skill'* ]]; then
+    _104_y_needs_skill=0
+  fi
+done < <(grep -F -- 'npx skills add' "$SETUP_SKILL_MD")
+if [[ "$_104_failopen" -eq 1 && "$_104_npxskills" -eq 1 && "$_104_skillflag" -eq 1 \
+      && "$_104_yflag" -eq 1 && "$_104_no_g" -eq 1 && "$_104_y_needs_skill" -eq 1 ]]; then
+  report PASS "104: SKILL.md fail-open + install command carries --skill and -y (paired on the same 'npx skills add' line); no such line passes -g"
+else
+  report FAIL "104: SKILL.md fail-open/install-flags" \
+    "failopen=$_104_failopen npxskills=$_104_npxskills skill=$_104_skillflag y=$_104_yflag no_g=$_104_no_g y_needs_skill=$_104_y_needs_skill"
+fi
+
+# ---------------------------------------------------------------------------
+# 105. SKILL.md: non-sparse workspaces skip Step 2a entirely; the worked
+#      negative example names skills/setup/SKILL.md as not sparse.
+# ---------------------------------------------------------------------------
+_105_skip_rule=0; _105_named_not_sparse=0
+grep -qF -- 'skip **entirely** `## Step 2a — Greenfield gate`' "$SETUP_SKILL_MD" \
+  && _105_skip_rule=1
+grep -qF -- 'including `skills/setup/SKILL.md`' "$SETUP_SKILL_MD" && _105_named_not_sparse=1
+if [[ "$_105_skip_rule" -eq 1 && "$_105_named_not_sparse" -eq 1 ]]; then
+  report PASS "105: SKILL.md skips Step 2a for non-sparse workspaces; names skills/setup/SKILL.md as a not-sparse worked example"
+else
+  report FAIL "105: SKILL.md not-sparse skip rule + worked example" \
+    "skip_rule=$_105_skip_rule named_example=$_105_named_not_sparse"
+fi
+
+# ---------------------------------------------------------------------------
+# 106. templates/ORCHESTRATION.md carries the BOOTSTRAP comment marker,
+#      'GREENFIELD ONLY', and 'options.greenfield'.
+# ---------------------------------------------------------------------------
+_106_bootstrap=0; _106_greenfield_only=0; _106_flag=0
+grep -qF -- '<!-- BOOTSTRAP' "$ORCH_TPL" && _106_bootstrap=1
+grep -qF -- 'GREENFIELD ONLY' "$ORCH_TPL" && _106_greenfield_only=1
+grep -qF -- 'options.greenfield' "$ORCH_TPL" && _106_flag=1
+if [[ "$_106_bootstrap" -eq 1 && "$_106_greenfield_only" -eq 1 && "$_106_flag" -eq 1 ]]; then
+  report PASS "106: templates/ORCHESTRATION.md carries '<!-- BOOTSTRAP', 'GREENFIELD ONLY', and 'options.greenfield'"
+else
+  report FAIL "106: templates/ORCHESTRATION.md BOOTSTRAP/GREENFIELD ONLY/options.greenfield" \
+    "bootstrap=$_106_bootstrap greenfield_only=$_106_greenfield_only flag=$_106_flag"
+fi
+
+# ---------------------------------------------------------------------------
+# 107. skills/setup/VERSION is exactly 0.17.0; README.md documents 0.17.0
+#      plus TypeScript, Python, and the 1000-install floor.
+# ---------------------------------------------------------------------------
+_107_version_exact=0
+[[ "$(tr -d '[:space:]' < "$VERSION_FILE")" == "0.17.0" ]] && _107_version_exact=1
+_107_readme_version=0; _107_readme_ts=0; _107_readme_py=0; _107_readme_1000=0
+grep -qF -- '0.17.0' "$README_MD" && _107_readme_version=1
+grep -qF -- 'TypeScript' "$README_MD" && _107_readme_ts=1
+grep -qF -- 'Python' "$README_MD" && _107_readme_py=1
+grep -qF -- '1000+' "$README_MD" && _107_readme_1000=1
+if [[ "$_107_version_exact" -eq 1 && "$_107_readme_version" -eq 1 && "$_107_readme_ts" -eq 1 \
+      && "$_107_readme_py" -eq 1 && "$_107_readme_1000" -eq 1 ]]; then
+  report PASS "107: skills/setup/VERSION is exactly 0.17.0; README.md documents 0.17.0 + TypeScript + Python + 1000"
+else
+  report FAIL "107: VERSION==0.17.0 + README claims" \
+    "version=$_107_version_exact readme_version=$_107_readme_version ts=$_107_readme_ts py=$_107_readme_py 1000=$_107_readme_1000"
+fi
+
+# ---------------------------------------------------------------------------
+# 108. Mutation (SKILL.md copy, $TMP only): deleting the guide-then-confirm
+#      sentence from a copy fails assertion-101's predicate; the real file
+#      still passes.
+# ---------------------------------------------------------------------------
+_108_copy="$TMP/skill_no_confirm_sentence.md"
+cp "$SETUP_SKILL_MD" "$_108_copy"
+sed -i '/create nothing until the user explicitly confirms that tree/d' "$_108_copy"
+_108_copy_fails=0; _108_real_passes=0
+grep -qF -- 'create nothing until the user explicitly confirms that tree' "$_108_copy" \
+  || _108_copy_fails=1
+grep -qF -- 'create nothing until the user explicitly confirms that tree' "$SETUP_SKILL_MD" \
+  && _108_real_passes=1
+if [[ "$_108_copy_fails" -eq 1 && "$_108_real_passes" -eq 1 ]]; then
+  report PASS "108: mutation -- stripping the guide-then-confirm sentence from a SKILL.md copy fails assertion-101's predicate; the real file still passes"
+else
+  report FAIL "108: mutation (guide-then-confirm sentence)" \
+    "copy_fails=$_108_copy_fails real_passes=$_108_real_passes"
+fi
+
+# ---------------------------------------------------------------------------
+# 109. Mutation (ORCHESTRATION.md template copy, $TMP only): stripping
+#      'GREENFIELD ONLY' fails assertion-106's predicate; the real template
+#      still passes.
+# ---------------------------------------------------------------------------
+_109_copy="$TMP/orchestration_no_greenfield_only.md"
+cp "$ORCH_TPL" "$_109_copy"
+sed -i 's/GREENFIELD ONLY//g' "$_109_copy"
+_109_copy_fails=0; _109_real_passes=0
+grep -qF -- 'GREENFIELD ONLY' "$_109_copy" || _109_copy_fails=1
+grep -qF -- 'GREENFIELD ONLY' "$ORCH_TPL" && _109_real_passes=1
+if [[ "$_109_copy_fails" -eq 1 && "$_109_real_passes" -eq 1 ]]; then
+  report PASS "109: mutation -- stripping 'GREENFIELD ONLY' from an ORCHESTRATION.md template copy fails assertion-106's predicate; the real template still passes"
+else
+  report FAIL "109: mutation (GREENFIELD ONLY)" \
+    "copy_fails=$_109_copy_fails real_passes=$_109_real_passes"
+fi
+
+# ---------------------------------------------------------------------------
+# 110. Mutation ($TMP-only VERSION file): a file containing 0.16.0 fails the
+#      ==0.17.0 predicate; the real skills/setup/VERSION passes.
+# ---------------------------------------------------------------------------
+_110_bad="$TMP/VERSION_bad"
+printf '0.16.0\n' > "$_110_bad"
+_110_bad_fails=0; _110_real_passes=0
+[[ "$(tr -d '[:space:]' < "$_110_bad")" == "0.17.0" ]] || _110_bad_fails=1
+[[ "$(tr -d '[:space:]' < "$VERSION_FILE")" == "0.17.0" ]] && _110_real_passes=1
+if [[ "$_110_bad_fails" -eq 1 && "$_110_real_passes" -eq 1 ]]; then
+  report PASS "110: mutation -- a temp VERSION file containing 0.16.0 fails the ==0.17.0 predicate; the real skills/setup/VERSION passes"
+else
+  report FAIL "110: mutation (VERSION 0.16.0)" \
+    "bad_fails=$_110_bad_fails real_passes=$_110_real_passes"
+fi
+
+# ---------------------------------------------------------------------------
+# 111. SKILL.md names all four greenfield inference-only test/setup tokens
+#      and the '(not configured)' literal. Does not require the "14" site
+#      count (a cycle-2 error).
+# ---------------------------------------------------------------------------
+_111_targeted=0; _111_full=0; _111_frameworks=0; _111_setup=0; _111_notconfigured=0
+grep -qF -- 'TARGETED_TEST_COMMAND' "$SETUP_SKILL_MD" && _111_targeted=1
+grep -qF -- 'FULL_TEST_COMMAND' "$SETUP_SKILL_MD" && _111_full=1
+grep -qF -- 'TEST_FRAMEWORKS' "$SETUP_SKILL_MD" && _111_frameworks=1
+grep -qF -- 'SETUP_COMMANDS' "$SETUP_SKILL_MD" && _111_setup=1
+grep -qF -- '(not configured)' "$SETUP_SKILL_MD" && _111_notconfigured=1
+if [[ "$_111_targeted" -eq 1 && "$_111_full" -eq 1 && "$_111_frameworks" -eq 1 \
+      && "$_111_setup" -eq 1 && "$_111_notconfigured" -eq 1 ]]; then
+  report PASS "111: SKILL.md names TARGETED_TEST_COMMAND, FULL_TEST_COMMAND, TEST_FRAMEWORKS, SETUP_COMMANDS dispositions and '(not configured)'"
+else
+  report FAIL "111: SKILL.md greenfield token dispositions" \
+    "targeted=$_111_targeted full=$_111_full frameworks=$_111_frameworks setup=$_111_setup not_configured=$_111_notconfigured"
+fi
+
+# ---------------------------------------------------------------------------
+# 112. SKILL.md evaluates the greenfield gate once per /setup session.
+# ---------------------------------------------------------------------------
+_112_once_per=0
+grep -qF -- 'once per' "$SETUP_SKILL_MD" && _112_once_per=1
+if [[ "$_112_once_per" -eq 1 ]]; then
+  report PASS "112: SKILL.md states the greenfield gate is evaluated 'once per' /setup session"
+else
+  report FAIL "112: SKILL.md 'once per' session gate" "once_per=$_112_once_per"
+fi
+
+# Shared Step 2a section extract for assertions 113-114 (scoped so hits in
+# other sections of SKILL.md cannot satisfy these two checks).
+_step2a_section="$(awk '/^## Step 2a — Greenfield gate/{flag=1} /^## Step 2 —/{flag=0} flag' \
+  "$SETUP_SKILL_MD")"
+
+# ---------------------------------------------------------------------------
+# 113. SKILL.md Step 2a section names the Step 2 hand-back as its resume
+#      target.
+# ---------------------------------------------------------------------------
+_113_handback=0
+grep -qE -- 'continues at Step 2|Step 2 — Inspect the repo' <<< "$_step2a_section" \
+  && _113_handback=1
+if [[ "$_113_handback" -eq 1 ]]; then
+  report PASS "113: SKILL.md Step 2a section names the Step 2 hand-back as its resume target"
+else
+  report FAIL "113: SKILL.md Step 2a resume-target hand-back" "handback=$_113_handback"
+fi
+
+# ---------------------------------------------------------------------------
+# 114. SKILL.md Step 2a never-overwrite: skip an existing confirmed path and
+#      report the skip.
+# ---------------------------------------------------------------------------
+_114_skip=0; _114_overwrite=0
+grep -qF -- 'skip' <<< "$_step2a_section" && _114_skip=1
+grep -qF -- 'overwrite' <<< "$_step2a_section" && _114_overwrite=1
+if [[ "$_114_skip" -eq 1 && "$_114_overwrite" -eq 1 ]]; then
+  report PASS "114: SKILL.md Step 2a states never-overwrite: skip an existing confirmed path and report the skip"
+else
+  report FAIL "114: SKILL.md Step 2a never-overwrite rule" "skip=$_114_skip overwrite=$_114_overwrite"
+fi
+
+# ===========================================================================
 # Guard: remaining assertions require a self-install (_loop/loop.sh). On a
 # fresh clone (or the canonical templates repo itself, pre-/setup), that dir
 # does not exist — skip the loop-instance assertions cleanly (or fail hard if

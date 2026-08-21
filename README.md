@@ -2,7 +2,7 @@
 
 [![skills.sh installs](https://skills.sh/b/kdcllc/skills)](https://skills.sh/kdcllc/skills)
 
-> Kit version: **0.16.0** (`skills/setup/VERSION`) · The install badge above applies
+> Kit version: **0.17.0** (`skills/setup/VERSION`) · The install badge above applies
 > only if the repo is made public: [skills.sh](https://www.skills.sh/) filters private
 > repos out of its public index by design
 > ([vercel-labs/skills#381](https://github.com/vercel-labs/skills/issues/381)), so it
@@ -114,6 +114,14 @@ asks):
 cp -r skills/setup  <your-project>/.claude/skills/     # Claude Code
 cp -r skills/setup  <your-project>/.cursor/skills/     # Cursor
 ```
+
+**Greenfield / sparse directory:** On an empty or near-empty workspace, `/setup` runs
+Step 2a (the greenfield gate) and **asks** before scaffolding. It **shows** a
+recommended project tree and **creates nothing until you confirm**. First-class layouts
+are **TypeScript/Node** and **Python**; other stacks get a generic `src/` + `tests/`
+tree. After you confirm, it can optionally offer **skills.sh** stack skills with
+**1000+** installs — you pick which ones, installed **into this project**. **Existing
+projects are unchanged:** non-sparse repos skip the greenfield gate entirely.
 
 Then, in a session inside that project, run `/setup`. It detects which harnesses to
 target (multiple is normal), inspects the repo (stack, test commands, layers,
