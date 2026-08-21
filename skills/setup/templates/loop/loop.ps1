@@ -1146,9 +1146,9 @@ function Invoke-LoopReapSlot {
     # ITERATION-mismatch OR a subset-check violation (STORY-010 disposition:
     # NO backlog transition either way).
     if ($mismatch) {
-        [Console]::Error.WriteLine("!!! slot $Slot: ITERATION-mismatch (claim was '$story') -- quarantine-lite pending: no backlog transition, claim released")
+        [Console]::Error.WriteLine("!!! slot ${Slot}: ITERATION-mismatch (claim was '$story') -- quarantine-lite pending: no backlog transition, claim released")
     } elseif ($subsetBad.Count -gt 0) {
-        [Console]::Error.WriteLine("!!! slot $Slot: branch '$branch' touched paths outside its declared writes: -- quarantine-lite pending: no backlog transition, claim released: $($subsetBad -join ' ')")
+        [Console]::Error.WriteLine("!!! slot ${Slot}: branch '$branch' touched paths outside its declared writes: -- quarantine-lite pending: no backlog transition, claim released: $($subsetBad -join ' ')")
     } else {
         switch ($iterVerdict) {
             'passed'  { Set-LoopBacklogField -Path $BacklogFile -StoryId $story -Field 'passes' -Value 'true' }
@@ -1344,7 +1344,7 @@ function Invoke-LoopReapSlot {
         if ($dirty -eq 1) { $abnormal = 1 }
 
         if ($mismatch) {
-            [Console]::Error.WriteLine("!!! slot $Slot: ITERATION-mismatch — quarantine-lite: NOT integrating; retaining branch '$branch' for inspection ($tree)")
+            [Console]::Error.WriteLine("!!! slot ${Slot}: ITERATION-mismatch — quarantine-lite: NOT integrating; retaining branch '$branch' for inspection ($tree)")
             Write-LoopQuarantineMarker -Story $story -Slot $Slot -Branch $branch -LoopStatus "$status" `
                 -Reason 'mismatch' -DirtyPaths $dirtyPathsFlat -Prompt $dispatchedPrompt
             & git worktree remove --force $tree 2>$null
@@ -1379,7 +1379,7 @@ function Invoke-LoopReapSlot {
             # -- admission's runs-alone rule already prevented any
             # conflict for it, so the check is skipped there rather than
             # manufacturing a spurious violation.
-            [Console]::Error.WriteLine("!!! slot $Slot: branch '$branch' touched paths outside its declared writes: (quarantine-lite, not integrated): $($subsetBad -join ' ')")
+            [Console]::Error.WriteLine("!!! slot ${Slot}: branch '$branch' touched paths outside its declared writes: (quarantine-lite, not integrated): $($subsetBad -join ' ')")
             Write-LoopQuarantineMarker -Story $story -Slot $Slot -Branch $branch -LoopStatus "$status" `
                 -Reason 'subset' -DirtyPaths $dirtyPathsFlat -Prompt $dispatchedPrompt
             & git worktree remove --force $tree 2>$null
