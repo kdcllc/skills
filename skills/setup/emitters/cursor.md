@@ -14,7 +14,7 @@ undocumented, and `.cursor/` wins name conflicts.
 
 | Source (resolved) | Destination | Translation |
 |-------------------|-------------|-------------|
-| `templates/agents/*.md` | `.cursor/agents/*.md` | `model:` → Cursor model IDs from the model map, effort as bracket param: `{{CURSOR_MODEL_FRONTIER}}[effort=high]` for judges, `…[effort=medium]` for workers; drop the separate `effort:` key; drop `tools:` unless the live schema documents an equivalent |
+| `templates/agents/*.md` | `.cursor/agents/*.md` | `model:` → Cursor model IDs from the model map, effort as bracket param: `{{CURSOR_MODEL_FRONTIER}}[effort=high]` for evaluators, `…[effort=medium]` for workers; drop the separate `effort:` key; drop `tools:` unless the live schema documents an equivalent |
 | `templates/skills/*` | `.cursor/skills/*` **only if** Claude Code emitter did not run (otherwise Cursor reads `.claude/skills/`) | Skills have **no model key** in Cursor — strip `model:`/`effort:` from any skill frontmatter; **keep** `disable-model-invocation` as-is (same key, same behavior as Claude Code — do not strip it) |
 | `templates/ORCHESTRATION.md` | `.cursor/ORCHESTRATION.md` (skip if `.claude/ORCHESTRATION.md` exists; reference that instead) | — |
 | Pointer rule | `.cursor/rules/orchestration.mdc` | see below — **must be `.mdc`**, plain `.md` is silently ignored |
@@ -26,11 +26,11 @@ Pointer rule content:
 ---
 alwaysApply: true
 ---
-Feature work runs through the orchestrator/worker/judge system described in
+Feature work runs through the orchestrator/worker/evaluator system described in
 ORCHESTRATION.md (in .claude/ or .cursor/). Non-trivial features start with the
 `feature` skill; implementation goes to the implementer/test-writer subagents; all
-verification goes to the judge subagents. Never mark orchestrated work complete
-without a judge PASS.
+verification goes to the evaluator subagents. Never mark orchestrated work complete
+without an evaluator PASS.
 ```
 
 ## Harness specifics
@@ -47,7 +47,7 @@ without a judge PASS.
   shell tool). The nesting note above (tell L1 to spawn) already
   covers `terminal`; do not add a second rule file for it.
 - **Silent model fallback**: under team-admin/plan restrictions Cursor substitutes a
-  model without erroring. The judge templates already self-report their model; keep that.
+  model without erroring. The evaluator templates already self-report their model; keep that.
 - Cloud Agents support only main→L1 — the QA-gate flow still works, but warn in the
   emitted ORCHESTRATION.md if the project relies on cloud agents.
 

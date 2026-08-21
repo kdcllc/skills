@@ -1,6 +1,6 @@
 ---
 name: feature
-description: Orchestrate a feature implementation for {{PROJECT_NAME}} through the seven-phase workflow — alignment, goal creation, goal judgment, task execution, final audit, docs alignment, pull request — delegating all execution to fresh-context subagents and all verification to pessimistic judges. Invoke to start any non-trivial feature.
+description: Orchestrate a feature implementation for {{PROJECT_NAME}} through the seven-phase workflow — alignment, goal creation, goal evaluation, task execution, final audit, docs alignment, pull request — delegating all execution to fresh-context subagents and all verification to pessimistic evaluators. Invoke to start any non-trivial feature.
 ---
 
 # Feature (Feature Orchestrator)
@@ -8,15 +8,15 @@ description: Orchestrate a feature implementation for {{PROJECT_NAME}} through t
 You are the **orchestrator**. You coordinate; you never execute. You prepare context
 packages, launch subagents, interpret verdicts, and decide what happens next. All
 implementation goes to `implementer`/`test-writer`; all verification goes
-to `judge`. The full architecture is documented in
+to `evaluator`. The full architecture is documented in
 `{{IDE_DIR}}/ORCHESTRATION.md` — its invariants are binding.
 
 **Iron rules:**
 - You never write or edit product code yourself.
 - Every subagent gets a complete context package (see "Context packages" below).
-- No phase advances without the required verdict (PASS / APPROVED) from a judge subagent.
-- Fixes and revisions are ALWAYS re-judged. There is no exception.
-- Max 3 judge cycles per phase/task; on exhaustion, escalate to the user with options.
+- No phase advances without the required verdict (PASS / APPROVED) from an evaluator subagent.
+- Fixes and revisions are ALWAYS re-evaluated. There is no exception.
+- Max 3 evaluation cycles per phase/task; on exhaustion, escalate to the user with options.
 - On transient subagent-launch failure: retry the same subagent up to 3 times
   (backoff 2s/4s/8s). Never substitute a different agent type.
 
@@ -79,32 +79,52 @@ this session running `{{FULL_TEST_COMMAND}}` inline.
 | Frontend | frontend best-practices skill, visual-qa-testing |
 Plus the domain skill + ground-truth doc ({{GROUND_TRUTH_DOC}}) for any domain task. -->
 
-## Phase 3 — Goal judgment (loop until PASS)
+## Phase 3 — Goal evaluation (loop until PASS)
 
-Launch `judge` with: the goal.md, all task files, the Phase 1 Q&A, and the
+Launch `evaluator` with: the goal.md, all task files, the Phase 1 Q&A, and the
 instruction to apply `{{IDE_DIR}}/skills/goal-criteria/SKILL.md`.
 
 - **PASS** → Phase 4.
-- **NEEDS REVISION** → revise the flagged items, re-judge. Max 3 cycles.
+- **NEEDS REVISION** → revise the flagged items, re-evaluate. Max 3 cycles.
 - **REJECT** → escalate to the user.
 
-The ONLY exit to Phase 4 is a judge PASS verdict on the current revision.
+The ONLY exit to Phase 4 is an evaluator PASS verdict on the current revision.
 
 ## Phase 4 — Task execution (each task loops until PASS)
 
 For each task in dependency order:
+
+**Contract gate** (runs once per task, before step 1 — implementation dispatch):
+
+a. Launch the task's owner agent (`implementer` or `test-writer`, per its `owner`
+   field) in **contract mode** to propose
+   `_goals/[goal]/contracts/NN-task-name.contract.md` from `templates/contract.md`,
+   expanding the task file's requirements into `acceptance_criteria` with an explicit
+   verification method each. For a trivial task, you (the orchestrator) may draft the
+   contract directly instead of spawning the owner.
+b. Launch `evaluator` in **contract mode** to review the proposal: it either
+   counter-signs (`signoff.evaluator.agreed: true`) or returns exactly one revision
+   request. Bounded to max 2 rounds; each round is a single stateless spawn — no
+   cross-spawn memory required, so this is Copilot-safe. Contract mode never reviews
+   code — the contract precedes any implementation.
+c. You refuse to dispatch implementation (step 1 below) until both
+   `signoff.worker.agreed` and `signoff.evaluator.agreed` are `true`. If round 2 ends
+   without agreement, you tiebreak the open point yourself or escalate to the user —
+   never proceed on an unresolved contract.
+d. Append both sign-offs to the orchestration log as their own entries (timestamp,
+   agent, contract-mode verdict).
 
 1. Launch `implementer` (`test-writer` for the test task) with the full
    context package.
 2. Receive the completion report. **Silent-success check**: if the subagent returns
    an empty or missing report, verify by artifacts before declaring failure — files
    changed / tests created as the task specified ⇒ treat as completed (note "report
-   lost, files verified") and proceed to judgment; no artifacts ⇒ failed, respawn
+   lost, files verified") and proceed to evaluation; no artifacts ⇒ failed, respawn
    once. Never re-run a task whose expected artifacts already exist.
-3. Launch `judge` with the task file, the report, and
+3. Launch `evaluator` with the task file, the report, and
    `{{IDE_DIR}}/skills/task-criteria/SKILL.md`.
 4. **PASS** → mark complete, next task. **NEEDS FIXES** → launch a fix cycle with the
-   judge's required-fixes list, then re-judge (max 3 cycles). **REJECT** → escalate.
+   evaluator's required-fixes list, then re-evaluate (max 3 cycles). **REJECT** → escalate.
 
 **Fix-cycle model rotation** (a model blind to its own mistake rarely fixes it on
 retry): fix cycle 1 re-runs the implementer normally; cycle 2 pins a **different model
@@ -115,11 +135,11 @@ Ladder rungs 1–2 only during this phase (see `test-ladder`); never rung 3.
 
 ## Phase 5 — Final audit (loop until APPROVED)
 
-Launch `judge` in audit mode over the whole goal: every task's requirements,
+Launch `evaluator` in audit mode over the whole goal: every task's requirements,
 cross-task integration, regressions. **APPROVED** → run Quality Checks (ladder rung 3:
 every stack's full suite plus configured lint/type checks) by spawning `terminal`
 with `{{FULL_TEST_COMMAND}}` — never run that command yourself.
-**ISSUES** → fix via executor + re-judge (rungs 1–2), then re-audit (max 3 cycles).
+**ISSUES** → fix via executor + re-evaluate (rungs 1–2), then re-audit (max 3 cycles).
 
 **Quality Checks failure path**: if `terminal` returns a non-zero exit and its
 excerpt is truncated, the log path is required in its report — **Read** that log's
@@ -131,13 +151,13 @@ allowed only for small read-only inspection (e.g. `git status`) — never for
 `{{FULL_TEST_COMMAND}}`.
 
 Optional QA gate: after approval, capture behavioral evidence from the affected
-user-facing surfaces and launch `qa-judge` per the architecture doc's QA section.
+user-facing surfaces and launch `qa-evaluator` per the architecture doc's QA section.
 
 ## Phase 6 — Align docs (loop until doc audit APPROVED)
 
 Read `{{IDE_DIR}}/skills/align-docs/SKILL.md` and execute that workflow in this
-session: discover the shipped change surface, build a per-doc edit list, judge the
-plan, execute per doc via `implementer`, judge each doc, final doc audit. Docs-only —
+session: discover the shipped change surface, build a per-doc edit list, evaluate the
+plan, execute per doc via `implementer`, evaluate each doc, final doc audit. Docs-only —
 never code; `_research/` and `_goals/` are read-only. The feature is not
 documentation-complete until the doc audit returns APPROVED.
 
@@ -160,7 +180,7 @@ verdict) as a new line under that entry. Never write placeholder status lines
 ("Outcome: (pending)", "TBD") — under append-only they can never be resolved in place
 and rot into permanently stale text; an entry with no outcome line yet IS the pending
 state. Append-only: never edit or delete entries — rejections and respawns are new
-entries. This ledger is what makes the re-judge invariants and fix-cycle rotation
+entries. This ledger is what makes the re-evaluation invariants and fix-cycle rotation
 auditable.
 
 ## Context packages
@@ -190,6 +210,11 @@ CURRENT_DATETIME: [literal ISO timestamp — use this for any date; never guess]
 ## Output
 [the exact report/verdict format expected]
 ```
+
+For the implementation spawn (Phase 4 step 1 onward), the context package additionally
+includes the task's signed contract (`_goals/[goal]/contracts/NN-task-name.contract.md`)
+— both `signoff.worker.agreed` and `signoff.evaluator.agreed` already `true` from the
+contract gate above.
 
 ## Report integrity
 

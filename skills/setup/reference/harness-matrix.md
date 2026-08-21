@@ -48,8 +48,8 @@ drivers assume the harness CLI runs natively where invoked.
 4. Codex AGENTS.md has no frontmatter/schema — roles and models live in `config.toml`. 🔎
 5. The exact `.cursor/agents` frontmatter schema was **refuted** in verification (0-3) —
    re-check `cursor.com/docs/subagents` live before emitting Cursor agent files.
-6. Copilot: the session runs the frontier tier (ceiling rule); judges cannot pin up.
-   Workers and other subagents **may pin down**. The ceiling is “cannot exceed the
+6. Copilot: the session runs the frontier tier (ceiling rule); evaluators cannot pin
+   up. Workers and other subagents **may pin down**. The ceiling is “cannot exceed the
    parent tier,” not “must equal the parent tier.”
 7. Copilot skills live at `.github/skills/*/SKILL.md` (first-class as of 2026-08-20).
    Do **not** inline skill bodies into agents on current VS Code; reserve inlining
@@ -63,6 +63,17 @@ drivers assume the harness CLI runs natively where invoked.
    documents terminal `outputLocation` and a timeout, not a size cap. Isolate noisy
    commands in a light-tier subagent and capture quiet command forms at setup —
    never invent runner flags.
+10. Codex agent-name rule — **verified on 2026-08-21** against
+    `developers.openai.com/codex/config-reference`: `[agents.<name>]` custom role
+    names must not collide with the reserved scalar setting names under `[agents]`
+    (`enabled`, `default_subagent_model`, `default_subagent_reasoning_effort`,
+    `interrupt_message`, `max_concurrent_threads_per_session`, `max_threads`);
+    `evaluator` and `qa-evaluator` collide with none of them, so both names are
+    confirmed safe under the live rule. The external report's stronger "simple ASCII
+    names… `name` is the source of truth" phrasing was NOT found verbatim on that
+    page as of this check — only the reserved-name-collision constraint above is
+    independently confirmed; treat any broader ASCII/charset claim as still
+    unverified.
 
 ## Context, skills invocation, and command-output isolation (verified 2026-08-20)
 
@@ -130,10 +141,10 @@ untestable for a different reason: the native `.agent.md` fixture deliberately
 omits both keys (a sanctioned manifest deviation), leaving nothing to introspect
 even with working auth.
 
-Observed once (CLI-observed, n=1): with same-named `judge` agents in both
-`.github/agents` and `.claude/agents`, only the native one surfaced in the
-recognition reply; mechanism unconfirmed — reply-level dedup of same-named agents
-not excluded. Do not treat as a precedence rule.
+Observed once (CLI-observed, n=1): with same-named `judge` (role renamed to
+evaluator in v0.18.0) agents in both `.github/agents` and `.claude/agents`, only the
+native one surfaced in the recognition reply; mechanism unconfirmed — reply-level
+dedup of same-named agents not excluded. Do not treat as a precedence rule.
 
 **Evidence-floor status:** 9 non-untestable cells were obtained across all harnesses
 vs the goal's floor of 5 non-untestable cells — floor cleared (9 ≥ 5): Claude Code

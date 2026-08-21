@@ -1,6 +1,6 @@
 ---
 name: test-ladder
-description: Staged test ladder for {{PROJECT_NAME}} — run new tests first, then impacted tests, and the full suites only after all changes in the cycle are applied. Use whenever writing, running, or judging tests.
+description: Staged test ladder for {{PROJECT_NAME}} — run new tests first, then impacted tests, and the full suites only after all changes in the cycle are applied. Use whenever writing, running, or evaluating tests.
 user-invocable: true
 disable-model-invocation: true
 ---
@@ -28,13 +28,13 @@ Rung 3  Full suites        →  {{FULL_TEST_COMMAND}}
 
 | When | Rungs |
 |------|-------|
-| TDD red/green, a single task (except a designated closer task — next row), a judge-driven fix, mid-cycle implementation | **1 then 2 only** |
+| TDD red/green, a single task (except a designated closer task — next row), an evaluator-driven fix, mid-cycle implementation | **1 then 2 only** |
 | A goal's designated closer task, when its task file mandates the full-suite run as the closing gate | **1 → 2 → 3** (the delegated cycle-end run — see the carve-out below) |
 | All planned changes for the request/goal are applied (Phase 5 Quality Checks, or the last step of an ad-hoc change) | **1 → 2 → 3** |
 | Docs-only / no testable code | Skip all rungs |
 
 A **cycle** is one user request or one `feature` goal — not one file save and not one
-task. Phase 4 tasks and implement→judge retries are mid-cycle. One exception: a
+task. Phase 4 tasks and implement→evaluate retries are mid-cycle. One exception: a
 goal's **designated closer task** applies the cycle's last planned changes, so
 cycle end occurs inside it (see the carve-out below).
 
@@ -104,10 +104,10 @@ re-run everything immediately.
 |------|---------------|
 | `implementer` | 1 then 2. Rung 3 only when executing the goal's designated closer task (see the carve-out below). |
 | `test-writer` | 1 then 2. Rung 3 only when executing the goal's designated closer task (see the carve-out below). |
-| `judge` (via `task-criteria`) | Requires evidence of 1 then 2. Does **not** fail a task for skipping rung 3 (see the carve-out below for a closer task's mandated run). |
+| `evaluator` (via `task-criteria`) | Requires evidence of 1 then 2. Does **not** fail a task for skipping rung 3 (see the carve-out below for a closer task's mandated run). |
 | `feature` orchestrator (and ad-hoc main-session work) | After every task is PASS and the final audit is APPROVED: **spawn `terminal`** for rung 3 — the orchestrator's rung-3 authority (when it runs) is unchanged, only its execution is delegated. Never run rung 3 itself in this session. |
 | `terminal` | Executes any Bash or PowerShell command it is spawned with. No Edit/Write tools. Returns only the result the caller asked for (default: compact `{exit; excerpt; log path}`). Rung 3 is always a spawn of this agent. |
-| `qa-judge` | Behavioral evidence only. Does not replace the ladder. |
+| `qa-evaluator` | Behavioral evidence only. Does not replace the ladder. |
 
 ## Closer-task carve-out (delegated rung 3)
 
@@ -127,13 +127,13 @@ it as the closing gate. All conditions required:
 On a rung-3 failure outside its write fence, a closer task escalates per the
 write-fence rule — it never edits an out-of-fence file to make a suite pass.
 
-Judge interplay is unchanged: per `task-criteria`, no task is ever failed *for
+Evaluator interplay is unchanged: per `task-criteria`, no task is ever failed *for
 skipping rung 3*; a closer task that skips its mandated run fails
 requirements-completeness (its task file said so), not the ladder. The
 orchestrator's rung-3 authority is unchanged: Phase 5 Quality Checks still
 runs the full suites at cycle end — the Who-does-what row above delegates only
 the *execution* of that run to a spawned `terminal`, not the authority over
-*when* it happens. The closer task's run is an additional, judged regression
+*when* it happens. The closer task's run is an additional, evaluated regression
 gate — it never replaces Phase 5.
 
 A spawned `terminal` reporting rung 3 output is **not** a designated closer

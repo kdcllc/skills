@@ -7,8 +7,8 @@ disable-model-invocation: true
 # Align Docs (Phase 6)
 
 Bring repository **documentation** back in sync with shipped **code** after a feature
-lands. Same judge-gated subagent workflow as the `feature` skill (discover → plan →
-judge → execute-per-doc → final audit), but the deliverable is **accurate Markdown,
+lands. Same evaluator-gated subagent workflow as the `feature` skill (discover → plan →
+evaluate → execute-per-doc → final audit), but the deliverable is **accurate Markdown,
 never code**.
 
 ## Core guardrails (NON-NEGOTIABLE — repeat in every subagent context package)
@@ -43,7 +43,7 @@ skill/agent files.
 
 ## Subagents
 
-Uses the standard kit subagents: `judge` (plan judgment, per-doc judgment, final
+Uses the standard kit subagents: `evaluator` (plan evaluation, per-doc evaluation, final
 audit) and `implementer` (per-doc editing). Standard retry rules apply (same subagent,
 3 attempts, backoff — never substitute).
 
@@ -66,19 +66,19 @@ fact, then **grep those docs** for stale claims (old names, removed flags, "TODO
 "planned", "not yet"). Produce a **per-doc edit list** (or "no change — already
 accurate"). Confirm `_research/` and `_goals/` are excluded.
 
-### Phase 6.3: Judge the edit plan (`judge`)
+### Phase 6.3: Evaluate the edit plan (`evaluator`)
 Criteria: coverage (every stale doc caught?), scope (zero excluded-path or code edits
 planned?), anti-invention (every planned edit cites its source file?). Mandatory
-re-judge loop: PASS → 6.4; NEEDS REVISION → revise + re-judge (3 max); REJECT →
+re-evaluate loop: PASS → 6.4; NEEDS REVISION → revise + re-evaluate (3 max); REJECT →
 escalate.
 
-### Phase 6.4: Execute per doc (`implementer` + `judge`)
+### Phase 6.4: Execute per doc (`implementer` + `evaluator`)
 Docs are independent — executors may run in parallel. Context package per doc: its
 edit-list entry, the relevant shipped facts, exact files to READ FIRST, and the full
-guardrails. Judge each result: accuracy, completeness, scope (only this doc changed),
-preserved prose intact, links resolve. Re-judge loop, 3 cycles max per doc.
+guardrails. Evaluate each result: accuracy, completeness, scope (only this doc changed),
+preserved prose intact, links resolve. Re-evaluate loop, 3 cycles max per doc.
 
-### Phase 6.5: Final audit (`judge`)
+### Phase 6.5: Final audit (`evaluator`)
 The whole change set: every affected doc accurate and **mutually consistent**; no
 stale claims remain; `git status` shows **only** documentation files changed.
 APPROVED → lint markdown if a linter is configured, report which docs changed (and
@@ -86,6 +86,6 @@ which were already accurate); ISSUES → remediate + re-audit (3 max).
 
 ## Escalation
 
-Escalate when: a judge fails to PASS/APPROVED after 3 cycles; any REJECT; no shipped
+Escalate when: an evaluator fails to PASS/APPROVED after 3 cycles; any REJECT; no shipped
 feature found; or a guardrail conflict (the only accurate fix would require a code
 change — which this skill must not make).

@@ -13,7 +13,7 @@ defined; re-run `/setup` (or edit here and re-emit) when providers rotate model 
 
 | Tier | Roles | Rationale |
 |------|-------|-----------|
-| `frontier` | orchestrator (main session), `judge`, `qa-judge` | Delegation and judging have a capability floor — don't cheap out on the roles that decide and verify |
+| `frontier` | orchestrator (main session), `evaluator`, `qa-evaluator` | Delegation and evaluation have a capability floor — don't cheap out on the roles that decide and verify |
 | `light` | `implementer`, `test-writer`, `terminal` | Checklist-driven execution and compact command running retain most quality at a fraction of the cost when the plan and the verification are strong |
 
 ## Resolved models
@@ -23,7 +23,7 @@ defined; re-run `/setup` (or edit here and re-emit) when providers rotate model 
 | `frontier` | {{MODEL_FRONTIER}} | {{CURSOR_MODEL_FRONTIER}} | {{COPILOT_MODEL_FRONTIER}} | {{CODEX_MODEL_FRONTIER}} |
 | `light` | {{MODEL_LIGHT}} | {{CURSOR_MODEL_LIGHT}} | {{COPILOT_MODEL_LIGHT}} | {{CODEX_MODEL_LIGHT}} |
 
-Reasoning-effort pins (where the harness supports them): judges `high`, workers `medium`
+Reasoning-effort pins (where the harness supports them): evaluators `high`, workers `medium`
 — Claude Code `effort:` frontmatter, Cursor `[effort=...]` bracket params, Codex
 `default_subagent_reasoning_effort`; Copilot has no effort key (drop it).
 
@@ -67,7 +67,7 @@ same as the `light` row above. Ends with the same omit-the-pin rule as the table
 above: a trip past the last chain entry clears the model pin and the harness default
 takes over (no hardcoded model IDs outside this file).
 
-## Fix-cycle rotation (after judge rejections)
+## Fix-cycle rotation (after evaluator rejections)
 
 A model blind to its own class of mistake rarely fixes it on retry. Rotate:
 
@@ -82,8 +82,8 @@ A model blind to its own class of mistake rarely fixes it on retry. Rotate:
 - **Copilot cost ceiling**: a subagent cannot run a *stronger* model than the session —
   the main session must run the `frontier` tier; workers pin down.
 - **Cursor silent fallback**: under team-admin/plan restrictions Cursor substitutes a
-  compatible model without erroring — judges should state their expected model in their
-  prompt and report which model produced the verdict.
+  compatible model without erroring — evaluators should state their expected model in
+  their prompt and report which model produced the verdict.
 - **Claude Code env overrides**: `CLAUDE_CODE_SUBAGENT_MODEL` and
   `CLAUDE_CODE_EFFORT_LEVEL` override frontmatter; org `availableModels` allowlists can
   cause pins to be ignored.

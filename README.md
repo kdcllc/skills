@@ -2,7 +2,7 @@
 
 [![skills.sh installs](https://skills.sh/b/kdcllc/skills)](https://skills.sh/kdcllc/skills)
 
-> Kit version: **0.17.0** (`skills/setup/VERSION`) · The install badge above applies
+> Kit version: **0.18.0** (`skills/setup/VERSION`) · The install badge above applies
 > only if the repo is made public: [skills.sh](https://www.skills.sh/) filters private
 > repos out of its public index by design
 > ([vercel-labs/skills#381](https://github.com/vercel-labs/skills/issues/381)), so it
@@ -10,7 +10,7 @@
 > below. If the repo publishes under a different owner/name, update the badge path
 > (`skills.sh/b/<owner>/<repo>`).
 
-A portable orchestrator/worker/judge multi-agent system for AI coding harnesses —
+A portable orchestrator/worker/evaluator multi-agent system for AI coding harnesses —
 **Claude Code, Cursor, GitHub Copilot (VS Code), and OpenAI Codex** — packaged as one
 installable `setup` skill that compiles a single canonical template source into each
 harness's native format.
@@ -18,28 +18,32 @@ harness's native format.
 What an install gives a project:
 
 - A **seven-phase feature workflow** (`/feature`): alignment → goal creation → goal
-  judgment → task execution → final audit → docs alignment → approval-gated pull
-  request. No phase advances without a judge verdict; fixes are always re-judged
-  (3-cycle limits, explicit escalation).
-- **Five subagents with tiered model pinning**: `judge` and `qa-judge` on the frontier
-  tier (effort high), `implementer`, `test-writer`, and `terminal` on the light tier
-  (effort medium) — `terminal` runs Bash or PowerShell and returns only the
+  evaluation → task execution → final audit → docs alignment → approval-gated pull
+  request. No phase advances without an evaluator verdict; fixes are always
+  re-evaluated (3-cycle limits, explicit escalation).
+- **Five subagents with tiered model pinning**: `evaluator` and `qa-evaluator` on the
+  frontier tier (effort high), `implementer`, `test-writer`, and `terminal` on the light
+  tier (effort medium) — `terminal` runs Bash or PowerShell and returns only the
   result the caller asked for, so the raw stream stays out of the frontier
   session. Model IDs are configuration (`models.map.md`), with per-tier fallback
   chains, a never-fall-up rule, and a cost-ceiling policy.
-- **Hardened judging** (patterns adopted from studying
+- **Hardened evaluation** (patterns adopted from studying
   [bradygaster/squad](https://github.com/bradygaster/squad)): existence checks with a
   ✅/⚠️/❌/🔍 confidence ladder and anti-fabrication rules, a required devil's-advocate
-  section in goal judgment, fix-cycle **model rotation** (retry with a different model
+  section in goal evaluation, fix-cycle **model rotation** (retry with a different model
   family, then the frontier tier), silent-success artifact verification, and an
-  append-only **orchestration log** per goal.
+  append-only **orchestration log** per goal. v0.18.0 added **calibration exemplars**
+  and an **execute-before-score** rule to the `evaluator` agent, a **hard per-criterion
+  threshold** (no averaging away one failing dimension) to the criteria skills, pre-code
+  **contracts** with two-party worker/evaluator sign-off before implementation, and
+  **`eval_depth`** intensity routing set by the orchestrator (never a skip).
 - A **staged test ladder** (`test-ladder`): new tests → impacted tests mid-cycle; full
   suites at cycle end — in a goal's designated closer task when it has one, and in the
   orchestrator's Phase 5 Quality Checks.
 - An optional **autonomous loop** (`auto-loop` + `_loop/loop.sh` / `_loop/loop.ps1`):
-  one backlog story per fresh-context iteration, judge-gated commits, circuit breakers
-  (no-progress, repeated-error, and protected-path violations enforced in the loop
-  drivers, not prose), memory size gates, and a single human-approved PR at run end.
+  one backlog story per fresh-context iteration, evaluation-gated commits, circuit
+  breakers (no-progress, repeated-error, and protected-path violations enforced in the
+  loop drivers, not prose), memory size gates, and a single human-approved PR at run end.
   Slot-supervision knobs — `LOOP_SLOTS` (default 2, clamped `[1,3]`; live under the
   N>1-iff-worktree rule shipped in v0.12.0: honored when `LOOP_WORKTREE=1`, clamps to
   effective 1 when `LOOP_WORKTREE=0` (with a stderr note only when `LOOP_SLOTS>1` was
@@ -58,7 +62,9 @@ docs/
 ├── research-multi-harness-upgrade.md  # Verified per-harness research + upgrade plan
 ├── research-squad-ideas.md            # bradygaster/squad study + adopted ideas (A1–A10)
 ├── research-token-efficient-skills.md # 2026-08-20: invocation flags, hygiene, terminal agent
-└── design-parallel-dispatch.md        # Judged design: WIP-limited parallel dispatch
+├── research-harness-design-upgrade.md # 2026-08-21: Anthropic harness-design study →
+│                                      #   evaluator vocabulary + contracts (shipped v0.18.0: phases 0–2)
+└── design-parallel-dispatch.md        # Verdict-gated design: WIP-limited parallel dispatch
                                        #   in the autonomous loop (partially shipped; see its Status block)
 skills/setup/                 # The installable skill (the compiler)
 ├── SKILL.md                  # Workflow: detect harness(es) → inspect → interview →
@@ -74,7 +80,7 @@ skills/setup/                 # The installable skill (the compiler)
 └── templates/                # Canonical source (Claude Code format)
     ├── ORCHESTRATION.md      # Architecture doc template
     ├── models.map.md         # Tier → model IDs, fallback chains, fix-cycle rotation
-    ├── agents/               # judge, qa-judge (frontier) · implementer, test-writer (light)
+    ├── agents/               # evaluator, qa-evaluator (frontier) · implementer, test-writer (light)
     ├── skills/               # feature, research, {goal,task,qa}-criteria,
     │                         #   test-ladder, align-docs, ship-pr
     └── loop/                 # Optional autonomous loop: SKILL.md (one iteration),
@@ -131,22 +137,22 @@ emits:
 
 | Generated | Purpose |
 |-----------|---------|
-| `agents/judge`, `agents/qa-judge` | Skeptical reviewers — frontier tier, existence checks + confidence ladder |
+| `agents/evaluator`, `agents/qa-evaluator` | Skeptical reviewers — frontier tier, existence checks + confidence ladder |
 | `agents/implementer`, `agents/test-writer` | Workers — light tier, ladder rungs 1–2 only |
 | `skills/feature` | Seven-phase workflow + goal/task templates + orchestration log |
 | `skills/research` | Research → Plan workflow (optional) |
-| `skills/{goal,task,qa}-criteria` | Judgment checklists (goal judgment includes devil's advocate) |
+| `skills/{goal,task,qa}-criteria` | Evaluation checklists (goal evaluation includes devil's advocate) |
 | `skills/test-ladder` | New → impacted tests mid-cycle; full suites only at cycle end |
-| `skills/align-docs` | Phase 6: judge-gated sync of all docs to shipped code |
+| `skills/align-docs` | Phase 6: evaluator-gated sync of all docs to shipped code |
 | `skills/ship-pr` | Phase 7: approval-gated PR drafted from branch commits |
 | `skills/auto-loop` + `_loop/` + `_goals/backlog.md` | Autonomous loop with structural guards (optional) |
 | `ORCHESTRATION.md` | The architecture doc, filled in for the project |
 | `orchestration-kit.manifest.json` | Kit version + file hashes, enabling clean upgrades |
 
 Everything is generated with project-specific content — layer order, test commands,
-judge auto-fail triggers, and model IDs are derived from the codebase and your answers,
-never left generic. Start your first feature with `/feature`; start an unattended run
-(sandboxed!) with `_loop/loop.sh 10` (or `pwsh _loop/loop.ps1 10` — PowerShell 7+).
+evaluator auto-fail triggers, and model IDs are derived from the codebase and your
+answers, never left generic. Start your first feature with `/feature`; start an unattended
+run (sandboxed!) with `_loop/loop.sh 10` (or `pwsh _loop/loop.ps1 10` — PowerShell 7+).
 Driver-owned dispatch, write-set admission, and the single-writer integrator shipped in
 v0.12.0. Completion and exit aggregation shipped in v0.13.0 — per-slot CB1/CB2
 retirement instead of a run-fatal stop, the run exit aggregated across slots with
@@ -205,7 +211,7 @@ harness and run without requiring `_loop/`.
 
 ## Model tiers
 
-Judges and the orchestrating session run a frontier model; implementer and test-writer
+Evaluators and the orchestrating session run a frontier model; implementer and test-writer
 run a light model. `models.map.md` is the single place model IDs live per install —
 including fallback chains (never fall back *up* a tier), the fix-cycle rotation table,
 and the cost-ceiling policy. The research behind the split — including the Copilot

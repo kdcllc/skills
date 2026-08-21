@@ -60,6 +60,9 @@ CHECKS_SH="$REPO_ROOT/.claude/checks.sh"
 TASK_TPL="$REPO_ROOT/skills/setup/templates/skills/feature/templates/task.md"
 CRITERIA_TPL="$REPO_ROOT/skills/setup/templates/skills/goal-criteria/SKILL.md"
 MANIFEST_JSON="$REPO_ROOT/orchestration-kit.manifest.json"
+CANON_AGENTS_DIR="$REPO_ROOT/skills/setup/templates/agents"
+CONTRACT_TPL="$REPO_ROOT/skills/setup/templates/skills/feature/templates/contract.md"
+INSTANCE_AGENTS_DIR="$REPO_ROOT/.claude/agents"
 
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
@@ -513,7 +516,7 @@ fi
 # Static structural greps against skills/setup/SKILL.md,
 # skills/setup/templates/ORCHESTRATION.md, skills/setup/VERSION, and
 # README.md -- lock the Step 2a greenfield gate, its GREENFIELD ONLY
-# BOOTSTRAP template hook, and the 0.17.0 / 1000-install claims. Mutations
+# BOOTSTRAP template hook, and the 0.18.0 / 1000-install claims. Mutations
 # (108-110) run ONLY on copies under $TMP; the real repo files are read-only.
 # ===========================================================================
 ORCH_TPL="$REPO_ROOT/skills/setup/templates/ORCHESTRATION.md"
@@ -636,21 +639,25 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 107. skills/setup/VERSION is exactly 0.17.0; README.md documents 0.17.0
+# 107. skills/setup/VERSION is exactly 0.18.0; README.md documents 0.18.0
 #      plus TypeScript, Python, and the 1000-install floor.
+#      NOTE: the expected version is hardcoded (not derived from VERSION_FILE)
+#      so this assertion still catches a wrong VERSION file, not just README
+#      drift -- assertion 110 is the mutation control proving that non-
+#      vacuity. The next version bump must update both 0.18.0 literals below.
 # ---------------------------------------------------------------------------
 _107_version_exact=0
-[[ "$(tr -d '[:space:]' < "$VERSION_FILE")" == "0.17.0" ]] && _107_version_exact=1
+[[ "$(tr -d '[:space:]' < "$VERSION_FILE")" == "0.18.0" ]] && _107_version_exact=1
 _107_readme_version=0; _107_readme_ts=0; _107_readme_py=0; _107_readme_1000=0
-grep -qF -- '0.17.0' "$README_MD" && _107_readme_version=1
+grep -qF -- '0.18.0' "$README_MD" && _107_readme_version=1
 grep -qF -- 'TypeScript' "$README_MD" && _107_readme_ts=1
 grep -qF -- 'Python' "$README_MD" && _107_readme_py=1
 grep -qF -- '1000+' "$README_MD" && _107_readme_1000=1
 if [[ "$_107_version_exact" -eq 1 && "$_107_readme_version" -eq 1 && "$_107_readme_ts" -eq 1 \
       && "$_107_readme_py" -eq 1 && "$_107_readme_1000" -eq 1 ]]; then
-  report PASS "107: skills/setup/VERSION is exactly 0.17.0; README.md documents 0.17.0 + TypeScript + Python + 1000"
+  report PASS "107: skills/setup/VERSION is exactly 0.18.0; README.md documents 0.18.0 + TypeScript + Python + 1000"
 else
-  report FAIL "107: VERSION==0.17.0 + README claims" \
+  report FAIL "107: VERSION==0.18.0 + README claims" \
     "version=$_107_version_exact readme_version=$_107_readme_version ts=$_107_readme_ts py=$_107_readme_py 1000=$_107_readme_1000"
 fi
 
@@ -694,15 +701,15 @@ fi
 
 # ---------------------------------------------------------------------------
 # 110. Mutation ($TMP-only VERSION file): a file containing 0.16.0 fails the
-#      ==0.17.0 predicate; the real skills/setup/VERSION passes.
+#      ==0.18.0 predicate; the real skills/setup/VERSION passes.
 # ---------------------------------------------------------------------------
 _110_bad="$TMP/VERSION_bad"
 printf '0.16.0\n' > "$_110_bad"
 _110_bad_fails=0; _110_real_passes=0
-[[ "$(tr -d '[:space:]' < "$_110_bad")" == "0.17.0" ]] || _110_bad_fails=1
-[[ "$(tr -d '[:space:]' < "$VERSION_FILE")" == "0.17.0" ]] && _110_real_passes=1
+[[ "$(tr -d '[:space:]' < "$_110_bad")" == "0.18.0" ]] || _110_bad_fails=1
+[[ "$(tr -d '[:space:]' < "$VERSION_FILE")" == "0.18.0" ]] && _110_real_passes=1
 if [[ "$_110_bad_fails" -eq 1 && "$_110_real_passes" -eq 1 ]]; then
-  report PASS "110: mutation -- a temp VERSION file containing 0.16.0 fails the ==0.17.0 predicate; the real skills/setup/VERSION passes"
+  report PASS "110: mutation -- a temp VERSION file containing 0.16.0 fails the ==0.18.0 predicate; the real skills/setup/VERSION passes"
 else
   report FAIL "110: mutation (VERSION 0.16.0)" \
     "bad_fails=$_110_bad_fails real_passes=$_110_real_passes"
@@ -1559,7 +1566,7 @@ fi
 # check J -- no function extraction needed) -- must FAIL and name the path.
 # ---------------------------------------------------------------------------
 j_neg_manifest="$TMP/j_negative_manifest.json"
-j_target_path=".claude/agents/judge.md"
+j_target_path=".claude/agents/evaluator.md"
 python3 - "$MANIFEST_JSON" "$j_neg_manifest" "$j_target_path" <<'PY'
 import json, sys
 manifest_path, out_path, target = sys.argv[1:4]
@@ -4843,6 +4850,82 @@ if [[ -f "$CHECKS_SH" ]]; then
   fi
 else
   report SKIP "99: check G mutation (.claude/checks.sh absent)"
+fi
+
+# ---------------------------------------------------------------------------
+# 115 (harness-evaluator-upgrade, canonical): skills/setup/templates/agents/
+# evaluator.md and qa-evaluator.md exist and declare `name: evaluator` /
+# `name: qa-evaluator`; no judge.md/qa-judge.md template exists alongside
+# them (clean one-shot rename, no alias stubs -- goal Discovery policy).
+# Numbered 115+ (not 100+) to stay clear of the Greenfield-setup contract
+# assertions' reserved 100-114 block above.
+# ---------------------------------------------------------------------------
+canon_eval_md="$CANON_AGENTS_DIR/evaluator.md"
+canon_qa_eval_md="$CANON_AGENTS_DIR/qa-evaluator.md"
+canon_115_ok=1
+[[ -f "$canon_eval_md" ]] && grep -qxF 'name: evaluator' "$canon_eval_md" || canon_115_ok=0
+[[ -f "$canon_qa_eval_md" ]] && grep -qxF 'name: qa-evaluator' "$canon_qa_eval_md" || canon_115_ok=0
+[[ -f "$CANON_AGENTS_DIR/judge.md" ]] && canon_115_ok=0
+[[ -f "$CANON_AGENTS_DIR/qa-judge.md" ]] && canon_115_ok=0
+if [[ "$canon_115_ok" -eq 1 ]]; then
+  report PASS "115: canonical evaluator.md/qa-evaluator.md exist with name: evaluator/qa-evaluator; no judge.md/qa-judge.md template exists"
+else
+  report FAIL "115: canonical evaluator.md/qa-evaluator.md exist with name: evaluator/qa-evaluator; no judge.md/qa-judge.md template exists" \
+    "evaluator.md=$([[ -f "$canon_eval_md" ]] && echo present || echo missing) qa-evaluator.md=$([[ -f "$canon_qa_eval_md" ]] && echo present || echo missing) judge.md=$([[ -f "$CANON_AGENTS_DIR/judge.md" ]] && echo present || echo absent) qa-judge.md=$([[ -f "$CANON_AGENTS_DIR/qa-judge.md" ]] && echo present || echo absent)"
+fi
+
+# ---------------------------------------------------------------------------
+# 116 (harness-evaluator-upgrade, instance -- aggregate-skip when the
+# instance itself is absent, matching the CHECKS_SH-absent convention above
+# (assertions 86/99): the gate keys on $INSTANCE_AGENTS_DIR (the directory)
+# and $MANIFEST_JSON, NOT on evaluator.md (the artifact under test), so a
+# missing evaluator.md scores as a FAIL below, not a SKIP. .claude/agents/
+# evaluator.md exists, no .claude/agents/judge.md, and
+# orchestration-kit.manifest.json carries no judge-named key (task 08's
+# re-emit + stale-file prune; this repo's own harness must never carry both
+# names at once).
+# ---------------------------------------------------------------------------
+if [[ -d "$INSTANCE_AGENTS_DIR" && -f "$MANIFEST_JSON" ]]; then
+  inst_116_ok=1
+  [[ -f "$INSTANCE_AGENTS_DIR/evaluator.md" ]] || inst_116_ok=0
+  [[ -f "$INSTANCE_AGENTS_DIR/judge.md" ]] && inst_116_ok=0
+  manifest_judge_keys="$(python3 -c "
+import json, sys
+with open(sys.argv[1]) as f:
+    data = json.load(f)
+print('\n'.join(k for k in data.get('files', {}) if 'judge' in k.lower()))
+" "$MANIFEST_JSON" 2>/dev/null)"
+  [[ -n "$manifest_judge_keys" ]] && inst_116_ok=0
+  if [[ "$inst_116_ok" -eq 1 ]]; then
+    report PASS "116: instance .claude/agents/evaluator.md exists, no .claude/agents/judge.md, no judge-named manifest key"
+  else
+    report FAIL "116: instance state" "evaluator.md present=$([[ -f "$INSTANCE_AGENTS_DIR/evaluator.md" ]] && echo yes || echo no) judge.md present=$([[ -f "$INSTANCE_AGENTS_DIR/judge.md" ]] && echo yes || echo no) manifest judge keys=[$manifest_judge_keys]"
+  fi
+else
+  report SKIP "116: .claude/agents directory or manifest absent -- instance-state check skipped"
+fi
+
+# ---------------------------------------------------------------------------
+# 117 (harness-evaluator-upgrade, contract template): feature/templates/
+# contract.md exists and contains both `signoff` and `acceptance_criteria`
+# (task 06's pre-code two-party sign-off mechanism).
+# ---------------------------------------------------------------------------
+if [[ -f "$CONTRACT_TPL" ]] && grep -qF 'signoff' "$CONTRACT_TPL" && grep -qF 'acceptance_criteria' "$CONTRACT_TPL"; then
+  report PASS "117: feature/templates/contract.md exists and contains 'signoff' and 'acceptance_criteria'"
+else
+  report FAIL "117: feature/templates/contract.md exists and contains 'signoff' and 'acceptance_criteria'" \
+    "$([[ -f "$CONTRACT_TPL" ]] && echo 'file present, content check failed' || echo 'file missing')"
+fi
+
+# ---------------------------------------------------------------------------
+# 118 (harness-evaluator-upgrade, eval_depth): feature/templates/task.md
+# carries the eval_depth field (task 06's evaluation-intensity routing,
+# orchestrator-set, never a skip).
+# ---------------------------------------------------------------------------
+if grep -qF 'eval_depth' "$TASK_TPL"; then
+  report PASS "118: feature/templates/task.md contains eval_depth"
+else
+  report FAIL "118: feature/templates/task.md contains eval_depth" "no 'eval_depth' match in $TASK_TPL"
 fi
 
 echo

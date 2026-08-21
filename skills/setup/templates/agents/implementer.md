@@ -59,7 +59,7 @@ guessing.
 ### Verification
 - [command run] → [result]
 
-### Notes for the judge
+### Notes for the evaluator
 - [decisions made, tradeoffs, anything ambiguous]
 ```
 

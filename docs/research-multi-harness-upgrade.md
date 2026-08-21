@@ -13,6 +13,12 @@ fully autonomous feature-by-feature loop.
 panel · 🔎 = primary source, spot-verified manually against live docs · ⚠️ = primary
 source, unverified · 💬 = blog/secondary, unverified.
 
+> **See also**: [research-harness-design-upgrade.md](research-harness-design-upgrade.md)
+> (2026-08-21) — Anthropic 2025–26 harness-design study driving the
+> `judge` → `evaluator` rename, per-task contracts, and evaluator hardening (shipped
+> v0.18.0: phases 0–2); live QA, frontend-design routing, and the simplification policy
+> follow as separate goals.
+
 ---
 
 ## Part 1 — Findings

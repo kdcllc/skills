@@ -1,6 +1,6 @@
 ---
 name: research
-description: Research → Plan workflow for {{PROJECT_NAME}} domain topics that need external investigation before implementation. Produces a research prompt for an external agent, ingests the report, and turns it into a judged goal/task structure for the feature.
+description: Research → Plan workflow for {{PROJECT_NAME}} domain topics that need external investigation before implementation. Produces a research prompt for an external agent, ingests the report, and turns it into an evaluated goal/task structure for the feature.
 ---
 
 # Research (Deep Research → Plan Orchestrator)
@@ -31,4 +31,4 @@ tradeoffs, chosen direction, affected layers ({{EXECUTION_LAYERS}}).
 
 Create `_goals/[goal-name]/` using the `feature` skill's `goal.md`/`task.md`
 templates, then hand off: the goal enters the `feature` skill at its Phase 3 (goal
-judgment) — it still must PASS the judge before execution.
+evaluation) — it still must PASS the evaluator before execution.

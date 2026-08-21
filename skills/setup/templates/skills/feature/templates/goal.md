@@ -6,7 +6,7 @@
 
 ## Discovery Summary (Phase 1 Q&A)
 
-[Condensed record of the alignment questions and the user's answers. The goal judge
+[Condensed record of the alignment questions and the user's answers. The goal evaluator
 checks tasks against this — every answered decision must be reflected in a task.]
 
 ## Success Criteria
@@ -20,7 +20,7 @@ checks tasks against this — every answered decision must be reflected in a tas
 
 ## Out of Scope
 
-- [Explicitly excluded work, so the judge can flag scope creep]
+- [Explicitly excluded work, so the evaluator can flag scope creep]
 
 ## Tasks (dependency order)
 

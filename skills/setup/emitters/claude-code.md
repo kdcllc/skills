@@ -24,11 +24,11 @@ resolved templates.
 2. **CLAUDE.md pointer** — append (or create) a short section:
    ```markdown
    ## Orchestration
-   Feature work runs through the orchestrator/worker/judge system — see
+   Feature work runs through the orchestrator/worker/evaluator system — see
    .claude/ORCHESTRATION.md. Start features with /feature.
    ```
 3. Orchestrator spawn allowlists use
-   `tools: Agent(implementer, test-writer, judge, qa-judge, terminal)` comma-string
+   `tools: Agent(implementer, test-writer, evaluator, qa-evaluator, terminal)` comma-string
    syntax where needed — `terminal` joins the allowlist so any allowed caller can spawn
    it with a Bash or PowerShell command and get back only the requested result.
 4. Model values: Claude aliases (`opus`, `sonnet`, `haiku`, `fable`) or full IDs are both

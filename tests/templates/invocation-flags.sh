@@ -27,6 +27,8 @@ TEMPLATES="$REPO_ROOT/skills/setup/templates"
 EMITTERS="$REPO_ROOT/skills/setup/emitters"
 SETUP_SKILL_MD="$REPO_ROOT/skills/setup/SKILL.md"
 RESEARCH_DOC="$REPO_ROOT/docs/research-token-efficient-skills.md"
+ROOT_README="$REPO_ROOT/README.md"
+ROOT_ORCHESTRATION="$REPO_ROOT/ORCHESTRATION.md"
 
 fail_count=0
 pass_count=0
@@ -321,6 +323,42 @@ if [[ $research_ok -eq 1 ]]; then
   report PASS "research doc carries invocation-flag-hygiene status phrases"
 else
   report FAIL "research doc carries invocation-flag-hygiene status phrases"
+fi
+
+# ===========================================================================
+# 16 (harness-evaluator-upgrade): case-insensitive vocabulary guard -- no
+# judge-family word survives in the live-vocabulary surfaces named by the
+# goal's success criterion 1 sweep. Scope deliberately EXCLUDES
+# templates/loop/ drivers, reference/harness-matrix.md, and the test files
+# themselves (frozen provenance / flagged fixtures / this guard's own
+# pattern) -- none of those paths are in the list below, so the exclusion is
+# structural, not a grep flag.
+# ===========================================================================
+judg_scope=(
+  "$TEMPLATES/agents"
+  "$TEMPLATES/skills"
+  "$TEMPLATES/ORCHESTRATION.md"
+  "$TEMPLATES/models.map.md"
+  "$EMITTERS"
+  "$SETUP_SKILL_MD"
+  "$ROOT_README"
+  "$ROOT_ORCHESTRATION"
+)
+judg_missing=()
+for p in "${judg_scope[@]}"; do
+  [[ -e "$p" ]] || judg_missing+=("$p")
+done
+if [[ ${#judg_missing[@]} -gt 0 ]]; then
+  report FAIL "vocabulary guard: no judge-family word in live-vocabulary surfaces" \
+    "scope path(s) missing -- a rename/move degraded the guard: ${judg_missing[*]}"
+else
+  judg_hits="$(grep -rIni 'judg' "${judg_scope[@]}" 2>/dev/null)"
+  if [[ -z "$judg_hits" ]]; then
+    report PASS "vocabulary guard: no judge-family word in templates/agents, templates/skills, templates/ORCHESTRATION.md, templates/models.map.md, emitters/, setup/SKILL.md, README.md, ORCHESTRATION.md"
+  else
+    report FAIL "vocabulary guard: no judge-family word in live-vocabulary surfaces" \
+      "$(wc -l <<<"$judg_hits") match(es) found -- first few: $(head -3 <<<"$judg_hits")"
+  fi
 fi
 
 echo

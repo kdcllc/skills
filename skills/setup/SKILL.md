@@ -1,12 +1,12 @@
 ---
 name: setup
-description: Install the orchestrator/worker/judge multi-agent system into the current project, compiled for its AI coding harness(es) — Claude Code, Cursor, GitHub Copilot (VS Code), and/or OpenAI Codex. Generates the five subagents (judge, qa-judge, implementer, test-writer, terminal) with tiered model pins — terminal is light-tier: it runs any Bash or PowerShell command and returns only the result the caller asked for — plus the orchestrator skills (feature, research), the criteria skills, an optional autonomous feature loop, and a project-specific ORCHESTRATION.md. On empty or near-empty (greenfield) directories it first asks whether to scaffold a project tree and creates nothing until the user confirms. Run once per project; re-run to upgrade or re-target.
+description: Install the orchestrator/worker/evaluator multi-agent system into the current project, compiled for its AI coding harness(es) — Claude Code, Cursor, GitHub Copilot (VS Code), and/or OpenAI Codex. Generates the five subagents (evaluator, qa-evaluator, implementer, test-writer, terminal) with tiered model pins — terminal is light-tier: it runs any Bash or PowerShell command and returns only the result the caller asked for — plus the orchestrator skills (feature, research), the criteria skills, an optional autonomous feature loop, and a project-specific ORCHESTRATION.md. On empty or near-empty (greenfield) directories it first asks whether to scaffold a project tree and creates nothing until the user confirms. Run once per project; re-run to upgrade or re-target.
 ---
 
 # Setup (Orchestration Kit Compiler)
 
 You are installing a multi-agent orchestration system (orchestrator coordinates,
-worker subagents execute with fresh context, skeptical judges verify) into the
+worker subagents execute with fresh context, skeptical evaluators verify) into the
 **current project**. The kit keeps ONE canonical template source in Claude Code format
 (`templates/`) and **compiles** it per harness via the instruction files in `emitters/`.
 Consult `reference/harness-matrix.md` for verified capabilities and friction points —
@@ -176,7 +176,7 @@ Ask (multiple-choice where possible) only what you could not infer:
    CURRENT frontier and light model IDs (check the harness's live model list; IDs
    rotate). Offer "inherit/unpinned" as an option (then strip model keys and the tier
    column from emitted files).
-4. **QA gate surfaces** — which user-facing surfaces qa-judge covers; any existing
+4. **QA gate surfaces** — which user-facing surfaces qa-evaluator covers; any existing
    evidence-producing skills (API smoke, visual QA)?
 5. **Research workflow** — wanted? If not, skip the `research` skill and delete its
    section from ORCHESTRATION.md.
@@ -194,7 +194,7 @@ In a scratch copy, resolve every `{{TOKEN}}` and act on + delete every
 `<!-- BOOTSTRAP: ... -->` comment in `templates/`. Rules:
 
 - Table rows / sections that don't apply are removed, not left as placeholders.
-- Judge auto-fail triggers must name **this project's** sins (from Step 2). Generic
+- Evaluator auto-fail triggers must name **this project's** sins (from Step 2). Generic
   filler is a bootstrap failure.
 - Model tiers resolve from the completed model map; keep the resolved
   `models.map.md` as the single place model IDs live.
@@ -217,7 +217,7 @@ In a scratch copy, resolve every `{{TOKEN}}` and act on + delete every
 | `{{TARGETED_TEST_COMMAND}}` / `{{FULL_TEST_COMMAND}}` | Staged test commands |
 | `{{TEST_FRAMEWORKS}}` | Test framework(s) in use |
 | `{{LINT_COMMAND}}` / `{{TYPECHECK_COMMAND}}` | Only if configured; else remove rows |
-| `{{JUDGE_AUTO_FAIL_TRIGGERS}}` / `{{QA_AUTO_FAIL_TRIGGERS}}` | Project-specific instant-fail conditions |
+| `{{EVALUATOR_AUTO_FAIL_TRIGGERS}}` / `{{QA_AUTO_FAIL_TRIGGERS}}` | Project-specific instant-fail conditions |
 
 ## Step 5 — Emit per harness
 
@@ -304,6 +304,24 @@ If `orchestration-kit.manifest.json` exists: compare its `kitVersion` to `VERSIO
 diff manifest hashes against the working tree to find user-modified files, regenerate
 into the scratch copy, and show the user a diff for any file they modified before
 overwriting it. Unmodified files update silently. Update the manifest last.
+
+**Stale-file pruning**: after regenerating the new emit set, compare it against the
+previous manifest's `files` keys. A key present in the previous manifest but absent
+from the new emit set names a file the kit no longer produces — delete it if it
+matches its previously recorded hash (unmodified), or report it for the user to
+remove themselves if its hash has drifted (user-modified — never silently delete
+someone's edits). The v0.18.0 evaluator rename is the reference case: an upgrade
+from a pre-rename install prunes the two pre-v0.18.0 verification-role agent copies —
+the predecessors of today's `evaluator.md` and `qa-evaluator.md`, one per role — from
+every manifest-keyed instance directory (`.claude/`, `.cursor/`, `.github/`, `.codex/`,
+per the harnesses that were targeted), leaving only the current `evaluator.md` /
+`qa-evaluator.md` files behind.
+**Limit**: manifest-key pruning only reaches files the manifest actually keys — it
+does NOT reach un-keyed copies, such as a self-install's nested
+`skills/setup/templates/` tree (a vendored copy of the kit's own canonical templates,
+never entered into `files`). Those copies are stale until whatever install mechanism
+created that nested copy is re-run; the pruning step here cannot detect or clean
+them.
 
 Paths listed in `seedFiles` are outside this flow: create a seed if it is missing,
 otherwise leave it exactly as it is — never overwrite it, never diff-confirm it, and

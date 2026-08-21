@@ -6,7 +6,7 @@
      skill for the placeholder reference. -->
 
 A guide to how the feature and research orchestration system works for **{{PROJECT_NAME}}**,
-including subagent delegation, judgment cycles, and retry mechanisms.
+including subagent delegation, evaluation cycles, and retry mechanisms.
 
 > **Stack note:** {{STACK_SUMMARY}}
 > <!-- BOOTSTRAP: 2–5 sentences — language/runtime, package manager, major code lanes
@@ -26,8 +26,8 @@ including subagent delegation, judgment cycles, and retry mechanisms.
      against ports/abstractions rather than concretions, and no god-files that
      accumulate unrelated responsibilities. Name no language, runtime, or package
      manager; the stack note above already carries that. These are authoring
-     conventions for a fresh codebase, not judge auto-fail triggers — do not add them
-     to the auto-fail table or to any judge criteria. When `options.greenfield` is
+     conventions for a fresh codebase, not evaluator auto-fail triggers — do not add them
+     to the auto-fail table or to any evaluator criteria. When `options.greenfield` is
      false or absent — an existing-project install, a declined scaffold, or a Step 2a
      that was skipped as not sparse — delete this comment and add no subsection. -->
 
@@ -39,9 +39,9 @@ including subagent delegation, judgment cycles, and retry mechanisms.
 2. [Component Overview](#component-overview)
 3. [Feature Flow](#feature-flow)
 4. [Research Flow](#research-flow)
-5. [QA Judgment (Optional Behavioral Gate)](#qa-judgment-optional-behavioral-gate)
+5. [QA Evaluation (Optional Behavioral Gate)](#qa-evaluation-optional-behavioral-gate)
 6. [Subagent Communication Protocol](#subagent-communication-protocol)
-7. [Judgment & Retry Mechanisms](#judgment--retry-mechanisms)
+7. [Evaluation & Retry Mechanisms](#evaluation--retry-mechanisms)
 8. [Autonomous Loop (Optional)](#autonomous-loop-optional)
 9. [Quick Reference](#quick-reference)
 
@@ -65,14 +65,14 @@ Traditional single-agent execution suffers from:
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                                                                             │
-│   ORCHESTRATOR                    WORKERS                   JUDGES          │
+│   ORCHESTRATOR                    WORKERS                   EVALUATORS      │
 │   (Coordinates)                   (Execute)                 (Verify)        │
 │                                                                             │
 │   ┌───────────┐                  ┌───────────┐            ┌───────────┐    │
 │   │           │    context       │           │   output   │           │    │
-│   │  feature- │ ───────────────► │  impl-    │ ─────────► │ pessim-   │    │
-│   │  orchest- │                  │  executor │            │ istic-    │    │
-│   │  rator    │ ◄─────────────── │           │ ◄───────── │ judge     │    │
+│   │  feature- │ ───────────────► │  impl-    │ ─────────► │           │    │
+│   │  orchest- │                  │  executor │            │ evaluator │    │
+│   │  rator    │ ◄─────────────── │           │ ◄───────── │           │    │
 │   │           │    verdict       │           │   verdict  │           │    │
 │   └───────────┘                  └───────────┘            └───────────┘    │
 │                                                                             │
@@ -120,11 +120,11 @@ ON subagent invocation failure:
 |-------|------|---------|
 | `feature` | Coordinator | Plans and executes feature implementation across {{PROJECT_NAME}} layers |
 | `research` | Coordinator | Research → Plan workflow for domain topics |
-| `goal-criteria` | Reference | Criteria for goal judgment |
-| `task-criteria` | Reference | Criteria for task judgment |
-| `qa-criteria` | Reference | Criteria for user-facing QA judgment |
+| `goal-criteria` | Reference | Criteria for goal evaluation |
+| `task-criteria` | Reference | Criteria for task evaluation |
+| `qa-criteria` | Reference | Criteria for user-facing QA evaluation |
 | `test-ladder` | Supporting | New tests → impacted tests mid-cycle; full suites (rung 3) only at cycle end |
-| `align-docs` | Coordinator | Phase 6: judge-gated sync of all docs to shipped code (docs-only) |
+| `align-docs` | Coordinator | Phase 6: evaluator-gated sync of all docs to shipped code (docs-only) |
 | `ship-pr` | Delivery | Phase 7: draft + create the GitHub PR from branch commits (approval-gated) |
 <!-- BOOTSTRAP: append one row per project domain skill (the canonical knowledge base
      for the problem domain) and per supporting skill (TDD workflow, test ladder,
@@ -144,8 +144,8 @@ ON subagent invocation failure:
 
 | Subagent | Behavioral Style | Use Case | Model Tier |
 |----------|------------------|----------|------------|
-| `judge` | Skeptical, problem-finding | Goal / task / code verification | frontier — `{{MODEL_FRONTIER}}`, effort high |
-| `qa-judge` | Skeptical, user-perspective | Behavioral QA of user-facing surfaces | frontier — `{{MODEL_FRONTIER}}`, effort high |
+| `evaluator` | Skeptical, problem-finding | Goal / task / code verification | frontier — `{{MODEL_FRONTIER}}`, effort high |
+| `qa-evaluator` | Skeptical, user-perspective | Behavioral QA of user-facing surfaces | frontier — `{{MODEL_FRONTIER}}`, effort high |
 | `implementer` | Focused, checklist-driven | Implementation + fixes | light — `{{MODEL_LIGHT}}`, effort medium |
 | `test-writer` | Coverage-obsessed | Test creation, all external services mocked | light — `{{MODEL_LIGHT}}`, effort medium |
 | `terminal` | Compact command runner | Any Bash or PowerShell command — returns only the result the caller asked for | light — `{{MODEL_LIGHT}}`, effort medium |
@@ -155,8 +155,8 @@ PowerShell command plus the result shape it needs; `terminal` executes it and re
 only that result, so the raw stream never lands in the caller. Rung 3 is always a
 `terminal` spawn.
 
-**Model tiers:** The orchestrator (main session) and both judges run the **frontier**
-tier (`{{MODEL_FRONTIER}}`) — delegation and judging have a capability floor. The
+**Model tiers:** The orchestrator (main session) and both evaluators run the **frontier**
+tier (`{{MODEL_FRONTIER}}`) — delegation and evaluating have a capability floor. The
 light-tier agents — the two workers **plus** `terminal` — run the **light** tier
 (`{{MODEL_LIGHT}}`) — checklist-driven execution and compact command running keep
 quality when the plan and verification are strong, at a fraction of the output-token
@@ -164,7 +164,7 @@ cost. Model IDs are configuration, not constants: they are defined once in the m
 map and pinned in each agent's frontmatter; update them there when providers rotate
 names. Harness caveats: on Copilot a subagent cannot run a stronger model than the
 session (so the session itself must run the frontier tier); Cursor silently falls back
-to a compatible model under admin/plan restrictions (judges should report which model
+to a compatible model under admin/plan restrictions (evaluators should report which model
 produced the verdict).
 <!-- BOOTSTRAP: if the project does not pin models, delete the Model Tier column
      and this paragraph. -->
@@ -210,14 +210,14 @@ PHASE 2: GOAL CREATION (With Decision Gates)
     └─────────────────────────────────────────────┘
 
 
-PHASE 3: GOAL JUDGMENT (Mandatory Re-Judge Loop)
-════════════════════════════════════════════════
+PHASE 3: GOAL EVALUATION (Mandatory Re-Evaluate Loop)
+═════════════════════════════════════════════════════
 
-    Orchestrator ──► Launch judge
+    Orchestrator ──► Launch evaluator
                      (includes Phase 1 Q&A for Discovery Coverage check)
            │
            ▼
-    Receive Judgment
+    Receive Evaluation
            │
     ┌──────┼──────┐
     │      │      │
@@ -226,21 +226,29 @@ PHASE 3: GOAL JUDGMENT (Mandatory Re-Judge Loop)
     │      │      │
     ▼      ▼      ▼
  Phase4  Revise  User
-         & re-judge
+         & re-evaluate
         (3 max)
 
     INVARIANT: The ONLY exit to Phase 4 is a PASS verdict
-    from the judge subagent. Revisions MUST be re-judged.
+    from the evaluator subagent. Revisions MUST be re-evaluated.
 
 
-PHASE 4: TASK EXECUTION (Mandatory Re-Judge After Every Fix)
-════════════════════════════════════════════════════════════
+PHASE 4: TASK EXECUTION (Mandatory Re-Evaluate After Every Fix)
+═══════════════════════════════════════════════════════════════
 
     FOR EACH TASK (in dependency order):
 
-    Step 1: Launch implementer (or test-writer for the test task)
+    Contract gate (before Step 1): owner agent proposes the contract from the task
+    file (or the orchestrator drafts it directly for trivial tasks) ──► evaluator
+    reviews in contract mode, counter-signs or requests one revision (max 2 rounds,
+    each a single stateless spawn) ──► both signoff.worker/evaluator agreed:true,
+    logged to the orchestration log ──► Step 1. No implementation dispatch before
+    both sign-offs land.
+
+    Step 1: Launch implementer (or test-writer for the test task) — context
+            package includes the signed contract
     Step 2: Receive completion report
-    Step 3: Launch judge
+    Step 3: Launch evaluator
     Step 4: Handle verdict
             │
     ┌───────┼───────┐
@@ -250,12 +258,14 @@ PHASE 4: TASK EXECUTION (Mandatory Re-Judge After Every Fix)
     │       │       │
     ▼       ▼       ▼
   Next   Re-impl  Escalate
-  Task   & re-judge to User
+  Task   & re-evaluate to User
         (3 max)
 
-    INVARIANT: A task is only marked complete after the judge
+    INVARIANT: A task is only marked complete after the evaluator
     returns PASS. There is no path where fixes are made and the
-    orchestrator proceeds without re-verification.
+    orchestrator proceeds without re-verification. The contract gate is
+    a separate invariant: implementation never begins until both
+    signoff.worker.agreed and signoff.evaluator.agreed are true.
 
 
 PHASE 5: FINAL AUDIT (Mandatory Re-Audit Loop)
@@ -264,7 +274,7 @@ PHASE 5: FINAL AUDIT (Mandatory Re-Audit Loop)
     All Tasks Complete
            │
            ▼
-    Final judge audit
+    Final evaluator audit
            │
     ┌──────┴──────┐
     │             │
@@ -280,8 +290,8 @@ PHASE 5: FINAL AUDIT (Mandatory Re-Audit Loop)
     MUST be re-audited.
 
 
-PHASE 6: ALIGN DOCS (Judge-Gated Doc Sync)
-══════════════════════════════════════════
+PHASE 6: ALIGN DOCS (Evaluator-Gated Doc Sync)
+══════════════════════════════════════════════
 
     Quality Checks green
            │
@@ -289,8 +299,8 @@ PHASE 6: ALIGN DOCS (Judge-Gated Doc Sync)
     align-docs skill: discover shipped surface ──► per-doc edit plan
            │
            ▼
-    judge the plan ──► implementer per doc ──► judge each doc ──► final doc audit
-    (same re-judge invariants and 3-cycle limits as Phases 3–5)
+    evaluate the plan ──► implementer per doc ──► evaluate each doc ──► final doc audit
+    (same re-evaluate invariants and 3-cycle limits as Phases 3–5)
 
     RULES: docs-only (never code), anti-invention (every claim traces
     to a read file), _research/ and _goals/ are READ-ONLY.
@@ -339,6 +349,23 @@ tests) → rung 2 (impacted tests) mid-cycle; rung 3 (every stack's full suite) 
 Use only the layers the feature actually touches — most features reuse shared
 infrastructure and add one module plus its interface and tests.
 
+### Evaluation intensity (`eval_depth`)
+
+Every task file's ownership-contract block carries `eval_depth: full` (default) or
+`light`. It is orchestrator-set at planning time only — a worker never sets it — and
+`light` is never a skip: it shortens the evaluator's rubric to a requirements walk +
+targeted tests + write-fence check, while still ending in a real PASS / NEEDS FIXES /
+REJECT verdict. The orchestrator assigns `light` only by explicit decision, with a
+stated reason recorded in the task file or the goal's Discovery Summary;
+`goal-criteria` flags an unexplained `light` and fails a missing field closed to
+`full`.
+
+Maintainers periodically compare the verdicts recorded in each goal's
+`orchestration-log.md` against what actually happened afterward, then tune the
+**criteria skills** — never the evaluator's fixed stance — when its behavior drifts
+(see `evaluator.md`'s tuning note). This log-driven ritual is how both `eval_depth`
+routing and the evaluation criteria stay calibrated over time.
+
 ---
 
 ## Research Flow
@@ -362,9 +389,9 @@ Phase 4 execution.
 
 ---
 
-## QA Judgment (Optional Behavioral Gate)
+## QA Evaluation (Optional Behavioral Gate)
 
-User-facing QA is a lightweight, optional gate run with the `qa-judge` subagent after a feature
+User-facing QA is a lightweight, optional gate run with the `qa-evaluator` subagent after a feature
 is implemented. It covers **all user-facing surfaces**:
 
 <!-- BOOTSTRAP: list this project's user-facing surfaces and the evidence each produces,
@@ -381,18 +408,18 @@ Exercise the affected surface and capture evidence
 (exact invocations, outputs, exit codes / status codes, screenshots, logs)
         │
         ▼
-Launch qa-judge ──► Verdict
+Launch qa-evaluator ──► Verdict
         │
   ┌─────┼─────┐
 PASS  ISSUES  REJECT
   │     │       │
   ▼     ▼       ▼
 Done  Create  Escalate
-      fix tasks → implementer → judge → re-run QA
+      fix tasks → implementer → evaluator → re-run QA
 ```
 
 QA never fixes issues — it finds them. Fixes flow back through the standard
-implementer + judge loop, then QA re-runs.
+implementer + evaluator loop, then QA re-runs.
 
 ---
 
@@ -431,26 +458,28 @@ Every subagent invocation requires a complete context package:
 
 ---
 
-## Judgment & Retry Mechanisms
+## Evaluation & Retry Mechanisms
 
 ### Retry Limits by Phase
 
 | Phase | Max Cycles | On Exhaust |
 |-------|------------|------------|
-| Goal Judgment (Phase 3) | 3 revise→re-judge | Escalate to user |
-| Task Execution (Phase 4) | 3 implement→judge per task | Escalate to user |
+| Goal Evaluation (Phase 3) | 3 revise→re-evaluate | Escalate to user |
+| Contract Gate (Phase 4 pre-step) | 2 propose→review rounds (stateless spawns) | Orchestrator tiebreak or escalate to user |
+| Task Execution (Phase 4) | 3 implement→evaluate per task | Escalate to user |
 | Final Audit (Phase 5) | 3 fix→re-audit | Escalate to user |
 | Align Docs (Phase 6) | 3 per doc + 3 for plan and final doc audit | Escalate to user |
 | Pull Request (Phase 7) | n/a — gated on explicit user approval | User edits or declines the draft |
-| QA Gate (optional) | bounded by runtime; fixes loop through impl+judge | Escalate if unresolved |
+| QA Gate (optional) | bounded by runtime; fixes loop through impl+evaluate | Escalate if unresolved |
 
-### Mandatory Re-Judge Invariants
+### Mandatory Re-Evaluate Invariants
 
-- **Phase 3**: Goal judgment loop ONLY exits to Phase 4 via a PASS verdict. Revisions without re-judge are forbidden.
-- **Phase 4**: A task is ONLY marked complete after the judge returns PASS. Fixes without re-judge are forbidden.
+- **Phase 3**: Goal evaluation loop ONLY exits to Phase 4 via a PASS verdict. Revisions without re-evaluate are forbidden.
+- **Phase 4**: A task is ONLY marked complete after the evaluator returns PASS. Fixes without re-evaluate are forbidden.
   Fix cycles rotate models — cycle 2 uses a different model family, cycle 3 the frontier tier (see the model map) — and every spawn is recorded in the goal's append-only orchestration log.
+  The contract gate is a separate invariant: implementation is ONLY dispatched once both `signoff.worker.agreed` and `signoff.evaluator.agreed` are `true`.
 - **Phase 5**: Audit loop ONLY exits to Quality Checks via an APPROVED verdict. Remediations without re-audit are forbidden.
-- **Phase 6**: A doc is ONLY complete after the judge returns PASS; the doc set ONLY ships after the final doc audit returns APPROVED. `_research/`, `_goals/`, and code are never touched.
+- **Phase 6**: A doc is ONLY complete after the evaluator returns PASS; the doc set ONLY ships after the final doc audit returns APPROVED. `_research/`, `_goals/`, and code are never touched.
 - **Phase 7**: The PR is ONLY created after the user approves the drafted title and body.
 
 ### Escalation Format
@@ -488,7 +517,7 @@ Run the feature flow (Phases 2–6; backlog acceptance criteria replace Phase 1,
 align-docs runs per story so docs never drift)
         │
         ▼
-Judge PASS + ladder rungs green? ──NO──► attempts += 1; if attempts == 3:
+Evaluator PASS + ladder rungs green? ──NO──► attempts += 1; if attempts == 3:
         │ YES                             mark blocked, log to ESCALATIONS.md,
         ▼                                 move to next story
 Commit (one commit per story, docs included) ──► mark passes: true ──► append learnings
@@ -509,7 +538,7 @@ Next iteration (fresh context)
 | Circuit breaker | per slot: retire after 3 consecutive no-commit reaps or 5 identical failure signatures (run continues); every slot retired stops the run — exit 3 if any signature-retirement, else 2 |
 | Model breaker | CLOSED/OPEN/HALF-OPEN on anchored rate-limit detection; 600s cooldown, 2 successes to close; falls down the loop model chain, omit-pin at chain end; OPEN sleeps instead of hammering; rate-limited passes CB1-exempt |
 | Exit condition | driver-dispatched runs: the driver's own backlog re-scan, gated on zero quarantined branches (exit 0); manual runs: explicit `<promise>COMPLETE</promise>` sentinel — never inferred from prose |
-| Merge gate | judge PASS + green ladder rungs 1–2 before any commit; rung 3 at run end |
+| Merge gate | evaluator PASS + green ladder rungs 1–2 before any commit; rung 3 at run end |
 | Docs | align-docs (Phase 6) runs per story — doc updates land in the story's commit |
 | Protected paths | the loop may not modify `_loop/`, kit agents/skills, the manifest, or `.gitattributes` — the loop driver (`loop.sh`/`loop.ps1`) reverts the iteration and stops (exit 4) |
 | Memory gates | `_goals/LEARNINGS.md` ≥ 15 KB → compact; `_goals/ESCALATIONS.md` ≥ 20 KB → archive resolved entries |
@@ -530,8 +559,8 @@ drifting run early. Headless entry point: `_loop/loop.sh [max-iterations]` (bash
 ```
 {{IDE_DIR}}/
 ├── agents/
-│   ├── judge.md        # Skeptical code/goal/task reviewer
-│   ├── qa-judge.md                 # Skeptical user-facing QA reviewer
+│   ├── evaluator.md     # Skeptical code/goal/task reviewer
+│   ├── qa-evaluator.md              # Skeptical user-facing QA reviewer
 │   ├── implementer.md  # Focused implementer
 │   ├── test-writer.md           # Test creator (external services mocked)
 │   └── terminal.md              # Bash/PowerShell runner — returns only the asked-for result
@@ -539,17 +568,17 @@ drifting run early. Headless entry point: `_loop/loop.sh [max-iterations]` (bash
 ├── skills/
 │   ├── feature/       # Feature coordination
 │   │   ├── SKILL.md
-│   │   └── templates/{goal.md,task.md}
+│   │   └── templates/{goal.md,task.md,contract.md}
 │   │
 │   ├── research/ # Research → Plan
 │   │   ├── SKILL.md
 │   │   └── templates/{research-prompt.md,research-report.md}
 │   │
-│   ├── goal-criteria/SKILL.md         # Goal judgment criteria
-│   ├── task-criteria/SKILL.md         # Task judgment criteria
-│   ├── qa-criteria/SKILL.md           # User-facing QA judgment criteria
+│   ├── goal-criteria/SKILL.md         # Goal evaluation criteria
+│   ├── task-criteria/SKILL.md         # Task evaluation criteria
+│   ├── qa-criteria/SKILL.md           # User-facing QA evaluation criteria
 │   ├── test-ladder/SKILL.md    # Rungs 1–2 mid-cycle, rung 3 at cycle end
-│   ├── align-docs/SKILL.md            # Phase 6: judge-gated doc sync
+│   ├── align-docs/SKILL.md            # Phase 6: evaluator-gated doc sync
 │   ├── ship-pr/SKILL.md       # Phase 7: approval-gated PR creation
 │   └── auto-loop/SKILL.md             # One autonomous iteration (if loop enabled)
 │
@@ -557,6 +586,7 @@ drifting run early. Headless entry point: `_loop/loop.sh [max-iterations]` (bash
 
 _goals/backlog.md               # Story backlog for the autonomous loop (if enabled)
 _goals/<goal>/orchestration-log.md  # Append-only spawn ledger per goal
+_goals/<goal>/contracts/NN-task-name.contract.md  # Per-task sign-off (Phase 4 contract gate)
 _goals/breaker-state.json       # Model circuit breaker state (runtime, gitignored)
 _loop/{loop.sh,loop.ps1,breaker.sh,breaker.ps1,PROMPT.md}  # Headless loop driver (if enabled)
 ```
@@ -611,14 +641,14 @@ session.
 ```
 
 The criteria skills (`goal-criteria`, `task-criteria`, `qa-criteria`) are reference checklists used by the
-judge subagents — they are not invoked directly.
+evaluator subagents — they are not invoked directly.
 
 ### Subagent Behaviors
 
 | Subagent | Default Stance | Key Behavior | Auto-Fail Triggers |
 |----------|----------------|--------------|-------------------|
-| `judge` | Score starts at 2/5 | Actively looks for code problems | {{JUDGE_AUTO_FAIL_TRIGGERS}} |
-| `qa-judge` | Score starts at 2/5 | User-perspective behavioral QA | {{QA_AUTO_FAIL_TRIGGERS}} |
+| `evaluator` | Score starts at 2/5 | Actively looks for code problems | {{EVALUATOR_AUTO_FAIL_TRIGGERS}} |
+| `qa-evaluator` | Score starts at 2/5 | User-perspective behavioral QA | {{QA_AUTO_FAIL_TRIGGERS}} |
 | `implementer` | Must complete ALL | Checklist-driven execution | Skipping requirements |
 | `test-writer` | 100% coverage required | Outcome-verifying tests | Functions without tests, live external-service calls |
 
@@ -645,12 +675,12 @@ The orchestrator maintains this state throughout execution:
 - [ ] Decision gates passed (or user decided)
 - [ ] Task files created
 
-### Phase 3: Goal Judgment (must loop until PASS)
-- [ ] Judge subagent invoked (attempt 1)
+### Phase 3: Goal Evaluation (must loop until PASS)
+- [ ] Evaluator subagent invoked (attempt 1)
 - [ ] Verdict: [PASS/NEEDS REVISION/REJECT]
 - [ ] Final verdict that allowed progression: PASS
 
-### Phase 4: Execution (each task must loop judge until PASS)
+### Phase 4: Execution (each task must loop evaluator until PASS)
 | Task | Cycle 1 | Cycle 2 | Cycle 3 | Final Verdict |
 |------|---------|---------|---------|---------------|
 | 01-... | ⬜ | - | - | ⬜ |
@@ -664,8 +694,8 @@ The orchestrator maintains this state throughout execution:
 
 ### Phase 6: Align Docs (must loop until doc audit APPROVED)
 - [ ] Change surface + per-doc edit list built
-- [ ] Edit plan judged PASS
-- [ ] Each doc executed + judged PASS
+- [ ] Edit plan evaluated PASS
+- [ ] Each doc executed + evaluated PASS
 - [ ] Final doc audit APPROVED (docs only; _research/ and _goals/ untouched)
 
 ### Phase 7: Pull Request (gated on user approval)
@@ -680,13 +710,13 @@ The orchestrator maintains this state throughout execution:
 
 1. **Orchestrators coordinate, never execute** - They prepare context and make decisions
 2. **Subagents execute with fresh context** - No fatigue, no bias
-3. **Judgment is always separate** - Pessimistic judges review all work (code AND behavior)
-4. **Re-judge is mandatory** - Fixes/revisions MUST be re-verified by a judge subagent
+3. **Evaluation is always separate** - Pessimistic evaluators review all work (code AND behavior)
+4. **Re-evaluate is mandatory** - Fixes/revisions MUST be re-verified by an evaluator subagent
 5. **Retries have limits (3 cycles)** - Prevents infinite loops, forces escalation
 6. **Escalation is explicit** - User gets clear options and required decisions
 7. **The Iron Law is enforced** - Tests define behavior, implementation must conform
 8. **Shared core is reused** - New modules build on shared infrastructure; never re-implement auth/transport/plumbing
 9. **Tests never touch live services** - All external/network access is mocked
 10. **Staged test ladder** - New tests, then impacted tests; full suites only after all cycle changes are applied
-11. **Docs ship with the code** - Phase 6 aligns every doc to shipped behavior (docs-only, judge-gated) before the work is done
+11. **Docs ship with the code** - Phase 6 aligns every doc to shipped behavior (docs-only, evaluator-gated) before the work is done
 12. **Delivery is a PR, approved by a human** - Phase 7 drafts the PR from the branch's commits; it is never created without user approval

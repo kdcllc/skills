@@ -12,7 +12,7 @@ markdown, no frontmatter, **32 KiB combined cap**, read once per session).
 | Orchestration summary | append a **short** section to root `AGENTS.md` (create if missing; keep the whole file well under the 32 KiB cap, aim ≤300 lines) | see pointer content below |
 | `templates/agents/*.md` bodies | `.codex/agents/<role>.md` | strip YAML frontmatter (Codex ignores it); keep the body as the role instruction file; these files double as Cursor-readable agents |
 | Role config | `.codex/config.toml` | see below |
-| Per-role model layers | `.codex/agents/<role>.toml` | `model = "{{CODEX_MODEL_FRONTIER}}"` for judges, `{{CODEX_MODEL_LIGHT}}` for workers **and** `terminal` — `terminal` is light-tier, never frontier, same as `implementer`/`test-writer` |
+| Per-role model layers | `.codex/agents/<role>.toml` | `model = "{{CODEX_MODEL_FRONTIER}}"` for evaluators, `{{CODEX_MODEL_LIGHT}}` for workers **and** `terminal` — `terminal` is light-tier, never frontier, same as `implementer`/`test-writer` |
 | `templates/loop/*` (if loop enabled) | `_loop/loop.sh`, `_loop/loop.ps1`, `_loop/breaker.sh`, `_loop/breaker.ps1`, `_goals/backlog.md` (create if missing; never overwrite) | loop CLI: `codex exec` with `approval_policy = "never"`, `sandbox_mode = "workspace-write"` — sandbox only; invocation forms as in the Claude Code emitter (`_loop/loop.sh [max-iterations]` / `pwsh _loop/loop.ps1 [MaxIterations]`) |
 
 `.codex/config.toml` (merge with any existing project config):
@@ -22,13 +22,13 @@ markdown, no frontmatter, **32 KiB combined cap**, read once per session).
 default_subagent_model = "{{CODEX_MODEL_LIGHT}}"
 default_subagent_reasoning_effort = "medium"
 
-[agents.judge]
-description = "Skeptical goal/task/code judge. Spawn to verify any completed work; returns PASS/NEEDS FIXES/REJECT. Read .codex/agents/judge.md first."
-config_file = "agents/judge.toml"
+[agents.evaluator]
+description = "Skeptical goal/task/code evaluator. Spawn to verify any completed work; returns PASS/NEEDS FIXES/REJECT. Read .codex/agents/evaluator.md first."
+config_file = "agents/evaluator.toml"
 
-[agents.qa-judge]
-description = "User-perspective behavioral QA judge for captured evidence. Read .codex/agents/qa-judge.md first."
-config_file = "agents/qa-judge.toml"
+[agents.qa-evaluator]
+description = "User-perspective behavioral QA evaluator for captured evidence. Read .codex/agents/qa-evaluator.md first."
+config_file = "agents/qa-evaluator.toml"
 
 [agents.implementer]
 description = "Checklist-driven implementer for one task per spawn. Read .codex/agents/implementer.md first."
@@ -53,10 +53,10 @@ AGENTS.md pointer section (keep short):
 
 ```markdown
 ## Orchestration
-Non-trivial features run through the orchestrator/worker/judge flow in
-ORCHESTRATION.md: plan → judge the plan → implement per task (spawn `implementer` /
-`test-writer`) → judge every task (spawn `judge`) → final audit → quality checks.
-Fixes are always re-judged. Quality checks spawn `terminal` for the full-suite run so
+Non-trivial features run through the orchestrator/worker/evaluator flow in
+ORCHESTRATION.md: plan → evaluate the plan → implement per task (spawn `implementer` /
+`test-writer`) → evaluate every task (spawn `evaluator`) → final audit → quality checks.
+Fixes are always re-evaluated. Quality checks spawn `terminal` for the full-suite run so
 its raw output stays out of the session. Role instructions: .codex/agents/*.md.
 ```
 

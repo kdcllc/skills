@@ -1,12 +1,15 @@
 ---
 name: goal-criteria
-description: Criteria the judge applies when judging a goal (goal.md + task files) for {{PROJECT_NAME}}. Reference skill — not invoked directly.
+description: Criteria the evaluator applies when evaluating a goal (goal.md + task files) for {{PROJECT_NAME}}. Reference skill — not invoked directly.
 disable-model-invocation: true
 ---
 
-# Goal Judgment Criteria
+# Goal Evaluation Criteria
 
 Score each dimension; the verdict starts at 2/5 and must be earned.
+
+**Hard-threshold rule**: the dimensions below are gates, not averages — one failing
+dimension caps the verdict at NEEDS REVISION no matter how strong the rest are.
 
 ## 1. Discovery Coverage
 
@@ -16,7 +19,7 @@ a task. An answered question that no task honors is a NEEDS REVISION.
 ## 2. Success Criteria Quality
 
 Criteria are observable outcomes ("`command X` returns Y with exit code 0"), not
-activities ("implement module X"). Each is verifiable by a judge without asking the user.
+activities ("implement module X"). Each is verifiable by an evaluator without asking the user.
 
 ## 3. Task Decomposition
 
@@ -39,8 +42,8 @@ Every task file carries an ownership block declaring `writes` / `reads` / `depen
    A block still carrying the template's bracket-literal placeholder values (`[path]`,
    `[NN-name]`, `[implementer|test-writer]`) is a pristine block, and a pristine block
    counts as UNDECLARED rather than declared — the same fail-closed missing-block remedy
-   applies (author real values, re-judge). `owner` must be one of `implementer` /
-   `test-writer`; the judge additionally cross-checks it against the agent the
+   applies (author real values, re-evaluate). `owner` must be one of `implementer` /
+   `test-writer`; the evaluator additionally cross-checks it against the agent the
    orchestration log shows was dispatched for that task.
 2. **Coverage** — the union of all tasks' `writes` equals the set of files the goal
    intends to change: no orphan edits (a planned change no task owns), no owned path
@@ -67,12 +70,27 @@ Scoping clauses (apply before scoring the seven):
   write-set union: coverage and single-owner apply to task-owned product files only.
 - **Missing ownership block.** A task file with no ownership block is NEEDS REVISION —
   fail closed, since an undeclared write-set is not an empty one. The remedy is to
-  author the block from the task template and re-judge; it is not a decomposition
+  author the block from the task template and re-evaluate; it is not a decomposition
   defect and does not count toward re-decomposition.
 - **Globs.** Explicit paths by default. A glob is legitimate only where the task owns
   the entire directory it matches, and any glob-vs-glob overlap counts as intersecting.
 
 Any violation of the seven checks is NEEDS REVISION.
+
+### Evaluation depth (`eval_depth`)
+
+**Applicability**: this check applies only to goals created on or after kit v0.18.0 —
+the version that introduced per-task contracts and `eval_depth`. A goal already in
+flight when these templates landed is exempt: the absence of `eval_depth` there is
+informational only, never a NEEDS REVISION cause. Treat a goal as v0.18.0+ when its
+task files use the current `templates/task.md` ownership-contract shape (the one
+carrying `eval_depth`); older task files predate the field by construction.
+
+For v0.18.0+ goals: every task file declares `eval_depth: full` or `eval_depth: light`.
+A `light` assignment carries an orchestrator-stated reason (in the task file or the
+goal's Discovery Summary) — an unexplained `light` is a NEEDS REVISION finding. A task
+file missing the field entirely fails closed to `full` — flag it in the evaluation
+output; do not reject the goal for the omission alone.
 
 ## 4. Scope Discipline
 
@@ -84,7 +102,7 @@ contradicts the constraints or the ground-truth doc ({{GROUND_TRUTH_DOC}}).
 Error paths (auth failures, empty/malformed data, pagination), migration/compatibility
 concerns, and rollback are addressed by some task where relevant.
 
-## 6. Devil's Advocate (required section of every goal judgment)
+## 6. Devil's Advocate (required section of every goal evaluation)
 
 Before the verdict, produce all five — informative, **never a veto** on its own:
 

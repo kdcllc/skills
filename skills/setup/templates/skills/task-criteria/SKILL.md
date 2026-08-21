@@ -1,19 +1,22 @@
 ---
 name: task-criteria
-description: Criteria the judge applies when judging a completed task in {{PROJECT_NAME}}. Reference skill — not invoked directly.
+description: Criteria the evaluator applies when evaluating a completed task in {{PROJECT_NAME}}. Reference skill — not invoked directly.
 disable-model-invocation: true
 ---
 
-# Task Judgment Criteria
+# Task Evaluation Criteria
 
-Judge the executor's work against the task file, not against the report's claims.
+Evaluate the executor's work against the task file, not against the report's claims.
+
+**Hard-threshold rule**: the dimensions below are gates, not averages — one failing
+dimension caps the verdict at NEEDS FIXES no matter how strong the rest are.
 
 ## 1. Requirements Completeness
 
 Walk the task's requirements checklist item by item. Verify each against the actual code
 (file:line) or test output — never against the executor's report alone — and mark each
 on the confidence ladder (✅ Verified / ⚠️ Unverified / ❌ Contradicted / 🔍 Needs
-investigation) per the judge's existence-check rules. One ⚠️ Unverified requirement
+investigation) per the evaluator's existence-check rules. One ⚠️ Unverified requirement
 caps the verdict at NEEDS FIXES; any ❌ Contradicted claim does too.
 
 ## 2. Correctness
@@ -59,9 +62,36 @@ orchestration-log entry recorded for this task. If the orchestrator omitted the 
 the fault is the orchestrator's — route the fix there (re-dispatch with the fence in the
 package). Never fail the executor for a fence it was never given.
 
+## Contract verification (v0.18.0+ goals)
+
+**Applicability**: applies only to tasks belonging to a goal created on or after kit
+v0.18.0. A task file from a goal already in flight when contracts landed has no
+contract by construction — its absence there is informational only, never a NEEDS
+FIXES cause.
+
+For v0.18.0+ goals: `_goals/[goal]/contracts/NN-task-name.contract.md` exists for this
+task with both `signoff.worker.agreed` and `signoff.evaluator.agreed` set to `true`,
+and every numbered `acceptance_criteria` item is addressed by the delivered work
+(verified the same way as a requirement — file:line, test output, or command run). A
+missing or unsigned contract on a v0.18.0+ goal is itself a NEEDS FIXES finding — the
+Phase 4 contract gate should have produced it before dispatch. An unaddressed
+acceptance criterion is a NEEDS FIXES finding.
+
+## Light evaluation rubric (`eval_depth: light`)
+
+Only when the task file's `eval_depth` is `light` (orchestrator-set, stated reason —
+see `goal-criteria`). Shortened, never skipped:
+1. Requirements walk (dimension 1), Test Evidence (dimension 4), and the write fence
+   (dimension 5) run in full — these gate the verdict.
+2. Correctness (dimension 2) and Reuse & Patterns (dimension 3) deep review is skipped.
+3. Still ends in a real verdict (PASS / NEEDS FIXES / REJECT); auto-fail triggers apply.
+4. Contract verification also runs in full under `light` — it is a hard gate, not a
+   depth-scaled dimension, so every acceptance criterion is still checked regardless of
+   `eval_depth`.
+
 ## Auto-fail triggers
 
-Apply the auto-fail list in `{{IDE_DIR}}/agents/judge.md`.
+Apply the auto-fail list in `{{IDE_DIR}}/agents/evaluator.md`.
 
 ## Verdicts
 

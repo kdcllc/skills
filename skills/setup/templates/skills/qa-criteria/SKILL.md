@@ -1,13 +1,18 @@
 ---
 name: qa-criteria
-description: Criteria the qa-judge applies to user-facing behavioral evidence for {{PROJECT_NAME}}. Reference skill — not invoked directly.
+description: Criteria the qa-evaluator applies to user-facing behavioral evidence for {{PROJECT_NAME}}. Reference skill — not invoked directly.
 disable-model-invocation: true
 ---
 
-# QA Judgment Criteria
+# QA Evaluation Criteria
 
-Judge observed behavior from the user's perspective. Evidence not provided = behavior
+Evaluate observed behavior from the user's perspective. Evidence not provided = behavior
 not tested = an issue.
+
+**Hard-threshold rule**: the criteria below are gates, not averages — one failing
+surface **or cross-cutting check** caps the verdict at ISSUES FOUND no matter how clean
+the rest are. A secrets leak, for example, caps the verdict on its own, regardless of how
+clean every surface is.
 
 ## Per-surface criteria
 
@@ -38,5 +43,5 @@ not tested = an issue.
 - **PASS**: all affected surfaces evidenced and clean.
 - **ISSUES FOUND**: numbered issues, each with observed vs expected and exact repro
   steps — these become fix tasks for implementer.
-- **REJECT**: an auto-fail trigger fired (see `{{IDE_DIR}}/agents/qa-judge.md`) or the
+- **REJECT**: an auto-fail trigger fired (see `{{IDE_DIR}}/agents/qa-evaluator.md`) or the
   evidence shows the feature fundamentally doesn't work.

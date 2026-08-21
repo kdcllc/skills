@@ -92,8 +92,8 @@ if (( SLOTS > 3 )); then
 fi
 
 # Capacity-contention rationale (why the design default is 2, not 3+): (1) one
-# iteration fans out many subagents (implementer/test-writer execute, judge
-# verifies every task, fixes are always re-judged), and that per-iteration
+# iteration fans out many subagents (implementer/test-writer execute, evaluator
+# verifies every task, fixes are always re-evaluated), and that per-iteration
 # fan-out multiplies by N against a shared ~20-concurrent subagent-spawn
 # ceiling; (2) all N slots would authenticate through the same LOOP_CLI as one
 # provider account, so they would share ONE rate-limit budget -- more slots
@@ -1033,7 +1033,7 @@ _loop_reap_slot() {
   # (§6.3 :685-689's single-writer compaction rule). Loud deferral notes
   # ONLY -- the driver never rewrites prose itself: "merge duplicates,
   # summarize older entries" / "move RESOLVED entries" need semantic
-  # judgment a shell function cannot honestly perform. The driver enforces
+  # evaluation a shell function cannot honestly perform. The driver enforces
   # the single-writer HALF it can (slots never compact); the compaction/
   # archival rewrite itself is deferred to the next MANUAL (non-driver-
   # dispatched) iteration, whose skill text keeps the gates. 15/20 KB read
