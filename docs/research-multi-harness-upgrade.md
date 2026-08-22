@@ -273,6 +273,11 @@ skills/setup/
 └── (root) README.md             # EDIT: four-harness install matrix + loop quickstart
 ```
 
+> **Superseded (2026-08-22):** As of kit v0.19.0, the Cursor emitter emits a fully
+> self-contained `.cursor/` tree (skills, ORCHESTRATION.md, model map, agents) and no
+> longer relies on the native cross-read; see `skills/setup/reference/harness-matrix.md`'s
+> "Kit policy (as of v0.19.0)" note and `skills/setup/emitters/cursor.md`.
+
 ### Sequencing
 
 1. **Phase A — model tiers + matrix** (small): tier tokens in agent templates,

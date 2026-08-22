@@ -811,15 +811,17 @@ _loop_fill_slot() {
     # Loud preflight (cycle-3 correction): BOTH probes are built from the SAME
     # resolved worktree-path variable ($wt) just passed to `git worktree add`
     # above — never a second hardcoded literal. The second probe is a
-    # DIRECTORY test on {{IDE_DIR}}, deliberately NOT a skill-FILE path: that
-    # file exists only on Claude-Code installs (this template's own loop
-    # skill) -- codex emits no loop skill file at all, copilot may inline its
-    # instructions instead of a file, and a Cursor+Claude install keeps the
-    # file under .claude/ while {{IDE_DIR}} resolves to .cursor. A directory
-    # probe on {{IDE_DIR}} is true on all four harnesses whenever the
-    # instance is tracked, and false in exactly the gitignored-instance case
-    # -- the iteration needs that whole directory (it is sent to
-    # ORCHESTRATION.md and _goals/ESCALATIONS.md), not just one file in it.
+    # DIRECTORY test on {{IDE_DIR}}, deliberately NOT a skill-FILE path: as of
+    # kit v0.19.0 each harness tree may carry its own skills (the Cursor
+    # emitter is self-contained), so a single skill-file path can't cover
+    # every install shape. {{IDE_DIR}} in these single-copy loop drivers
+    # resolves to the PRIMARY harness's dir, and a directory probe stays
+    # layout-agnostic across all four harnesses regardless of which one is
+    # primary. A directory probe on {{IDE_DIR}} is true on all four harnesses
+    # whenever the instance is tracked, and false in exactly the
+    # gitignored-instance case -- the iteration needs that whole directory
+    # (it is sent to ORCHESTRATION.md and _goals/ESCALATIONS.md), not just
+    # one file in it.
     if [[ ! -f "$wt/_goals/backlog.md" || ! -d "$wt/{{IDE_DIR}}" ]]; then
       echo "!!! worktree preflight failed: '$wt' is missing a tracked _goals/backlog.md and/or a tracked {{IDE_DIR}} directory — a worktree checks out TRACKED files only, so this repo's loop instance must be committed (not gitignored) for LOOP_WORKTREE=1 — stopping, no fallback to the main tree" >&2
       git worktree remove --force "$wt" 2>/dev/null || true

@@ -144,11 +144,11 @@ ON subagent invocation failure:
 
 | Subagent | Behavioral Style | Use Case | Model Tier |
 |----------|------------------|----------|------------|
-| `evaluator` | Skeptical, problem-finding | Goal / task / code verification | frontier — `{{MODEL_FRONTIER}}`, effort high |
-| `qa-evaluator` | Skeptical, user-perspective | Behavioral QA of user-facing surfaces | frontier — `{{MODEL_FRONTIER}}`, effort high |
-| `implementer` | Focused, checklist-driven | Implementation + fixes | light — `{{MODEL_LIGHT}}`, effort medium |
-| `test-writer` | Coverage-obsessed | Test creation, all external services mocked | light — `{{MODEL_LIGHT}}`, effort medium |
-| `terminal` | Compact command runner | Any Bash or PowerShell command — returns only the result the caller asked for | light — `{{MODEL_LIGHT}}`, effort medium |
+| `evaluator` | Skeptical, problem-finding | Goal / task / code verification | frontier, effort high |
+| `qa-evaluator` | Skeptical, user-perspective | Behavioral QA of user-facing surfaces | frontier, effort high |
+| `implementer` | Focused, checklist-driven | Implementation + fixes | light, effort medium |
+| `test-writer` | Coverage-obsessed | Test creation, all external services mocked | light, effort medium |
+| `terminal` | Compact command runner | Any Bash or PowerShell command — returns only the result the caller asked for | light, effort medium |
 
 The orchestrator (and any worker that can spawn) sends `terminal` an exact Bash or
 PowerShell command plus the result shape it needs; `terminal` executes it and returns
@@ -156,16 +156,21 @@ only that result, so the raw stream never lands in the caller. Rung 3 is always 
 `terminal` spawn.
 
 **Model tiers:** The orchestrator (main session) and both evaluators run the **frontier**
-tier (`{{MODEL_FRONTIER}}`) — delegation and evaluating have a capability floor. The
-light-tier agents — the two workers **plus** `terminal` — run the **light** tier
-(`{{MODEL_LIGHT}}`) — checklist-driven execution and compact command running keep
-quality when the plan and verification are strong, at a fraction of the output-token
-cost. Model IDs are configuration, not constants: they are defined once in the model
-map and pinned in each agent's frontmatter; update them there when providers rotate
-names. Harness caveats: on Copilot a subagent cannot run a stronger model than the
-session (so the session itself must run the frontier tier); Cursor silently falls back
-to a compatible model under admin/plan restrictions (evaluators should report which model
-produced the verdict).
+tier — delegation and evaluating have a capability floor. The light-tier agents — the
+two workers **plus** `terminal` — run the **light** tier — checklist-driven execution
+and compact command running keep quality when the plan and verification are strong, at
+a fraction of the output-token cost. Model IDs are configuration, not constants: the
+resolved per-harness model ID for each tier lives in exactly one place, the model map,
+and is pinned into each agent's config from there — on harnesses with a skills tree
+(Claude Code, Cursor) the map is also copied to `{{IDE_DIR}}/skills/setup-models.map.md`
+for reference, while the Copilot and Codex emitters place no reference copy of the map,
+so their pins live only in the harness's own config/frontmatter (Copilot `.agent.md`
+frontmatter, Codex `.codex/agents/<role>.toml`), resolved from the map at setup time;
+update the map (and re-pin) when providers rotate names. Harness caveats: on
+Copilot a subagent cannot run a stronger model than the session (so the session itself
+must run the frontier tier); Cursor silently falls back to a compatible model under
+admin/plan restrictions, and does the same — without erroring — when the resolved ID is
+unknown or stale (evaluators should report which model produced the verdict).
 <!-- BOOTSTRAP: if the project does not pin models, delete the Model Tier column
      and this paragraph. -->
 

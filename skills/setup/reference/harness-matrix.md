@@ -23,6 +23,12 @@ canonical templates are Claude-format:
   copies for anything model- or tools-critical. (Claude Code raw-tree fidelity for
   name/description empirically verified 2026-08-18, CLI-observed; tools partial — see
   Empirical validation)
+- **Kit policy (as of v0.19.0):** the Cursor emitter emits a fully **self-contained**
+  `.cursor/` tree and does not rely on this cross-read — per-field fidelity of
+  Claude-specific keys is undocumented, and **dual-install** behavior (both `.claude/`
+  and `.cursor/` present) must not depend on `.claude/`'s presence. The FACTS above
+  remain true and verified; this is a kit emission policy built on top of them, not a
+  correction to them.
 
 ## Capability table
 
@@ -31,8 +37,8 @@ canonical templates are Claude-format:
 | Agent definition | `.claude/agents/*.md`, YAML frontmatter ✅ | `.cursor/agents/` + reads `.claude/agents/` ✅ | `.github/agents/*.agent.md` (ex-`.chatmode.md`) + reads `.claude/agents` ✅ | `[agents.<name>]` tables in `config.toml` (`config_file`, `description`) 🔎 |
 | Skills | `.claude/skills/*/SKILL.md` ✅ | `.cursor/skills/` + reads `.claude/skills/`; `name`+`description` required; **no model key** ✅ | `.github/skills/*/SKILL.md` first-class (progressive disclosure, `/skill`, `disable-model-invocation`) ✅ 2026-08-20 | `skills.config` per-skill enablement 🔎 |
 | Fresh-context subagents | Yes; nesting depth via `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` (default flipped twice July 2026 — **pin explicitly**) ✅ | Yes; main→L1→L2 since 2.5 (cloud: L1 only) ✅ | Yes (`agent/runSubagent`, stateless); nesting off by default (`chat.subagents.allowInvocationsFromSubagents`, max 5) ✅ | Yes: `spawn_agent` et al., `features.multi_agent` stable, on by default 🔎 |
-| Per-agent model pin | frontmatter `model:` (alias/ID/`inherit`); env > tool param > frontmatter > parent ✅ | frontmatter `model` incl. `[effort=…,context=…]`; up or down OK; **silent fallback** under restrictions ✅ | frontmatter `model` (string or fallback array); **cannot exceed parent tier** — stronger refuses to run; cheaper-than-parent is valid; CLI rejects array form ✅ | `agents.default_subagent_model`, per-role `config_file`; spawn-time wins 🔎 |
-| Effort pin | `effort:` low→max on agents/skills/commands ✅ | `[effort=…]` ✅ | — | `default_subagent_reasoning_effort` 🔎 |
+| Per-agent model pin | frontmatter `model:` (alias/ID/`inherit`); env > tool param > frontmatter > parent ✅ | frontmatter `model` incl. bracket params `[effort=…,context=…]` (e.g. `<model-id>[effort=high,context=300k]`); slug-suffix effort variants (e.g. `…-high`-shaped model IDs) also appear in Cursor's live model lists — both forms coexist; see the model map's guidance; up or down OK; **silent fallback** under restrictions — re-verified 2026-08-21 against cursor.com/docs/subagents ✅ | frontmatter `model` (string or fallback array); **cannot exceed parent tier** — stronger refuses to run; cheaper-than-parent is valid; CLI rejects array form ✅ | `agents.default_subagent_model`, per-role `config_file`; spawn-time wins 🔎 |
+| Effort pin | `effort:` low→max on agents/skills/commands ✅ | `[effort=…]` bracket param (e.g. `[effort=high]`) — re-verified 2026-08-21 against cursor.com/docs/subagents, same scheme as the model-pin row above ✅ | — | `default_subagent_reasoning_effort` 🔎 |
 | Rules/instructions | `CLAUDE.md` (does NOT read AGENTS.md; import it from CLAUDE.md 💬) | `.cursor/rules/*.mdc` only (plain `.md` ignored); keys `alwaysApply`/`description`/`globs`; native nested AGENTS.md ✅ | `.github/copilot-instructions.md`, `.github/instructions/` | AGENTS.md root-down concat, nearest-last-wins; **32 KiB cap** (`project_doc_max_bytes`); read once per session 🔎 |
 | Role controls | `tools: Agent(implementer, test-writer)` allowlists; skill `disable-model-invocation: true` drops the description from session-start context ✅ 2026-08-20 | description-driven or `/name`; L1 agents may need explicit "you MUST spawn" prompting; skill `disable-model-invocation: true` (same spelling) ✅ 2026-08-20 | `agents:` allowlist, `user-invocable: false` (agents *and* skills, different meaning), skill/agent `disable-model-invocation: true` ✅ | role `description` guides spawn 🔎 |
 | Unattended mode | headless `claude -p` ⚠️ | Cloud Agents (L1 only) ✅ | Copilot coding agent on issues ⚠️ | `approval_policy: never` + `sandbox_mode` 🔎 |
@@ -47,7 +53,9 @@ drivers assume the harness CLI runs natively where invoked.
 3. Cursor skills have no model key — pin models at the **agent** level for Cursor. ✅
 4. Codex AGENTS.md has no frontmatter/schema — roles and models live in `config.toml`. 🔎
 5. The exact `.cursor/agents` frontmatter schema was **refuted** in verification (0-3) —
-   re-check `cursor.com/docs/subagents` live before emitting Cursor agent files.
+   re-check `cursor.com/docs/subagents` live before emitting Cursor agent files,
+   including the current model-ID/bracket-param format and the live model list (an
+   unknown or stale model ID is substituted silently, with no error surfaced).
 6. Copilot: the session runs the frontier tier (ceiling rule); evaluators cannot pin
    up. Workers and other subagents **may pin down**. The ceiling is “cannot exceed the
    parent tier,” not “must equal the parent tier.”

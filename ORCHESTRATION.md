@@ -60,6 +60,13 @@ with two-party sign-off, and introduced `eval_depth` intensity routing — that 
   branches, and quarantine marker files (`.loop-worktrees/QUARANTINE-<branch>.md`
   — slashes in the branch become dashes) embedding the dispatched prompt.
 
+v0.19.0 made the Cursor install fully self-contained — skills, the architecture doc, and the
+model map now emit under `.cursor/` with no reliance on native `.claude/` cross-reads —
+resolved `{{IDE_DIR}}` per emitter rather than once globally, replaced the model-tier
+table's resolved single-harness IDs with a reference to the emitted model map, and added
+an emit-time obligation to check Cursor's live model list before emitting agent
+frontmatter.
+
 Running `/setup` in a target project compiles the template — along with the subagents
 and skills — into the native format of each targeted harness (Claude Code, Cursor,
 GitHub Copilot, OpenAI Codex). See [`README.md`](README.md) for install steps,

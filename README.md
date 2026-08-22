@@ -2,7 +2,7 @@
 
 [![skills.sh installs](https://skills.sh/b/kdcllc/skills)](https://skills.sh/kdcllc/skills)
 
-> Kit version: **0.18.0** (`skills/setup/VERSION`) · The install badge above applies
+> Kit version: **0.19.0** (`skills/setup/VERSION`) · The install badge above applies
 > only if the repo is made public: [skills.sh](https://www.skills.sh/) filters private
 > repos out of its public index by design
 > ([vercel-labs/skills#381](https://github.com/vercel-labs/skills/issues/381)), so it
@@ -74,7 +74,7 @@ skills/setup/                 # The installable skill (the compiler)
 │   └── harness-matrix.md     # Verified per-harness capability table + friction points
 ├── emitters/                 # Per-harness compile instructions
 │   ├── claude-code.md        #   .claude/ (canonical format — mostly a copy)
-│   ├── cursor.md             #   .cursor/ + reuse of .claude/ (Cursor reads it natively)
+│   ├── cursor.md             #   .cursor/ self-contained tree (agents, skills, ORCHESTRATION.md, model map)
 │   ├── copilot.md            #   .github/agents/*.agent.md + copilot-instructions.md
 │   └── codex.md              #   AGENTS.md + .codex/config.toml role tables
 └── templates/                # Canonical source (Claude Code format)
@@ -151,7 +151,9 @@ emits:
 
 Everything is generated with project-specific content — layer order, test commands,
 evaluator auto-fail triggers, and model IDs are derived from the codebase and your
-answers, never left generic. Start your first feature with `/feature`; start an unattended
+answers, never left generic. Targeting Cursor emits a self-contained `.cursor/` tree —
+agents, skills, the architecture doc, and the model map — with no dependency on
+`.claude/`. Start your first feature with `/feature`; start an unattended
 run (sandboxed!) with `_loop/loop.sh 10` (or `pwsh _loop/loop.ps1 10` — PowerShell 7+).
 Driver-owned dispatch, write-set admission, and the single-writer integrator shipped in
 v0.12.0. Completion and exit aggregation shipped in v0.13.0 — per-slot CB1/CB2
@@ -190,7 +192,8 @@ Flags: `--dry-run` prints the planned destinations and writes nothing (exit 0);
 loudly on any symlink failure — never falls back to copy); `--force` is accepted
 and ignored (overwrite is already the default). The destination paths
 `.cursor/skills/` and `.agents/skills/` are gitignored alongside the entire `.claude/`
-directory (see `.gitignore`); nothing the scripts write ever reaches git.
+directory (see `.gitignore`); nothing the scripts write ever reaches git. `.gitignore`
+also covers `.cursor/ORCHESTRATION.md`, the architecture doc `/setup` emits under `.cursor/`.
 
 These scripts do **not** replace `/setup` and do **not** emit the compiled instance.
 `/setup` is the **compile** step that emits `_loop/`, the agents, `_goals/`,
@@ -199,7 +202,8 @@ running the scripts above, invoke `/setup` inside the repo session to produce th
 local instance.
 
 This repo dogfoods its own skill: run `/setup` in a session inside this repo and point
-it at itself. The emitted instance (`.claude/`, `_goals/`, `_loop/`, `_research/`,
+it at itself. The emitted instance (`.claude/`, `.cursor/skills/`, `.cursor/agents/`,
+`.cursor/rules/`, `.cursor/ORCHESTRATION.md`, `_goals/`, `_loop/`, `_research/`,
 `orchestration-kit.manifest.json`) is **gitignored** — a self-install never reaches
 git, so it is safe to re-run at any time and nothing in the instance is source of
 truth. The canonical kit stays under `skills/setup/`; after editing templates, re-run

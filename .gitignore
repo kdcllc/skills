@@ -6,6 +6,7 @@
 .cursor/skills/
 .cursor/agents/
 .cursor/rules/
+.cursor/ORCHESTRATION.md
 .agents/skills/
 _goals/
 _loop/

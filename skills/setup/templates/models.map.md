@@ -4,7 +4,10 @@
      model IDs (verify against the harness's live model list — IDs rotate fast; never
      copy IDs from this kit's docs without checking). Delete columns for harnesses not
      installed. The resolved values replace {{MODEL_FRONTIER}} and {{MODEL_LIGHT}}
-     everywhere they appear in emitted files. -->
+     everywhere they appear in emitted files. For Cursor specifically: confirm every
+     resolved ID against the harness's live model list before emitting — Cursor
+     substitutes an unknown or invalid model ID silently (no error), so a typo'd or
+     stale ID here fails quietly downstream instead of at resolution time. -->
 
 Model IDs are **configuration, not constants**. This file is the single place they are
 defined; re-run `/setup` (or edit here and re-emit) when providers rotate model names.
@@ -24,8 +27,13 @@ defined; re-run `/setup` (or edit here and re-emit) when providers rotate model 
 | `light` | {{MODEL_LIGHT}} | {{CURSOR_MODEL_LIGHT}} | {{COPILOT_MODEL_LIGHT}} | {{CODEX_MODEL_LIGHT}} |
 
 Reasoning-effort pins (where the harness supports them): evaluators `high`, workers `medium`
-— Claude Code `effort:` frontmatter, Cursor `[effort=...]` bracket params, Codex
-`default_subagent_reasoning_effort`; Copilot has no effort key (drop it).
+— Claude Code `effort:` frontmatter, Codex `default_subagent_reasoning_effort`; Copilot
+has no effort key (drop it). Cursor's effort encoding is not stable enough to hardcode
+here: Cursor's docs currently describe two coexisting forms — `…[effort=high]`-style
+bracket params appended to the model ID, and slug-suffix effort variants on the model
+name itself (shaped like `…-thinking-high`) that surface in some model lists. Neither
+form has superseded the other — check the live Cursor docs/model list at emit time and
+use whichever form they document that day.
 
 ## Fallback chains
 
@@ -81,7 +89,8 @@ A model blind to its own class of mistake rarely fixes it on retry. Rotate:
 
 - **Copilot cost ceiling**: a subagent cannot run a *stronger* model than the session —
   the main session must run the `frontier` tier; workers pin down.
-- **Cursor silent fallback**: under team-admin/plan restrictions Cursor substitutes a
+- **Cursor silent fallback**: under team-admin/plan restrictions, or when the resolved
+  ID is unknown/stale (a rotated-out or misspelled model name), Cursor substitutes a
   compatible model without erroring — evaluators should state their expected model in
   their prompt and report which model produced the verdict.
 - **Claude Code env overrides**: `CLAUDE_CODE_SUBAGENT_MODEL` and

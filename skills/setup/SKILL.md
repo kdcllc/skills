@@ -19,8 +19,9 @@ Skim `templates/ORCHESTRATION.md` first so you understand what you are instantia
 Evidence: existing `.claude/`, `.cursor/`, `.github/copilot-instructions.md` or
 `.github/agents/`, `.codex/` or `AGENTS.md`; plus the session you are running in.
 Present what you detected and ask which harnesses to target — **multiple is normal**
-(the canonical `.claude/` tree already serves Cursor and VS Code partially; see the
-matrix). If any destination file exists, list collisions and ask before overwriting —
+(the canonical `.claude/` tree already serves VS Code partially; see the matrix).
+Cursor's emitter is self-contained: targeting Cursor emits its own full `.cursor/`
+tree. If any destination file exists, list collisions and ask before overwriting —
 unless a kit manifest exists (see Upgrading below).
 
 ## Step 2a — Greenfield gate
@@ -198,6 +199,11 @@ In a scratch copy, resolve every `{{TOKEN}}` and act on + delete every
   filler is a bootstrap failure.
 - Model tiers resolve from the completed model map; keep the resolved
   `models.map.md` as the single place model IDs live.
+- Every token resolves **once** in the scratch copy — with one exception: `{{IDE_DIR}}`
+  is re-resolved **per emitter** whenever an emitter emits its own copy of a resolved
+  file for its target harness (`.claude`, `.cursor`, `.github`, `.codex`), because each
+  emitter's copy must point at its own config dir. No other token is re-resolved this
+  way.
 
 ### Placeholder reference
 
@@ -205,7 +211,7 @@ In a scratch copy, resolve every `{{TOKEN}}` and act on + delete every
 |-------|---------|
 | `{{PROJECT_NAME}}` | Display name of the project |
 | `{{STACK_SUMMARY}}` | 2–5 sentence stack note |
-| `{{IDE_DIR}}` | Primary config dir of the target harness (`.claude`, `.cursor`, `.github`, `.codex`) |
+| `{{IDE_DIR}}` | Config dir of the harness **being emitted**, resolved per emitter (`.claude`, `.cursor`, `.github`, `.codex`); single-copy shared artifacts (`_loop/*`) resolve it to the **primary** harness's dir |
 | `{{MODEL_FRONTIER}}` / `{{MODEL_LIGHT}}` | Tier → model ID for the primary harness (from the model map) |
 | `{{CURSOR_MODEL_*}}`, `{{COPILOT_MODEL_*}}`, `{{CODEX_MODEL_*}}` | Per-harness tier IDs (model map only) |
 | `{{MODEL_ALT_FAMILY}}` | Different-family model at light-comparable tier, used by fix-cycle rotation (model map) |
@@ -230,8 +236,10 @@ For each target harness, follow its emitter exactly:
 | GitHub Copilot (VS Code) | `emitters/copilot.md` |
 | OpenAI Codex | `emitters/codex.md` |
 
-Emitters compose: run Claude Code first when it is among the targets — Cursor and
-VS Code reuse parts of the emitted `.claude/` tree.
+Emitters compose: run Claude Code first when it is among the targets — VS Code reuses
+parts of the emitted `.claude/` tree. The Cursor emitter is self-contained (it emits its
+own full `.cursor/` tree and never reads `.claude/`), so it is order-independent
+relative to the other emitters.
 
 **Seed files (create if missing; never overwrite)**: `_goals/backlog.md` is emitted as
 a *seed*, not as managed content — the user owns it from the first install onward.
@@ -239,10 +247,12 @@ Create it only when it does not exist; on every re-run or upgrade leave an exist
 seed untouched, even when its recorded manifest hash no longer matches (see Step 6).
 
 **Loop extras (all harnesses)**: both loop drivers (`_loop/loop.sh` and
-`_loop/loop.ps1`) and their circuit-breaker helper twins (`_loop/breaker.sh` and
-`_loop/breaker.ps1`, sourced/dot-sourced by the drivers) are always emitted for
-loop-enabled installs, regardless of target harness or detected OS — the user picks
-the driver that matches their platform at invocation time. If the loop is enabled,
+`_loop/loop.ps1`), their circuit-breaker helper twins (`_loop/breaker.sh` and
+`_loop/breaker.ps1`, sourced/dot-sourced by the drivers), and `_loop/PROMPT.md` are
+always emitted for loop-enabled installs, regardless of target harness or detected OS —
+the drivers refuse to dispatch without `PROMPT.md`, so every loop-enabled install emits
+it even when Claude Code is not among the targets. The user picks the driver that
+matches their platform at invocation time. If the loop is enabled,
 append to the project's `.gitattributes` (create if missing) so parallel/append-only
 state merges cleanly and the loop drivers always check out with the line endings
 their interpreters require:
@@ -328,3 +338,10 @@ otherwise leave it exactly as it is — never overwrite it, never diff-confirm i
 never report its hash drift as a user modification (the recorded hash is an emit-time
 record only). Runtime/user artifacts (`_goals/LEARNINGS.md`, `_goals/ESCALATIONS.md`,
 `_goals/breaker-state.json`) have no manifest entry and are never touched.
+
+**Pre-v0.19.0 dual-install migration**: upgrading a project that was installed before
+v0.19.0 with both `claude-code` and `cursor` targeted adds the Cursor emitter's
+self-contained copies — `.cursor/skills/*`, `.cursor/ORCHESTRATION.md`, and
+`.cursor/skills/setup-models.map.md` — to the emit set and their paths as new keys in
+the manifest's `files`. No stale-file prunes are expected from this change: previously
+emitted `.cursor/` files are refreshed in place, not removed.
