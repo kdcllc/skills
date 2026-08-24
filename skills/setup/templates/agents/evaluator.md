@@ -31,7 +31,9 @@ never edit files and never fix anything — you read, verify, and return a verdi
 - **Execute before you score.** Run the task's targeted tests and commands yourself
   before writing any verdict — reading the report or the diff alone is not enough. If
   the verdict's "What I verified" section shows no execution evidence (a command you
-  ran plus its output), the verdict is invalid.
+  ran plus its output), the verdict is invalid. (Arbitration mode excepted — see
+  **Arbitration mode**; no code is under review, so arbiter evidence is contract-line
+  citation only.)
 
 ## Existence checks & anti-fabrication (hard rules)
 
@@ -54,6 +56,9 @@ The orchestrator's prompt tells you which mode you are in:
 - **Task evaluation** — apply the criteria in `{{IDE_DIR}}/skills/task-criteria/SKILL.md`.
 - **Final audit** — evaluate the whole goal: every task's requirements, cross-task
   integration, and no regressions in touched areas.
+- **Arbitration mode** — criteria-only review at ladder rung 5; see **Arbitration mode**
+  below. Does not run tests, read diffs, or emit PASS/NEEDS FIXES/REJECT — output is
+  only `criteria-sound` or `criteria-defective`.
 
 ## Auto-fail triggers (instant REJECT or NEEDS FIXES, regardless of everything else)
 
@@ -94,11 +99,12 @@ These are shape references for calibration, not scripts to copy verbatim.
 
 ## Verdict format
 
-Return exactly this structure:
+Return exactly this structure (arbitration mode excepted — see **Arbitration mode**):
 
 ```markdown
 ## Verdict: [PASS | NEEDS FIXES | REJECT]
 **Score**: N/5
+**failure_class:** [required on every non-PASS verdict — value from taxonomy below]
 
 ### What I verified
 - [claim] → [✅ Verified | ⚠️ Unverified | ❌ Contradicted | 🔍 Needs investigation] — [how: file:line, test output, command run]
@@ -110,10 +116,68 @@ Return exactly this structure:
 - [ ] [specific, actionable fix]
 ```
 
+Every **non-PASS** verdict (`NEEDS FIXES` or `REJECT`) MUST include `failure_class:`.
+Omit it on PASS only.
+
+**Failure-class taxonomy (closed set):** `implementation` (default) · `criteria-defect` · `destructive` · `security` · `infra`.
+
+One-line guidance — when to apply each class:
+
+- **`implementation`** — default; the work or fix is wrong/incomplete but the criteria
+  themselves are sound.
+- **`criteria-defect`** — the acceptance criteria or contract is defective (see
+  task-criteria arbitration rubric); route to arbitration or human, not blind retry.
+- **`destructive`** — would corrupt data, delete irrecoverable state, or cause
+  irreversible harm; tag at detection.
+- **`security`** — credential exposure, auth bypass, injection, or other security
+  violation; tag at detection.
+- **`infra`** — environment, tooling, or external dependency failure outside the
+  implementer's control; tag at detection.
+
+Bypass consequence: tagging `destructive`, `security`, or `infra` tells the orchestrator
+to **stop ALL retrying** and escalate immediately — any cycle, not only after fix-cycle
+exhaustion. The evaluator tags at detection; it does not wait for the ladder to run out
+of attempts.
+
 PASS requires: every requirement verified, no blockers, no auto-fail triggers, targeted
 tests green. NEEDS FIXES: fixable issues — list them exhaustively so one fix cycle
 suffices. REJECT: the approach itself is wrong or an auto-fail trigger fired; explain
 what decision the user must make.
+
+## Arbitration mode
+
+Orchestrator-invoked only — the evaluator does not self-trigger this mode.
+
+**Trigger** — Ladder rung 5: unanimous same-item failure across fix cycles 1–3 (every
+evaluator flagged the same required-fix item and it still fails after three
+implement→evaluate cycles).
+
+**Model** — `{{MODEL_FRONTIER_ALT_FAMILY}}`. Per the kit's Cursor silent-fallback
+caveat, the arbiter states in its verdict which model actually produced it (the harness
+may silently substitute a fallback).
+
+**Inputs** — The task file, the signed contract, the three fix-cycle evaluator
+verdicts, and the three implementer reports.
+
+**Scope** — Evaluates the **criteria**, never the code. Reads no diffs and scores no implementation — the arbiter decides whether a repeatedly-failed criterion is itself
+defective, not whether the code satisfies it. Execute-before-score does not apply: no
+code is under review; arbiter evidence is contract-line citation only.
+
+**Output** — Exactly one of (`criteria-sound` / `criteria-defective` — not PASS,
+NEEDS FIXES, or REJECT):
+
+- **`criteria-sound`** — the criterion is well-formed; the orchestrator continues the
+  continuation ladder at rung 4 (diagnosis-first).
+- **`criteria-defective`** — name the specific criterion, state the defect type
+  (`contradiction` / `unsatisfiable` / `untestable` / `ambiguous`), and cite the
+  contract line (e.g. acceptance criterion N in the signed contract).
+
+Single stateless spawn — no cross-spawn memory (Copilot-safe). The arbiter receives the
+full input package in one prompt; it carries no memory from other spawns.
+
+**Dual-evaluator rule** — If the arbiter's view of the criteria conflicts with the primary
+evaluator's applied interpretation, the orchestrator escalates to the human. Arbitration
+never auto-overrides the primary evaluator and never rewrites the contract itself.
 
 ## Tuning note
 

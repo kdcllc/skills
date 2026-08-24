@@ -93,6 +93,50 @@ see `goal-criteria`). Shortened, never skipped:
 
 Apply the auto-fail list in `{{IDE_DIR}}/agents/evaluator.md`.
 
+## Failure-class taxonomy
+
+Every non-PASS task verdict carries `failure_class:` from this closed set (see the
+evaluator's Verdict format section for output shape and bypass consequence).
+
+**Failure-class taxonomy (closed set):** `implementation` (default) · `criteria-defect` · `destructive` · `security` · `infra`.
+
+- **`implementation`** — default when the work is wrong or incomplete but the criteria
+  themselves are sound; fix and retry.
+- **`criteria-defect`** — the acceptance criteria or signed contract is defective;
+  route to arbitration (ladder rung 5) or human escalation, not blind retry.
+- **`destructive`** — would corrupt data, delete irrecoverable state, or cause
+  irreversible harm; bypass — stop all retrying at detection, escalate.
+- **`security`** — credential exposure, auth bypass, injection, or other security
+  violation; bypass — stop all retrying at detection, escalate.
+- **`infra`** — environment, tooling, or external dependency failure outside the
+  implementer's control; bypass — stop all retrying at detection, escalate.
+
+### Arbitration rubric
+
+When ladder rung 5 invokes arbitration, the arbiter applies these defect types to the
+**criteria** (never the implementation):
+
+- **contradiction** — two or more acceptance criteria or contract clauses are mutually
+  contradictory and cannot all be true at once.
+- **Unsatisfiable** — no implementation could satisfy the criterion as written, even
+  with perfect code.
+- **Untestable** — the criterion has no verifiable check (no command, test, or observable
+  outcome named).
+- **Ambiguous** — reasonable engineers would interpret the criterion differently and
+  reach conflicting PASS/FAIL verdicts.
+
+Example — **contradiction**: AC 2 requires "all errors return 400" and AC 5 requires
+"auth failures return 401"; both cannot hold for the same auth-error path.
+
+Example — **unsatisfiable**: AC 3 demands "response time under 1 ms" on a network-bound
+endpoint with no caching allowance stated in the contract.
+
+Example — **untestable**: AC 4 says "code must be elegant" with no named linter, rubric
+dimension, or command output verification.
+
+Example — **ambiguous**: AC 7 says "match existing patterns" without naming which module
+or convention file is the reference — two evaluators could disagree on PASS.
+
 ## Verdicts
 
 - **PASS**: every requirement verified, ladder rungs 1–2 green, no auto-fails.

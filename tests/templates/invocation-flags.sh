@@ -232,17 +232,18 @@ else
 fi
 
 # ===========================================================================
-# 11. setup/SKILL.md description names terminal and enumerates five subagents
-#     (no longer claims only four).
+# 11. setup/SKILL.md description names terminal, diagnostician, and enumerates six subagents
+#     (no longer claims only four or five).
 # ===========================================================================
 setup_fm="$(frontmatter "$SETUP_SKILL_MD")"
 desc_line="$(grep '^description:' <<<"$setup_fm")"
 if grep -qiF 'terminal' <<<"$desc_line" \
-   && grep -qiF 'five subagents' <<<"$desc_line" \
+   && grep -qiF 'diagnostician' <<<"$desc_line" \
+   && grep -qiF 'six subagents' <<<"$desc_line" \
    && ! grep -qiF 'four subagents' <<<"$desc_line"; then
-  report PASS "setup/SKILL.md description names terminal and five subagents (not four)"
+  report PASS "setup/SKILL.md description names terminal, diagnostician, and six subagents (not four)"
 else
-  report FAIL "setup/SKILL.md description names terminal and five subagents (not four)"
+  report FAIL "setup/SKILL.md description names terminal, diagnostician, and six subagents (not four)"
 fi
 
 # ===========================================================================

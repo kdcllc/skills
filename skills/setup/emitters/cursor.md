@@ -12,8 +12,10 @@ never resolved once globally for all harnesses.
 > adversarial verification, and Cursor's `model:` ID/slug format also changes without
 > notice. Before emitting, check https://cursor.com/docs/subagents for the current
 > agent-frontmatter key set AND the live Cursor model list for the current model-ID
-> format, and adjust below. Unknown or stale model IDs are substituted silently by
-> Cursor — no error surfaces, so a typo'd or rotated-out ID fails quietly downstream.
+> format, and adjust below — including the `{{MODEL_FRONTIER_ALT_FAMILY}}` arbitration
+> pin from the model map's Cursor column. Unknown or stale model IDs are substituted
+> silently by Cursor — no error surfaces, so a typo'd or rotated-out ID fails quietly
+> downstream.
 
 ## Emit
 
@@ -43,6 +45,10 @@ the evaluator subagents. Never mark orchestrated work complete without an evalua
 
 - Nesting: main→L1→L2 since Cursor 2.5 — the orchestrator prompt should explicitly tell
   L1 agents to spawn (users report delegation doesn't happen unprompted).
+- `diagnostician`: pinned at the **frontier** Cursor model ID, the same tier as
+  `evaluator` and `qa-evaluator` — it rides the `templates/agents/*.md` glob row above,
+  no separate emit row needed, and its model value/format comes from the model map's
+  **Cursor column** frontier row.
 - `terminal`: pinned at the **light** Cursor model ID, the same tier as the other workers
   (`implementer`, `test-writer`) — it rides the `templates/agents/*.md` glob row above, no
   separate emit row needed, and its model value/format comes from the model map's
@@ -56,8 +62,10 @@ the evaluator subagents. Never mark orchestrated work complete without an evalua
   a second rule file for it.
 - **Silent model fallback**: under team-admin/plan restrictions, or when the resolved ID
   is unknown or stale (a rotated-out or misspelled model name), Cursor substitutes a
-  model without erroring. The evaluator templates already self-report their model; keep
-  that.
+  model without erroring — including the `{{MODEL_FRONTIER_ALT_FAMILY}}` arbitration pin.
+  The evaluator templates already self-report their model; keep that, and require the
+  arbiter to state which model actually produced its verdict when silent fallback may
+  have applied.
 - Cloud Agents support only main→L1 — the QA-gate flow still works, but warn in the
   emitted ORCHESTRATION.md if the project relies on cloud agents.
 

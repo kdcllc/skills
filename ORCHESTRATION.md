@@ -67,6 +67,12 @@ table's resolved single-harness IDs with a reference to the emitted model map, a
 an emit-time obligation to check Cursor's live model list before emitting agent
 frontmatter.
 
+v0.20.0 added the Phase 4 **continuation ladder** after fix-cycle exhaustion — rung 5
+arbitration (unanimous-failure heuristic), rung 4 diagnosis-first (`diagnostician`), rung 6
+decomposition + selective retry — with a closed failure-class taxonomy, always-escalate
+bypass for destructive/security/infra, and hard guards (attempt cap after cycle 3, repeated
+failure signature, orchestration-log transitions).
+
 Running `/setup` in a target project compiles the template — along with the subagents
 and skills — into the native format of each targeted harness (Claude Code, Cursor,
 GitHub Copilot, OpenAI Codex). See [`README.md`](README.md) for install steps,
@@ -74,7 +80,9 @@ GitHub Copilot, OpenAI Codex). See [`README.md`](README.md) for install steps,
 the harness research, [`docs/research-squad-ideas.md`](docs/research-squad-ideas.md) for
 the adopted hardening patterns,
 [`docs/research-harness-design-upgrade.md`](docs/research-harness-design-upgrade.md) for
-the v0.18.0 evaluator-vocabulary + contracts study, and
+the v0.18.0 evaluator-vocabulary + contracts study,
+[`docs/research-autonomous-escalation.md`](docs/research-autonomous-escalation.md) for
+the v0.20.0 continuation-ladder study, and
 [`docs/design-parallel-dispatch.md`](docs/design-parallel-dispatch.md) for the
 verdict-gated design for WIP-limited parallel dispatch in the autonomous loop (partially
 shipped — §1/§2/§5-supervision (v0.11.0); §3.2 (parts 1-3 v0.10.0, part 4 v0.12.0);

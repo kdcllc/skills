@@ -28,11 +28,16 @@ resolved templates.
    .claude/ORCHESTRATION.md. Start features with /feature.
    ```
 3. Orchestrator spawn allowlists use
-   `tools: Agent(implementer, test-writer, evaluator, qa-evaluator, terminal)` comma-string
+   `tools: Agent(implementer, test-writer, evaluator, qa-evaluator, terminal, diagnostician)` comma-string
    syntax where needed — `terminal` joins the allowlist so any allowed caller can spawn
-   it with a Bash or PowerShell command and get back only the requested result.
+   it with a Bash or PowerShell command and get back only the requested result;
+   `diagnostician` joins so the orchestrator can spawn rung 4 diagnosis after fix-cycle
+   exhaustion.
 4. Model values: Claude aliases (`opus`, `sonnet`, `haiku`, `fable`) or full IDs are both
    valid; `inherit` is the frontmatter default if a tier is deliberately unpinned.
+   Resolve every token in `templates/models.map.md` at setup time — including
+   `{{MODEL_FRONTIER_ALT_FAMILY}}` for evaluator arbitration (rung 5) — before the
+   as-is copy; diagnostician pins to the frontier tier the same way evaluators do.
 5. **Loop invocation is per-OS** — both drivers are always emitted; the user runs
    whichever matches their platform: `_loop/loop.sh [max-iterations]`
    (macOS/Linux/WSL/git-bash) or `pwsh _loop/loop.ps1 [MaxIterations]` (Windows,
@@ -49,3 +54,5 @@ resolved templates.
   frontmatter keys.
 - `.claude/agents/terminal.md` exists after the `templates/agents/*.md` copy, with the
   canonical `tools: Bash, Read` preserved as-is.
+- `.claude/agents/diagnostician.md` exists after the same glob copy, with frontier-tier
+  `model:` and `effort: high` preserved as-is.

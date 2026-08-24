@@ -131,6 +131,10 @@ PASS / NEEDS FIXES / NEEDS REVISION / REJECT / APPROVED keep their exact spellin
    runtime-specific; the kit runs pinned/fallback models on four harnesses.
 9. 5–15 GAN-style iterations as the default fix loop — keep max 3 + escalate; a higher
    cap only ever as an explicit design-iteration task type.
+   *[Superseded for Phase 4 task execution in v0.20.0: on cycle-3 exhaustion the
+   orchestrator now enters the continuation ladder (rungs 5→4→6 — arbitration,
+   diagnosis-first, decomposition) before terminal human escalation; other phases keep
+   max 3 + escalate. See [research-autonomous-escalation.md](research-autonomous-escalation.md).]*
 10. Taste-steering phrases ("museum quality") in the *code* evaluator's criteria —
     Mar 2026 observed criteria wording steering output character.
 

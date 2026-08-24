@@ -16,7 +16,7 @@ defined; re-run `/setup` (or edit here and re-emit) when providers rotate model 
 
 | Tier | Roles | Rationale |
 |------|-------|-----------|
-| `frontier` | orchestrator (main session), `evaluator`, `qa-evaluator` | Delegation and evaluation have a capability floor — don't cheap out on the roles that decide and verify |
+| `frontier` | orchestrator (main session), `evaluator`, `qa-evaluator`, `diagnostician` | Delegation and evaluation have a capability floor — don't cheap out on the roles that decide and verify; continuation-ladder diagnosis needs frontier-tier reasoning |
 | `light` | `implementer`, `test-writer`, `terminal` | Checklist-driven execution and compact command running retain most quality at a fraction of the cost when the plan and the verification are strong |
 
 ## Resolved models
@@ -84,6 +84,23 @@ A model blind to its own class of mistake rarely fixes it on retry. Rotate:
 | 1 | `{{MODEL_LIGHT}}` (normal) |
 | 2 | `{{MODEL_ALT_FAMILY}}` — a different model **family** at comparable tier (analytical diversity) |
 | 3 | `{{MODEL_FRONTIER}}` |
+
+### After cycle 3 — continuation ladder pins
+
+When fix cycles 1–3 exhaust, the continuation ladder (see ORCHESTRATION.md) applies:
+
+| Ladder step | Model pin |
+|-------------|-----------|
+| Diagnosis-driven implementation attempt (rung 4) | `{{MODEL_FRONTIER}}` |
+| Evaluator arbitration mode (rung 5) | `{{MODEL_FRONTIER_ALT_FAMILY}}` — a different model **family** from the primary evaluator at frontier tier (analytical diversity at the capability floor) |
+
+<!-- BOOTSTRAP: resolve {{MODEL_FRONTIER_ALT_FAMILY}} to a frontier-tier model from a
+     different provider family than {{MODEL_FRONTIER}} — same pattern as
+     {{MODEL_ALT_FAMILY}} at light tier, but never reuse {{MODEL_ALT_FAMILY}} for
+     arbitration (light tier ≠ frontier tier). -->
+
+**Copilot fit:** frontier = session tier, so diagnostician and arbiter pins respect the
+cost ceiling; Copilot has no effort key (drop it).
 
 ## Harness caveats that shape tiering
 

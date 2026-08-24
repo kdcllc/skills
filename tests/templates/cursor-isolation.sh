@@ -137,14 +137,14 @@ fi
 if [[ -f "$ORCH_TEMPLATE" ]]; then
   model_token_count="$(grep -c '{{MODEL_' "$ORCH_TEMPLATE" || true)"
   setup_map_count="$(grep -c 'setup-models.map.md' "$ORCH_TEMPLATE" || true)"
-  if [[ "${model_token_count:-0}" -eq 0 && "${setup_map_count:-0}" -ge 1 ]]; then
-    report PASS "templates/ORCHESTRATION.md: zero {{MODEL_ tokens, >=1 setup-models.map.md reference"
+  if [[ "${model_token_count:-0}" -eq 2 && "${setup_map_count:-0}" -ge 1 ]]; then
+    report PASS "templates/ORCHESTRATION.md: two {{MODEL_ tokens, >=1 setup-models.map.md reference"
   else
-    report FAIL "templates/ORCHESTRATION.md: zero {{MODEL_ tokens, >=1 setup-models.map.md reference" \
+    report FAIL "templates/ORCHESTRATION.md: two {{MODEL_ tokens, >=1 setup-models.map.md reference" \
       "{{MODEL_ count=${model_token_count:-0}, setup-models.map.md count=${setup_map_count:-0}"
   fi
 else
-  report FAIL "templates/ORCHESTRATION.md: zero {{MODEL_ tokens, >=1 setup-models.map.md reference" "file missing"
+  report FAIL "templates/ORCHESTRATION.md: two {{MODEL_ tokens, >=1 setup-models.map.md reference" "file missing"
 fi
 
 # ===========================================================================
@@ -322,12 +322,12 @@ else
   report FAIL "ORCHESTRATION.md: mentions v0.19.0"
 fi
 
-# 7d. skills/setup/VERSION equals exactly 0.19.0 (whole-file compare).
-if [[ -f "$VERSION_FILE" ]] && [[ "$(cat "$VERSION_FILE")" == "0.19.0" ]]; then
-  report PASS "skills/setup/VERSION equals exactly 0.19.0"
+# 7d. skills/setup/VERSION equals exactly 0.20.0 (whole-file compare).
+if [[ -f "$VERSION_FILE" ]] && [[ "$(cat "$VERSION_FILE")" == "0.20.0" ]]; then
+  report PASS "skills/setup/VERSION equals exactly 0.20.0"
 else
   version_contents="$(cat "$VERSION_FILE" 2>/dev/null)"
-  report FAIL "skills/setup/VERSION equals exactly 0.19.0" \
+  report FAIL "skills/setup/VERSION equals exactly 0.20.0" \
     "contents: '${version_contents:-<missing>}'"
 fi
 

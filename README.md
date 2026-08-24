@@ -2,7 +2,7 @@
 
 [![skills.sh installs](https://skills.sh/b/kdcllc/skills)](https://skills.sh/kdcllc/skills)
 
-> Kit version: **0.19.0** (`skills/setup/VERSION`) · The install badge above applies
+> Kit version: **0.20.0** (`skills/setup/VERSION`) · The install badge above applies
 > only if the repo is made public: [skills.sh](https://www.skills.sh/) filters private
 > repos out of its public index by design
 > ([vercel-labs/skills#381](https://github.com/vercel-labs/skills/issues/381)), so it
@@ -21,11 +21,11 @@ What an install gives a project:
   evaluation → task execution → final audit → docs alignment → approval-gated pull
   request. No phase advances without an evaluator verdict; fixes are always
   re-evaluated (3-cycle limits, explicit escalation).
-- **Five subagents with tiered model pinning**: `evaluator` and `qa-evaluator` on the
-  frontier tier (effort high), `implementer`, `test-writer`, and `terminal` on the light
-  tier (effort medium) — `terminal` runs Bash or PowerShell and returns only the
-  result the caller asked for, so the raw stream stays out of the frontier
-  session. Model IDs are configuration (`models.map.md`), with per-tier fallback
+- **Six subagents with tiered model pinning**: `evaluator`, `qa-evaluator`, and
+  `diagnostician` on the frontier tier (effort high), `implementer`, `test-writer`, and
+  `terminal` on the light tier (effort medium) — `terminal` runs Bash or PowerShell and
+  returns only the result the caller asked for, so the raw stream stays out of the
+  frontier session. Model IDs are configuration (`models.map.md`), with per-tier fallback
   chains, a never-fall-up rule, and a cost-ceiling policy.
 - **Hardened evaluation** (patterns adopted from studying
   [bradygaster/squad](https://github.com/bradygaster/squad)): existence checks with a
@@ -36,7 +36,11 @@ What an install gives a project:
   and an **execute-before-score** rule to the `evaluator` agent, a **hard per-criterion
   threshold** (no averaging away one failing dimension) to the criteria skills, pre-code
   **contracts** with two-party worker/evaluator sign-off before implementation, and
-  **`eval_depth`** intensity routing set by the orchestrator (never a skip).
+  **`eval_depth`** intensity routing set by the orchestrator (never a skip). v0.20.0
+  added the Phase 4 **continuation ladder** after fix-cycle exhaustion — rung 5
+  arbitration, rung 4 diagnosis-first (`diagnostician`), rung 6 decomposition + selective
+  retry — with a closed failure-class taxonomy, always-escalate bypass for
+  destructive/security/infra, and hard guards.
 - A **staged test ladder** (`test-ladder`): new tests → impacted tests mid-cycle; full
   suites at cycle end — in a goal's designated closer task when it has one, and in the
   orchestrator's Phase 5 Quality Checks.
@@ -79,6 +83,8 @@ docs/
 ├── research-token-efficient-skills.md # 2026-08-20: invocation flags, hygiene, terminal agent
 ├── research-harness-design-upgrade.md # 2026-08-21: Anthropic harness-design study →
 │                                      #   evaluator vocabulary + contracts (shipped v0.18.0: phases 0–2)
+├── research-autonomous-escalation.md  # 2026-08-24: fix-cycle escalation study →
+│                                      #   continuation ladder (shipped v0.20.0: rungs 4–6)
 ├── design-parallel-dispatch.md        # Verdict-gated design: WIP-limited parallel dispatch
 │                                      #   in the autonomous loop (partially shipped; see its Status block)
 └── guide/                             # Developer guide suite (9 docs): getting started,
@@ -97,7 +103,7 @@ skills/setup/                 # The installable skill (the compiler)
 └── templates/                # Canonical source (Claude Code format)
     ├── ORCHESTRATION.md      # Architecture doc template
     ├── models.map.md         # Tier → model IDs, fallback chains, fix-cycle rotation
-    ├── agents/               # evaluator, qa-evaluator (frontier) · implementer, test-writer (light)
+    ├── agents/               # evaluator, qa-evaluator, diagnostician (frontier) · implementer, test-writer, terminal (light)
     ├── skills/               # feature, research, {goal,task,qa}-criteria,
     │                         #   test-ladder, align-docs, ship-pr
     └── loop/                 # Optional autonomous loop: SKILL.md (one iteration),
@@ -157,6 +163,7 @@ emits:
 | Generated | Purpose |
 |-----------|---------|
 | `agents/evaluator`, `agents/qa-evaluator` | Skeptical reviewers — frontier tier, existence checks + confidence ladder |
+| `agents/diagnostician` | Root-cause analysis after fix-cycle exhaustion — frontier tier, no code writes |
 | `agents/implementer`, `agents/test-writer` | Workers — light tier, ladder rungs 1–2 only |
 | `skills/feature` | Seven-phase workflow + goal/task templates + orchestration log |
 | `skills/research` | Research → Plan workflow (optional) |

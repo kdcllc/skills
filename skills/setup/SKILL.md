@@ -1,6 +1,6 @@
 ---
 name: setup
-description: Install the orchestrator/worker/evaluator multi-agent system into the current project, compiled for its AI coding harness(es) — Claude Code, Cursor, GitHub Copilot (VS Code), and/or OpenAI Codex. Generates the five subagents (evaluator, qa-evaluator, implementer, test-writer, terminal) with tiered model pins — terminal is light-tier: it runs any Bash or PowerShell command and returns only the result the caller asked for — plus the orchestrator skills (feature, research), the criteria skills, an optional autonomous feature loop, and a project-specific ORCHESTRATION.md. On empty or near-empty (greenfield) directories it first asks whether to scaffold a project tree and creates nothing until the user confirms. Run once per project; re-run to upgrade or re-target.
+description: Install the orchestrator/worker/evaluator multi-agent system into the current project, compiled for its AI coding harness(es) — Claude Code, Cursor, GitHub Copilot (VS Code), and/or OpenAI Codex. Generates the six subagents (evaluator, qa-evaluator, implementer, test-writer, terminal, diagnostician) with tiered model pins — terminal is light-tier: it runs any Bash or PowerShell command and returns only the result the caller asked for — plus the orchestrator skills (feature, research), the criteria skills, an optional autonomous feature loop, and a project-specific ORCHESTRATION.md. On empty or near-empty (greenfield) directories it first asks whether to scaffold a project tree and creates nothing until the user confirms. Run once per project; re-run to upgrade or re-target.
 ---
 
 # Setup (Orchestration Kit Compiler)
@@ -215,6 +215,7 @@ In a scratch copy, resolve every `{{TOKEN}}` and act on + delete every
 | `{{MODEL_FRONTIER}}` / `{{MODEL_LIGHT}}` | Tier → model ID for the primary harness (from the model map) |
 | `{{CURSOR_MODEL_*}}`, `{{COPILOT_MODEL_*}}`, `{{CODEX_MODEL_*}}` | Per-harness tier IDs (model map only) |
 | `{{MODEL_ALT_FAMILY}}` | Different-family model at light-comparable tier, used by fix-cycle rotation (model map) |
+| `{{MODEL_FRONTIER_ALT_FAMILY}}` | Different-family model at frontier tier, used by evaluator arbitration mode after cycle 3 (model map) |
 | `{{LOOP_MODEL_CHAIN}}` | Comma-separated loop fallback chain, first = preferred (from the model map's "Loop fallback chain" row); empty ⇒ the breaker still tracks state but never passes a model flag |
 | `{{EXECUTION_LAYERS}}` | Dependency-ordered layer chain |
 | `{{GROUND_TRUTH_DOC}}` | Committed domain ground-truth doc path |

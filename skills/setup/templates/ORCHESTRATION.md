@@ -149,6 +149,10 @@ ON subagent invocation failure:
 | `implementer` | Focused, checklist-driven | Implementation + fixes | light, effort medium |
 | `test-writer` | Coverage-obsessed | Test creation, all external services mocked | light, effort medium |
 | `terminal` | Compact command runner | Any Bash or PowerShell command — returns only the result the caller asked for | light, effort medium |
+| `diagnostician` | Analytical, diagnosis-only | Root-cause analysis after fix-cycle exhaustion — no code writes | frontier |
+
+The roster is six subagents — `evaluator`, `qa-evaluator`, `implementer`, `test-writer`,
+`terminal`, and `diagnostician` — each with a dedicated agent file under `{{IDE_DIR}}/agents/`.
 
 The orchestrator (and any worker that can spawn) sends `terminal` an exact Bash or
 PowerShell command plus the result shape it needs; `terminal` executes it and returns
@@ -465,13 +469,74 @@ Every subagent invocation requires a complete context package:
 
 ## Evaluation & Retry Mechanisms
 
+### Continuation ladder (Phase 4 task execution)
+
+When Task Execution (Phase 4) exhausts its 3 implement→evaluate fix cycles, the
+orchestrator runs this ladder before terminal human escalation. Apply in this order:
+
+1. **Bypass check (every verdict, every cycle).** A verdict tagged with a bypass failure
+   class (`destructive`, `security`, `infra`) stops all retrying immediately — including
+   cycles 1–3 — and escalates to the human. Requirement ambiguity routes through rung 5,
+   not the bypass — it is not a bypass class.
+
+2. **Rung 5 — arbitration (conditional, checked first on exhaustion).** If cycles 1–3 all
+   failed on the *same* required-fix item (unanimous-failure heuristic), spawn the
+   evaluator in **arbitration mode** on `{{MODEL_FRONTIER_ALT_FAMILY}}` before any
+   further fixing. Outcomes: `criteria-defective` → escalate to the human carrying the
+   specific defect; arbiter/primary **disagreement → escalate (never auto-resolve)**;
+   `criteria-sound` → continue to rung 4.
+
+3. **Rung 4 — diagnosis-first.** Spawn the `diagnostician` (frontier tier, no code writes)
+   with the task file, signed contract, and all three fix-cycle histories. If its
+   hypothesis matches a previously tried fix signature → skip to rung 6 if it recommended
+   a split, else escalate. Otherwise run **ONE** diagnosis-driven implementation attempt
+   (fresh implementer on `{{MODEL_FRONTIER}}`, using the diagnostician's rewritten
+   required-fixes list) and re-evaluate.
+
+4. **Rung 6 — decomposition + selective retry.** Only on a diagnostician split
+   recommendation; the orchestrator derives subtasks with ownership contracts (write sets
+   ⊆ the parent task's) from the **failing pieces only** — work earlier cycles
+   implemented that the evaluator did not flag stays as-is, is not re-run, and gets no
+   separate evaluation. The parent task is complete when every derived subtask has an evaluator PASS. Each subtask gets one implement→evaluate cycle; evaluator spawns never consume the attempt budget — only implementation attempts do.
+
+5. **Terminal.** Human escalation with the full ladder history.
+
+**Failure-class taxonomy (closed set):** `implementation` (default) · `criteria-defect`
+· `destructive` · `security` · `infra`. Bypass subset — destructive, security, infra.
+
+**Hard guards:**
+
+- At most **3 additional implementation attempts** after cycle 3, summed across rungs 4
+  and 6.
+- A **repeated failure signature** stops the ladder immediately.
+- Every rung transition is an orchestration-log entry recording agent, model, rung, and
+  trigger.
+- token/cost budgets are NOT a guard in this kit — no harness exposes token counts
+  to markdown policy.
+
+**Attempt accounting:** The diagnosis-driven implementation attempt costs 1 of the 3.
+Each rung-6 subtask implement→evaluate cycle costs 1 of the 3. Before splitting, the
+orchestrator compares the failing-subtask count against the remaining budget — if the
+count exceeds the remaining budget, escalate instead of splitting. **Signature identity:**
+the evaluator's required-fixes list as recorded in the orchestration log, identical to an
+earlier cycle's list item-for-item after normalizing whitespace and list numbering.
+
+**Deferred future rungs (out of scope):**
+
+- **high-effort pin** — evidence-marginal for routine coding; no procedure defined here.
+- **best-of-N** — conflicts with disjoint write-set admission; no procedure defined here.
+
+The headless loop inherits this ladder because each iteration runs the phased flow; the
+loop drivers' per-story attempt cap and circuit breakers stay the unchanged outer
+backstop.
+
 ### Retry Limits by Phase
 
 | Phase | Max Cycles | On Exhaust |
 |-------|------------|------------|
 | Goal Evaluation (Phase 3) | 3 revise→re-evaluate | Escalate to user |
 | Contract Gate (Phase 4 pre-step) | 2 propose→review rounds (stateless spawns) | Orchestrator tiebreak or escalate to user |
-| Task Execution (Phase 4) | 3 implement→evaluate per task | Escalate to user |
+| Task Execution (Phase 4) | 3 implement→evaluate per task | Continuation ladder (rungs 5→4→6), then escalate to user |
 | Final Audit (Phase 5) | 3 fix→re-audit | Escalate to user |
 | Align Docs (Phase 6) | 3 per doc + 3 for plan and final doc audit | Escalate to user |
 | Pull Request (Phase 7) | n/a — gated on explicit user approval | User edits or declines the draft |
@@ -568,7 +633,8 @@ drifting run early. Headless entry point: `_loop/loop.sh [max-iterations]` (bash
 │   ├── qa-evaluator.md              # Skeptical user-facing QA reviewer
 │   ├── implementer.md  # Focused implementer
 │   ├── test-writer.md           # Test creator (external services mocked)
-│   └── terminal.md              # Bash/PowerShell runner — returns only the asked-for result
+│   ├── terminal.md              # Bash/PowerShell runner — returns only the asked-for result
+│   └── diagnostician.md         # Diagnosis-only (post-cycle-3, no code writes)
 │
 ├── skills/
 │   ├── feature/       # Feature coordination
@@ -717,7 +783,7 @@ The orchestrator maintains this state throughout execution:
 2. **Subagents execute with fresh context** - No fatigue, no bias
 3. **Evaluation is always separate** - Pessimistic evaluators review all work (code AND behavior)
 4. **Re-evaluate is mandatory** - Fixes/revisions MUST be re-verified by an evaluator subagent
-5. **Retries have limits (3 cycles)** - Prevents infinite loops, forces escalation
+5. **Retries have limits (3 cycles)** - Phase 4 task execution continues through the continuation ladder (rungs 5→4→6) before escalation; other phases escalate after 3 cycles
 6. **Escalation is explicit** - User gets clear options and required decisions
 7. **The Iron Law is enforced** - Tests define behavior, implementation must conform
 8. **Shared core is reused** - New modules build on shared infrastructure; never re-implement auth/transport/plumbing

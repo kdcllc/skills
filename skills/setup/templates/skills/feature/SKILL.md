@@ -16,7 +16,8 @@ to `evaluator`. The full architecture is documented in
 - Every subagent gets a complete context package (see "Context packages" below).
 - No phase advances without the required verdict (PASS / APPROVED) from an evaluator subagent.
 - Fixes and revisions are ALWAYS re-evaluated. There is no exception.
-- Max 3 evaluation cycles per phase/task; on exhaustion, escalate to the user with options.
+- Max 3 evaluation cycles per phase/task; on exhaustion, Phase 4 task execution enters
+  the continuation ladder (all other phases escalate to the user with options).
 - On transient subagent-launch failure: retry the same subagent up to 3 times
   (backoff 2s/4s/8s). Never substitute a different agent type.
 
@@ -126,12 +127,67 @@ d. Append both sign-offs to the orchestration log as their own entries (timestam
 4. **PASS** → mark complete, next task. **NEEDS FIXES** → launch a fix cycle with the
    evaluator's required-fixes list, then re-evaluate (max 3 cycles). **REJECT** → escalate.
 
+   **Bypass at detection (every verdict, cycles 1–3).** Any verdict tagged
+   `destructive`, `security`, or `infra` stops all cycles immediately and escalates
+   to the user — from cycle 1, not only after exhaustion.
+
+   **On cycle-3 exhaustion** (NEEDS FIXES after three implement→evaluate cycles without
+   PASS), enter the **continuation ladder** before terminal escalation. Every ladder fix
+   attempt is re-evaluated; there is no exception. Apply in this order:
+
+   1. **Rung 5 — arbitration (unanimity check).** If all three evaluator verdicts in
+      the orchestration log flagged the same required-fix item (unanimous-failure
+      heuristic), spawn `evaluator` in
+      **arbitration mode** on `{{MODEL_FRONTIER_ALT_FAMILY}}` with the task file,
+      signed contract, all three verdicts, and all three implementer reports. Outcomes:
+      `criteria-defective` → escalate to the user carrying the named defective criterion
+      **verbatim**; arbiter/primary disagreement → escalate (never auto-resolve);
+      `criteria-sound` → continue to rung 4.
+
+   2. **Rung 4 — diagnosis-first.** Spawn `diagnostician` with the task file,
+      signed contract, all three implementer reports and evaluator verdicts, and the
+      targeted verification command. If its **Signature Declaration** matches a
+      previously tried fix signature → skip to rung 6 if it recommended a split,
+      else escalate. Otherwise run **ONE** diagnosis-driven implementation attempt:
+      fresh `implementer` on `{{MODEL_FRONTIER}}` using the diagnostician's
+      **Rewritten Required-Fixes** list; then mandatory re-evaluation.
+
+   3. **Rung 6 — decomposition + selective retry** (only on a diagnostician
+      split recommendation). Derive subtask files with ownership contracts whose write sets
+      are subsets of the parent task's, from the **failing pieces only** — unflagged work
+      from earlier cycles stays as-is, is not re-run, and gets no separate evaluation.
+      Each derived subtask gets one implement→evaluate cycle; the parent task completes
+      when every derived subtask has an evaluator PASS; evaluator spawns never consume
+      the attempt budget — only implementation attempts do.
+
+   4. **Terminal.** Escalate to the user with the full ladder history.
+
+   **Hard guards** (character-consistent with `{{IDE_DIR}}/ORCHESTRATION.md`):
+
+   - At most **3 additional implementation attempts** after cycle 3, summed across rungs 4
+     and 6.
+   - The diagnosis-driven implementation attempt costs 1 of the 3. Each rung-6 subtask
+     implement→evaluate cycle costs 1 of the 3. Before splitting, compare the
+     failing-subtask count against the remaining budget — if the count exceeds the
+     remaining budget, escalate instead of splitting.
+   - A **repeated failure signature** stops the ladder immediately: the evaluator's
+     required-fixes list as recorded in the orchestration log, identical to an earlier
+     cycle's list item-for-item after normalizing whitespace and list numbering.
+   - Every rung transition, spawn, and guard trip is an orchestration-log entry recording
+     the rung name.
+
+   token/cost budgets are NOT a guard in this kit — no harness exposes token counts to
+   markdown policy.
+
 **Fix-cycle model rotation** (a model blind to its own mistake rarely fixes it on
 retry): fix cycle 1 re-runs the implementer normally; cycle 2 pins a **different model
 family** at comparable tier; cycle 3 pins the **frontier tier** — see the model map's
 rotation table. Record each rotation in the orchestration log.
 
 Ladder rungs 1–2 only during this phase (see `test-ladder`); never rung 3.
+
+The headless loop inherits this ladder because each iteration runs this skill; the loop
+drivers' per-story attempt cap and circuit breakers stay the unchanged outer backstop.
 
 ## Phase 5 — Final audit (loop until APPROVED)
 
@@ -176,7 +232,8 @@ Maintain `_goals/[goal-name]/orchestration-log.md`. **Before** every subagent la
 append an entry: timestamp, agent, model (and any rotation/fallback applied), why this
 agent was routed, the task's `writes` claim (its allowed-paths fence), expected
 outputs. **After** it returns, append the outcome (report received / files verified /
-verdict) as a new line under that entry. Never write placeholder status lines
+verdict) as a new line under that entry. For continuation-ladder transitions, spawns,
+and guard trips, include the **rung name** in the entry. Never write placeholder status lines
 ("Outcome: (pending)", "TBD") — under append-only they can never be resolved in place
 and rot into permanently stale text; an entry with no outcome line yet IS the pending
 state. Append-only: never edit or delete entries — rejections and respawns are new
@@ -228,6 +285,10 @@ your own clearly-yours summary.
 ```markdown
 ## Escalation Required
 **Phase**: [phase] · **Issue**: [what went wrong] · **Attempts**: [what was tried]
+**Ladder**: [rungs attempted and their outcomes]
 **Options**: 1. [option + tradeoffs] 2. [option + tradeoffs]
 **What I need from you**: [specific decision]
 ```
+
+For `criteria-defective` escalations (from rung 5 arbitration), state the defective
+criterion **verbatim** in the **Issue** line.
