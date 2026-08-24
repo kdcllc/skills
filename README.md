@@ -54,6 +54,21 @@ What an install gives a project:
   quarantined this run), exit 4 short-circuiting the table on protected-path
   violations, and exit 5 as the loud setup/integration stop.
 
+## Documentation
+
+Developer guide: [docs/guide/README.md](docs/guide/README.md).
+
+| Guide | Description |
+|-------|-------------|
+| [getting-started.md](docs/guide/getting-started.md) | Install paths, `/setup` compile flow, greenfield gate, multi-harness emission, manifest basics |
+| [decision-guide.md](docs/guide/decision-guide.md) | Choosing direct edit, `/feature`, `/research` → `/feature`, or autonomous loop; flowchart, mode comparison, anti-patterns |
+| [feature-workflow.md](docs/guide/feature-workflow.md) | Seven phases in depth, contract gate, fix-cycle rotation, escalation, orchestration log, condensed worked example |
+| [research-workflow.md](docs/guide/research-workflow.md) | Why research precedes implementation, prompt/report artifacts, ingestion into a goal, when to skip |
+| [autonomous-loop.md](docs/guide/autonomous-loop.md) | Drivers, backlog stories, iteration lifecycle, circuit breakers, slots/worktrees, exit codes, quarantine, safety model |
+| [agents-and-models.md](docs/guide/agents-and-models.md) | Five subagent roles and boundaries, model tiers, `models.map.md` anatomy, fallback chains, harness caveats |
+| [evaluation-system.md](docs/guide/evaluation-system.md) | Verdict vocabulary, confidence ladder, anti-fabrication, devil's advocate, pre-code contracts, `eval_depth`, test ladder, orchestration log audit trail |
+| [contributing.md](docs/guide/contributing.md) | Repo anatomy (canonical vs instance vs generated), self-install dogfood loop, templates/emitters, harness matrix, VERSION + manifest + upgrades, test harness |
+
 ## Layout
 
 ```
@@ -64,8 +79,10 @@ docs/
 ├── research-token-efficient-skills.md # 2026-08-20: invocation flags, hygiene, terminal agent
 ├── research-harness-design-upgrade.md # 2026-08-21: Anthropic harness-design study →
 │                                      #   evaluator vocabulary + contracts (shipped v0.18.0: phases 0–2)
-└── design-parallel-dispatch.md        # Verdict-gated design: WIP-limited parallel dispatch
-                                       #   in the autonomous loop (partially shipped; see its Status block)
+├── design-parallel-dispatch.md        # Verdict-gated design: WIP-limited parallel dispatch
+│                                      #   in the autonomous loop (partially shipped; see its Status block)
+└── guide/                             # Developer guide suite (9 docs): getting started,
+                                       #   decision guide, workflows, agents, evaluation — see §Documentation
 skills/setup/                 # The installable skill (the compiler)
 ├── SKILL.md                  # Workflow: detect harness(es) → inspect → interview →
 │                             #   resolve templates → emit per harness → manifest
@@ -87,6 +104,8 @@ skills/setup/                 # The installable skill (the compiler)
                               #   loop.sh + loop.ps1 (guarded drivers), PROMPT.md, backlog.md
 scripts/                      # self-install.sh / self-install.ps1 — first-mile dogfood (see §Self-install)
 tests/
+├── docs-link-check.sh         # docs/guide/ suite integrity checker (links, mermaid,
+│                              #   conventions); run: bash tests/docs-link-check.sh
 └── loop-harness/run.sh        # Tracked behavioral test suite (breaker state machine +
                               #   torn-read/fail-safe hardening, SIGPIPE regressions,
                               #   checks J/K mutations); self-install assertions run before
