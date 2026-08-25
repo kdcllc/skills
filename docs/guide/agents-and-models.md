@@ -1,10 +1,10 @@
-**Who this is for / What you'll learn:** Kit **users** and **contributors** who need to understand the five subagents, which model tier each role runs on, and how `models.map.md` governs IDs, fallbacks, and fix-cycle rotation. You will learn each agent's role, write boundaries, and prohibitions; why evaluators run frontier models while workers run light ones; the structure and rules of the model map; and harness caveats that affect tiering. For what evaluators enforce (verdict vocabulary, confidence ladder, contracts), see [evaluation-system.md](evaluation-system.md). For where each agent appears in the `/feature` phases, see [feature-workflow.md](feature-workflow.md).
+**Who this is for / What you'll learn:** Kit **users** and **contributors** who need to understand the six subagents, which model tier each role runs on, and how `models.map.md` governs IDs, fallbacks, and fix-cycle rotation. You will learn each agent's role, write boundaries, and prohibitions; why evaluators run frontier models while workers run light ones; the diagnostician's role in the post-exhaustion continuation ladder; the structure and rules of the model map; and harness caveats that affect tiering. For what evaluators enforce (verdict vocabulary, confidence ladder, contracts), see [evaluation-system.md](evaluation-system.md). For where each agent appears in the `/feature` phases, see [feature-workflow.md](feature-workflow.md).
 
 # Agents and Model Configuration
 
-The kit separates **coordination and verification** (frontier tier) from **execution** (light tier). One orchestrating main session prepares context, makes decisions, and spawns subagents — it never implements tasks itself. Five specialized subagents handle implementation, testing, command execution, and evaluation. Model IDs, fallback chains, and fix-cycle rotation are configured in a single template file that `/setup` resolves per harness.
+The kit separates **coordination and verification** (frontier tier) from **execution** (light tier). One orchestrating main session prepares context, makes decisions, and spawns subagents — it never implements tasks itself. Six specialized subagents handle implementation, testing, command execution, evaluation, and post-exhaustion diagnosis (as of v0.20.0). Model IDs, fallback chains, and fix-cycle rotation are configured in a single template file that `/setup` resolves per harness.
 
-## The five subagents at a glance
+## The six subagents at a glance
 
 | Agent | Tier | May write | Must never |
 |-------|------|-----------|------------|
@@ -13,6 +13,7 @@ The kit separates **coordination and verification** (frontier tier) from **execu
 | `implementer` | `light` (`{{MODEL_LIGHT}}`) | Only paths in the task's `writes` set | Edit out-of-fence files; run rung-3 full suites |
 | `test-writer` | `light` | Only test files in task `writes` | Hit live external services; edit source to make tests pass |
 | `terminal` | `light` | Shell side effects only (no Edit/Write tools) | Dump raw command streams into the caller session |
+| `diagnostician` | `frontier` (`{{MODEL_FRONTIER}}`) | Nothing — diagnosis-only report | Edit files or write product code; re-litigate the signed contract (rung-5 arbitration's job) |
 
 The sections below quote or paraphrase the canonical agent templates under [`skills/setup/templates/agents/`](../../skills/setup/templates/agents/). Capabilities not confirmed there are omitted.
 
@@ -30,6 +31,8 @@ The sections below quote or paraphrase the canonical agent templates under [`ski
 - Score from the report or diff alone without executing targeted tests first.
 - Talk itself into a PASS after finding an issue (identified issues must appear in the verdict).
 - Treat unverified claims as verified.
+
+As of v0.20.0, the evaluator also has an orchestrator-invoked **arbitration mode** (continuation-ladder rung 5, pinned to `{{MODEL_FRONTIER_ALT_FAMILY}}`) that reviews criteria rather than code — semantics in [evaluation-system.md](evaluation-system.md).
 
 Evaluation criteria — verdict vocabulary, confidence ladder, anti-fabrication rules, auto-fail triggers — are owned by [evaluation-system.md](evaluation-system.md), not repeated here.
 
@@ -99,9 +102,32 @@ For noisy commands, spawn `terminal` where the harness allows (not Copilot).
 
 The terminal is the **shell-output shield**: noisy test runs, builds, and git operations stay in a light-tier subagent so raw streams do not flood the frontier orchestrating session.
 
+## Diagnostician
+
+**Role:** Fresh-context root-cause analyst spawned at continuation-ladder rung 4 after three implement→evaluate fix cycles exhaust without a PASS (as of v0.20.0).
+
+**Inputs:** The task file, the signed contract, all three fix-cycle histories (implementer reports + evaluator verdicts), and pointers to the current code.
+
+**Tier:** `frontier` — frontmatter `model: {{MODEL_FRONTIER}}`, effort `high`. Tools: Bash, Read, Grep, Glob — no Edit/Write.
+
+**Execute before you diagnose:** Run the task's targeted verification command(s) yourself to observe the failure — reading prior reports or the diff alone is not enough.
+
+**Report format:** Return a frozen five-section report — Root-Cause Hypothesis, Evidence, Rewritten Required-Fixes, Split Recommendation, Signature Declaration.
+
+**What it may write:** Nothing — diagnosis-only report.
+
+**What it must never do:**
+
+- Edit files or write product code.
+- Propose skipping evaluation.
+- Re-litigate whether the contract is sound (defer to rung-5 arbitration).
+- Invent command output (quoted output must come from commands it ran).
+
+You supply the report — the orchestrator routes (signature match → rung 6 or escalate; otherwise ONE diagnosis-driven implementation attempt). Routing details in [feature-workflow.md](feature-workflow.md).
+
 ## Roster diagram
 
-The orchestrating session runs on the frontier tier. It dispatches light-tier workers for execution and frontier-tier evaluators for verification. The terminal agent isolates command output.
+The orchestrating session runs on the frontier tier. It dispatches light-tier workers for execution and frontier-tier evaluators for verification. The terminal agent isolates command output. A frontier-tier diagnostician is spawned for post-exhaustion diagnosis.
 
 ```mermaid
 flowchart TD
@@ -111,33 +137,36 @@ flowchart TD
     Term["terminal\n(light tier)\nshell-output shield"]
     Eval["evaluator\n(frontier tier)"]
     QA["qa-evaluator\n(frontier tier)"]
+    Diag["diagnostician\n(frontier tier)\ndiagnosis-only"]
 
     Orch -->|"spawn: implement / fix"| Impl
     Orch -->|"spawn: write tests"| TW
     Orch -->|"spawn: run command"| Term
     Orch -->|"spawn: verify task / goal"| Eval
     Orch -->|"spawn: verify UX"| QA
+    Orch -->|"spawn: diagnose (rung 4)"| Diag
     Impl -->|"noisy command"| Term
     TW -->|"noisy command"| Term
     Term -->|"result only, no raw stream"| Orch
     Eval -->|"verdict"| Orch
     QA -->|"QA verdict"| Orch
+    Diag -->|"diagnosis report"| Orch
 ```
 
 Workers never advance a phase on their own — evaluators gate progression. See [feature-workflow.md](feature-workflow.md) for where each spawn happens in the seven phases.
 
 ## Why frontier vs light
 
-Evaluators and the orchestrating session run **frontier** models; `implementer`, `test-writer`, and `terminal` run **light** models. The split follows a simple cost–quality tradeoff:
+Evaluators, the diagnostician, and the orchestrating session run **frontier** models; `implementer`, `test-writer`, and `terminal` run **light** models. The split follows a simple cost–quality tradeoff:
 
 | Tier | Roles | Rationale |
 |------|-------|-----------|
-| `frontier` | Orchestrator (main session), `evaluator`, `qa-evaluator` | Delegation and evaluation have a capability floor — don't cheap out on the roles that decide and verify |
+| `frontier` | Orchestrator (main session), `evaluator`, `qa-evaluator`, `diagnostician` | Delegation and evaluation have a capability floor — don't cheap out on the roles that decide and verify; continuation-ladder diagnosis needs frontier-tier reasoning |
 | `light` | `implementer`, `test-writer`, `terminal` | Checklist-driven execution and compact command running retain most quality at a fraction of the cost when the plan and the verification are strong |
 
 **Verification quality is where frontier spend pays off.** Implementation is cheaper-tier work that evaluators re-check before anything advances. A light-tier implementer following a signed contract and strong evaluation is cheaper than running everything on frontier — without sacrificing gate quality at the roles that matter.
 
-Reasoning-effort pins (where the harness supports them): evaluators `high`, workers `medium`.
+Reasoning-effort pins (where the harness supports them): evaluators and the diagnostician `high`, workers `medium`.
 
 ## `models.map.md` anatomy
 
@@ -186,6 +215,17 @@ After evaluator rejections, rotate the implementer's model — a model blind to 
 
 The workflow context for when fix cycles fire is in [feature-workflow.md](feature-workflow.md).
 
+### After cycle 3 — continuation ladder pins (as of v0.20.0)
+
+When fix cycles 1–3 exhaust, the continuation ladder applies these pins:
+
+| Ladder step | Model pin |
+|-------------|-----------|
+| Diagnosis-driven implementation attempt (rung 4) | `{{MODEL_FRONTIER}}` |
+| Evaluator arbitration mode (rung 5) | `{{MODEL_FRONTIER_ALT_FAMILY}}` — a different model **family** from the primary evaluator at frontier tier |
+
+`{{MODEL_ALT_FAMILY}}` (light tier) is never reused for arbitration.
+
 ### Cost-ceiling policy
 
 Three outcomes when a model choice conflicts with a plan or admin ceiling:
@@ -200,7 +240,7 @@ These caveats shape tiering and emitter behavior. They are drawn from [`models.m
 
 ### Copilot cost ceiling
 
-A Copilot subagent **cannot run a stronger model than the session**. The main session must run the `frontier` tier; workers pin **down**. Evaluators cannot pin up — the ceiling is "cannot exceed the parent tier," not "must equal the parent tier." Cheaper-than-parent pins are valid.
+A Copilot subagent **cannot run a stronger model than the session**. The main session must run the `frontier` tier; workers pin **down**. Evaluators cannot pin up — the ceiling is "cannot exceed the parent tier," not "must equal the parent tier." Cheaper-than-parent pins are valid. Frontier = session tier, so the diagnostician and rung-5 arbiter pins respect the cost ceiling; Copilot has no reasoning-effort key (the effort pin is dropped there).
 
 Practical implication: on Copilot, your orchestrating session is the frontier anchor. Light-tier worker pins must stay at or below that session's tier.
 
@@ -227,7 +267,8 @@ For the full capability comparison, see [`harness-matrix.md`](../../skills/setup
 
 Each subagent is spawned at specific moments in the orchestration lifecycle:
 
-- **Goal and task evaluation** — `evaluator` after goal creation, after each task, and at final audit. Criteria and verdict mechanics: [evaluation-system.md](evaluation-system.md).
+- **Goal and task evaluation** — `evaluator` after goal creation, after each task, and at final audit; `evaluator` in **arbitration mode** at continuation-ladder rung 5 on unanimous same-item failure across fix cycles 1–3. Criteria and verdict mechanics: [evaluation-system.md](evaluation-system.md).
+- **Post-exhaustion diagnosis** — `diagnostician` at continuation-ladder rung 4 after Phase 4 fix cycles exhaust.
 - **Implementation and fixes** — `implementer` for each task and fix cycle (model rotates per the fix-cycle table above).
 - **Dedicated test tasks** — `test-writer` when a goal includes a test-only task.
 - **Noisy commands** — `terminal` for rung-3 full suites at cycle end, and whenever a worker or orchestrator needs command output without flooding context.
@@ -241,7 +282,7 @@ Phase-by-phase spawn timing, contracts, and escalation: [feature-workflow.md](fe
 2. Verify IDs against each harness's **live model list** — especially Cursor.
 3. Re-run `/setup` to re-emit agents, skills, and loop drivers with updated pins.
 
-Never copy model IDs from kit documentation without checking — IDs rotate frequently. Placeholder tokens (`{{MODEL_FRONTIER}}`, `{{MODEL_LIGHT}}`, `{{MODEL_ALT_FAMILY}}`, per-harness variants) describe the map's structure; concrete IDs are install-specific configuration.
+Never copy model IDs from kit documentation without checking — IDs rotate frequently. Placeholder tokens (`{{MODEL_FRONTIER}}`, `{{MODEL_FRONTIER_ALT_FAMILY}}`, `{{MODEL_LIGHT}}`, `{{MODEL_ALT_FAMILY}}`, per-harness variants) describe the map's structure; concrete IDs are install-specific configuration.
 
 ## Sources
 
@@ -250,6 +291,7 @@ Never copy model IDs from kit documentation without checking — IDs rotate freq
 - [`skills/setup/templates/agents/implementer.md`](../../skills/setup/templates/agents/implementer.md) — implementer rules, write fence, test ladder, terminal spawn
 - [`skills/setup/templates/agents/test-writer.md`](../../skills/setup/templates/agents/test-writer.md) — test writer coverage rules, mocking, write fence
 - [`skills/setup/templates/agents/terminal.md`](../../skills/setup/templates/agents/terminal.md) — terminal command runner, output isolation
+- [`skills/setup/templates/agents/diagnostician.md`](../../skills/setup/templates/agents/diagnostician.md) — diagnostician role, report format, routing
 - [`skills/setup/templates/models.map.md`](../../skills/setup/templates/models.map.md) — tier assignments, resolved models table, fallback chains, never-fall-up, fix-cycle rotation, cost ceiling, harness caveats
 - [`skills/setup/reference/harness-matrix.md`](../../skills/setup/reference/harness-matrix.md) — per-harness capabilities, Copilot ceiling, Cursor silent fallback, live model list
 - [`README.md`](../../README.md) — Model tiers section (frontier/light split, map as single source, re-run `/setup` on rotation)

@@ -1,4 +1,4 @@
-**Who this is for / What you'll learn:** Kit **users** running non-trivial features through `/feature`, and **contributors** who need to understand what the orchestrator actually does phase by phase. You will learn the seven-phase lifecycle — alignment through pull request — including the contract gate, per-gate verdict vocabulary, fix-cycle model rotation, escalation exits, the orchestration log, and orchestrator iron rules. For verdict rubrics and criteria depth see [evaluation-system.md](evaluation-system.md); for who gets spawned and model tiers see [agents-and-models.md](agents-and-models.md). To choose `/feature` over other modes, start with [decision-guide.md](decision-guide.md).
+**Who this is for / What you'll learn:** Kit **users** running non-trivial features through `/feature`, and **contributors** who need to understand what the orchestrator actually does phase by phase. You will learn the seven-phase lifecycle — alignment through pull request — including the contract gate, per-gate verdict vocabulary, fix-cycle model rotation, the Phase 4 continuation ladder on cycle-3 exhaustion (as of v0.20.0), escalation exits, the orchestration log, and orchestrator iron rules. For verdict rubrics and criteria depth see [evaluation-system.md](evaluation-system.md); for who gets spawned and model tiers see [agents-and-models.md](agents-and-models.md). To choose `/feature` over other modes, start with [decision-guide.md](decision-guide.md).
 
 # Feature workflow (`/feature`)
 
@@ -21,7 +21,8 @@ flowchart TD
     P4Pass["PASS → next task"]
     P4Fix["NEEDS FIXES"]
     P4FixCycle["Fix cycle\n(model rotation)"]
-    P4Esc["Escalate to user\n(max 3 cycles per task)"]
+    P4Ladder["Continuation ladder\n(rungs 5→4→6)"]
+    P4Esc["Escalate to user"]
     P4Reject["REJECT → escalate"]
     P5Audit["Phase 5: Final audit"]
     P5App["APPROVED"]
@@ -48,8 +49,11 @@ flowchart TD
     P4 --> P4Fix
     P4 --> P4Reject
     P4Fix --> P4FixCycle
+    P4Fix -->|"bypass class: escalate at detection"| P4Esc
     P4FixCycle -->|"cycle ≤ 3"| P4
-    P4FixCycle -->|"cycle > 3"| P4Esc
+    P4FixCycle -->|"cycle > 3"| P4Ladder
+    P4Ladder -->|"ladder exhausted"| P4Esc
+    P4Ladder -->|"ladder attempt PASS"| P4Pass
     P4Pass -->|"all tasks PASS"| P5Audit
     P5Audit --> P5App
     P5Audit --> P5Issues
@@ -69,7 +73,7 @@ Each gate uses its **own** verdict vocabulary — never collapsed:
 | Phase | Gate | Loop verdict | Exit verdict | Max cycles |
 |-------|------|--------------|--------------|------------|
 | 3 | Goal evaluation | **NEEDS REVISION** | **PASS** | 3 revise→re-evaluate |
-| 4 | Task evaluation | **NEEDS FIXES** | **PASS** | 3 implement→evaluate per task |
+| 4 | Task evaluation | **NEEDS FIXES** | **PASS** | 3 implement→evaluate per task, then continuation ladder (rungs 5→4→6) before escalation (as of v0.20.0) |
 | 5 | Final audit | **ISSUES** | **APPROVED** | 3 fix→re-audit |
 
 Phase 4 also has a **contract gate** (max 2 propose→review rounds) before implementation dispatch — see below.
@@ -107,6 +111,7 @@ sequenceDiagram
         O->>W: Fix cycle (model rotation on retry 2/3)
         W->>O: Fix report
         O->>E: Re-evaluate
+        Note over O,E: On cycle-3 exhaustion — continuation ladder (see below)
     end
 ```
 
@@ -188,8 +193,35 @@ For trivial tasks, the orchestrator may draft the contract directly.
 | Verdict | Action |
 |---------|--------|
 | **PASS** | Mark complete, next task |
-| **NEEDS FIXES** | Fix cycle with evaluator's required-fixes list, re-evaluate (max 3 cycles) |
+| **NEEDS FIXES** | Fix cycle with evaluator's required-fixes list, re-evaluate (max 3 cycles, then continuation ladder) |
 | **REJECT** | Escalate |
+
+### Bypass at detection
+
+Any verdict tagged `destructive`, `security`, or `infra` stops all cycles immediately and escalates — from cycle 1, not only after exhaustion (as of v0.20.0). Full taxonomy in [evaluation-system.md](evaluation-system.md).
+
+### Continuation ladder (on cycle-3 exhaustion, as of v0.20.0)
+
+When three implement→evaluate cycles end without **PASS**, the orchestrator runs this ladder before terminal escalation. Every ladder fix attempt is re-evaluated; there is no exception.
+
+1. **Rung 5 — arbitration (unanimity check).** If all three evaluator verdicts flagged the same required-fix item, spawn `evaluator` in **arbitration mode** on `{{MODEL_FRONTIER_ALT_FAMILY}}` with the task file, signed contract, all three verdicts, and all three implementer reports. Outcomes: `criteria-defective` → escalate carrying the named defective criterion **verbatim**; arbiter/primary disagreement → escalate (never auto-resolve); `criteria-sound` → rung 4.
+
+2. **Rung 4 — diagnosis-first.** Spawn `diagnostician` with the task file, signed contract, all three implementer reports and evaluator verdicts, and the targeted verification command. If its **Signature Declaration** matches a previously tried fix signature → skip to rung 6 if it recommended a split, else escalate. Otherwise **ONE** diagnosis-driven implementation attempt: fresh `implementer` on `{{MODEL_FRONTIER}}` executing the diagnostician's **Rewritten Required-Fixes** list, then mandatory re-evaluation.
+
+3. **Rung 6 — decomposition + selective retry** (only on a diagnostician split recommendation). Derive subtask files with ownership contracts whose write sets are subsets of the parent's, from the **failing pieces only** — unflagged earlier work stays as-is, is not re-run, and gets no separate evaluation. Each derived subtask gets one implement→evaluate cycle; the parent completes when every derived subtask has an evaluator **PASS**.
+
+4. **Terminal.** Escalate to the user with the full ladder history.
+
+**Hard guards:**
+
+- At most **3 additional implementation attempts** after cycle 3, summed across rungs 4 and 6 (the diagnosis-driven attempt costs 1; each rung-6 subtask cycle costs 1; evaluator spawns never consume the budget; if failing-subtask count exceeds the remaining budget, escalate instead of splitting).
+- A **repeated failure signature** (required-fixes list identical item-for-item after normalizing whitespace and numbering) stops the ladder immediately.
+- Every rung transition, spawn, and guard trip is an orchestration-log entry recording the rung name.
+- Token/cost budgets are **not** a guard in this kit.
+
+**Deferred future rungs:** high-effort pin and best-of-N are named as future rungs but **not** implemented.
+
+The headless loop inherits this ladder because each iteration runs this skill; the loop drivers' per-story attempt cap and circuit breakers stay the unchanged outer backstop.
 
 ### Fix-cycle model rotation
 
@@ -262,7 +294,7 @@ These are user-visible behaviors enforced throughout all phases:
 | **Never edit product code** | The orchestrating session coordinates only — context packages, spawns, verdicts, decisions. Spawning `terminal` for Quality Checks is coordination, not implementation. |
 | **Every fix is re-evaluated** | Fixes and revisions are **always** re-verified by an evaluator. No exception. |
 | **No phase advances without verdict** | Phase 4 tasks need evaluator **PASS**; Phase 5 needs **APPROVED**; Phase 3 needs **PASS** on the goal. |
-| **Max 3 cycles, then escalate** | Goal evaluation, task execution, and final audit each cap at 3 evaluation cycles. Contract gate caps at 2 rounds. |
+| **Max 3 cycles, then escalate** | As of v0.20.0, Phase 4 task execution continues through the continuation ladder (rungs 5→4→6) before escalation; Phase 3 and Phase 5 escalate after 3 cycles; contract gate caps at 2 rounds. |
 
 ### Escalation format
 
@@ -271,9 +303,12 @@ When cycles exhaust, the orchestrator presents:
 ```markdown
 ## Escalation Required
 **Phase**: [phase] · **Issue**: [what went wrong] · **Attempts**: [what was tried]
+**Ladder**: [rungs attempted and their outcomes]
 **Options**: 1. [option + tradeoffs] 2. [option + tradeoffs]
 **What I need from you**: [specific decision]
 ```
+
+For `criteria-defective` escalations (rung 5 arbitration), the defective criterion is stated **verbatim** in the **Issue** line.
 
 ---
 
@@ -288,6 +323,8 @@ Path: `_goals/[goal-name]/orchestration-log.md` — an **append-only spawn ledge
 - Routing reason
 - Task's `writes` claim (allowed-paths fence)
 - Expected outputs
+
+For continuation-ladder transitions, spawns, and guard trips, entries include the **rung name**.
 
 **After the subagent returns**, append the outcome (report received, files verified, verdict) as a **new line under that entry**.
 
@@ -306,7 +343,7 @@ These are what **you** do in a typical `/feature` run — separate from any spec
 | **Alignment** | Phase 1 | Answer structured MCQs; confirm "My Understanding" before goal creation |
 | **Decision gates** | Phase 2 (and elsewhere) | Choose between viable approaches when the orchestrator presents tradeoffs |
 | **PR approval** | Phase 7 (when it runs) | Review the drafted PR title and body; approve or request edits before push/create |
-| **Escalations** | Any phase after 3 failed cycles | Respond with a decision from the options the orchestrator presents |
+| **Escalations** | Phase 4 after the continuation ladder completes (or immediately on a bypass-class verdict); other phases after 3 failed cycles | Respond with a decision from the options the orchestrator presents |
 
 You are not expected to spawn subagents, write contracts, or run Quality Checks — those are orchestrator responsibilities.
 
@@ -390,7 +427,7 @@ Delivery instead followed the goal's Delivery Procedure: merge commit `5825729` 
 
 - [decision-guide.md](decision-guide.md) — when to choose `/feature` vs `/research`, autonomous loop, or direct edit
 - [evaluation-system.md](evaluation-system.md) — verdict vocabulary, confidence ladder, contract sign-off, test ladder rungs, eval_depth
-- [agents-and-models.md](agents-and-models.md) — five subagent roles, model tiers, rotation table, harness caveats
+- [agents-and-models.md](agents-and-models.md) — six subagent roles, model tiers, rotation table, harness caveats
 
 ## Sources
 
@@ -400,6 +437,7 @@ Delivery instead followed the goal's Delivery Procedure: merge commit `5825729` 
 - [`skills/setup/templates/skills/feature/templates/contract.md`](../../skills/setup/templates/skills/feature/templates/contract.md) — pre-code contract shape
 - [`skills/setup/templates/skills/align-docs/SKILL.md`](../../skills/setup/templates/skills/align-docs/SKILL.md) — Phase 6 workflow
 - [`skills/setup/templates/skills/ship-pr/SKILL.md`](../../skills/setup/templates/skills/ship-pr/SKILL.md) — Phase 7 workflow
-- [`skills/setup/templates/ORCHESTRATION.md`](../../skills/setup/templates/ORCHESTRATION.md) — architecture invariants, retry limits, escalation format
+- [`skills/setup/templates/ORCHESTRATION.md`](../../skills/setup/templates/ORCHESTRATION.md) — architecture invariants, retry limits, continuation ladder, escalation format
+- [`skills/setup/templates/models.map.md`](../../skills/setup/templates/models.map.md) — continuation-ladder model pins
 - `_goals/loop-ps1-slot-interpolation-fix/goal.md` — exemplar goal (local gitignored artifact)
 - `_goals/loop-ps1-slot-interpolation-fix/orchestration-log.md` — exemplar orchestration log (local gitignored artifact)

@@ -135,7 +135,7 @@ The Cursor emitter, as of v0.19.0, is order-independent relative to Claude Code 
 
 ### VERSION
 
-[`skills/setup/VERSION`](../../skills/setup/VERSION) holds the kit version (as of v0.19.0, **0.19.0**). Bump it when changing kit behavior that installs should pick up. Docs-only changes in this repo do not require a VERSION bump.
+[`skills/setup/VERSION`](../../skills/setup/VERSION) holds the kit version (as of v0.20.0, **0.20.0**). Bump it when changing kit behavior that installs should pick up. Docs-only changes in this repo do not require a VERSION bump.
 
 ### Manifest shape
 
@@ -180,6 +180,10 @@ This is the tracked **behavioral** test suite (test-ladder rung 3 territory — 
 
 When `_loop/` is absent (fresh clone before `/setup`), loop-instance assertions are skipped in aggregate — self-install assertions still run.
 
+### Standalone template guards
+
+Three tracked structural guards live under `tests/templates/` — [`cursor-isolation.sh`](../../tests/templates/cursor-isolation.sh), [`invocation-flags.sh`](../../tests/templates/invocation-flags.sh), and [`escalation-ladder.sh`](../../tests/templates/escalation-ladder.sh) (added with the v0.20.0 continuation-ladder goal). The escalation-ladder guard locks the Phase 4 continuation-ladder subsection, failure-class taxonomy identity across canonical templates, diagnostician template and dual-instance emission wiring, and `{{MODEL_FRONTIER_ALT_FAMILY}}` documentation. Run any guard directly with `bash tests/templates/<name>.sh`; they are not invoked by `tests/loop-harness/run.sh`.
+
 ### Documentation suite checker
 
 ```bash
@@ -190,7 +194,7 @@ Added by the developer-guide-docs goal: validates the finished `docs/guide/` sui
 
 ## Documentation conventions
 
-If you add or revise guide content under `docs/guide/`, follow the frozen conventions in [README.md](README.md): Mermaid rules (core types only, `flowchart TD` default, no init directives, quoted punctuation labels), relative file-level cross-links resolved from the linking file's directory, opener blocks, Sources sections, version anchoring ("as of v0.19.0" for version-sensitive kit-behavior claims), and canonical-vs-instance labeling.
+If you add or revise guide content under `docs/guide/`, follow the frozen conventions in [README.md](README.md): Mermaid rules (core types only, `flowchart TD` default, no init directives, quoted punctuation labels), relative file-level cross-links resolved from the linking file's directory, opener blocks, Sources sections, version anchoring (version-sensitive kit-behavior claims anchored at the kit version where the behavior shipped — for example "as of v0.19.0" or "as of v0.20.0"), and canonical-vs-instance labeling.
 
 Install and user-side usage topics belong in [getting-started.md](getting-started.md), not here.
 
@@ -206,6 +210,7 @@ Install and user-side usage topics belong in [getting-started.md](getting-starte
 | Placeholder reference | `skills/setup/SKILL.md` |
 | Harness verified facts | `skills/setup/reference/harness-matrix.md` |
 | Behavioral tests | `bash tests/loop-harness/run.sh` |
+| Structural template guards | `bash tests/templates/escalation-ladder.sh` (and siblings) |
 | Guide suite integrity | `bash tests/docs-link-check.sh` |
 | Harness research ground truth | [../research-multi-harness-upgrade.md](../research-multi-harness-upgrade.md) |
 
@@ -213,7 +218,7 @@ Install and user-side usage topics belong in [getting-started.md](getting-starte
 
 - [`docs/guide/README.md`](README.md) — frozen document map, Mermaid/link/opener conventions, glossary
 - [`README.md`](../../README.md) — layout tree, self-install section, upgrading, editing templates
-- [`ORCHESTRATION.md`](../../ORCHESTRATION.md) — root architecture pointer and v0.18.0–v0.19.0 capability summary
+- [`ORCHESTRATION.md`](../../ORCHESTRATION.md) — root architecture pointer and v0.18.0–v0.20.0 capability summary
 - [`.gitignore`](../../.gitignore) — instance paths gitignored in this repo
 - [`skills/setup/SKILL.md`](../../skills/setup/SKILL.md) — `/setup` workflow, placeholder reference, manifest and upgrade semantics
 - [`skills/setup/emitters/claude-code.md`](../../skills/setup/emitters/claude-code.md) — Claude Code emission map
