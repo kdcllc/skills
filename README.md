@@ -175,25 +175,34 @@ emits:
 | `ORCHESTRATION.md` | The architecture doc, filled in for the project |
 | `orchestration-kit.manifest.json` | Kit version + file hashes, enabling clean upgrades |
 
-Everything is generated with project-specific content — layer order, test commands,
-evaluator auto-fail triggers, and model IDs are derived from the codebase and your
-answers, never left generic. Targeting Cursor emits a self-contained `.cursor/` tree —
-agents, skills, the architecture doc, and the model map — with no dependency on
-`.claude/`. Start your first feature with `/feature`; start an unattended
-run (sandboxed!) with `_loop/loop.sh 10` (or `pwsh _loop/loop.ps1 10` — PowerShell 7+).
-Driver-owned dispatch, write-set admission, and the single-writer integrator shipped in
-v0.12.0. Completion and exit aggregation shipped in v0.13.0 — per-slot CB1/CB2
-retirement instead of a run-fatal stop, the run exit aggregated across slots with
-precedence 4>3>2>1>0, quarantine-gated completion (drained-backlog exit 0 only when no
-branch was quarantined this run), and `.loop-worktrees/QUARANTINE-<branch>.md` markers
-(slashes in the branch become dashes) embedding the dispatched prompt.
-`LOOP_WORKTREE` still defaults to 0 (main-tree iteration; `=1` requires a
-tracked-instance preflight); `LOOP_SLOTS` is live under the
-N>1-iff-worktree rule (LOOP_WORKTREE=1 honors the configured value; LOOP_WORKTREE=0
-clamps to effective 1, with a stderr note only when `LOOP_SLOTS>1` was set explicitly).
-A new exit code 5 covers setup/integration failures; the completion-time backlog
-re-scan added in v0.13.0 now raises the same missing/unreadable-backlog cause at a
-fifth site (the four causes are unchanged — this adds loud completion-time coverage).
+Everything is generated with project-specific content. Layer order, test commands, evaluator auto-fail triggers, and model IDs are derived from the codebase and your answers, never left generic.
+
+Targeting Cursor emits a self-contained `.cursor/` tree containing agents, skills, the architecture doc, and the model map, with no dependency on `.claude/`.
+
+Start your first feature with `/feature`.
+
+Start an unattended run (sandboxed!) with `_loop/loop.sh 10` or `pwsh _loop/loop.ps1 10` (PowerShell 7+).
+
+Driver-owned dispatch, write-set admission, and the single-writer integrator shipped in **v0.12.0**.
+
+Completion and exit aggregation shipped in **v0.13.0**:
+
+- Per-slot CB1/CB2 retirement instead of a run-fatal stop.
+- Run exit aggregated across slots with precedence `4 > 3 > 2 > 1 > 0`.
+- Quarantine-gated completion, where drained-backlog exit `0` occurs only when no branch was quarantined during the run.
+- `.loop-worktrees/QUARANTINE-<branch>.md` markers (slashes in branch names become dashes) embedding the dispatched prompt.
+
+`LOOP_WORKTREE` still defaults to `0` (main-tree iteration). Setting `LOOP_WORKTREE=1` requires a tracked-instance preflight.
+
+`LOOP_SLOTS` is live under the N>1-iff-worktree rule:
+
+- `LOOP_WORKTREE=1` honors the configured value.
+- `LOOP_WORKTREE=0` clamps to an effective value of `1`.
+- A stderr note is emitted only when `LOOP_SLOTS > 1` was explicitly configured.
+
+A new exit code, `5`, covers setup/integration failures.
+
+The completion-time backlog re-scan added in **v0.13.0** now raises the same missing/unreadable-backlog cause at a fifth site. The original four causes are unchanged; this simply adds louder completion-time coverage.
 
 ### Self-install (local development of the kit itself)
 
