@@ -77,6 +77,8 @@ v0.21.0 synced the canonical architecture template to shipped v0.12–v0.20 beha
 research handoff at Phase 3, the escalation **Ladder** line, closer-task rung-3 carve-out,
 and loop dispatch/exit-funnel/merge-gate summary.
 
+v0.22.0 added the Phase 7 **forge adapter** — GitHub / Azure DevOps / GitLab / hand-over; Phase 7 is never deleted from an install.
+
 Running `/setup` in a target project compiles the template — along with the subagents
 and skills — into the native format of each targeted harness (Claude Code, Cursor,
 GitHub Copilot, OpenAI Codex). See [`README.md`](README.md) for install steps,
@@ -86,7 +88,9 @@ the adopted hardening patterns,
 [`docs/research-harness-design-upgrade.md`](docs/research-harness-design-upgrade.md) for
 the v0.18.0 evaluator-vocabulary + contracts study,
 [`docs/research-autonomous-escalation.md`](docs/research-autonomous-escalation.md) for
-the v0.20.0 continuation-ladder study, and
+the v0.20.0 continuation-ladder study,
+[`docs/research-forge-adapter-support.md`](docs/research-forge-adapter-support.md) for
+the forge-adapter study, and
 [`docs/design-parallel-dispatch.md`](docs/design-parallel-dispatch.md) for the
 verdict-gated design for WIP-limited parallel dispatch in the autonomous loop (partially
 shipped — §1/§2/§5-supervision (v0.11.0); §3.2 (parts 1-3 v0.10.0, part 4 v0.12.0);

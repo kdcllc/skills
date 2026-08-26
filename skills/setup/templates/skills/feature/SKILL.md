@@ -222,7 +222,8 @@ documentation-complete until the doc audit returns APPROVED.
 Read `{{IDE_DIR}}/skills/ship-pr/SKILL.md` and execute that workflow in this
 session: analyze the branch's commits and diff, draft the PR (executive summary +
 technical breakdown), **show the draft and wait for the user's approval**, then push
-if needed and create the PR with `gh`. Report the PR URL as the final deliverable.
+if needed. The ship-pr skill's forge adapter creates the PR/MR or hands over.
+Report the PR URL or hand-over artifact as the final deliverable.
 Skip this phase only if the work happened directly on the default branch (then say
 so) or the user declines a PR.
 

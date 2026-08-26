@@ -342,13 +342,13 @@ else
 fi
 
 # ===========================================================================
-# 12. VERSION 0.21.0, README version prose, no five-subagent phrasing.
+# 12. VERSION 0.22.0, README version prose, no five-subagent phrasing.
 # ===========================================================================
 check12_ok=1
-if [[ ! -f "$VERSION_FILE" ]] || [[ "$(cat "$VERSION_FILE")" != "0.21.0" ]]; then
+if [[ ! -f "$VERSION_FILE" ]] || [[ "$(cat "$VERSION_FILE")" != "0.22.0" ]]; then
   check12_ok=0
 fi
-if ! grep -q '0\.21\.0' "$ROOT_README" 2>/dev/null; then
+if ! grep -q '0\.22\.0' "$ROOT_README" 2>/dev/null; then
   check12_ok=0
 fi
 if rg -q 'five subagents' "$ROOT_README" "$SETUP_SKILL" 2>/dev/null; then
@@ -358,9 +358,9 @@ if ! grep -qF 'six subagents' "$SETUP_SKILL" 2>/dev/null; then
   check12_ok=0
 fi
 if [[ $check12_ok -eq 1 ]]; then
-  report PASS "VERSION 0.21.0, README version prose, no five-subagent phrasing in README or setup SKILL"
+  report PASS "VERSION 0.22.0, README version prose, no five-subagent phrasing in README or setup SKILL"
 else
-  report FAIL "VERSION 0.21.0, README version prose, no five-subagent phrasing in README or setup SKILL"
+  report FAIL "VERSION 0.22.0, README version prose, no five-subagent phrasing in README or setup SKILL"
 fi
 
 echo

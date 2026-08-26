@@ -18,6 +18,13 @@ source, unverified · 💬 = blog/secondary, unverified.
 > `judge` → `evaluator` rename, per-task contracts, and evaluator hardening (shipped
 > v0.18.0: phases 0–2); live QA, frontend-design routing, and the simplification policy
 > follow as separate goals.
+>
+> **See also**: [research-forge-adapter-support.md](research-forge-adapter-support.md)
+> (2026-08-26) — forge-adapter study for Phase 7 delivery (Azure DevOps via
+> `az repos pr`, GitLab via `glab`, no-forge hand-over fallback), multi-remote
+> default-branch resolution, plus verification of the v0.20.0 install-feedback claims
+> (single-family model rotation, path-scoped rules vs subagents). Implementation
+> pending.
 
 ---
 

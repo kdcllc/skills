@@ -639,25 +639,25 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 107. skills/setup/VERSION is exactly 0.21.0; README.md documents 0.21.0
+# 107. skills/setup/VERSION is exactly 0.22.0; README.md documents 0.22.0
 #      plus TypeScript, Python, and the 1000-install floor.
 #      NOTE: the expected version is hardcoded (not derived from VERSION_FILE)
 #      so this assertion still catches a wrong VERSION file, not just README
 #      drift -- assertion 110 is the mutation control proving that non-
-#      vacuity. The next version bump must update both 0.21.0 literals below.
+#      vacuity. The next version bump must update both 0.22.0 literals below.
 # ---------------------------------------------------------------------------
 _107_version_exact=0
-[[ "$(tr -d '[:space:]' < "$VERSION_FILE")" == "0.21.0" ]] && _107_version_exact=1
+[[ "$(tr -d '[:space:]' < "$VERSION_FILE")" == "0.22.0" ]] && _107_version_exact=1
 _107_readme_version=0; _107_readme_ts=0; _107_readme_py=0; _107_readme_1000=0
-grep -qF -- '0.21.0' "$README_MD" && _107_readme_version=1
+grep -qF -- '0.22.0' "$README_MD" && _107_readme_version=1
 grep -qF -- 'TypeScript' "$README_MD" && _107_readme_ts=1
 grep -qF -- 'Python' "$README_MD" && _107_readme_py=1
 grep -qF -- '1000+' "$README_MD" && _107_readme_1000=1
 if [[ "$_107_version_exact" -eq 1 && "$_107_readme_version" -eq 1 && "$_107_readme_ts" -eq 1 \
       && "$_107_readme_py" -eq 1 && "$_107_readme_1000" -eq 1 ]]; then
-  report PASS "107: skills/setup/VERSION is exactly 0.21.0; README.md documents 0.21.0 + TypeScript + Python + 1000"
+  report PASS "107: skills/setup/VERSION is exactly 0.22.0; README.md documents 0.22.0 + TypeScript + Python + 1000"
 else
-  report FAIL "107: VERSION==0.21.0 + README claims" \
+  report FAIL "107: VERSION==0.22.0 + README claims" \
     "version=$_107_version_exact readme_version=$_107_readme_version ts=$_107_readme_ts py=$_107_readme_py 1000=$_107_readme_1000"
 fi
 
@@ -701,15 +701,15 @@ fi
 
 # ---------------------------------------------------------------------------
 # 110. Mutation ($TMP-only VERSION file): a file containing 0.16.0 fails the
-#      ==0.21.0 predicate; the real skills/setup/VERSION passes.
+#      ==0.22.0 predicate; the real skills/setup/VERSION passes.
 # ---------------------------------------------------------------------------
 _110_bad="$TMP/VERSION_bad"
 printf '0.16.0\n' > "$_110_bad"
 _110_bad_fails=0; _110_real_passes=0
-[[ "$(tr -d '[:space:]' < "$_110_bad")" == "0.21.0" ]] || _110_bad_fails=1
-[[ "$(tr -d '[:space:]' < "$VERSION_FILE")" == "0.21.0" ]] && _110_real_passes=1
+[[ "$(tr -d '[:space:]' < "$_110_bad")" == "0.22.0" ]] || _110_bad_fails=1
+[[ "$(tr -d '[:space:]' < "$VERSION_FILE")" == "0.22.0" ]] && _110_real_passes=1
 if [[ "$_110_bad_fails" -eq 1 && "$_110_real_passes" -eq 1 ]]; then
-  report PASS "110: mutation -- a temp VERSION file containing 0.16.0 fails the ==0.21.0 predicate; the real skills/setup/VERSION passes"
+  report PASS "110: mutation -- a temp VERSION file containing 0.16.0 fails the ==0.22.0 predicate; the real skills/setup/VERSION passes"
 else
   report FAIL "110: mutation (VERSION 0.16.0)" \
     "bad_fails=$_110_bad_fails real_passes=$_110_real_passes"

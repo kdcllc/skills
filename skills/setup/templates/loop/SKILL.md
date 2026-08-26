@@ -158,7 +158,7 @@ Follow the `feature` skill's Phases 2–6 with two substitutions: **the story's
 acceptance criteria replace Phase 1 alignment** (there is no user to ask), and
 **Phase 7 (pull request) is deferred to the end of the whole run** — the loop never
 pushes; a human (or an explicitly enabled final step) runs `ship-pr` once to
-ship the branch as a single PR. If the story is too ambiguous to derive a goal from,
+draft and create the PR/MR on the project's forge, or hand over. If the story is too ambiguous to derive a goal from,
 treat that as a blocking issue (step 4). If the derived goal's tasks need to write
 outside the story's declared `writes:` set, that is also a blocking issue (step
 4) — escalate it; never silently widen scope past what was declared.

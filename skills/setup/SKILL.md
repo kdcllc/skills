@@ -166,6 +166,8 @@ Establish from the code (do not ask what you can read):
 - User-facing surfaces: CLIs, API endpoints, web UI, library entry points
 - Existing skills/agents/rules, per-directory `AGENTS.md`/`CLAUDE.md`, canonical docs
 - External services the code talks to (these must be mocked in tests)
+- Enumerate `git remote -v` and classify each remote per the forge taxonomy in
+  `templates/ORCHESTRATION.md` § Forge adapter (Phase 7 delivery)
 
 ## Step 3 — Interview the user
 
@@ -184,9 +186,10 @@ Ask (multiple-choice where possible) only what you could not infer:
 6. **Autonomous loop** — wanted? If yes: confirm sandbox strategy (worktree/container),
    max iterations, and that commits stay local (no auto-push) unless they say otherwise.
    If no: skip `templates/loop/` and delete the Autonomous Loop section.
-7. **Pull-request workflow (Phase 7)** — confirm the project lives on GitHub and `gh`
-   is available. If not, skip the `ship-pr` skill and delete Phase 7 from the
-   emitted ORCHESTRATION.md.
+7. **Delivery forge (Phase 7)** — present the detected forge and the chosen remote.
+   Confirm or override with any of `github` / `azuredevops` / `gitlab` / `none`
+   (plus `forgeHost` for self-hosted). The `ship-pr` skill is always emitted;
+   `none` means the draft + hand-over branch.
 8. **Ground-truth doc** — the committed reference file for domain decisions.
 
 ## Step 4 — Resolve the canonical templates
@@ -288,7 +291,7 @@ branching).
      "kitVersion": "<contents of VERSION>",
      "installedAt": "<ISO date>",
      "harnesses": ["claude-code", "..."],
-     "options": { "research": true, "loop": false, "greenfield": false },
+     "options": { "research": true, "loop": false, "greenfield": false, "forge": "<detected>" },
      "files": { "<emitted path>": "<sha256>" },
      "seedFiles": ["_goals/backlog.md"]
    }
@@ -296,6 +299,9 @@ branching).
    `options.greenfield` is `true` **only** when Step 2a's accept path ran and the user
    confirmed a tree; on the decline path, or when Step 2a was skipped as not sparse, it
    is `false`.
+   `options.forge` is one of `github`, `azuredevops`, `gitlab`, or `none`.
+   Optional `"forgeHost"` maps a self-hosted host. A manifest override beats detection
+   at ship-pr runtime.
    `seedFiles` lists the emitted paths that are seeds (today exactly one): their hash
    is recorded in `files` at emit time and is EXEMPT from the upgrade diff-confirm
    flow. Semantics:
@@ -315,6 +321,11 @@ If `orchestration-kit.manifest.json` exists: compare its `kitVersion` to `VERSIO
 diff manifest hashes against the working tree to find user-modified files, regenerate
 into the scratch copy, and show the user a diff for any file they modified before
 overwriting it. Unmodified files update silently. Update the manifest last.
+
+On every re-run, re-detect the forge from the current remotes. If detection agrees
+with the manifest, refresh silently. If it disagrees (remote migrated, e.g.
+GitHub → Azure DevOps), surface both values and ask — never silently flip, never
+keep a stale value unmentioned.
 
 **Stale-file pruning**: after regenerating the new emit set, compare it against the
 previous manifest's `files` keys. A key present in the previous manifest but absent

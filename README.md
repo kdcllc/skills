@@ -2,7 +2,7 @@
 
 [![skills.sh installs](https://skills.sh/b/kdcllc/skills)](https://skills.sh/kdcllc/skills)
 
-> Kit version: **0.21.0** (`skills/setup/VERSION`) · The install badge above applies
+> Kit version: **0.22.0** (`skills/setup/VERSION`) · The install badge above applies
 > only if the repo is made public: [skills.sh](https://www.skills.sh/) filters private
 > repos out of its public index by design
 > ([vercel-labs/skills#381](https://github.com/vercel-labs/skills/issues/381)), so it
@@ -43,7 +43,8 @@ What an install gives a project:
   destructive/security/infra, and hard guards. v0.21.0 synced the canonical architecture
   template to shipped v0.12–v0.20 behavior — research handoff at Phase 3, the escalation
   **Ladder** line, closer-task rung-3 carve-out, and loop dispatch/exit-funnel/merge-gate
-  summary.
+  summary. v0.22.0 added the Phase 7 **forge adapter** — GitHub / Azure DevOps / GitLab / hand-over;
+  Phase 7 is never deleted from an install.
 - A **staged test ladder** (`test-ladder`): new tests → impacted tests mid-cycle; full
   suites at cycle end — in a goal's designated closer task when it has one, and in the
   orchestrator's Phase 5 Quality Checks.
@@ -160,7 +161,7 @@ projects are unchanged:** non-sparse repos skip the greenfield gate entirely.
 Then, in a session inside that project, run `/setup`. It detects which harnesses to
 target (multiple is normal), inspects the repo (stack, test commands, layers,
 user-facing surfaces), interviews you for what it can't infer (project name, model
-tiers, QA surfaces, research workflow, autonomous loop, GitHub/`gh` availability), and
+tiers, QA surfaces, research workflow, autonomous loop, delivery forge), and
 emits:
 
 | Generated | Purpose |
@@ -173,7 +174,7 @@ emits:
 | `skills/{goal,task,qa}-criteria` | Evaluation checklists (goal evaluation includes devil's advocate) |
 | `skills/test-ladder` | New → impacted tests mid-cycle; full suites only at cycle end |
 | `skills/align-docs` | Phase 6: evaluator-gated sync of all docs to shipped code |
-| `skills/ship-pr` | Phase 7: approval-gated PR drafted from branch commits |
+| `skills/ship-pr` | Phase 7: approval-gated forge delivery (GitHub / Azure DevOps / GitLab / hand-over) |
 | `skills/auto-loop` + `_loop/` + `_goals/backlog.md` | Autonomous loop with structural guards (optional) |
 | `ORCHESTRATION.md` | The architecture doc, filled in for the project |
 | `orchestration-kit.manifest.json` | Kit version + file hashes, enabling clean upgrades |

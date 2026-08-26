@@ -125,7 +125,7 @@ ON subagent invocation failure:
 | `qa-criteria` | Reference | Criteria for user-facing QA evaluation |
 | `test-ladder` | Supporting | New tests → impacted tests mid-cycle; full suites (rung 3) only at cycle end |
 | `align-docs` | Coordinator | Phase 6: evaluator-gated sync of all docs to shipped code (docs-only) |
-| `ship-pr` | Delivery | Phase 7: draft + create the GitHub PR from branch commits (approval-gated) |
+| `ship-pr` | Delivery | Phase 7: draft + create the PR/MR on the project's forge, or hand over (approval-gated) |
 <!-- BOOTSTRAP: append one row per project domain skill (the canonical knowledge base
      for the problem domain) and per supporting skill (TDD workflow, test ladder,
      smoke testing, frontend rules, visual QA, ...). Only list skills that exist. -->
@@ -327,10 +327,58 @@ PHASE 7: PULL REQUEST (Approval-Gated)
     Draft PR (exec summary + technical breakdown)
            │
            ▼
-    Show draft ──► USER APPROVES ──► push (if needed) ──► gh pr create ──► URL
+    Show draft ──► USER APPROVES ──► push (if needed) ──► create PR/MR or hand over ──► URL
 
     INVARIANT: The PR is never created before the user approves the draft.
 ```
+
+### Forge adapter (Phase 7 delivery)
+
+Phase 7 (`ship-pr`) classifies git remotes at invocation time and branches on the forge. **Phase 7 is never deleted from an install** — a repo with no detected forge takes the `none` branch (draft + human hand-over), not a removed phase.
+
+**Taxonomy.** Four values; each names its create mechanism:
+
+| Value | Create mechanism |
+|-------|------------------|
+| `github` | `gh pr create` |
+| `azuredevops` | `az repos pr create` |
+| `gitlab` | `glab mr create` |
+| `none` | draft + hand-over; never creates |
+
+**Detection.** Classify the chosen remote's URL by domain. Host patterns live only in this table:
+
+| Host pattern | Forge |
+|--------------|-------|
+| `github.com` | `github` |
+| `dev.azure.com`, `ssh.dev.azure.com`, `*.visualstudio.com`, `vs-ssh.visualstudio.com` | `azuredevops` |
+| `gitlab.com` | `gitlab` |
+
+The `_git` path segment is the strong signal on Azure DevOps URLs. Anything else classifies to `none` unless overridden. Self-hosted GitLab, GHE (GitHub Enterprise), and on-prem Azure DevOps Server are pattern-undetectable — override-only.
+
+**Remote selection.** Choose the PR-target remote with this procedure:
+
+1. Classify every remote's URL per the taxonomy.
+2. A candidate is a remote that classifies to a known forge (`github`, `azuredevops`, `gitlab`). `none`-classified remotes (for example a deploy remote) are NOT candidates and can never trigger disagreement.
+3. If candidates span two or more different forges, stop and ask the human — never pick silently.
+4. Otherwise pick the PR-target remote by precedence `upstream` → a remote named for its forge (`github`, `azuredevops`/`azure`, `gitlab`) → `origin` → remaining candidates in `git remote` listed order.
+5. Zero candidates → the `none` branch unless the manifest override names a forge.
+
+**PR-target remote vs push remote.** Forge classification and base-branch resolution use the chosen PR-target remote. `git push` uses the branch's existing tracking remote if set, else `origin`. A GitHub fork setup (`origin` = fork, `upstream` = parent) keeps pushing to the fork while targeting the parent, exactly as `gh` behaves.
+
+**Override.** In `orchestration-kit.manifest.json`, `options.forge` (one of the four taxonomy values) and optional `options.forgeHost` (self-hosted host mapping) beat detection. The adapter never writes `git config`.
+
+**Base-branch resolution.** Resolve always against the chosen PR-target remote. Name that remote explicitly in every base-resolution command (`ls-remote`/`fetch`/`log`/`diff`) — never a bare hardcoded `origin` in those templates.
+Primary resolver: `git ls-remote --symref <remote> HEAD`.
+Offline fallback: the cached `refs/remotes/<remote>/HEAD` symref (repair with `git remote set-head <remote> -a`).
+On the `github` branch, `gh repo view` remains an accepted resolver.
+
+**Stop and ask** when:
+
+- (a) the chosen remote's HEAD is unresolvable (cached symref unset AND `ls-remote` fails or is auth-blocked);
+- (b) two candidate remotes resolve to different forges;
+- (c) the resolved base differs from the branch the current commits diverged from.
+
+The human-approval invariant (draft → user approves → create/hand over) holds in all four branches. On-prem Azure DevOps Server is routed to the `none` branch (Microsoft: `az repos` CLI is Services-only).
 
 ### Execution Order for {{PROJECT_NAME}}
 
@@ -551,7 +599,7 @@ backstop.
   The contract gate is a separate invariant: implementation is ONLY dispatched once both `signoff.worker.agreed` and `signoff.evaluator.agreed` are `true`.
 - **Phase 5**: Audit loop ONLY exits to Quality Checks via an APPROVED verdict. Remediations without re-audit are forbidden.
 - **Phase 6**: A doc is ONLY complete after the evaluator returns PASS; the doc set ONLY ships after the final doc audit returns APPROVED. `_research/`, `_goals/`, and code are never touched.
-- **Phase 7**: The PR is ONLY created after the user approves the drafted title and body.
+- **Phase 7**: The PR/MR is ONLY created, or the hand-over printed, after the user approves the drafted title and body.
 
 ### Escalation Format
 
@@ -627,7 +675,7 @@ Next iteration (fresh context)
 | Docs | align-docs (Phase 6) runs per story — doc updates land in the story's commit |
 | Protected paths | the loop may not modify `_loop/`, kit agents/skills, the manifest, or `.gitattributes` — the loop driver (`loop.sh`/`loop.ps1`) reverts the iteration and stops (exit 4) |
 | Memory gates | `_goals/LEARNINGS.md` ≥ 15 KB → compact; `_goals/ESCALATIONS.md` ≥ 20 KB → archive resolved entries |
-| Shipping | the loop never pushes; at run end, `ship-pr` (Phase 7) ships the branch as ONE PR, with the user approving the draft |
+| Shipping | the loop never pushes; at run end, `ship-pr` (Phase 7) drafts and creates the PR/MR on the project's forge, or hand over, with the user approving the draft |
 | Sandbox | run in a worktree/container with minimal credentials; never skip permission prompts outside a sandbox |
 
 **Exit funnel** (driver-aggregated across slots; precedence **4>3>2>1>0** — exit 4 and
@@ -731,7 +779,7 @@ session.
 /feature            - Start a new feature implementation (Phases 1–7)
 /research           - Research → Plan workflow for a domain topic
 /align-docs         - Phase 6 standalone: sync docs to shipped code
-/ship-pr    - Phase 7 standalone: draft + create the PR
+/ship-pr    - Phase 7 standalone: draft + create the PR/MR on the project's forge, or hand over
 /test-ladder - Test-rung rules (also routed into every impl/test task)
 ```
 
@@ -796,7 +844,8 @@ The orchestrator maintains this state throughout execution:
 ### Phase 7: Pull Request (gated on user approval)
 - [ ] PR title + body drafted from branch commits
 - [ ] User approved the draft
-- [ ] PR created/updated — URL: [link]
+- [ ] PR/MR created/updated on the project's forge, or hand-over printed — URL or artifact: [link]
+See ### Forge adapter (Phase 7 delivery).
 ```
 
 ---
@@ -814,4 +863,4 @@ The orchestrator maintains this state throughout execution:
 9. **Tests never touch live services** - All external/network access is mocked
 10. **Staged test ladder** - New tests, then impacted tests; full suites only after all cycle changes are applied
 11. **Docs ship with the code** - Phase 6 aligns every doc to shipped behavior (docs-only, evaluator-gated) before the work is done
-12. **Delivery is a PR, approved by a human** - Phase 7 drafts the PR from the branch's commits; it is never created without user approval
+12. **Delivery is a PR/MR on the project's forge, or a hand-over, approved by a human** - Phase 7 drafts from the branch's commits; it is never created or handed over without user approval
