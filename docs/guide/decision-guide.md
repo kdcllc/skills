@@ -4,7 +4,7 @@
 
 ## Four ways to work
 
-The kit ships three orchestrated workflows plus the option to edit without invoking any of them. All orchestrated paths share the same architecture: an orchestrator coordinates, fresh-context workers execute, and skeptical evaluators gate progression. As of v0.20.0, the canonical behavior is what `skills/setup/templates/` emits via `/setup`; this document compares modes only — mechanics of each workflow live in the linked guides below.
+The kit ships three orchestrated workflows plus the option to edit without invoking any of them. All orchestrated paths share the same architecture: an orchestrator coordinates, fresh-context workers execute, and skeptical evaluators gate progression. As of v0.21.0, the canonical behavior is what `skills/setup/templates/` emits via `/setup`; this document compares modes only — mechanics of each workflow live in the linked guides below.
 
 | Mode | When to choose it | Deep dive |
 |------|-------------------|-----------|
@@ -140,5 +140,5 @@ Claims in this document trace to these canonical files (paths relative to `docs/
 - [`../../skills/setup/templates/skills/research/SKILL.md`](../../skills/setup/templates/skills/research/SKILL.md) — `/research` purpose (external-domain investigation before implementation), report → goal handoff at feature Phase 3
 - [`../../skills/setup/templates/loop/SKILL.md`](../../skills/setup/templates/loop/SKILL.md) — one story per iteration, backlog selection, ambiguous-story blocking, feature Phases 2–6 substitution
 - [`../../skills/setup/templates/ORCHESTRATION.md`](../../skills/setup/templates/ORCHESTRATION.md) — architecture: fresh context, evaluator gates, autonomous loop guards, mandatory re-evaluate invariants
-- [`../../README.md`](../../README.md) — kit overview, feature list phrasing, workflow summaries as of v0.20.0
+- [`../../README.md`](../../README.md) — kit overview, feature list phrasing, workflow summaries as of v0.21.0
 - [`../research-multi-harness-upgrade.md`](../research-multi-harness-upgrade.md) — example research artifact grounding external harness claims

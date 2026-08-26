@@ -322,12 +322,12 @@ else
   report FAIL "ORCHESTRATION.md: mentions v0.19.0"
 fi
 
-# 7d. skills/setup/VERSION equals exactly 0.20.0 (whole-file compare).
-if [[ -f "$VERSION_FILE" ]] && [[ "$(cat "$VERSION_FILE")" == "0.20.0" ]]; then
-  report PASS "skills/setup/VERSION equals exactly 0.20.0"
+# 7d. skills/setup/VERSION equals exactly 0.21.0 (whole-file compare).
+if [[ -f "$VERSION_FILE" ]] && [[ "$(cat "$VERSION_FILE")" == "0.21.0" ]]; then
+  report PASS "skills/setup/VERSION equals exactly 0.21.0"
 else
   version_contents="$(cat "$VERSION_FILE" 2>/dev/null)"
-  report FAIL "skills/setup/VERSION equals exactly 0.20.0" \
+  report FAIL "skills/setup/VERSION equals exactly 0.21.0" \
     "contents: '${version_contents:-<missing>}'"
 fi
 

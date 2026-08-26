@@ -2,7 +2,7 @@
 
 [![skills.sh installs](https://skills.sh/b/kdcllc/skills)](https://skills.sh/kdcllc/skills)
 
-> Kit version: **0.20.0** (`skills/setup/VERSION`) · The install badge above applies
+> Kit version: **0.21.0** (`skills/setup/VERSION`) · The install badge above applies
 > only if the repo is made public: [skills.sh](https://www.skills.sh/) filters private
 > repos out of its public index by design
 > ([vercel-labs/skills#381](https://github.com/vercel-labs/skills/issues/381)), so it
@@ -40,7 +40,10 @@ What an install gives a project:
   added the Phase 4 **continuation ladder** after fix-cycle exhaustion — rung 5
   arbitration, rung 4 diagnosis-first (`diagnostician`), rung 6 decomposition + selective
   retry — with a closed failure-class taxonomy, always-escalate bypass for
-  destructive/security/infra, and hard guards.
+  destructive/security/infra, and hard guards. v0.21.0 synced the canonical architecture
+  template to shipped v0.12–v0.20 behavior — research handoff at Phase 3, the escalation
+  **Ladder** line, closer-task rung-3 carve-out, and loop dispatch/exit-funnel/merge-gate
+  summary.
 - A **staged test ladder** (`test-ladder`): new tests → impacted tests mid-cycle; full
   suites at cycle end — in a goal's designated closer task when it has one, and in the
   orchestrator's Phase 5 Quality Checks.
@@ -69,7 +72,7 @@ Developer guide: [docs/guide/README.md](docs/guide/README.md).
 | [feature-workflow.md](docs/guide/feature-workflow.md) | Seven phases in depth, contract gate, fix-cycle rotation, escalation, orchestration log, condensed worked example |
 | [research-workflow.md](docs/guide/research-workflow.md) | Why research precedes implementation, prompt/report artifacts, ingestion into a goal, when to skip |
 | [autonomous-loop.md](docs/guide/autonomous-loop.md) | Drivers, backlog stories, iteration lifecycle, circuit breakers, slots/worktrees, exit codes, quarantine, safety model |
-| [agents-and-models.md](docs/guide/agents-and-models.md) | Five subagent roles and boundaries, model tiers, `models.map.md` anatomy, fallback chains, harness caveats |
+| [agents-and-models.md](docs/guide/agents-and-models.md) | Six subagent roles and boundaries, model tiers, `models.map.md` anatomy, fallback chains, harness caveats |
 | [evaluation-system.md](docs/guide/evaluation-system.md) | Verdict vocabulary, confidence ladder, anti-fabrication, devil's advocate, pre-code contracts, `eval_depth`, test ladder, orchestration log audit trail |
 | [contributing.md](docs/guide/contributing.md) | Repo anatomy (canonical vs instance vs generated), self-install dogfood loop, templates/emitters, harness matrix, VERSION + manifest + upgrades, test harness |
 

@@ -106,7 +106,7 @@ When the autonomous loop is enabled, all harnesses share single-copy `_loop/` dr
 
 `/setup` writes `orchestration-kit.manifest.json` at the project root. The manifest records:
 
-- **`kitVersion`** — contents of [`skills/setup/VERSION`](../../skills/setup/VERSION) at emit time (currently `0.20.0`)
+- **`kitVersion`** — contents of [`skills/setup/VERSION`](../../skills/setup/VERSION) at emit time (currently `0.21.0`)
 - **`files`** — map of every emitted path to its SHA-256 hash
 - **`seedFiles`** — paths that are seeds, not managed content (today `_goals/backlog.md`)
 - **`harnesses`**, **`options`**, **`installedAt`** — which harnesses were targeted and which optional features were enabled
@@ -138,4 +138,4 @@ With `/setup` complete, your project has agents, skills, an architecture doc, an
 - [`skills/setup/emitters/copilot.md`](../../skills/setup/emitters/copilot.md) — GitHub Copilot emit destinations
 - [`skills/setup/emitters/codex.md`](../../skills/setup/emitters/codex.md) — OpenAI Codex emit destinations
 - `orchestration-kit.manifest.json` — example manifest shape (`kitVersion`, `files`, `seedFiles`)
-- [`skills/setup/VERSION`](../../skills/setup/VERSION) — kit version anchor (`0.20.0`)
+- [`skills/setup/VERSION`](../../skills/setup/VERSION) — kit version anchor (`0.21.0`)

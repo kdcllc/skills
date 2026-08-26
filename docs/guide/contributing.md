@@ -135,7 +135,7 @@ The Cursor emitter, as of v0.19.0, is order-independent relative to Claude Code 
 
 ### VERSION
 
-[`skills/setup/VERSION`](../../skills/setup/VERSION) holds the kit version (as of v0.20.0, **0.20.0**). Bump it when changing kit behavior that installs should pick up. Docs-only changes in this repo do not require a VERSION bump.
+[`skills/setup/VERSION`](../../skills/setup/VERSION) holds the kit version (as of v0.21.0, **0.21.0**). Bump it when changing kit behavior that installs should pick up. Docs-only changes in this repo do not require a VERSION bump.
 
 ### Manifest shape
 
@@ -182,7 +182,7 @@ When `_loop/` is absent (fresh clone before `/setup`), loop-instance assertions 
 
 ### Standalone template guards
 
-Three tracked structural guards live under `tests/templates/` — [`cursor-isolation.sh`](../../tests/templates/cursor-isolation.sh), [`invocation-flags.sh`](../../tests/templates/invocation-flags.sh), and [`escalation-ladder.sh`](../../tests/templates/escalation-ladder.sh) (added with the v0.20.0 continuation-ladder goal). The escalation-ladder guard locks the Phase 4 continuation-ladder subsection, failure-class taxonomy identity across canonical templates, diagnostician template and dual-instance emission wiring, and `{{MODEL_FRONTIER_ALT_FAMILY}}` documentation. Run any guard directly with `bash tests/templates/<name>.sh`; they are not invoked by `tests/loop-harness/run.sh`.
+Four tracked structural guards live under `tests/templates/` — [`cursor-isolation.sh`](../../tests/templates/cursor-isolation.sh), [`invocation-flags.sh`](../../tests/templates/invocation-flags.sh), [`escalation-ladder.sh`](../../tests/templates/escalation-ladder.sh) (added with the v0.20.0 continuation-ladder goal), and [`template-currency.sh`](../../tests/templates/template-currency.sh) (added with the v0.21.0 template-currency goal; locks the six template-currency claims — research handoff at Phase 3, escalation **Ladder** line, closer-task rung-3 carve-out, loop dispatch/exit-funnel/merge-gate — with SKIP-when-absent instance-mirror assertions). The escalation-ladder guard locks the Phase 4 continuation-ladder subsection, failure-class taxonomy identity across canonical templates, diagnostician template and dual-instance emission wiring, and `{{MODEL_FRONTIER_ALT_FAMILY}}` documentation. Run any guard directly with `bash tests/templates/<name>.sh`; they are not invoked by `tests/loop-harness/run.sh`.
 
 ### Documentation suite checker
 
@@ -218,7 +218,7 @@ Install and user-side usage topics belong in [getting-started.md](getting-starte
 
 - [`docs/guide/README.md`](README.md) — frozen document map, Mermaid/link/opener conventions, glossary
 - [`README.md`](../../README.md) — layout tree, self-install section, upgrading, editing templates
-- [`ORCHESTRATION.md`](../../ORCHESTRATION.md) — root architecture pointer and v0.18.0–v0.20.0 capability summary
+- [`ORCHESTRATION.md`](../../ORCHESTRATION.md) — root architecture pointer and v0.18.0–v0.21.0 capability summary
 - [`.gitignore`](../../.gitignore) — instance paths gitignored in this repo
 - [`skills/setup/SKILL.md`](../../skills/setup/SKILL.md) — `/setup` workflow, placeholder reference, manifest and upgrade semantics
 - [`skills/setup/emitters/claude-code.md`](../../skills/setup/emitters/claude-code.md) — Claude Code emission map

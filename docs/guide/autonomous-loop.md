@@ -66,7 +66,7 @@ These guards are **structural** — enforced by `loop.sh` / `loop.ps1` and the `
 | **Circuit breaker (CB1 / CB2)** | **Per slot:** retire after **3 consecutive no-commit reaps** (CB1) or **5 identical failure signatures** (CB2). The run **continues** while other slots remain active. When **every slot is retired**, the run stops — exit **3** if any retirement was signature-based (CB2), else exit **2**. |
 | **Model breaker** | CLOSED/OPEN/HALF-OPEN on anchored rate-limit detection; 600s cooldown, 2 successes to close; falls down the loop model chain. OPEN sleeps instead of hammering; rate-limited passes are CB1-exempt. State: `_goals/breaker-state.json`. |
 | **Memory size gates** | After integrate, the driver **detects** breaches and prints a deferral — it never compacts or archives. Thresholds match the guard table: `_goals/LEARNINGS.md` ≥ **15 KB** (compact) and `_goals/ESCALATIONS.md` ≥ **20 KB** (archive resolved entries). Compaction and archival happen in a **manual** `auto-loop` iteration only; driver-dispatched slots never run these gates. |
-| **Merge gate** | Evaluator PASS + green ladder rungs **1–2** before any commit; rung **3** at run end. |
+| **Merge gate** | Evaluator PASS + green ladder rungs **1–2** before any commit; rung **3** per story after that story's Phase 5 audit, before that story's commit. |
 | **PR gate / shipping** | The loop **never pushes**. At run end, **`ship-pr` (Phase 7)** ships the branch as **one PR**, with the user approving the draft. |
 | **Per-story attempt cap** | **3** attempts, then `blocked: true` plus an escalation entry. |
 | **Sandbox** | Run in a worktree/container with minimal credentials; never skip permission prompts outside a sandbox. |

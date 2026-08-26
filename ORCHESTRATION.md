@@ -73,6 +73,10 @@ decomposition + selective retry — with a closed failure-class taxonomy, always
 bypass for destructive/security/infra, and hard guards (attempt cap after cycle 3, repeated
 failure signature, orchestration-log transitions).
 
+v0.21.0 synced the canonical architecture template to shipped v0.12–v0.20 behavior —
+research handoff at Phase 3, the escalation **Ladder** line, closer-task rung-3 carve-out,
+and loop dispatch/exit-funnel/merge-gate summary.
+
 Running `/setup` in a target project compiles the template — along with the subagents
 and skills — into the native format of each targeted harness (Claude Code, Cursor,
 GitHub Copilot, OpenAI Codex). See [`README.md`](README.md) for install steps,

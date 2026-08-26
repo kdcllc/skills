@@ -353,7 +353,9 @@ SEQUENTIAL: {{EXECUTION_LAYERS}}
 
 Per-task and TDD verification follows the `test-ladder` skill: rung 1 (new
 tests) → rung 2 (impacted tests) mid-cycle; rung 3 (every stack's full suite) runs
-**once**, after the audit is APPROVED.
+at cycle end — in the orchestrator's Phase 5 Quality Checks after the audit is APPROVED,
+and additionally in a goal's designated closer task when one exists (a Phase 4 worker
+gate with a written mandate that never replaces Phase 5).
 
 Use only the layers the feature actually touches — most features reuse shared
 infrastructure and add one module plus its interface and tests.
@@ -393,8 +395,7 @@ Phase 4: Low-Level Tasks          → _goals/[goal-name]/ structure
 - `_research/` — working/scratch area for new prompts and raw reports. Promote durable
   findings into {{GROUND_TRUTH_DOC}}.
 
-The output of Phase 4 (`_goals/[goal-name]/`) feeds directly into the `feature` skill's
-Phase 4 execution.
+The output of Phase 4 (`_goals/[goal-name]/`) enters the `feature` skill at Phase 3 (goal evaluation) — it must PASS the evaluator before Phase 4 execution begins.
 
 ---
 
@@ -560,6 +561,7 @@ backstop.
 **Phase**: [current phase]
 **Issue**: [what went wrong]
 **Attempts**: [what was tried]
+**Ladder**: [rungs attempted and their outcomes]
 
 **Options**:
 1. [option with tradeoffs]
@@ -567,6 +569,9 @@ backstop.
 
 **What I need from you**: [specific decision or input]
 ```
+
+For `criteria-defective` escalations (from rung 5 arbitration), state the defective
+criterion **verbatim** in the **Issue** line.
 
 ---
 
@@ -578,6 +583,16 @@ backstop.
 The `auto-loop` skill runs the orchestration flow unattended, **one feature per
 iteration**, pulling work from a backlog instead of Phase 1 user alignment. Each
 iteration is a fresh context; all state lives in files and git.
+
+**Dual-mode dispatch** (see `auto-loop` and the loop driver): in **driver-dispatched**
+runs the driver picks the story, performs `writes:` write-set admission against
+in-flight claims, increments `attempts` at claim time, and integrates via the
+single-writer integrator; dispatched slots never re-select stories, never increment
+`attempts`, and never print the completion sentinel — that sentinel belongs to
+**manual** runs only. Concurrency: `LOOP_SLOTS` > 1 is honored iff `LOOP_WORKTREE=1`
+(default 2, clamped [1,3]).
+
+**Manual-mode view** (human-invoked or non-dispatched `auto-loop`):
 
 ```
 _goals/backlog.md ──► pick highest-priority story with passes: false, attempts < 3
@@ -608,12 +623,20 @@ Next iteration (fresh context)
 | Circuit breaker | per slot: retire after 3 consecutive no-commit reaps or 5 identical failure signatures (run continues); every slot retired stops the run — exit 3 if any signature-retirement, else 2 |
 | Model breaker | CLOSED/OPEN/HALF-OPEN on anchored rate-limit detection; 600s cooldown, 2 successes to close; falls down the loop model chain, omit-pin at chain end; OPEN sleeps instead of hammering; rate-limited passes CB1-exempt |
 | Exit condition | driver-dispatched runs: the driver's own backlog re-scan, gated on zero quarantined branches (exit 0); manual runs: explicit `<promise>COMPLETE</promise>` sentinel — never inferred from prose |
-| Merge gate | evaluator PASS + green ladder rungs 1–2 before any commit; rung 3 at run end |
+| Merge gate | evaluator PASS + green ladder rungs 1–2 before any commit; rung 3 per story after that story's Phase 5 audit, before that story's commit |
 | Docs | align-docs (Phase 6) runs per story — doc updates land in the story's commit |
 | Protected paths | the loop may not modify `_loop/`, kit agents/skills, the manifest, or `.gitattributes` — the loop driver (`loop.sh`/`loop.ps1`) reverts the iteration and stops (exit 4) |
 | Memory gates | `_goals/LEARNINGS.md` ≥ 15 KB → compact; `_goals/ESCALATIONS.md` ≥ 20 KB → archive resolved entries |
 | Shipping | the loop never pushes; at run end, `ship-pr` (Phase 7) ships the branch as ONE PR, with the user approving the draft |
 | Sandbox | run in a worktree/container with minimal credentials; never skip permission prompts outside a sandbox |
+
+**Exit funnel** (driver-aggregated across slots; precedence **4>3>2>1>0** — exit 4 and
+exit 5 short-circuit): **exit 1** = max-iterations reached with eligible stories
+remaining, or drained backlog with quarantined branches retained; **exit 5** = setup or
+integration failure (tracked-instance preflight, missing/unreadable backlog, PROMPT.md
+substitution point, non-fast-forward integration). Quarantine markers
+`.loop-worktrees/QUARANTINE-<branch>.md` (reasons: `mismatch|abnormal|subset|killed`)
+block exit 0 until inspected.
 
 Known failure mode: loops can burn large budgets without converging — prefer more,
 smaller stories (each sized to one context window) and let the circuit breaker stop a
@@ -683,8 +706,9 @@ _loop/{loop.sh,loop.ps1,breaker.sh,breaker.ps1,PROMPT.md}  # Headless loop drive
 | Type check | {{TYPECHECK_COMMAND}} |
 
 Don't invent commands for tools that aren't configured. Tests must mock all external
-service/network access. Do not run rung 3 during Phase 4 tasks or TDD loops — the
-`test-ladder` skill governs which rung runs when. Rung 3 is executed by **spawning
+service/network access. Do not run rung 3 during Phase 4 tasks or TDD loops — except
+in a goal's designated closer task when its task file mandates the full-suite run as
+the closing gate — the `test-ladder` skill governs which rung runs when. Rung 3 is executed by **spawning
 `terminal`** with the command above, never by the orchestrator running it in this
 session.
 

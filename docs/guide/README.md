@@ -132,6 +132,6 @@ Research and design documents linked from this suite (paths relative to `docs/gu
 ## Sources
 
 - [`README.md`](../../README.md) — kit overview, layout, install paths, feature list, model tiers, upgrade story
-- [`ORCHESTRATION.md`](../../ORCHESTRATION.md) — architecture pointer and v0.18.0–v0.20.0 capability summary
+- [`ORCHESTRATION.md`](../../ORCHESTRATION.md) — v0.18.0–v0.21.0 capability summary
 - [`skills/setup/SKILL.md`](../../skills/setup/SKILL.md) — `/setup` workflow, greenfield gate, emit steps, manifest
 - [`skills/setup/templates/ORCHESTRATION.md`](../../skills/setup/templates/ORCHESTRATION.md) — canonical architecture: workflows, agents, evaluation, contracts, test ladder, autonomous loop guards
