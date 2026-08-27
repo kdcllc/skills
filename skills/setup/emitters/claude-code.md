@@ -5,13 +5,16 @@ resolved templates.
 
 ## Emit
 
+Template skills are stored as `SKILL.template.md` so harnesses do not discover them
+in the kit repo; emit them as `SKILL.md`.
+
 | Source (resolved) | Destination |
 |-------------------|-------------|
 | `templates/agents/*.md` | `.claude/agents/*.md` (as-is; `model:` = Claude Code tier IDs/aliases from the model map, `effort:` kept) |
-| `templates/skills/*` | `.claude/skills/*` |
+| `templates/skills/*` | `.claude/skills/*` (full tree copy; rename each `SKILL.template.md` → `SKILL.md`; other files copy through as-is) |
 | `templates/models.map.md` | `.claude/skills/setup-models.map.md` (reference copy) |
 | `templates/ORCHESTRATION.md` | `.claude/ORCHESTRATION.md` |
-| `templates/loop/*` (if loop enabled) | `.claude/skills/auto-loop/SKILL.md`, `_loop/loop.sh` (chmod +x — no-op on Windows, harmless) AND `_loop/loop.ps1`, `_loop/breaker.sh` (chmod +x — no-op on Windows, harmless), `_loop/breaker.ps1`, `_loop/PROMPT.md`, `_goals/backlog.md` (create if missing; never overwrite) |
+| `templates/loop/SKILL.template.md` + other `templates/loop/*` (if loop enabled) | `.claude/skills/auto-loop/SKILL.md`, `_loop/loop.sh` (chmod +x — no-op on Windows, harmless) AND `_loop/loop.ps1`, `_loop/breaker.sh` (chmod +x — no-op on Windows, harmless), `_loop/breaker.ps1`, `_loop/PROMPT.md`, `_goals/backlog.md` (create if missing; never overwrite) |
 
 ## Harness specifics
 

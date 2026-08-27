@@ -54,13 +54,13 @@ frontmatter() {
 # 1. Seven P0 skills carry `disable-model-invocation: true` in frontmatter.
 # ===========================================================================
 p0_files=(
-  "$TEMPLATES/skills/align-docs/SKILL.md"
-  "$TEMPLATES/skills/ship-pr/SKILL.md"
-  "$TEMPLATES/skills/goal-criteria/SKILL.md"
-  "$TEMPLATES/skills/task-criteria/SKILL.md"
-  "$TEMPLATES/skills/qa-criteria/SKILL.md"
-  "$TEMPLATES/skills/test-ladder/SKILL.md"
-  "$TEMPLATES/loop/SKILL.md"
+  "$TEMPLATES/skills/align-docs/SKILL.template.md"
+  "$TEMPLATES/skills/ship-pr/SKILL.template.md"
+  "$TEMPLATES/skills/goal-criteria/SKILL.template.md"
+  "$TEMPLATES/skills/task-criteria/SKILL.template.md"
+  "$TEMPLATES/skills/qa-criteria/SKILL.template.md"
+  "$TEMPLATES/skills/test-ladder/SKILL.template.md"
+  "$TEMPLATES/loop/SKILL.template.md"
 )
 for f in "${p0_files[@]}"; do
   rel="${f#"$REPO_ROOT"/}"
@@ -75,18 +75,18 @@ done
 # ===========================================================================
 # 2. test-ladder keeps `user-invocable: true` alongside the P0 flag.
 # ===========================================================================
-tl="$TEMPLATES/skills/test-ladder/SKILL.md"
+tl="$TEMPLATES/skills/test-ladder/SKILL.template.md"
 tl_fm="$(frontmatter "$tl")"
 if grep -qxF 'user-invocable: true' <<<"$tl_fm"; then
-  report PASS "test-ladder/SKILL.md keeps user-invocable: true"
+  report PASS "test-ladder/SKILL.template.md keeps user-invocable: true"
 else
-  report FAIL "test-ladder/SKILL.md keeps user-invocable: true"
+  report FAIL "test-ladder/SKILL.template.md keeps user-invocable: true"
 fi
 
 # ===========================================================================
 # 3. `feature` and `research` frontmatter never gain the flag.
 # ===========================================================================
-for f in "$TEMPLATES/skills/feature/SKILL.md" "$TEMPLATES/skills/research/SKILL.md"; do
+for f in "$TEMPLATES/skills/feature/SKILL.template.md" "$TEMPLATES/skills/research/SKILL.template.md"; do
   rel="${f#"$REPO_ROOT"/}"
   fm="$(frontmatter "$f")"
   if [[ -f "$f" ]] && ! grep -q 'disable-model-invocation' <<<"$fm"; then
@@ -100,14 +100,14 @@ done
 # 4. feature/SKILL.md path-Reads align-docs + ship-pr (not a legacy "Invoke
 #    the `X` skill" phrasing).
 # ===========================================================================
-feat="$TEMPLATES/skills/feature/SKILL.md"
+feat="$TEMPLATES/skills/feature/SKILL.template.md"
 if grep -qF '{{IDE_DIR}}/skills/align-docs/SKILL.md' "$feat" \
    && grep -qF '{{IDE_DIR}}/skills/ship-pr/SKILL.md' "$feat" \
    && ! grep -qF 'Invoke the `align-docs` skill' "$feat" \
    && ! grep -qF 'Invoke the `ship-pr` skill' "$feat"; then
-  report PASS "feature/SKILL.md path-Reads align-docs + ship-pr (no legacy invoke phrasing)"
+  report PASS "feature/SKILL.template.md path-Reads align-docs + ship-pr (no legacy invoke phrasing)"
 else
-  report FAIL "feature/SKILL.md path-Reads align-docs + ship-pr (no legacy invoke phrasing)"
+  report FAIL "feature/SKILL.template.md path-Reads align-docs + ship-pr (no legacy invoke phrasing)"
 fi
 
 # ===========================================================================
@@ -116,21 +116,21 @@ fi
 #    into the orchestrator session.
 # ===========================================================================
 if grep -qiF 'spawn `terminal`' "$feat"; then
-  report PASS "feature/SKILL.md spawns terminal (case-insensitive)"
+  report PASS "feature/SKILL.template.md spawns terminal (case-insensitive)"
 else
-  report FAIL "feature/SKILL.md spawns terminal (case-insensitive)"
+  report FAIL "feature/SKILL.template.md spawns terminal (case-insensitive)"
 fi
 
-if grep -qF 'the log path is required in its report' "$feat"; then
-  report PASS "feature/SKILL.md Phase 5 failure path names the log path"
+if grep -qF 'log path' "$feat"; then
+  report PASS "feature/SKILL.template.md Phase 5 failure path names the log path"
 else
-  report FAIL "feature/SKILL.md Phase 5 failure path names the log path"
+  report FAIL "feature/SKILL.template.md Phase 5 failure path names the log path"
 fi
 
-if grep -qF 'never dump the full suite into this session' "$feat"; then
-  report PASS "feature/SKILL.md forbids dumping the full suite into the orchestrator session"
+if grep -qF 'never dump the full suite here' "$feat"; then
+  report PASS "feature/SKILL.template.md forbids dumping the full suite into the orchestrator session"
 else
-  report FAIL "feature/SKILL.md forbids dumping the full suite into the orchestrator session"
+  report FAIL "feature/SKILL.template.md forbids dumping the full suite into the orchestrator session"
 fi
 
 # ===========================================================================

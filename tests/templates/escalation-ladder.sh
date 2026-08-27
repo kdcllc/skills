@@ -24,10 +24,15 @@ cd "$REPO_ROOT" || exit 1
 
 TEMPLATES="$REPO_ROOT/skills/setup/templates"
 ORCH_TEMPLATE="$TEMPLATES/ORCHESTRATION.md"
-FEATURE_SKILL="$TEMPLATES/skills/feature/SKILL.md"
+FEATURE_SKILL="$TEMPLATES/skills/feature/SKILL.template.md"
+LADDER_REF="$TEMPLATES/skills/feature/reference/continuation-ladder.md"
+LADDER_CLAUDE="$REPO_ROOT/.claude/skills/feature/reference/continuation-ladder.md"
+LADDER_CURSOR="$REPO_ROOT/.cursor/skills/feature/reference/continuation-ladder.md"
+FEATURE_CLAUDE="$REPO_ROOT/.claude/skills/feature/SKILL.md"
+FEATURE_CURSOR="$REPO_ROOT/.cursor/skills/feature/SKILL.md"
 EVALUATOR="$TEMPLATES/agents/evaluator.md"
 DIAGNOSTICIAN="$TEMPLATES/agents/diagnostician.md"
-TASK_CRITERIA="$TEMPLATES/skills/task-criteria/SKILL.md"
+TASK_CRITERIA="$TEMPLATES/skills/task-criteria/SKILL.template.md"
 MODELS_MAP="$TEMPLATES/models.map.md"
 SETUP_SKILL="$REPO_ROOT/skills/setup/SKILL.md"
 EMITTERS="$REPO_ROOT/skills/setup/emitters"
@@ -264,33 +269,54 @@ else
 fi
 
 # ===========================================================================
-# 8. Feature-skill guard anchors.
+# 8. Continuation-ladder guard anchors in reference file (canonical + instances);
+#    feature skill(s) assert the pointer to reference/continuation-ladder.md.
 # ===========================================================================
 check8_ok=1
-if ! grep -qF '3 additional implementation attempts' "$FEATURE_SKILL" 2>/dev/null; then
-  check8_ok=0
-fi
-if ! grep -qF 'repeated failure signature' "$FEATURE_SKILL" 2>/dev/null; then
-  check8_ok=0
-fi
-if ! grep -q 'remaining budget' "$FEATURE_SKILL" 2>/dev/null; then
-  check8_ok=0
-fi
-if [[ $check8_ok -eq 1 ]] \
-   && ! grep -q 'exceeds the remaining budget' "$FEATURE_SKILL" 2>/dev/null \
-   && ! grep -q 'failing-subtask count against the remaining budget' "$FEATURE_SKILL" 2>/dev/null; then
-  check8_ok=0
+check8_detail=""
+for ladder in "$LADDER_REF" "$LADDER_CLAUDE" "$LADDER_CURSOR"; do
+  rel="${ladder#"$REPO_ROOT"/}"
+  if [[ ! -f "$ladder" ]]; then
+    check8_ok=0
+    check8_detail="missing $rel"
+    break
+  fi
+  grep -qF '3 additional implementation attempts' "$ladder" || { check8_ok=0; check8_detail="$rel: 3-additional-attempts anchor missing"; break; }
+  grep -qF 'repeated failure signature' "$ladder" || { check8_ok=0; check8_detail="$rel: repeated-failure-signature anchor missing"; break; }
+  if ! grep -q 'remaining budget' "$ladder" \
+     && ! grep -q 'exceeds the remaining budget' "$ladder" \
+     && ! grep -q 'failing-subtask count against the remaining budget' "$ladder"; then
+    check8_ok=0
+    check8_detail="$rel: split-vs-budget anchor missing"
+    break
+  fi
+done
+if [[ $check8_ok -eq 1 ]]; then
+  for feat in "$FEATURE_SKILL" "$FEATURE_CLAUDE" "$FEATURE_CURSOR"; do
+    rel="${feat#"$REPO_ROOT"/}"
+    if [[ ! -f "$feat" ]]; then
+      check8_ok=0
+      check8_detail="missing $rel"
+      break
+    fi
+    grep -qF 'reference/continuation-ladder.md' "$feat" || {
+      check8_ok=0
+      check8_detail="$rel: continuation-ladder pointer missing"
+      break
+    }
+  done
 fi
 if [[ $check8_ok -eq 1 ]]; then
-  report PASS "feature-skill guard anchors (3-additional-attempts, repeated-failure-signature, split-vs-budget)"
+  report PASS "continuation-ladder guard anchors in reference file (canonical + instances) and pointer in feature skill(s)"
 else
-  report FAIL "feature-skill guard anchors (3-additional-attempts, repeated-failure-signature, split-vs-budget)"
+  report FAIL "continuation-ladder guard anchors in reference file (canonical + instances) and pointer in feature skill(s)" \
+    "$check8_detail"
 fi
 
 # ===========================================================================
 # 9. Bypass classes in canonical feature skill and ORCHESTRATION ladder section.
 # ===========================================================================
-feat_bypass_region="$(awk '/Bypass at detection/{p=1;next} p&&/^\*\*On cycle-3 exhaustion\*\*/{exit} p' "$FEATURE_SKILL" 2>/dev/null)"
+feat_bypass_region="$(awk '/Bypass at detection/{p=1} p&&/On cycle-3 exhaustion/{exit} p' "$FEATURE_SKILL" 2>/dev/null)"
 orch_ladder="$(extract_ladder_section "$ORCH_TEMPLATE")"
 check9_ok=1
 for term in destructive security infra; do
@@ -345,10 +371,10 @@ fi
 # 12. VERSION 0.22.0, README version prose, no five-subagent phrasing.
 # ===========================================================================
 check12_ok=1
-if [[ ! -f "$VERSION_FILE" ]] || [[ "$(cat "$VERSION_FILE")" != "0.22.0" ]]; then
+if [[ ! -f "$VERSION_FILE" ]] || [[ "$(cat "$VERSION_FILE")" != "0.23.0" ]]; then
   check12_ok=0
 fi
-if ! grep -q '0\.22\.0' "$ROOT_README" 2>/dev/null; then
+if ! grep -q '0\.23\.0' "$ROOT_README" 2>/dev/null; then
   check12_ok=0
 fi
 if rg -q 'five subagents' "$ROOT_README" "$SETUP_SKILL" 2>/dev/null; then
@@ -358,9 +384,9 @@ if ! grep -qF 'six subagents' "$SETUP_SKILL" 2>/dev/null; then
   check12_ok=0
 fi
 if [[ $check12_ok -eq 1 ]]; then
-  report PASS "VERSION 0.22.0, README version prose, no five-subagent phrasing in README or setup SKILL"
+  report PASS "VERSION 0.23.0, README version prose, no five-subagent phrasing in README or setup SKILL"
 else
-  report FAIL "VERSION 0.22.0, README version prose, no five-subagent phrasing in README or setup SKILL"
+  report FAIL "VERSION 0.23.0, README version prose, no five-subagent phrasing in README or setup SKILL"
 fi
 
 echo

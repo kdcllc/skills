@@ -19,14 +19,17 @@ never resolved once globally for all harnesses.
 
 ## Emit
 
+Template skills are stored as `SKILL.template.md` so harnesses do not discover them
+in the kit repo; emit them as `SKILL.md`.
+
 | Source (resolved) | Destination | Translation |
 |-------------------|-------------|-------------|
 | `templates/agents/*.md` | `.cursor/agents/*.md` | `model:` → Cursor tier IDs from the model map's **Cursor column**, in whatever format the live docs/model list document at emit time — Cursor has documented both bracket-style `effort`/`context` options appended to the model ID and slug-suffix effort variants on the model name itself (shaped like `…-thinking-high`); never hardcode either scheme as the only one, use whichever form the model map's Cursor column encodes; drop the separate `effort:` key; drop `tools:` unless the live schema documents an equivalent |
-| `templates/skills/*` | `.cursor/skills/*` (unconditional — emitted regardless of whether the Claude Code emitter also ran) | Skills have **no model key** in Cursor — strip `model:`/`effort:` from any skill frontmatter; **keep** `disable-model-invocation` as-is (same key, same behavior as Claude Code — do not strip it) |
+| `templates/skills/*` | `.cursor/skills/*` (unconditional — emitted regardless of whether the Claude Code emitter also ran) | copy the full skill directory tree — rename each `SKILL.template.md` to `SKILL.md`; nested payloads (`feature/templates/*`, `feature/reference/*`, `research/templates/*`, etc.) copy through as-is; skills have **no model key** in Cursor — strip `model:`/`effort:` from any skill frontmatter; **keep** `disable-model-invocation` as-is (same key, same behavior as Claude Code — do not strip it) |
 | `templates/models.map.md` | `.cursor/skills/setup-models.map.md` (reference copy, mirroring the Claude Code emitter's equivalent row) | — |
 | `templates/ORCHESTRATION.md` | `.cursor/ORCHESTRATION.md` (unconditional — emitted regardless of whether `.claude/ORCHESTRATION.md` exists) | — |
 | Pointer rule | `.cursor/rules/orchestration.mdc` | see below — **must be `.mdc`**, plain `.md` is silently ignored |
-| `templates/loop/SKILL.md` (if loop enabled) | `.cursor/skills/auto-loop/SKILL.md` (`{{IDE_DIR}}` = `.cursor`) | — |
+| `templates/loop/SKILL.template.md` (if loop enabled) | `.cursor/skills/auto-loop/SKILL.md` (`{{IDE_DIR}}` = `.cursor`) | — |
 | `templates/loop/*` `_loop/` files (if loop enabled) | `_loop/loop.sh`, `_loop/loop.ps1`, `_loop/breaker.sh`, `_loop/breaker.ps1` — **single-copy**, resolved to the primary harness's dir (not duplicated per-harness even when multiple IDEs are installed) | loop CLI note: use `cursor-agent` or keep `claude` per user choice; invocation forms as in the Claude Code emitter (`_loop/loop.sh [max-iterations]` / `pwsh _loop/loop.ps1 [MaxIterations]`) |
 
 Pointer rule content:

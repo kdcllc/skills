@@ -314,7 +314,7 @@ _LOOP_HOTSPOTS=(
   "skills/setup/emitters/copilot.md"
   "skills/setup/emitters/cursor.md"
   "skills/setup/templates/ORCHESTRATION.md"
-  "skills/setup/templates/skills/feature/SKILL.md"
+  "skills/setup/templates/skills/feature/SKILL.template.md"
 )
 
 # _loop_normalize_glob <glob> -> prints the normalized PREFIX on stdout;

@@ -22,7 +22,7 @@ REPO_ROOT="$(cd "$HERE/../.." && pwd)"
 cd "$REPO_ROOT" || exit 1
 
 TEMPLATES="$REPO_ROOT/skills/setup/templates"
-SHIP_PR="$TEMPLATES/skills/ship-pr/SKILL.md"
+SHIP_PR="$TEMPLATES/skills/ship-pr/SKILL.template.md"
 ORCH_TEMPLATE="$TEMPLATES/ORCHESTRATION.md"
 SETUP_SKILL="$REPO_ROOT/skills/setup/SKILL.md"
 CLAUDE_SHIP_PR="$REPO_ROOT/.claude/skills/ship-pr/SKILL.md"
@@ -182,7 +182,7 @@ fi
 # ===========================================================================
 check6_ok=1
 check6_detail=""
-expected_version="0.22.0"
+expected_version="0.23.0"
 for vf in "$VERSION_FILE" "$CLAUDE_VERSION" "$CURSOR_VERSION"; do
   rel="${vf#"$REPO_ROOT"/}"
   if [[ ! -f "$vf" ]] || [[ "$(cat "$vf")" != "$expected_version" ]]; then
@@ -191,7 +191,7 @@ for vf in "$VERSION_FILE" "$CLAUDE_VERSION" "$CURSOR_VERSION"; do
     break
   fi
 done
-if [[ $check6_ok -eq 1 ]] && ! grep -qF -- 'Kit version: **0.22.0**' "$ROOT_README" 2>/dev/null; then
+if [[ $check6_ok -eq 1 ]] && ! grep -qF -- 'Kit version: **0.23.0**' "$ROOT_README" 2>/dev/null; then
   check6_ok=0
   check6_detail="README Kit version line missing or wrong"
 fi
@@ -207,9 +207,9 @@ assert m['options']['forge'] == 'github', m.get('options', {}).get('forge')
   fi
 fi
 if [[ $check6_ok -eq 1 ]]; then
-  report PASS "version 0.22.0 at skills/setup/VERSION, nested VERSIONs, README Kit version, manifest kitVersion; options.forge github"
+  report PASS "version 0.23.0 at skills/setup/VERSION, nested VERSIONs, README Kit version, manifest kitVersion; options.forge github"
 else
-  report FAIL "version 0.22.0 at skills/setup/VERSION, nested VERSIONs, README Kit version, manifest kitVersion; options.forge github" \
+  report FAIL "version 0.23.0 at skills/setup/VERSION, nested VERSIONs, README Kit version, manifest kitVersion; options.forge github" \
     "$check6_detail"
 fi
 

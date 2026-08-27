@@ -2,7 +2,7 @@
 
 # Research workflow (`/research`)
 
-The `/research` skill is a **Research → Plan** orchestrator for domain topics an external research agent must investigate **without codebase access**. As of v0.19.0, the canonical behavior is what [`skills/setup/templates/skills/research/SKILL.md`](../../skills/setup/templates/skills/research/SKILL.md) emits via `/setup`; installs receive it as an optional skill alongside `/feature`. The workflow produces a self-contained research prompt, ingests the returned report, plans with you, and creates a goal/task structure that hands off to `/feature` — research does not bypass evaluation.
+The `/research` skill is a **Research → Plan** orchestrator for domain topics an external research agent must investigate **without codebase access**. As of v0.19.0, the canonical behavior is what [`skills/setup/templates/skills/research/SKILL.template.md`](../../skills/setup/templates/skills/research/SKILL.template.md) emits via `/setup`; installs receive it as an optional skill alongside `/feature`. The workflow produces a self-contained research prompt, ingests the returned report, plans with you, and creates a goal/task structure that hands off to `/feature` — research does not bypass evaluation.
 
 ## Research pipeline
 
@@ -187,10 +187,10 @@ The research skill coordinates four phases internally; the pipeline diagram at t
 
 ## Sources
 
-- [`skills/setup/templates/skills/research/SKILL.md`](../../skills/setup/templates/skills/research/SKILL.md) — four research phases, prompt/report paths, ingestion handoff to feature Phase 3
+- [`skills/setup/templates/skills/research/SKILL.template.md`](../../skills/setup/templates/skills/research/SKILL.template.md) — four research phases, prompt/report paths, ingestion handoff to feature Phase 3
 - [`skills/setup/templates/skills/research/templates/research-prompt.md`](../../skills/setup/templates/skills/research/templates/research-prompt.md) — prompt artifact section structure
 - [`skills/setup/templates/skills/research/templates/research-report.md`](../../skills/setup/templates/skills/research/templates/research-report.md) — report artifact section structure and promotion checklist
-- [`skills/setup/templates/skills/feature/SKILL.md`](../../skills/setup/templates/skills/feature/SKILL.md) — seven-phase feature workflow receiving research handoff at Phase 3
+- [`skills/setup/templates/skills/feature/SKILL.template.md`](../../skills/setup/templates/skills/feature/SKILL.template.md) — seven-phase feature workflow receiving research handoff at Phase 3
 - [`README.md`](../../README.md) — kit layout, optional `skills/research` emission, `_research/` instance paths
 - [`../research-multi-harness-upgrade.md`](../research-multi-harness-upgrade.md) — example promoted research grounding harness capability claims
 - [`../research-squad-ideas.md`](../research-squad-ideas.md) — example study whose adopted hardening ideas fed shipped kit behavior

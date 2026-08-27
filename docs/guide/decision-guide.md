@@ -4,11 +4,11 @@
 
 ## Four ways to work
 
-The kit ships three orchestrated workflows plus the option to edit without invoking any of them. All orchestrated paths share the same architecture: an orchestrator coordinates, fresh-context workers execute, and skeptical evaluators gate progression. As of v0.21.0, the canonical behavior is what `skills/setup/templates/` emits via `/setup`; this document compares modes only — mechanics of each workflow live in the linked guides below.
+The kit ships three orchestrated workflows plus the option to edit without invoking any of them. All orchestrated paths share the same architecture: an orchestrator coordinates, fresh-context workers execute, and skeptical evaluators gate progression. As of v0.23.0, the canonical behavior is what `skills/setup/templates/` emits via `/setup`; this document compares modes only — mechanics of each workflow live in the linked guides below.
 
 | Mode | When to choose it | Deep dive |
 |------|-------------------|-----------|
-| **Direct edit** | Trivial or mechanical change; no goal, contracts, or evaluator cycle needed | — |
+| **Direct edit** | Trivial or mechanical change; no goal or evaluator cycle needed | — |
 | **`/feature`** | Any **non-trivial** feature needing human alignment and decision gates | [feature-workflow.md](feature-workflow.md) |
 | **`/research` → `/feature`** | Work touching an **external domain** the team must investigate before planning | [research-workflow.md](research-workflow.md) |
 | **Autonomous loop** | A **backlog** of small, well-specified, independently verifiable stories | [autonomous-loop.md](autonomous-loop.md) |
@@ -53,11 +53,11 @@ flowchart TD
 
 | Dimension | Direct edit | `/feature` | `/research` + `/feature` | Autonomous loop |
 |-----------|-------------|------------|--------------------------|-----------------|
-| **Human involvement** | You edit and verify in one session; no orchestrator phases | Orchestrator asks structured alignment questions; you confirm understanding and approve decision gates, PR draft, and escalations | Same human gates as `/feature`, plus collaborative planning after the external report is ingested | Minimal per-iteration involvement; backlog stories pre-specify acceptance criteria; human ships one PR at run end |
+| **Human involvement** | You edit and verify in one session; no orchestrator phases | Orchestrator asks structured alignment questions (incl. Phase 6/7 intent); you confirm understanding and approve decision gates, PR draft, and escalations | Same human gates as `/feature`, plus collaborative planning after the external report is ingested | Minimal per-iteration involvement; backlog stories pre-specify acceptance criteria; human ships one PR at run end when loop-level `pull_request` is enabled |
 | **Context freshness** | Single continuous session — context accumulates | Fresh-context subagents per task and evaluation; orchestrator retains session history | Same fresh-context model as `/feature`; research report is a durable artifact before coding | One story, one fresh context per iteration; all state lives in files and git |
-| **Verification guarantees** | Whatever checks you run yourself — no evaluator PASS requirement | Evaluator PASS (or APPROVED for audits) required before every phase advance; fixes always re-evaluated | Research report reviewed critically before goal creation; then full evaluator gates through `/feature` | Evaluator PASS + green ladder rungs before each story commit; same re-evaluate invariants as `/feature` Phases 2–6 |
-| **Artifacts produced** | Git diff only | `_goals/<name>/` (goal, tasks, contracts, orchestration log); optional QA evidence | `_research/prompts/`, `_research/<topic>/report.md`, then `_goals/<name>/` | `_goals/backlog.md` entries, per-story commits, `_goals/LEARNINGS.md`, `_goals/ESCALATIONS.md` on failure |
-| **Typical work size** | One file or a few lines; verifiable immediately | Multi-task features spanning layers; needs decomposition and contracts | Features whose design depends on external facts, APIs, or standards not yet verified | Many small stories, each sized to one context window and one commit |
+| **Verification guarantees** | Whatever checks you run yourself — no evaluator PASS requirement | Evaluator PASS (or APPROVED for audits) required before every phase advance; acceptance criteria validated at Phase 3; fixes always re-evaluated | Research report reviewed critically before goal creation; then full evaluator gates through `/feature` | Evaluator PASS + green ladder rungs before each story commit; same re-evaluate invariants as `/feature` Phases 2–6 |
+| **Artifacts produced** | Git diff only | `_goals/<name>/` (goal, tasks, orchestration log); optional QA evidence | `_research/prompts/`, `_research/<topic>/report.md`, then `_goals/<name>/` | `_goals/backlog.md` entries, per-story commits, `_goals/LEARNINGS.md`, `_goals/ESCALATIONS.md` on failure |
+| **Typical work size** | One file or a few lines; verifiable immediately | Multi-task features spanning layers; needs decomposition and acceptance criteria at planning | Features whose design depends on external facts, APIs, or standards not yet verified | Many small stories, each sized to one context window and one commit |
 | **Failure mode when misused** | Shipping unreviewed changes to complex behavior; skipping tests on non-trivial edits | Running `/feature` for a typo — heavy process, wasted evaluator cycles | Skipping research and coding against unverified external claims — confident fabrication | Running the loop on ambiguous stories — blocked iterations, wasted evaluator cycles |
 
 ## Why research first
@@ -80,7 +80,7 @@ Each scenario states a concrete piece of work, the chosen mode, and why that mod
 
 **Route:** Direct edit.
 
-**Rationale:** The change is trivial and mechanical — no new behavior, no cross-layer impact, no external-domain investigation, and no backlog queue. Invoking `/feature` would create a full goal, contracts, and evaluator cycles for work you can verify by reading the diff. The feature skill applies to **non-trivial** features, not one-line fixes.
+**Rationale:** The change is trivial and mechanical — no new behavior, no cross-layer impact, no external-domain investigation, and no backlog queue. Invoking `/feature` would create a full goal and evaluator cycles for work you can verify by reading the diff. The feature skill applies to **non-trivial** features, not one-line fixes.
 
 ### 2. New subsystem calling an unfamiliar payment API → `/research` then `/feature`
 
@@ -120,7 +120,7 @@ When work depends on external APIs, vendor docs, or standards the team has not v
 
 ### Using `/feature` for a one-line mechanical fix
 
-The feature skill description says to invoke it to start **any non-trivial feature**. A typo, import reorder, or single-line config tweak does not need seven phases, contracts, or an orchestration log. Edit directly, run targeted checks, and commit.
+The feature skill description says to invoke it to start **any non-trivial feature**. A typo, import reorder, or single-line config tweak does not need seven phases or an orchestration log. Edit directly, run targeted checks, and commit.
 
 ### Marking orchestrated work complete without an evaluator PASS
 
@@ -128,7 +128,7 @@ Across `/feature`, `/research` handoff, and the autonomous loop, no phase or tas
 
 ## Where to go next
 
-- [feature-workflow.md](feature-workflow.md) — seven-phase flow, contracts, fix cycles, orchestration log
+- [feature-workflow.md](feature-workflow.md) — seven-phase flow, acceptance criteria at planning, optional Phases 6/7, fix cycles, orchestration log
 - [research-workflow.md](research-workflow.md) — prompt/report artifacts, ingestion, goal handoff
 - [autonomous-loop.md](autonomous-loop.md) — drivers, backlog format, iteration lifecycle, safety guards
 
@@ -136,9 +136,9 @@ Across `/feature`, `/research` handoff, and the autonomous loop, no phase or tas
 
 Claims in this document trace to these canonical files (paths relative to `docs/guide/`):
 
-- [`../../skills/setup/templates/skills/feature/SKILL.md`](../../skills/setup/templates/skills/feature/SKILL.md) — `/feature` applicability ("any non-trivial feature"), orchestrator/evaluator invariants, phase structure
-- [`../../skills/setup/templates/skills/research/SKILL.md`](../../skills/setup/templates/skills/research/SKILL.md) — `/research` purpose (external-domain investigation before implementation), report → goal handoff at feature Phase 3
-- [`../../skills/setup/templates/loop/SKILL.md`](../../skills/setup/templates/loop/SKILL.md) — one story per iteration, backlog selection, ambiguous-story blocking, feature Phases 2–6 substitution
+- [`../../skills/setup/templates/skills/feature/SKILL.template.md`](../../skills/setup/templates/skills/feature/SKILL.template.md) — `/feature` applicability ("any non-trivial feature"), orchestrator/evaluator invariants, phase structure
+- [`../../skills/setup/templates/skills/research/SKILL.template.md`](../../skills/setup/templates/skills/research/SKILL.template.md) — `/research` purpose (external-domain investigation before implementation), report → goal handoff at feature Phase 3
+- [`../../skills/setup/templates/loop/SKILL.template.md`](../../skills/setup/templates/loop/SKILL.template.md) — one story per iteration, backlog selection, ambiguous-story blocking, feature Phases 2–6 substitution
 - [`../../skills/setup/templates/ORCHESTRATION.md`](../../skills/setup/templates/ORCHESTRATION.md) — architecture: fresh context, evaluator gates, autonomous loop guards, mandatory re-evaluate invariants
-- [`../../README.md`](../../README.md) — kit overview, feature list phrasing, workflow summaries as of v0.21.0
+- [`../../README.md`](../../README.md) — kit overview, feature list phrasing, workflow summaries as of v0.23.0
 - [`../research-multi-harness-upgrade.md`](../research-multi-harness-upgrade.md) — example research artifact grounding external harness claims

@@ -1,6 +1,6 @@
 ---
 name: research
-description: Research → Plan workflow for {{PROJECT_NAME}} domain topics that need external investigation before implementation. Produces a research prompt for an external agent, ingests the report, and turns it into an evaluated goal/task structure for the feature.
+description: Research → Plan workflow for {{PROJECT_NAME}} topics needing external investigation — produces a research prompt, ingests the report, and yields an evaluated goal/task structure.
 ---
 
 # Research (Deep Research → Plan Orchestrator)

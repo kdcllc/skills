@@ -1,10 +1,10 @@
-**Who this is for / What you'll learn:** Kit **users** and **contributors** who need to understand how the kit verifies work before it advances — not just *that* evaluators gate progression, but *how* they score, what each verdict means, and what evidence they require. You will learn the per-gate verdict vocabulary, the failure-class taxonomy, arbitration mode (rung 5), the confidence ladder and anti-fabrication rules, devil's advocate, pre-code contracts with two-party sign-off, `eval_depth` routing, the staged test ladder, and the orchestration log as an append-only audit trail. For where these gates sit in the seven phases, see [feature-workflow.md](feature-workflow.md); for who runs evaluation and model tiers, see [agents-and-models.md](agents-and-models.md).
+**Who this is for / What you'll learn:** Kit **users** and **contributors** who need to understand how the kit verifies work before it advances — not just *that* evaluators gate progression, but *how* they score, what each verdict means, and what evidence they require. You will learn the per-gate verdict vocabulary, the failure-class taxonomy, arbitration mode (rung 5), the confidence ladder and anti-fabrication rules, devil's advocate, acceptance criteria validated at Phase 3, `eval_depth` routing, the staged test ladder, and the orchestration log as an append-only audit trail. For where these gates sit in the seven phases, see [feature-workflow.md](feature-workflow.md); for who runs evaluation and model tiers, see [agents-and-models.md](agents-and-models.md).
 
 # Evaluation system
 
 The kit separates execution from verification: workers produce artifacts; evaluators read, verify, and return verdicts. This document **explains** the criteria skills and evaluator agent files — it is not a normative fork. When anything here disagrees with a canonical source, the source wins. Each section below points at its binding file under [`skills/setup/templates/`](../../skills/setup/templates/).
 
-Phase-by-phase orchestration narrative (alignment through pull request) belongs in [feature-workflow.md](feature-workflow.md). Here we stay inside the index scope row: verdict machinery, contracts, test ladder, and audit trail.
+Phase-by-phase orchestration narrative (alignment through pull request) belongs in [feature-workflow.md](feature-workflow.md). Here we stay inside the index scope row: verdict machinery, acceptance criteria, test ladder, and audit trail.
 
 **Canonical vs instance:** Behavior described here is what [`skills/setup/templates/`](../../skills/setup/templates/) emits via `/setup`. Your harness writes an **instance** tree (agents, skills, `ORCHESTRATION.md`) into the target project — in this repo that instance is gitignored (e.g. `.claude/`) and is not source of truth. Paths below use the canonical template location unless labeled as instance-specific.
 
@@ -14,26 +14,26 @@ Every gate has its **own** verdict set. Never collapse them into one triple.
 
 | Gate | Phase / context | Verdicts | Binding source |
 |------|-----------------|----------|----------------|
-| **Goal evaluation** | Phase 3 — goal + task files | **PASS**, **NEEDS REVISION**, **REJECT** | [`goal-criteria/SKILL.md`](../../skills/setup/templates/skills/goal-criteria/SKILL.md) |
-| **Task evaluation** | Phase 4 — completed task work | **PASS**, **NEEDS FIXES**, **REJECT** | [`task-criteria/SKILL.md`](../../skills/setup/templates/skills/task-criteria/SKILL.md) |
-| **Final audit** | Phase 5 — whole goal | **APPROVED**, **ISSUES** | [`feature/SKILL.md`](../../skills/setup/templates/skills/feature/SKILL.md) (Phase 5); lifecycle in [`ORCHESTRATION.md`](../../skills/setup/templates/ORCHESTRATION.md) |
-| **Align-docs plan evaluation** | Phase 6.3 — doc edit plan | **PASS**, **NEEDS REVISION**, **REJECT** | [`align-docs/SKILL.md`](../../skills/setup/templates/skills/align-docs/SKILL.md) |
-| **Doc audit** | Phase 6.5 — whole doc change set | **APPROVED**, **ISSUES** | [`align-docs/SKILL.md`](../../skills/setup/templates/skills/align-docs/SKILL.md) |
-| **QA gate** (optional behavioral) | After Phase 5 approval, user-facing surfaces | **PASS**, **ISSUES FOUND**, **REJECT** | [`qa-criteria/SKILL.md`](../../skills/setup/templates/skills/qa-criteria/SKILL.md) |
+| **Goal evaluation** | Phase 3 — goal + task files | **PASS**, **NEEDS REVISION**, **REJECT** | [`goal-criteria/SKILL.template.md`](../../skills/setup/templates/skills/goal-criteria/SKILL.template.md) |
+| **Task evaluation** | Phase 4 — completed task work | **PASS**, **NEEDS FIXES**, **REJECT** | [`task-criteria/SKILL.template.md`](../../skills/setup/templates/skills/task-criteria/SKILL.template.md) |
+| **Final audit** | Phase 5 — whole goal | **APPROVED**, **ISSUES** | [`feature/SKILL.template.md`](../../skills/setup/templates/skills/feature/SKILL.template.md) (Phase 5); lifecycle in [`ORCHESTRATION.md`](../../skills/setup/templates/ORCHESTRATION.md) |
+| **Align-docs plan evaluation** | Phase 6.3 — doc edit plan | **PASS**, **NEEDS REVISION**, **REJECT** | [`align-docs/SKILL.template.md`](../../skills/setup/templates/skills/align-docs/SKILL.template.md) |
+| **Doc audit** | Phase 6.5 — whole doc change set | **APPROVED**, **ISSUES** | [`align-docs/SKILL.template.md`](../../skills/setup/templates/skills/align-docs/SKILL.template.md) |
+| **QA gate** (optional behavioral) | After Phase 5 approval, user-facing surfaces | **PASS**, **ISSUES FOUND**, **REJECT** | [`qa-criteria/SKILL.template.md`](../../skills/setup/templates/skills/qa-criteria/SKILL.template.md) |
 | **Arbitration (rung 5)** | Phase 4 continuation ladder — orchestrator-invoked on unanimous same-item failure across fix cycles 1–3 (as of v0.20.0) | **criteria-sound**, **criteria-defective** (never PASS/NEEDS FIXES/REJECT) | [`agents/evaluator.md`](../../skills/setup/templates/agents/evaluator.md) § Arbitration mode |
 
 ### Source precedence: `ISSUES` vs `ISSUES FOUND`
 
-The Phase 5 final audit unhappy path is **ISSUES** — not `ISSUES FOUND`. **`ISSUES FOUND`** belongs to the QA gate only ([`qa-criteria/SKILL.md`](../../skills/setup/templates/skills/qa-criteria/SKILL.md)).
+The Phase 5 final audit unhappy path is **ISSUES** — not `ISSUES FOUND`. **`ISSUES FOUND`** belongs to the QA gate only ([`qa-criteria/SKILL.template.md`](../../skills/setup/templates/skills/qa-criteria/SKILL.template.md)).
 
 The canonical [`ORCHESTRATION.md`](../../skills/setup/templates/ORCHESTRATION.md) progress-checklist placeholder `[APPROVED/ISSUES FOUND]` (workflow state tracking) is **not** final-audit vocabulary. The lifecycle diagram in that file correctly shows **APPROVED** / **ISSUES** for Phase 5. On apparent conflict, the feature skill and criteria skills win.
 
 ## Failure-class taxonomy (as of v0.20.0)
 
-Every non-PASS task verdict carries `failure_class:` from this closed set ([`task-criteria/SKILL.md`](../../skills/setup/templates/skills/task-criteria/SKILL.md) § Failure-class taxonomy, [`agents/evaluator.md`](../../skills/setup/templates/agents/evaluator.md) § Verdict format): `implementation` (default) · `criteria-defect` · `destructive` · `security` · `infra`.
+Every non-PASS task verdict carries `failure_class:` from this closed set ([`task-criteria/SKILL.template.md`](../../skills/setup/templates/skills/task-criteria/SKILL.template.md) § Failure-class taxonomy, [`agents/evaluator.md`](../../skills/setup/templates/agents/evaluator.md) § Verdict format): `implementation` (default) · `criteria-defect` · `destructive` · `security` · `infra`.
 
 - **`implementation`** — default when the work is wrong or incomplete but the criteria themselves are sound; fix and retry.
-- **`criteria-defect`** — the acceptance criteria or signed contract is defective; route to arbitration (ladder rung 5) or human escalation, not blind retry.
+- **`criteria-defect`** — the task's acceptance criteria are defective; route to arbitration (ladder rung 5) or human escalation, not blind retry.
 - **`destructive`** — would corrupt data, delete irrecoverable state, or cause irreversible harm.
 - **`security`** — credential exposure, auth bypass, injection, or other security violation.
 - **`infra`** — environment, tooling, or external dependency failure outside the implementer's control.
@@ -48,22 +48,22 @@ Orchestrator-invoked only — the evaluator does not self-trigger this mode ([`a
 
 **Model** — `{{MODEL_FRONTIER_ALT_FAMILY}}` (frontier tier, different family from the primary evaluator). Per the kit's Cursor silent-fallback caveat, the arbiter states in its verdict which model actually produced it ([`agents/evaluator.md`](../../skills/setup/templates/agents/evaluator.md) § Arbitration mode).
 
-**Scope** — evaluates the **criteria**, never the code. Reads no diffs and scores no implementation. Execute-before-score does not apply; arbiter evidence is contract-line citation only.
+**Scope** — evaluates the **criteria**, never the code. Reads no diffs and scores no implementation. Execute-before-score does not apply; arbiter evidence is acceptance-criterion citation only.
 
-**Inputs** — the task file, the signed contract, the three fix-cycle evaluator verdicts, and the three implementer reports.
+**Inputs** — the task file (including its `## Acceptance Criteria`), the three fix-cycle evaluator verdicts, and the three implementer reports.
 
 **Output** — exactly one of (`criteria-sound` / `criteria-defective` — not PASS, NEEDS FIXES, or REJECT):
 
 - **`criteria-sound`** — the criterion is well-formed; the orchestrator continues the continuation ladder at rung 4 (diagnosis-first).
-- **`criteria-defective`** — name the specific criterion, state the defect type (`contradiction` / `unsatisfiable` / `untestable` / `ambiguous`), cite the contract line (e.g. acceptance criterion N in the signed contract), and escalate carrying the defect verbatim.
+- **`criteria-defective`** — name the specific criterion, state the defect type (`contradiction` / `unsatisfiable` / `untestable` / `ambiguous`), cite the task file's acceptance criterion (e.g. acceptance criterion N in `## Acceptance Criteria`), and escalate carrying the defect verbatim.
 
-**Dual-evaluator rule** — if the arbiter's view of the criteria conflicts with the primary evaluator's applied interpretation, the orchestrator escalates to the human. Arbitration never auto-overrides the primary evaluator and never rewrites the contract itself.
+**Dual-evaluator rule** — if the arbiter's view of the criteria conflicts with the primary evaluator's applied interpretation, the orchestrator escalates to the human. Arbitration never auto-overrides the primary evaluator and never rewrites the task file itself.
 
-Single stateless spawn — no cross-spawn memory. The four defect types are defined with examples in [`task-criteria/SKILL.md`](../../skills/setup/templates/skills/task-criteria/SKILL.md) § Arbitration rubric.
+Single stateless spawn — no cross-spawn memory. The four defect types are defined with examples in [`task-criteria/SKILL.template.md`](../../skills/setup/templates/skills/task-criteria/SKILL.template.md) § Arbitration rubric.
 
 ## Scoring stance: verdicts start unearned
 
-Evaluators begin skeptical. Per [`goal-criteria/SKILL.md`](../../skills/setup/templates/skills/goal-criteria/SKILL.md) and the evaluator stance in [`agents/evaluator.md`](../../skills/setup/templates/agents/evaluator.md), scoring **starts at 2/5** and must be **earned** — evidence moves it up; absence keeps it down. "Looks right" is not evidence.
+Evaluators begin skeptical. Per [`goal-criteria/SKILL.template.md`](../../skills/setup/templates/skills/goal-criteria/SKILL.template.md) and the evaluator stance in [`agents/evaluator.md`](../../skills/setup/templates/agents/evaluator.md), scoring **starts at 2/5** and must be **earned** — evidence moves it up; absence keeps it down. "Looks right" is not evidence.
 
 The QA evaluator uses the same baseline ([`agents/qa-evaluator.md`](../../skills/setup/templates/agents/qa-evaluator.md)).
 
@@ -77,7 +77,7 @@ Dimensions in each criteria skill are **gates, not averages** — one failing di
 | Task evaluation | **NEEDS FIXES** |
 | QA evaluation | **ISSUES FOUND** |
 
-Sources: [`goal-criteria/SKILL.md`](../../skills/setup/templates/skills/goal-criteria/SKILL.md), [`task-criteria/SKILL.md`](../../skills/setup/templates/skills/task-criteria/SKILL.md), [`qa-criteria/SKILL.md`](../../skills/setup/templates/skills/qa-criteria/SKILL.md).
+Sources: [`goal-criteria/SKILL.template.md`](../../skills/setup/templates/skills/goal-criteria/SKILL.template.md), [`task-criteria/SKILL.template.md`](../../skills/setup/templates/skills/task-criteria/SKILL.template.md), [`qa-criteria/SKILL.template.md`](../../skills/setup/templates/skills/qa-criteria/SKILL.template.md).
 
 ## Confidence ladder and anti-fabrication
 
@@ -98,11 +98,11 @@ Any "X exists" claim must be **checked, never assumed**: file paths exist in the
 - Never invent numbers, benchmarks, or "production results".
 - Any **❌ Contradicted** claim caps the task verdict at **NEEDS FIXES**.
 
-Task evaluation applies the ladder per requirement ([`task-criteria/SKILL.md`](../../skills/setup/templates/skills/task-criteria/SKILL.md)): one **⚠️ Unverified** requirement caps at **NEEDS FIXES**; any **❌ Contradicted** claim does too.
+Task evaluation applies the ladder per requirement ([`task-criteria/SKILL.template.md`](../../skills/setup/templates/skills/task-criteria/SKILL.template.md)): one **⚠️ Unverified** requirement caps at **NEEDS FIXES**; any **❌ Contradicted** claim does too.
 
 ### Execute before you score
 
-Evaluators must **run** targeted tests and commands before writing a verdict. Reading the report or diff alone is insufficient. If the verdict's "What I verified" section shows no execution evidence (a command run plus its output), the verdict is invalid ([`agents/evaluator.md`](../../skills/setup/templates/agents/evaluator.md)). As of v0.20.0, arbitration mode is the exception: no code is under review, so execute-before-score does not apply; arbiter evidence is contract-line citation only ([`agents/evaluator.md`](../../skills/setup/templates/agents/evaluator.md) § Arbitration mode).
+Evaluators must **run** targeted tests and commands before writing a verdict. Reading the report or diff alone is insufficient. If the verdict's "What I verified" section shows no execution evidence (a command run plus its output), the verdict is invalid ([`agents/evaluator.md`](../../skills/setup/templates/agents/evaluator.md)). As of v0.20.0, arbitration mode is the exception: no code is under review, so execute-before-score does not apply; arbiter evidence is acceptance-criterion citation only ([`agents/evaluator.md`](../../skills/setup/templates/agents/evaluator.md) § Arbitration mode).
 
 ### Calibration exemplars (as of v0.19.0)
 
@@ -115,7 +115,7 @@ See [`agents/evaluator.md`](../../skills/setup/templates/agents/evaluator.md) §
 
 ## Devil's advocate (goal evaluation)
 
-Every goal evaluation includes a mandatory devil's advocate section ([`goal-criteria/SKILL.md`](../../skills/setup/templates/skills/goal-criteria/SKILL.md) §6). Produce all five parts — informative, **never a veto on its own**:
+Every goal evaluation includes a mandatory devil's advocate section ([`goal-criteria/SKILL.template.md`](../../skills/setup/templates/skills/goal-criteria/SKILL.template.md) §6). Produce all five parts — informative, **never a veto on its own**:
 
 1. **Steelman the strongest alternative approach** — the strongest version, not a strawman.
 2. **Load-bearing assumptions** — things the goal treats as fixed that are actually choices.
@@ -125,38 +125,15 @@ Every goal evaluation includes a mandatory devil's advocate section ([`goal-crit
 
 A DA finding forces **NEEDS REVISION** **only** when it reveals an **unaddressed risk** that a success criterion or task should cover — not merely because an alternative exists.
 
-## Pre-code contracts
+## Acceptance criteria at planning (Phase 2 → validated Phase 3)
 
-As of v0.19.0, every v0.18.0+ goal task passes through a **contract gate** before implementation dispatch ([`feature/SKILL.md`](../../skills/setup/templates/skills/feature/SKILL.md) Phase 4).
+As of v0.23.0, every task file carries an `## Acceptance Criteria` section at Phase 2 — each criterion includes a verification method (command output, test, live interaction, etc.). The Phase 3 goal evaluator validates these once for all tasks before any implementation dispatch ([`feature/SKILL.template.md`](../../skills/setup/templates/skills/feature/SKILL.template.md) Phases 2–3, [`goal-criteria/SKILL.template.md`](../../skills/setup/templates/skills/goal-criteria/SKILL.template.md)). There is no separate pre-implementation sign-off gate: the task file (including its Acceptance Criteria) is the testable scope source for Phase 4 workers and evaluators.
 
-### Why contracts precede implementation
-
-Contracts are proposed in **contract mode** before any implementation spawn. Contract mode **never reviews code**. The contract is the testable expansion of the task file — not a second scope source. The orchestrator refuses dispatch until both parties sign off.
-
-### Contract template shape
-
-Per [`feature/templates/contract.md`](../../skills/setup/templates/skills/feature/templates/contract.md), each contract file includes:
-
-| Section | Purpose |
-|---------|---------|
-| `task_id` | Must match the task file id exactly |
-| `done_definition` | One paragraph: what "done" looks like, verifiable unaided |
-| `acceptance_criteria` | Numbered list; each criterion has an explicit **verification method** (unit test, integration test, command output, live interaction, screenshot) |
-| `verification_environment` | CLI, API, browser, or library |
-| `out_of_scope` | Explicit exclusions |
-| `signoff` YAML | `worker` + `evaluator`, each with `agreed`, `timestamp`, `note`; `revision` 0–2 |
-
-Both `signoff.worker.agreed: true` and `signoff.evaluator.agreed: true` are required before implementation dispatch.
-
-### Max-2-round contract gate
-
-Contract review is bounded to **max 2 rounds** — each round is a single stateless spawn. A 3rd round is **never** attempted; the orchestrator tiebreaks or escalates to the user. Sign-offs are appended to the orchestration log as their own entries.
-
-Task evaluation under v0.18.0+ goals also verifies the signed contract exists and every acceptance criterion is addressed ([`task-criteria/SKILL.md`](../../skills/setup/templates/skills/task-criteria/SKILL.md) § Contract verification).
+Task evaluation verifies every acceptance criterion is addressed ([`task-criteria/SKILL.template.md`](../../skills/setup/templates/skills/task-criteria/SKILL.template.md)).
 
 ## Evaluation depth (`eval_depth: full|light`)
 
-As of v0.19.0, every v0.18.0+ task file declares `eval_depth: full` or `eval_depth: light` in its ownership block ([`goal-criteria/SKILL.md`](../../skills/setup/templates/skills/goal-criteria/SKILL.md) § Evaluation depth).
+As of v0.19.0, every v0.18.0+ task file declares `eval_depth: full` or `eval_depth: light` in its ownership block ([`goal-criteria/SKILL.template.md`](../../skills/setup/templates/skills/goal-criteria/SKILL.template.md) § Evaluation depth).
 
 | Rule | Detail |
 |------|--------|
@@ -168,14 +145,13 @@ As of v0.19.0, every v0.18.0+ task file declares `eval_depth: full` or `eval_dep
 
 ### Light rubric (shortened, not skipped)
 
-Under `eval_depth: light` ([`task-criteria/SKILL.md`](../../skills/setup/templates/skills/task-criteria/SKILL.md) § Light evaluation rubric):
+Under `eval_depth: light` ([`task-criteria/SKILL.template.md`](../../skills/setup/templates/skills/task-criteria/SKILL.template.md) § Light evaluation rubric):
 
 **Runs in full (gate the verdict):**
 
 - Requirements walk (dimension 1)
 - Test evidence (dimension 4)
 - Write fence (dimension 5)
-- Contract verification (hard gate regardless of depth)
 
 **Deep review skipped:**
 
@@ -186,7 +162,7 @@ Auto-fail triggers still apply.
 
 ## Ownership-contract verification (goal evaluation)
 
-At goal evaluation, the evaluator verifies write-set disjointness ([`goal-criteria/SKILL.md`](../../skills/setup/templates/skills/goal-criteria/SKILL.md) §3). Seven checks — summarized here, not reproduced verbatim:
+At goal evaluation, the evaluator verifies write-set disjointness ([`goal-criteria/SKILL.template.md`](../../skills/setup/templates/skills/goal-criteria/SKILL.template.md) §3). Seven checks — summarized here, not reproduced verbatim:
 
 1. **Declarations complete** — non-empty `writes`; `reads` are interface briefs unless `depends_on` orders after the producer; `depends_on` names every consumed producer; rewrite semantics stated; `owner` is `implementer` or `test-writer`.
 2. **Coverage** — union of all `writes` equals the goal's intended file set; no orphan edits, no unplanned owned paths.
@@ -196,13 +172,13 @@ At goal evaluation, the evaluator verifies write-set disjointness ([`goal-criter
 6. **Contracts first** — shared interfaces/schemas frozen in an earlier task than consumers.
 7. **Hotspots** — shared high-traffic files owned by one task or serialized by dependency; never concurrently written.
 
-**Orchestrator-owned carve-out:** `_goals/` artifacts (goal files, orchestration log, contracts) and Phase 6 doc surfaces listed in the align-docs map sit **outside** the task write-set union — coverage and single-owner apply to task-owned product files only.
+**Orchestrator-owned carve-out:** `_goals/` artifacts (goal files, orchestration log) and Phase 6 doc surfaces listed in the align-docs map sit **outside** the task write-set union — coverage and single-owner apply to task-owned product files only.
 
 Any violation of the seven checks is **NEEDS REVISION**. A missing ownership block is also **NEEDS REVISION** (fail closed).
 
 ## Staged test ladder
 
-The [`test-ladder/SKILL.md`](../../skills/setup/templates/skills/test-ladder/SKILL.md) skill governs when tests run. Workers climb rungs 1–2 mid-cycle; rung 3 runs once at cycle end.
+The [`test-ladder/SKILL.template.md`](../../skills/setup/templates/skills/test-ladder/SKILL.template.md) skill governs when tests run. Workers climb rungs 1–2 mid-cycle; rung 3 runs once at cycle end.
 
 ```mermaid
 flowchart TD
@@ -266,7 +242,7 @@ flowchart TD
 
 ### Fix-cycle model rotation
 
-On task **NEEDS FIXES**, fix cycles rotate models ([`feature/SKILL.md`](../../skills/setup/templates/skills/feature/SKILL.md)) — a model blind to its own mistake rarely fixes it on retry:
+On task **NEEDS FIXES**, fix cycles rotate models ([`feature/SKILL.template.md`](../../skills/setup/templates/skills/feature/SKILL.template.md)) — a model blind to its own mistake rarely fixes it on retry:
 
 - **Cycle 1** — re-run the implementer normally.
 - **Cycle 2** — pin a **different model family** at comparable tier.
@@ -276,11 +252,11 @@ Each rotation is recorded in the orchestration log. For who evaluates and tier d
 
 ### Re-evaluation invariants
 
-Fixes and revisions are **always** re-evaluated — there is no exception ([`feature/SKILL.md`](../../skills/setup/templates/skills/feature/SKILL.md), [`ORCHESTRATION.md`](../../skills/setup/templates/ORCHESTRATION.md) § Mandatory Re-Evaluate Invariants). The orchestration log makes these invariants and rotations **auditable**.
+Fixes and revisions are **always** re-evaluated — there is no exception ([`feature/SKILL.template.md`](../../skills/setup/templates/skills/feature/SKILL.template.md), [`ORCHESTRATION.md`](../../skills/setup/templates/ORCHESTRATION.md) § Mandatory Re-Evaluate Invariants). The orchestration log makes these invariants and rotations **auditable**.
 
 ## Orchestration log (append-only audit trail)
 
-Each goal maintains `_goals/[goal-name]/orchestration-log.md` ([`feature/SKILL.md`](../../skills/setup/templates/skills/feature/SKILL.md) § Orchestration log).
+Each goal maintains `_goals/[goal-name]/orchestration-log.md` ([`feature/SKILL.template.md`](../../skills/setup/templates/skills/feature/SKILL.template.md) § Orchestration log). The log header carries a running `est_tokens` total.
 
 **Entry-before-launch** — append before every subagent spawn:
 
@@ -288,8 +264,11 @@ Each goal maintains `_goals/[goal-name]/orchestration-log.md` ([`feature/SKILL.m
 - Why this agent was routed
 - The task's `writes` claim (allowed-paths fence)
 - Expected outputs
+- `context_chars` — character length of the context package prompt
 
-**Outcome-after** — when the agent returns, append the outcome (report received, files verified, verdict) as a **new line under that entry**. Never write placeholder pending lines (`"Outcome: (pending)"`, `"TBD"`) — an entry with no outcome line yet **is** the pending state.
+**Outcome-after** — when the agent returns, append the outcome line with `report_chars` (character length of the completion report) and `est_tokens` = (`context_chars` + `report_chars`) / 4, labeled estimate — proxy fields only; no harness exposes true token counts. Never write placeholder pending lines (`"Outcome: (pending)"`, `"TBD"`) — an entry with no outcome line yet **is** the pending state.
+
+Ladder transitions, guard trips, and phase skips (e.g. Phase 6/7 declined via `goal.md`'s `phases:` block) are logged as separate entries.
 
 **Append-only:** never edit or delete entries. Rejections and respawns are new entries.
 
@@ -297,13 +276,13 @@ The ledger is what makes re-evaluation invariants and fix-cycle model rotation *
 
 ## QA behavioral gate (optional)
 
-After Phase 5 **APPROVED** and Quality Checks, the orchestrator may capture behavioral evidence and launch `qa-evaluator` ([`feature/SKILL.md`](../../skills/setup/templates/skills/feature/SKILL.md) Phase 5 optional QA gate, [`ORCHESTRATION.md`](../../skills/setup/templates/ORCHESTRATION.md) § QA Evaluation).
+After Phase 5 **APPROVED** and Quality Checks, the orchestrator may capture behavioral evidence and launch `qa-evaluator` ([`feature/SKILL.template.md`](../../skills/setup/templates/skills/feature/SKILL.template.md) Phase 5 optional QA gate, [`ORCHESTRATION.md`](../../skills/setup/templates/ORCHESTRATION.md) § QA Evaluation).
 
-The QA evaluator evaluates **observed user-facing behavior**, not code ([`agents/qa-evaluator.md`](../../skills/setup/templates/agents/qa-evaluator.md)). Evidence not provided = behavior not tested = an issue. Verdicts: **PASS**, **ISSUES FOUND**, **REJECT** per [`qa-criteria/SKILL.md`](../../skills/setup/templates/skills/qa-criteria/SKILL.md). QA never fixes — fixes flow through implementer + evaluator, then QA re-runs.
+The QA evaluator evaluates **observed user-facing behavior**, not code ([`agents/qa-evaluator.md`](../../skills/setup/templates/agents/qa-evaluator.md)). Evidence not provided = behavior not tested = an issue. Verdicts: **PASS**, **ISSUES FOUND**, **REJECT** per [`qa-criteria/SKILL.template.md`](../../skills/setup/templates/skills/qa-criteria/SKILL.template.md). QA never fixes — fixes flow through implementer + evaluator, then QA re-runs.
 
 ## Where to go next
 
-- **Phase placement** — [feature-workflow.md](feature-workflow.md) maps each gate to Phases 3–6 and shows the contract gate inside Phase 4.
+- **Phase placement** — [feature-workflow.md](feature-workflow.md) maps each gate to Phases 3–7 and shows optional Phase 6/7 gating via `goal.md`'s `phases:` block.
 - **Who evaluates** — [agents-and-models.md](agents-and-models.md) covers `evaluator`, `qa-evaluator`, the `diagnostician` (rung 4 diagnosis), evaluator arbitration mode, model tiers, and spawn boundaries.
 - **Index and conventions** — [README.md](README.md) document map and frozen link/Mermaid rules.
 
@@ -311,13 +290,12 @@ The QA evaluator evaluates **observed user-facing behavior**, not code ([`agents
 
 Canonical template paths (relative to repo root):
 
-- [`skills/setup/templates/skills/goal-criteria/SKILL.md`](../../skills/setup/templates/skills/goal-criteria/SKILL.md) — goal dimensions, devil's advocate, ownership checks, `eval_depth`, goal verdicts
-- [`skills/setup/templates/skills/task-criteria/SKILL.md`](../../skills/setup/templates/skills/task-criteria/SKILL.md) — task dimensions, light rubric, contract verification, task verdicts, failure-class taxonomy, arbitration rubric
-- [`skills/setup/templates/skills/qa-criteria/SKILL.md`](../../skills/setup/templates/skills/qa-criteria/SKILL.md) — QA gate criteria and **ISSUES FOUND** vocabulary
-- [`skills/setup/templates/skills/align-docs/SKILL.md`](../../skills/setup/templates/skills/align-docs/SKILL.md) — Phase 6.3 plan evaluation and Phase 6.5 doc audit verdicts
-- [`skills/setup/templates/skills/feature/SKILL.md`](../../skills/setup/templates/skills/feature/SKILL.md) — contract gate, fix-cycle rotation, orchestration log, Phase 5 **APPROVED** / **ISSUES**
-- [`skills/setup/templates/skills/test-ladder/SKILL.md`](../../skills/setup/templates/skills/test-ladder/SKILL.md) — rung definitions and role ownership
-- [`skills/setup/templates/skills/feature/templates/contract.md`](../../skills/setup/templates/skills/feature/templates/contract.md) — contract template shape and sign-off fields
+- [`skills/setup/templates/skills/goal-criteria/SKILL.template.md`](../../skills/setup/templates/skills/goal-criteria/SKILL.template.md) — goal dimensions, devil's advocate, ownership checks, `eval_depth`, goal verdicts, acceptance-criteria validation
+- [`skills/setup/templates/skills/task-criteria/SKILL.template.md`](../../skills/setup/templates/skills/task-criteria/SKILL.template.md) — task dimensions, light rubric, task verdicts, failure-class taxonomy, arbitration rubric
+- [`skills/setup/templates/skills/qa-criteria/SKILL.template.md`](../../skills/setup/templates/skills/qa-criteria/SKILL.template.md) — QA gate criteria and **ISSUES FOUND** vocabulary
+- [`skills/setup/templates/skills/align-docs/SKILL.template.md`](../../skills/setup/templates/skills/align-docs/SKILL.template.md) — Phase 6.3 plan evaluation and Phase 6.5 doc audit verdicts
+- [`skills/setup/templates/skills/feature/SKILL.template.md`](../../skills/setup/templates/skills/feature/SKILL.template.md) — acceptance criteria at planning, fix-cycle rotation, orchestration log, Phase 5 **APPROVED** / **ISSUES**, optional Phases 6/7
+- [`skills/setup/templates/skills/test-ladder/SKILL.template.md`](../../skills/setup/templates/skills/test-ladder/SKILL.template.md) — rung definitions and role ownership
 - [`skills/setup/templates/agents/evaluator.md`](../../skills/setup/templates/agents/evaluator.md) — stance, confidence ladder, anti-fabrication, execute-before-score, calibration exemplars, failure-class taxonomy, arbitration mode
 - [`skills/setup/templates/agents/qa-evaluator.md`](../../skills/setup/templates/agents/qa-evaluator.md) — behavioral-evidence stance
 - [`skills/setup/templates/ORCHESTRATION.md`](../../skills/setup/templates/ORCHESTRATION.md) — lifecycle diagram, continuation ladder (Phase 4), retry limits by phase table, re-evaluation invariants, QA section

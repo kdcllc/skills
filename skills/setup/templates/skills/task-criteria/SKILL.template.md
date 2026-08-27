@@ -62,20 +62,14 @@ orchestration-log entry recorded for this task. If the orchestrator omitted the 
 the fault is the orchestrator's — route the fix there (re-dispatch with the fence in the
 package). Never fail the executor for a fence it was never given.
 
-## Contract verification (v0.18.0+ goals)
+## Acceptance Criteria verification
 
-**Applicability**: applies only to tasks belonging to a goal created on or after kit
-v0.18.0. A task file from a goal already in flight when contracts landed has no
-contract by construction — its absence there is informational only, never a NEEDS
-FIXES cause.
-
-For v0.18.0+ goals: `_goals/[goal]/contracts/NN-task-name.contract.md` exists for this
-task with both `signoff.worker.agreed` and `signoff.evaluator.agreed` set to `true`,
-and every numbered `acceptance_criteria` item is addressed by the delivered work
-(verified the same way as a requirement — file:line, test output, or command run). A
-missing or unsigned contract on a v0.18.0+ goal is itself a NEEDS FIXES finding — the
-Phase 4 contract gate should have produced it before dispatch. An unaddressed
-acceptance criterion is a NEEDS FIXES finding.
+Every task file carries an `## Acceptance Criteria` section (validated at Phase 3).
+Verify the implementation against the task's Requirements **and** Acceptance Criteria.
+Walk each numbered acceptance criterion and verify it using the verification method
+stated on that line — file:line, test output, or command run, marked on the confidence
+ladder the same way as requirements. An unaddressed or unverified acceptance criterion
+caps the verdict at NEEDS FIXES.
 
 ## Light evaluation rubric (`eval_depth: light`)
 
@@ -85,9 +79,9 @@ see `goal-criteria`). Shortened, never skipped:
    (dimension 5) run in full — these gate the verdict.
 2. Correctness (dimension 2) and Reuse & Patterns (dimension 3) deep review is skipped.
 3. Still ends in a real verdict (PASS / NEEDS FIXES / REJECT); auto-fail triggers apply.
-4. Contract verification also runs in full under `light` — it is a hard gate, not a
-   depth-scaled dimension, so every acceptance criterion is still checked regardless of
-   `eval_depth`.
+4. Acceptance Criteria verification also runs in full under `light` — it is a hard gate,
+   not a depth-scaled dimension, so every acceptance criterion is still checked regardless
+   of `eval_depth`.
 
 ## Auto-fail triggers
 
@@ -102,8 +96,8 @@ evaluator's Verdict format section for output shape and bypass consequence).
 
 - **`implementation`** — default when the work is wrong or incomplete but the criteria
   themselves are sound; fix and retry.
-- **`criteria-defect`** — the acceptance criteria or signed contract is defective;
-  route to arbitration (ladder rung 5) or human escalation, not blind retry.
+- **`criteria-defect`** — the acceptance criteria are defective; route to arbitration
+  (ladder rung 5) or human escalation, not blind retry.
 - **`destructive`** — would corrupt data, delete irrecoverable state, or cause
   irreversible harm; bypass — stop all retrying at detection, escalate.
 - **`security`** — credential exposure, auth bypass, injection, or other security
@@ -116,8 +110,8 @@ evaluator's Verdict format section for output shape and bypass consequence).
 When ladder rung 5 invokes arbitration, the arbiter applies these defect types to the
 **criteria** (never the implementation):
 
-- **contradiction** — two or more acceptance criteria or contract clauses are mutually
-  contradictory and cannot all be true at once.
+- **contradiction** — two or more acceptance criteria are mutually contradictory and
+  cannot all be true at once.
 - **Unsatisfiable** — no implementation could satisfy the criterion as written, even
   with perfect code.
 - **Untestable** — the criterion has no verifiable check (no command, test, or observable
@@ -129,7 +123,7 @@ Example — **contradiction**: AC 2 requires "all errors return 400" and AC 5 re
 "auth failures return 401"; both cannot hold for the same auth-error path.
 
 Example — **unsatisfiable**: AC 3 demands "response time under 1 ms" on a network-bound
-endpoint with no caching allowance stated in the contract.
+endpoint with no caching allowance stated in the task file.
 
 Example — **untestable**: AC 4 says "code must be elegant" with no named linter, rubric
 dimension, or command output verification.
@@ -139,6 +133,7 @@ or convention file is the reference — two evaluators could disagree on PASS.
 
 ## Verdicts
 
-- **PASS**: every requirement verified, ladder rungs 1–2 green, no auto-fails.
+- **PASS**: every requirement and acceptance criterion verified, ladder rungs 1–2 green,
+  no auto-fails.
 - **NEEDS FIXES**: exhaustive required-fixes list (task loops back at most 3 times).
 - **REJECT**: approach wrong or auto-fail fired; escalation needed.

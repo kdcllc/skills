@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Structural guard for orchestration-template-currency goal: locks six fixed template
-# claims G1–G6 in skills/setup/templates/ORCHESTRATION.md and (SKIP-when-absent)
+# Structural guard for orchestration-template-currency goal: locks seven fixed template
+# claims G1–G7 in skills/setup/templates/ORCHESTRATION.md and (SKIP-when-absent)
 # instance mirrors .claude/ORCHESTRATION.md and .cursor/ORCHESTRATION.md.
 # Tracked, self-install-independent — no network, no LLM, no loop-harness dependency.
 #
@@ -20,6 +20,7 @@ cd "$REPO_ROOT" || exit 1
 CANONICAL="$REPO_ROOT/skills/setup/templates/ORCHESTRATION.md"
 MIRROR_CLAUDE="$REPO_ROOT/.claude/ORCHESTRATION.md"
 MIRROR_CURSOR="$REPO_ROOT/.cursor/ORCHESTRATION.md"
+DOCS_GUIDE="$REPO_ROOT/docs/guide/feature-workflow.md"
 
 fail_count=0
 pass_count=0
@@ -122,14 +123,38 @@ check_g6() {
   ! grep -qF 'rung 3 at run end' "$file"
 }
 
-check_all_g1_g6() { # check_all_g1_g6 <file> → 0 if all pass
+# ---------------------------------------------------------------------------
+# G7 — Feature Flow lifecycle mermaid diagram byte-identical to the docs guide.
+# ---------------------------------------------------------------------------
+extract_first_mermaid() { # extract_first_mermaid <file> <start-pattern>
+  # Prints the body of the first ```mermaid fence at or after start-pattern.
+  local file="$1" start="$2"
+  awk -v start="$start" '
+    $0 ~ start { s=1 }
+    s && /^```mermaid$/ { m=1; next }
+    m && /^```$/ { exit }
+    m { print }
+  ' "$file" 2>/dev/null
+}
+
+check_g7() {
+  local file="$1"
+  local tmpl_diag="" guide_diag=""
+  tmpl_diag="$(extract_first_mermaid "$file" '^## Feature Flow')"
+  guide_diag="$(extract_first_mermaid "$DOCS_GUIDE" '^# Feature workflow')"
+  [[ -n "$tmpl_diag" && -n "$guide_diag" ]] || return 1
+  [[ "$tmpl_diag" == "$guide_diag" ]]
+}
+
+check_all_g1_g7() { # check_all_g1_g7 <file> → 0 if all pass
   local file="$1"
   check_g1 "$file" && check_g2 "$file" && check_g3 "$file" \
-    && check_g4 "$file" && check_g5 "$file" && check_g6 "$file"
+    && check_g4 "$file" && check_g5 "$file" && check_g6 "$file" \
+    && check_g7 "$file"
 }
 
 # ===========================================================================
-# Canonical template — G1 through G6 (distinct PASS lines per claim).
+# Canonical template — G1 through G7 (distinct PASS lines per claim).
 # ===========================================================================
 if [[ ! -f "$CANONICAL" ]]; then
   report FAIL "canonical ORCHESTRATION: research handoff at Phase 3 (goal evaluation)" "file missing"
@@ -138,6 +163,7 @@ if [[ ! -f "$CANONICAL" ]]; then
   report FAIL "canonical ORCHESTRATION: driver-owned dispatch summary (write-set, sentinel, LOOP_SLOTS/LOOP_WORKTREE)" "file missing"
   report FAIL "canonical ORCHESTRATION: exit funnel (4>3>2>1>0, exit 1/5, quarantine markers)" "file missing"
   report FAIL "canonical ORCHESTRATION: merge gate per-story rung 3 (no run end)" "file missing"
+  report FAIL "canonical ORCHESTRATION: Feature Flow mermaid identical to docs/guide/feature-workflow.md" "file missing"
 else
   if check_g1 "$CANONICAL"; then
     report PASS "canonical ORCHESTRATION: research handoff at Phase 3 (goal evaluation)"
@@ -180,28 +206,35 @@ else
     report FAIL "canonical ORCHESTRATION: merge gate per-story rung 3 (no run end)" \
       "G6: per-story rung 3 missing and/or stale 'rung 3 at run end' present"
   fi
+
+  if check_g7 "$CANONICAL"; then
+    report PASS "canonical ORCHESTRATION: Feature Flow mermaid identical to docs/guide/feature-workflow.md"
+  else
+    report FAIL "canonical ORCHESTRATION: Feature Flow mermaid identical to docs/guide/feature-workflow.md" \
+      "G7: lifecycle mermaid block missing in template or docs guide, or the two blocks differ — keep them byte-identical"
+  fi
 fi
 
 # ===========================================================================
-# Instance mirrors — SKIP when absent, combined G1–G6 PASS when present.
+# Instance mirrors — SKIP when absent, combined G1–G7 PASS when present.
 # ===========================================================================
 if [[ -f "$MIRROR_CLAUDE" ]]; then
-  if check_all_g1_g6 "$MIRROR_CLAUDE"; then
-    report PASS "instance mirror .claude/ORCHESTRATION.md: G1–G6"
+  if check_all_g1_g7 "$MIRROR_CLAUDE"; then
+    report PASS "instance mirror .claude/ORCHESTRATION.md: G1–G7"
   else
-    report FAIL "instance mirror .claude/ORCHESTRATION.md: G1–G6" \
-      "one or more G1–G6 claims regressed in .claude/ORCHESTRATION.md"
+    report FAIL "instance mirror .claude/ORCHESTRATION.md: G1–G7" \
+      "one or more G1–G7 claims regressed in .claude/ORCHESTRATION.md"
   fi
 else
   skip_report "instance mirror .claude/ORCHESTRATION.md absent"
 fi
 
 if [[ -f "$MIRROR_CURSOR" ]]; then
-  if check_all_g1_g6 "$MIRROR_CURSOR"; then
-    report PASS "instance mirror .cursor/ORCHESTRATION.md: G1–G6"
+  if check_all_g1_g7 "$MIRROR_CURSOR"; then
+    report PASS "instance mirror .cursor/ORCHESTRATION.md: G1–G7"
   else
-    report FAIL "instance mirror .cursor/ORCHESTRATION.md: G1–G6" \
-      "one or more G1–G6 claims regressed in .cursor/ORCHESTRATION.md"
+    report FAIL "instance mirror .cursor/ORCHESTRATION.md: G1–G7" \
+      "one or more G1–G7 claims regressed in .cursor/ORCHESTRATION.md"
   fi
 else
   skip_report "instance mirror .cursor/ORCHESTRATION.md absent"

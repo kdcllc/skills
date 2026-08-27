@@ -134,7 +134,7 @@ deleted, so Step 6's grep for `{{` stays at zero hits.
 
 | Token | User supplied a value | User has none |
 |-------|----------------------|---------------|
-| `{{TARGETED_TEST_COMMAND}}` | replace **every** occurrence under `templates/` (today 5 sites: `ORCHESTRATION.md` code block, `agents/implementer.md`, `agents/test-writer.md`, `skills/test-ladder/SKILL.md`, `skills/task-criteria/SKILL.md` — **none** is a table row) | there is no token-only table row for this token; replace every occurrence with the literal `(not configured)` |
+| `{{TARGETED_TEST_COMMAND}}` | replace **every** occurrence under `templates/` (today 5 sites: `ORCHESTRATION.md` code block, `agents/implementer.md`, `agents/test-writer.md`, `skills/test-ladder/SKILL.template.md`, `skills/task-criteria/SKILL.template.md` — **none** is a table row) | there is no token-only table row for this token; replace every occurrence with the literal `(not configured)` |
 | `{{FULL_TEST_COMMAND}}` | replace **every** occurrence (today 9 sites; the only token-only table row among these four tokens is the `templates/ORCHESTRATION.md` Quality-checks / rung-3 row, plus 8 prose/code-block sites) | delete that table row if its cell is only this token; replace every remaining occurrence with `(not configured)` |
 | `{{TEST_FRAMEWORKS}}` | replace the occurrence (`agents/test-writer.md` prose) | replace with `not configured` |
 | `{{SETUP_COMMANDS}}` | replace the occurrence (`ORCHESTRATION.md` code block) | TypeScript/Node accept path: `npm install`; Python accept path: `pip install -e .`; Other or decline: `(not configured)` |

@@ -106,7 +106,7 @@ When the autonomous loop is enabled, all harnesses share single-copy `_loop/` dr
 
 `/setup` writes `orchestration-kit.manifest.json` at the project root. The manifest records:
 
-- **`kitVersion`** — contents of [`skills/setup/VERSION`](../../skills/setup/VERSION) at emit time (currently `0.21.0`)
+- **`kitVersion`** — contents of [`skills/setup/VERSION`](../../skills/setup/VERSION) at emit time (currently `0.23.0`)
 - **`files`** — map of every emitted path to its SHA-256 hash
 - **`seedFiles`** — paths that are seeds, not managed content (today `_goals/backlog.md`)
 - **`harnesses`**, **`options`**, **`installedAt`** — which harnesses were targeted and which optional features were enabled
@@ -121,7 +121,7 @@ For the full upgrade procedure (VERSION bumps, re-pulling with whichever CLI you
 
 With `/setup` complete, your project has agents, skills, an architecture doc, and (optionally) the autonomous loop — all filled in for your stack and interview answers.
 
-**Start your first feature with `/feature`.** That invokes the seven-phase orchestrator/worker/evaluator workflow. The phase-by-phase mechanics, contract gate, fix-cycle rotation, and orchestration log usage are documented in [feature-workflow.md](feature-workflow.md) — not repeated here.
+**Start your first feature with `/feature`.** That invokes the seven-phase orchestrator/worker/evaluator workflow (Phases 6 and 7 are optional — gated on `goal.md`'s `phases:` block). Acceptance criteria are defined at planning and validated at Phase 3; there is no separate pre-implementation sign-off gate. Phase-by-phase mechanics, fix-cycle rotation, optional Phase 6/7 skips, and orchestration log usage are documented in [feature-workflow.md](feature-workflow.md) — not repeated here.
 
 **Choosing a workflow:** not every change needs `/feature`. For direct edits, `/research` → `/feature`, or the autonomous loop, use [decision-guide.md](decision-guide.md) — it routes between the four modes with a decision flowchart and comparison table.
 
@@ -138,4 +138,4 @@ With `/setup` complete, your project has agents, skills, an architecture doc, an
 - [`skills/setup/emitters/copilot.md`](../../skills/setup/emitters/copilot.md) — GitHub Copilot emit destinations
 - [`skills/setup/emitters/codex.md`](../../skills/setup/emitters/codex.md) — OpenAI Codex emit destinations
 - `orchestration-kit.manifest.json` — example manifest shape (`kitVersion`, `files`, `seedFiles`)
-- [`skills/setup/VERSION`](../../skills/setup/VERSION) — kit version anchor (`0.21.0`)
+- [`skills/setup/VERSION`](../../skills/setup/VERSION) — kit version anchor (`0.23.0`)

@@ -77,6 +77,16 @@ Scoping clauses (apply before scoring the seven):
 
 Any violation of the seven checks is NEEDS REVISION.
 
+### Acceptance Criteria (Phase 3 gate)
+
+Every task file MUST contain an `## Acceptance Criteria` section. Each numbered item
+must name a verification method (unit test, integration test, command output, live
+interaction, screenshot, or equivalent). A missing section, an empty section, or any
+criterion without a stated verification method is NEEDS REVISION.
+
+This is where the former Phase 4 contract gate's rigor now lives — validated once at
+Phase 3 for all tasks before any implementation dispatch.
+
 ### Evaluation depth (`eval_depth`)
 
 **Applicability**: this check applies only to goals created on or after kit v0.18.0 —

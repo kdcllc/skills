@@ -12,7 +12,7 @@ One **run** is:
 
 1. **N iterations** — the driver's `max-iterations` argument (default **10** when omitted), counting total dispatches across all active slots.
 2. **One backlog story per fresh-context iteration** — each dispatch gets a clean CLI session; state lives in `_goals/backlog.md`, git, and outbox files, never in driver memory.
-3. **One human-approved PR at run end** — Phase 7 (`ship-pr`) ships the branch as a single pull request with your approval. The loop never auto-pushes.
+3. **One human-approved PR at run end (when enabled)** — Phase 7 (`ship-pr`) ships the branch as a single pull request with your approval when loop-level `pull_request` is enabled. The loop never auto-pushes.
 
 If you have not installed the loop yet, see [getting-started.md](getting-started.md) for `/setup` and the emitted `_loop/` layout.
 
@@ -50,7 +50,12 @@ flowchart TD
 
 **Iteration in main tree or worktree.** At `LOOP_WORKTREE=0` (default), every slot runs in the main checkout. At `LOOP_WORKTREE=1`, each slot gets its own git worktree under `.loop-worktrees/` after a tracked-instance preflight.
 
-**Evaluation-gated commit.** The iteration follows `/feature` Phases 2–6 with the story's acceptance criteria replacing Phase 1 alignment. A commit lands only on evaluator PASS (or APPROVED for audits) plus green test-ladder rungs 1–2; rung 3 runs once at cycle end. Details of verdicts, contracts, and the ladder live in [evaluation-system.md](evaluation-system.md). As of v0.20.0, iterations inherit Phase 4's continuation ladder (rungs 5→4→6 on fix-cycle exhaustion, before terminal escalation) because each iteration runs the phased flow; the drivers' per-story attempt cap and circuit breakers stay the unchanged outer backstop. Ladder mechanics are documented in [feature-workflow.md](feature-workflow.md).
+**Evaluation-gated commit.** The iteration follows `/feature` Phases 2–6 with the story's acceptance criteria replacing Phase 1 alignment. Phase 7 (`pull_request`) is deferred to the end of the whole run — the loop never pushes during per-story iterations. A commit lands only on evaluator PASS (or APPROVED for audits) plus green test-ladder rungs 1–2; rung 3 runs per story after that story's Phase 5 audit. Details of verdicts and the ladder live in [evaluation-system.md](evaluation-system.md). As of v0.20.0, iterations inherit Phase 4's continuation ladder (rungs 5→4→6 on fix-cycle exhaustion, before terminal escalation) because each iteration runs the phased flow; the drivers' per-story attempt cap and circuit breakers stay the unchanged outer backstop. Ladder mechanics are documented in [feature-workflow.md](feature-workflow.md).
+
+**Phase 6/7 controls** — the loop cannot ask questions, so flags are read from story backlog frontmatter and run configuration only (same naming as `goal.md`'s `phases:` block):
+
+- **`align_docs`** (per story, default `true`): Phase 6 (`align-docs`) runs **per story** when enabled, so doc updates land in the story's commit and documentation never drifts from shipped code. A story may set `align_docs: false` in its backlog frontmatter to skip the per-story Phase 6 run; the skip is logged, never silent — write "Phase 6 skipped per story frontmatter" to the orchestration log.
+- **`pull_request`** (loop-level, opt-in): the end-of-run ship step stays explicitly enabled — a human or an opt-in final step runs `ship-pr` once to draft and create the PR/MR on the project's forge, or hand over. Control this with loop-level `pull_request` in run configuration (`pull_request: false` skips the ship step with a logged skip, never silent); default remains opt-in as today.
 
 **Breaker checks.** After each reap, the driver evaluates per-slot circuit breakers (CB1 no-progress, CB2 repeated signatures), the model rate-limit breaker, and protected-path diffs (CB0). Trips **retire** the slot rather than stopping the whole run on first failure — unless CB0 fires (exit 4).
 
@@ -67,7 +72,7 @@ These guards are **structural** — enforced by `loop.sh` / `loop.ps1` and the `
 | **Model breaker** | CLOSED/OPEN/HALF-OPEN on anchored rate-limit detection; 600s cooldown, 2 successes to close; falls down the loop model chain. OPEN sleeps instead of hammering; rate-limited passes are CB1-exempt. State: `_goals/breaker-state.json`. |
 | **Memory size gates** | After integrate, the driver **detects** breaches and prints a deferral — it never compacts or archives. Thresholds match the guard table: `_goals/LEARNINGS.md` ≥ **15 KB** (compact) and `_goals/ESCALATIONS.md` ≥ **20 KB** (archive resolved entries). Compaction and archival happen in a **manual** `auto-loop` iteration only; driver-dispatched slots never run these gates. |
 | **Merge gate** | Evaluator PASS + green ladder rungs **1–2** before any commit; rung **3** per story after that story's Phase 5 audit, before that story's commit. |
-| **PR gate / shipping** | The loop **never pushes**. At run end, **`ship-pr` (Phase 7)** ships the branch as **one PR**, with the user approving the draft. |
+| **PR gate / shipping** | The loop **never pushes**. At run end, when loop-level `pull_request` is enabled, **`ship-pr` (Phase 7)** ships the branch as **one PR**, with the user approving the draft. |
 | **Per-story attempt cap** | **3** attempts, then `blocked: true` plus an escalation entry. |
 | **Sandbox** | Run in a worktree/container with minimal credentials; never skip permission prompts outside a sandbox. |
 
@@ -167,7 +172,7 @@ At run end, review commits on the branch and run **`ship-pr`** (Phase 7) once to
 | Topic | Guide |
 |-------|-------|
 | When to choose the loop | [decision-guide.md](decision-guide.md) |
-| Evaluator PASS, contracts, test ladder | [evaluation-system.md](evaluation-system.md) |
+| Evaluator PASS, acceptance criteria, test ladder | [evaluation-system.md](evaluation-system.md) |
 | Install and first `/setup` | [getting-started.md](getting-started.md) |
 | Parallel-dispatch design depth | [design-parallel-dispatch.md](../design-parallel-dispatch.md) |
 
@@ -176,7 +181,7 @@ At run end, review commits on the branch and run **`ship-pr`** (Phase 7) once to
 - [`skills/setup/templates/loop/loop.sh`](../../skills/setup/templates/loop/loop.sh) — driver truth: knobs, exit codes, aggregation, quarantine, worktree preflight
 - [`skills/setup/templates/loop/loop.ps1`](../../skills/setup/templates/loop/loop.ps1) — PowerShell twin (parity contract)
 - [`skills/setup/templates/loop/breaker.sh`](../../skills/setup/templates/loop/breaker.sh) — model circuit breaker state machine
-- [`skills/setup/templates/loop/SKILL.md`](../../skills/setup/templates/loop/SKILL.md) — one-iteration contract, dispatch modes, protected paths
+- [`skills/setup/templates/loop/SKILL.template.md`](../../skills/setup/templates/loop/SKILL.template.md) — one-iteration contract, dispatch modes, protected paths
 - [`skills/setup/templates/loop/PROMPT.md`](../../skills/setup/templates/loop/PROMPT.md) — dispatched prompt shape
 - [`skills/setup/templates/loop/backlog.md`](../../skills/setup/templates/loop/backlog.md) — canonical backlog story format
 - [`skills/setup/templates/ORCHESTRATION.md`](../../skills/setup/templates/ORCHESTRATION.md) — autonomous loop guard table

@@ -13,7 +13,7 @@ The kit separates **coordination and verification** (frontier tier) from **execu
 | `implementer` | `light` (`{{MODEL_LIGHT}}`) | Only paths in the task's `writes` set | Edit out-of-fence files; run rung-3 full suites |
 | `test-writer` | `light` | Only test files in task `writes` | Hit live external services; edit source to make tests pass |
 | `terminal` | `light` | Shell side effects only (no Edit/Write tools) | Dump raw command streams into the caller session |
-| `diagnostician` | `frontier` (`{{MODEL_FRONTIER}}`) | Nothing — diagnosis-only report | Edit files or write product code; re-litigate the signed contract (rung-5 arbitration's job) |
+| `diagnostician` | `frontier` (`{{MODEL_FRONTIER}}`) | Nothing — diagnosis-only report | Edit files or write product code; re-litigate whether the acceptance criteria are sound (rung-5 arbitration's job) |
 
 The sections below quote or paraphrase the canonical agent templates under [`skills/setup/templates/agents/`](../../skills/setup/templates/agents/). Capabilities not confirmed there are omitted.
 
@@ -106,7 +106,7 @@ The terminal is the **shell-output shield**: noisy test runs, builds, and git op
 
 **Role:** Fresh-context root-cause analyst spawned at continuation-ladder rung 4 after three implement→evaluate fix cycles exhaust without a PASS (as of v0.20.0).
 
-**Inputs:** The task file, the signed contract, all three fix-cycle histories (implementer reports + evaluator verdicts), and pointers to the current code.
+**Inputs:** The task file (including its `## Acceptance Criteria` section), all three fix-cycle histories (implementer reports + evaluator verdicts), and pointers to the current code.
 
 **Tier:** `frontier` — frontmatter `model: {{MODEL_FRONTIER}}`, effort `high`. Tools: Bash, Read, Grep, Glob — no Edit/Write.
 
@@ -164,7 +164,7 @@ Evaluators, the diagnostician, and the orchestrating session run **frontier** mo
 | `frontier` | Orchestrator (main session), `evaluator`, `qa-evaluator`, `diagnostician` | Delegation and evaluation have a capability floor — don't cheap out on the roles that decide and verify; continuation-ladder diagnosis needs frontier-tier reasoning |
 | `light` | `implementer`, `test-writer`, `terminal` | Checklist-driven execution and compact command running retain most quality at a fraction of the cost when the plan and the verification are strong |
 
-**Verification quality is where frontier spend pays off.** Implementation is cheaper-tier work that evaluators re-check before anything advances. A light-tier implementer following a signed contract and strong evaluation is cheaper than running everything on frontier — without sacrificing gate quality at the roles that matter.
+**Verification quality is where frontier spend pays off.** Implementation is cheaper-tier work that evaluators re-check before anything advances. A light-tier implementer following the task file (including its Acceptance Criteria) and strong evaluation is cheaper than running everything on frontier — without sacrificing gate quality at the roles that matter.
 
 Reasoning-effort pins (where the harness supports them): evaluators and the diagnostician `high`, workers `medium`.
 

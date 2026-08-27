@@ -18,6 +18,12 @@ checks tasks against this — every answered decision must be reflected in a tas
 
 - [Must reuse / must not touch / performance / compatibility constraints]
 
+```yaml
+phases:
+  align_docs: true|false    # recorded from Phase 1 answers; checked after Phase 5 APPROVED (default true)
+  pull_request: true|false  # recorded from Phase 1 answers; checked after Phase 5 APPROVED (default true)
+```
+
 ## Out of Scope
 
 - [Explicitly excluded work, so the evaluator can flag scope creep]
@@ -33,5 +39,5 @@ checks tasks against this — every answered decision must be reflected in a tas
 **Contract first.** If this goal touches a shared boundary or interface, the first task
 is a dedicated contract/scaffold task — it defines the types, schemas, and port
 interfaces and creates the empty file skeletons — and every task that consumes them
-lists it in `depends_on`. Consumers then build against a frozen contract instead of
+lists it in `depends_on`. Consumers then build against that frozen interface instead of
 each other's files.

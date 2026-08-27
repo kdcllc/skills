@@ -2,25 +2,37 @@
 
 [![skills.sh installs](https://skills.sh/b/kdcllc/skills)](https://skills.sh/kdcllc/skills)
 
-> Kit version: **0.22.0** (`skills/setup/VERSION`) · The install badge above applies
-> only if the repo is made public: [skills.sh](https://www.skills.sh/) filters private
-> repos out of its public index by design
-> ([vercel-labs/skills#381](https://github.com/vercel-labs/skills/issues/381)), so it
-> stays dormant while this repo is private. Private installs work regardless — see
-> below. If the repo publishes under a different owner/name, update the badge path
-> (`skills.sh/b/<owner>/<repo>`).
+> Kit version: **0.23.0** (`skills/setup/VERSION`) · Version history: [CHANGELOG.md](CHANGELOG.md)
 
 A portable orchestrator/worker/evaluator multi-agent system for AI coding harnesses —
 **Claude Code, Cursor, GitHub Copilot (VS Code), and OpenAI Codex** — packaged as one
 installable `setup` skill that compiles a single canonical template source into each
 harness's native format.
 
-What an install gives a project:
+## Quick start
+
+```bash
+# 1. Install the setup skill into your project (see §Install for options)
+npx skills add kdcllc/skills
+
+# 2. In a session inside the project, compile the kit for your harness(es)
+/setup
+
+# 3. Start your first orchestrated feature
+/feature
+```
+
+Optional: start an unattended run (sandboxed!) with `_loop/loop.sh 10` or
+`pwsh _loop/loop.ps1 10` (PowerShell 7+).
+
+## What you get
 
 - A **seven-phase feature workflow** (`/feature`): alignment → goal creation → goal
-  evaluation → task execution → final audit → docs alignment → approval-gated pull
-  request. No phase advances without an evaluator verdict; fixes are always
-  re-evaluated (3-cycle limits, explicit escalation).
+  evaluation → task execution → final audit → optional docs alignment → optional
+  approval-gated pull request. Acceptance criteria are defined at planning and
+  validated at Phase 3; Phases 6 and 7 are gated on a `phases:` block in `goal.md`.
+  No phase advances without an evaluator verdict; fixes are always re-evaluated
+  (3-cycle limits, explicit escalation).
 - **Six subagents with tiered model pinning**: `evaluator`, `qa-evaluator`, and
   `diagnostician` on the frontier tier (effort high), `implementer`, `test-writer`, and
   `terminal` on the light tier (effort medium) — `terminal` runs Bash or PowerShell and
@@ -30,37 +42,20 @@ What an install gives a project:
 - **Hardened evaluation** (patterns adopted from studying
   [bradygaster/squad](https://github.com/bradygaster/squad)): existence checks with a
   ✅/⚠️/❌/🔍 confidence ladder and anti-fabrication rules, a required devil's-advocate
-  section in goal evaluation, fix-cycle **model rotation** (retry with a different model
-  family, then the frontier tier), silent-success artifact verification, and an
-  append-only **orchestration log** per goal. v0.18.0 added **calibration exemplars**
-  and an **execute-before-score** rule to the `evaluator` agent, a **hard per-criterion
-  threshold** (no averaging away one failing dimension) to the criteria skills, pre-code
-  **contracts** with two-party worker/evaluator sign-off before implementation, and
-  **`eval_depth`** intensity routing set by the orchestrator (never a skip). v0.20.0
-  added the Phase 4 **continuation ladder** after fix-cycle exhaustion — rung 5
-  arbitration, rung 4 diagnosis-first (`diagnostician`), rung 6 decomposition + selective
-  retry — with a closed failure-class taxonomy, always-escalate bypass for
-  destructive/security/infra, and hard guards. v0.21.0 synced the canonical architecture
-  template to shipped v0.12–v0.20 behavior — research handoff at Phase 3, the escalation
-  **Ladder** line, closer-task rung-3 carve-out, and loop dispatch/exit-funnel/merge-gate
-  summary. v0.22.0 added the Phase 7 **forge adapter** — GitHub / Azure DevOps / GitLab / hand-over;
-  Phase 7 is never deleted from an install.
+  section in goal evaluation, fix-cycle **model rotation**, execute-before-score,
+  `eval_depth` intensity routing, a post-exhaustion **continuation ladder**, and an
+  append-only **orchestration log** per goal with proxy token fields. How each piece
+  arrived is in [CHANGELOG.md](CHANGELOG.md); mechanics are in
+  [docs/guide/evaluation-system.md](docs/guide/evaluation-system.md).
 - A **staged test ladder** (`test-ladder`): new tests → impacted tests mid-cycle; full
   suites at cycle end — in a goal's designated closer task when it has one, and in the
   orchestrator's Phase 5 Quality Checks.
 - An optional **autonomous loop** (`auto-loop` + `_loop/loop.sh` / `_loop/loop.ps1`):
   one backlog story per fresh-context iteration, evaluation-gated commits, circuit
-  breakers (no-progress, repeated-error, and protected-path violations enforced in the
-  loop drivers, not prose), memory size gates, and a single human-approved PR at run end.
-  Slot-supervision knobs — `LOOP_SLOTS` (default 2, clamped `[1,3]`; live under the
-  N>1-iff-worktree rule shipped in v0.12.0: honored when `LOOP_WORKTREE=1`, clamps to
-  effective 1 when `LOOP_WORKTREE=0` (with a stderr note only when `LOOP_SLOTS>1` was
-  set explicitly)) and `LOOP_WORKTREE` (default 0, main-tree iteration; `=1` opts into
-  a driver-managed worktree) — sit alongside a six-code exit contract: codes 0–3
-  aggregated across slots with precedence 4>3>2>1>0 (per-slot CB1/CB2 retirement
-  instead of a run-fatal stop; drained completion exits 0 only when no branch was
-  quarantined this run), exit 4 short-circuiting the table on protected-path
-  violations, and exit 5 as the loud setup/integration stop.
+  breakers enforced in the loop drivers (not prose), optional parallel slots in
+  driver-managed worktrees, a six-code exit contract, and a single human-approved PR
+  at run end. Knobs, exit codes, and the safety model are documented in
+  [docs/guide/autonomous-loop.md](docs/guide/autonomous-loop.md).
 
 ## Documentation
 
@@ -70,65 +65,36 @@ Developer guide: [docs/guide/README.md](docs/guide/README.md).
 |-------|-------------|
 | [getting-started.md](docs/guide/getting-started.md) | Install paths, `/setup` compile flow, greenfield gate, multi-harness emission, manifest basics |
 | [decision-guide.md](docs/guide/decision-guide.md) | Choosing direct edit, `/feature`, `/research` → `/feature`, or autonomous loop; flowchart, mode comparison, anti-patterns |
-| [feature-workflow.md](docs/guide/feature-workflow.md) | Seven phases in depth, contract gate, fix-cycle rotation, escalation, orchestration log, condensed worked example |
+| [feature-workflow.md](docs/guide/feature-workflow.md) | Seven phases in depth, acceptance criteria at planning, optional Phases 6/7, fix-cycle rotation, escalation, orchestration log, condensed worked example |
 | [research-workflow.md](docs/guide/research-workflow.md) | Why research precedes implementation, prompt/report artifacts, ingestion into a goal, when to skip |
 | [autonomous-loop.md](docs/guide/autonomous-loop.md) | Drivers, backlog stories, iteration lifecycle, circuit breakers, slots/worktrees, exit codes, quarantine, safety model |
 | [agents-and-models.md](docs/guide/agents-and-models.md) | Six subagent roles and boundaries, model tiers, `models.map.md` anatomy, fallback chains, harness caveats |
-| [evaluation-system.md](docs/guide/evaluation-system.md) | Verdict vocabulary, confidence ladder, anti-fabrication, devil's advocate, pre-code contracts, `eval_depth`, test ladder, orchestration log audit trail |
+| [evaluation-system.md](docs/guide/evaluation-system.md) | Verdict vocabulary, confidence ladder, anti-fabrication, devil's advocate, acceptance criteria validation, `eval_depth`, test ladder, orchestration log audit trail |
 | [contributing.md](docs/guide/contributing.md) | Repo anatomy (canonical vs instance vs generated), self-install dogfood loop, templates/emitters, harness matrix, VERSION + manifest + upgrades, test harness |
 
 ## Layout
 
-```
-ORCHESTRATION.md              # Pointer to the canonical template inside the skill
-docs/
-├── research-multi-harness-upgrade.md  # Verified per-harness research + upgrade plan
-├── research-squad-ideas.md            # bradygaster/squad study + adopted ideas (A1–A10)
-├── research-token-efficient-skills.md # 2026-08-20: invocation flags, hygiene, terminal agent
-├── research-harness-design-upgrade.md # 2026-08-21: Anthropic harness-design study →
-│                                      #   evaluator vocabulary + contracts (shipped v0.18.0: phases 0–2)
-├── research-autonomous-escalation.md  # 2026-08-24: fix-cycle escalation study →
-│                                      #   continuation ladder (shipped v0.20.0: rungs 4–6)
-├── design-parallel-dispatch.md        # Verdict-gated design: WIP-limited parallel dispatch
-│                                      #   in the autonomous loop (partially shipped; see its Status block)
-└── guide/                             # Developer guide suite (9 docs): getting started,
-                                       #   decision guide, workflows, agents, evaluation — see §Documentation
-skills/setup/                 # The installable skill (the compiler)
-├── SKILL.md                  # Workflow: detect harness(es) → inspect → interview →
-│                             #   resolve templates → emit per harness → manifest
-├── VERSION                   # Kit version (written into each install's manifest)
-├── reference/
-│   └── harness-matrix.md     # Verified per-harness capability table + friction points
-├── emitters/                 # Per-harness compile instructions
-│   ├── claude-code.md        #   .claude/ (canonical format — mostly a copy)
-│   ├── cursor.md             #   .cursor/ self-contained tree (agents, skills, ORCHESTRATION.md, model map)
-│   ├── copilot.md            #   .github/agents/*.agent.md + copilot-instructions.md
-│   └── codex.md              #   AGENTS.md + .codex/config.toml role tables
-└── templates/                # Canonical source (Claude Code format)
-    ├── ORCHESTRATION.md      # Architecture doc template
-    ├── models.map.md         # Tier → model IDs, fallback chains, fix-cycle rotation
-    ├── agents/               # evaluator, qa-evaluator, diagnostician (frontier) · implementer, test-writer, terminal (light)
-    ├── skills/               # feature, research, {goal,task,qa}-criteria,
-    │                         #   test-ladder, align-docs, ship-pr
-    └── loop/                 # Optional autonomous loop: SKILL.md (one iteration),
-                              #   loop.sh + loop.ps1 (guarded drivers), PROMPT.md, backlog.md
-scripts/                      # self-install.sh / self-install.ps1 — first-mile dogfood (see §Self-install)
-tests/
-├── docs-link-check.sh         # docs/guide/ suite integrity checker (links, mermaid,
-│                              #   conventions); run: bash tests/docs-link-check.sh
-└── loop-harness/run.sh        # Tracked behavioral test suite (breaker state machine +
-                              #   torn-read/fail-safe hardening, SIGPIPE regressions,
-                              #   checks J/K mutations); self-install assertions run before
-                              #   the `_loop/` guard (they execute on a fresh clone with no
-                              #   `_loop/`); the remaining loop-instance assertions are skipped
-                              #   if `_loop/` is absent (one aggregate skip, not per-row SKIP
-                              #   lines); run: bash tests/loop-harness/run.sh
-```
+| Path | What it is |
+|------|------------|
+| [`skills/setup/`](skills/setup/) | The installable skill (the compiler): `SKILL.md` workflow, `VERSION`, `emitters/` (per-harness compile instructions), `reference/harness-matrix.md` (verified harness facts), and `templates/` — the canonical source: architecture doc, `models.map.md`, six agents, the skills (each a `SKILL.template.md`, renamed to `SKILL.md` at emit), and the loop drivers |
+| [`docs/`](docs/) | The `guide/` developer suite (see §Documentation) plus the research and design studies behind shipped behavior — for example [research-autonomous-escalation.md](docs/research-autonomous-escalation.md) (→ the v0.20.0 continuation ladder) and [research-multi-harness-upgrade.md](docs/research-multi-harness-upgrade.md) (per-harness ground truth) |
+| [`tests/`](tests/) | `docs-link-check.sh` (guide integrity), `templates/` (6 canonical-template sync guards), `loop-harness/run.sh` (behavioral suite incl. self-install assertions) |
+| [`scripts/`](scripts/) | `self-install.sh` / `self-install.ps1` — first-mile dogfood copy (see §Self-install) |
+| [`ORCHESTRATION.md`](ORCHESTRATION.md) | Pointer to the canonical architecture template inside the skill |
+| [`CHANGELOG.md`](CHANGELOG.md) | Version history (v0.12.0 →) |
+
+The full repo anatomy — canonical vs gitignored-instance vs tracked-docs layers — is in
+[docs/guide/contributing.md](docs/guide/contributing.md).
 
 ## Install into a project
 
 A public repo is NOT required — both CLIs install from this private repo as long as
-the machine has git access to it:
+the machine has git access to it. (That is also why the install badge above stays
+dormant while the repo is private: [skills.sh](https://www.skills.sh/) filters private
+repos out of its public index by design,
+[vercel-labs/skills#381](https://github.com/vercel-labs/skills/issues/381). If the
+repo publishes under a different owner/name, update the badge path
+`skills.sh/b/<owner>/<repo>`.)
 
 ```bash
 # Option A — skills CLI: clones with your LOCAL git credentials (SSH or gh auth),
@@ -187,70 +153,19 @@ Start your first feature with `/feature`.
 
 Start an unattended run (sandboxed!) with `_loop/loop.sh 10` or `pwsh _loop/loop.ps1 10` (PowerShell 7+).
 
-Driver-owned dispatch, write-set admission, and the single-writer integrator shipped in **v0.12.0**.
-
-Completion and exit aggregation shipped in **v0.13.0**:
-
-- Per-slot CB1/CB2 retirement instead of a run-fatal stop.
-- Run exit aggregated across slots with precedence `4 > 3 > 2 > 1 > 0`.
-- Quarantine-gated completion, where drained-backlog exit `0` occurs only when no branch was quarantined during the run.
-- `.loop-worktrees/QUARANTINE-<branch>.md` markers (slashes in branch names become dashes) embedding the dispatched prompt.
-
-`LOOP_WORKTREE` still defaults to `0` (main-tree iteration). Setting `LOOP_WORKTREE=1` requires a tracked-instance preflight.
-
-`LOOP_SLOTS` is live under the N>1-iff-worktree rule:
-
-- `LOOP_WORKTREE=1` honors the configured value.
-- `LOOP_WORKTREE=0` clamps to an effective value of `1`.
-- A stderr note is emitted only when `LOOP_SLOTS > 1` was explicitly configured.
-
-A new exit code, `5`, covers setup/integration failures.
-
-The completion-time backlog re-scan added in **v0.13.0** now raises the same missing/unreadable-backlog cause at a fifth site. The original four causes are unchanged; this simply adds louder completion-time coverage.
+Loop driver behavior (dispatch, slots, worktrees, circuit breakers, exit codes) is
+documented in [docs/guide/autonomous-loop.md](docs/guide/autonomous-loop.md); when each
+piece shipped is in [CHANGELOG.md](CHANGELOG.md).
 
 ### Self-install (local development of the kit itself)
 
-**First-mile skill copy (offline, no npx):** These scripts copy every top-level
-`skills/<name>/` directory (each containing a `SKILL.md`) from the working tree
-directly into `.claude/skills/` and `.cursor/skills/`. Overwrite-copy is the default;
-no network access or npx is required.
-
-```bash
-bash scripts/self-install.sh
-```
-
-On Windows or any system where the `.ps1` may lack execute permission, use `pwsh -File` (PowerShell 7+):
-
-```powershell
-pwsh -NoProfile -File scripts/self-install.ps1
-```
-
-Flags: `--dry-run` prints the planned destinations and writes nothing (exit 0);
-`--symlink` places the canonical real tree under `.agents/skills/` and makes
-`.claude/skills/<name>` and `.cursor/skills/<name>` symlinks pointing there (fails
-loudly on any symlink failure — never falls back to copy); `--force` is accepted
-and ignored (overwrite is already the default). The destination paths
-`.cursor/skills/` and `.agents/skills/` are gitignored alongside the entire `.claude/`
-directory (see `.gitignore`); nothing the scripts write ever reaches git. `.gitignore`
-also covers `.cursor/ORCHESTRATION.md`, the architecture doc `/setup` emits under `.cursor/`.
-
-These scripts do **not** replace `/setup` and do **not** emit the compiled instance.
-`/setup` is the **compile** step that emits `_loop/`, the agents, `_goals/`,
-`orchestration-kit.manifest.json`, and all generated project-specific content. After
-running the scripts above, invoke `/setup` inside the repo session to produce the full
-local instance.
-
-This repo dogfoods its own skill: run `/setup` in a session inside this repo and point
-it at itself. The emitted instance (`.claude/`, `.cursor/skills/`, `.cursor/agents/`,
-`.cursor/rules/`, `.cursor/ORCHESTRATION.md`, `_goals/`, `_loop/`, `_research/`,
-`orchestration-kit.manifest.json`) is **gitignored** — a self-install never reaches
-git, so it is safe to re-run at any time and nothing in the instance is source of
-truth. The canonical kit stays under `skills/setup/`; after editing templates, re-run
-`/setup` to refresh the local instance and exercise the change end-to-end before
-committing the canonical side. The tracked test harness (`tests/loop-harness/run.sh`)
-exercises the `/setup`-emitted instance when `_loop/` is present — run it with
-`bash tests/loop-harness/run.sh`. Assertions for these scripts exist in the loop
-harness and run without requiring `_loop/`.
+This repo dogfoods its own skill. `bash scripts/self-install.sh` — or
+`pwsh -NoProfile -File scripts/self-install.ps1` (PowerShell 7+) — copies the
+top-level skills into `.claude/skills/` and `.cursor/skills/` offline (no npx); then
+run `/setup` in a repo session to emit the full instance. Everything emitted is
+gitignored — the canonical source stays under `skills/setup/`. Script flags, the
+dogfood loop, repo anatomy, and the test harnesses are documented in
+[docs/guide/contributing.md](docs/guide/contributing.md).
 
 ## Model tiers
 
@@ -264,20 +179,17 @@ names.
 
 ## Upgrading an installed project
 
-Re-run `/setup`: it reads `orchestration-kit.manifest.json`, diffs file hashes to spot
-your local modifications, regenerates, and shows a diff before touching anything you
-edited. Seed files (today just `_goals/backlog.md`, listed in the manifest's
-`seedFiles`) sit outside that flow: created only if missing, never overwritten, and
-their hash drift is expected, not a modification the diff needs to show you. Bump
-`skills/setup/VERSION` when changing the kit; users re-pull with whichever CLI they
-installed with — `npx skills add kdcllc/skills` again, or
-`npx agent-skills-cli update` (run `npx agent-skills-cli check` first to see installed
-skills with source and version) — then re-run `/setup` to re-emit.
+1. **Re-pull the kit** with whichever CLI you installed with:
+   `npx skills add kdcllc/skills` again, or `npx agent-skills-cli update`.
+2. **Re-run `/setup`.** It reads `orchestration-kit.manifest.json`, diffs file hashes
+   to spot your local modifications, and shows a diff before touching anything you
+   edited. Seed files like `_goals/backlog.md` are never overwritten. Always re-run
+   `/setup` after upgrading (updating `_loop/` drivers by hand skips new `.gitignore`
+   lines).
 
-Installs that update `_loop/` drivers without re-running `/setup` Step 5 will lack the
-new `.loop-worktrees/` and `_goals/breaker-state.json.tmp.*` `.gitignore` lines
-(`skills/setup/SKILL.md:127-132`) — re-run `/setup` after upgrading (or append them
-manually).
+Manifest semantics, seed files, and stale-file pruning are documented in
+[docs/guide/contributing.md](docs/guide/contributing.md); kit maintainers bump
+`skills/setup/VERSION` whenever kit behavior changes.
 
 ## Editing the templates
 

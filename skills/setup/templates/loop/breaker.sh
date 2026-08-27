@@ -139,7 +139,7 @@ _breaker_valid() {
 # sibling temp file first, then `mv -f` onto the target — POSIX rename(2) on the
 # same filesystem is atomic, so a concurrent reader can never observe a
 # zero-length or partially-written file (the torn-read race this story closes).
-# The temp name is colon-free (templates/loop/SKILL.md:27).
+# The temp name is colon-free (templates/loop/SKILL.template.md:27).
 _breaker_write() {
   local file="$1" state="$2" chain="$3" idx="$4" model="$5" cooldown="$6" \
         opened="$7" half="$8" fb="$9" rec="${10}"

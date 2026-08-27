@@ -49,8 +49,8 @@ rows, and terminal-agent-spec section below that it changed.
 
 | Skill | Verdict | First implementation move |
 |-------|---------|---------------------------|
-| `feature` | Keep auto-skill; later split thin SKILL.md + reference | Tighten description |
-| `research` | Keep auto-skill | Tighten description |
+| `feature` | Keep auto-skill; later split thin SKILL.md + reference | Tighten description — **Shipped** (`_goals/feature-skill-slimming/`) |
+| `research` | Keep auto-skill | Tighten description — **Shipped** (`_goals/feature-skill-slimming/`) |
 | `align-docs` | Manual | `disable-model-invocation: true`; keep `/align-docs` |
 | `ship-pr` | Manual | `disable-model-invocation: true`; keep `/ship-pr` |
 | `auto-loop` | Loop-driver only | `disable-model-invocation: true` |
@@ -124,8 +124,8 @@ the current phase.”
 | P1 | Emit `terminal` agent on all three harnesses; spawn rules in ORCHESTRATION.md | Command output leaves the frontier context | **Shipped by this goal** — `_goals/invocation-flag-hygiene/` |
 | P1 | `/setup` interview: quiet form of targeted/full test commands | No invented flags | Not this goal |
 | P1 | Copilot emitter: `.github/skills/` default; inline = legacy-only | Stops body duplication in agents | Not this goal |
-| P1 | Always-on + “binding” language hygiene | Stops whole-architecture pull into `/feature` | Not this goal |
-| P2 | Split `feature` (181) / `auto-loop` (208) SKILL.md | Smaller per-turn body once invoked | Not this goal |
+| P1 | Always-on + “binding” language hygiene | Stops whole-architecture pull into `/feature` | **Shipped** — `_goals/feature-skill-slimming/` |
+| P2 | Split `feature` (181) / `auto-loop` (208) SKILL.md | Smaller per-turn body once invoked | **Shipped** (feature ladder → `reference/continuation-ladder.md`; template skills → `SKILL.template.md`) — `_goals/feature-skill-slimming/` |
 | P2 | Test guard: fail if criteria/`auto-loop` are auto-invocable | Regression lock | **Shipped by this goal** — `_goals/invocation-flag-hygiene/` |
 | P2 | Setup-report MCP / `/context` warning | User education; kit does not emit MCP | Not this goal |
 | P2 | Path-scoped lane rules (Copilot `applyTo`, Cursor `globs`, Claude `paths:`) | Test/docs/PR rules stay out of unrelated sessions | Not this goal |

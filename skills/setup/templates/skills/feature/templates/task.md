@@ -39,6 +39,15 @@ eval_depth: [full|light]
 - [ ] [Error handling requirement — what happens on failure X]
 - [ ] [...]
 
+## Acceptance Criteria
+
+1. [Specific, verifiable criterion] — verification: [unit test | integration test | command output | live interaction | screenshot]
+2. [Specific, verifiable criterion] — verification: [unit test | integration test | command output | live interaction | screenshot]
+3. [...]
+
+These criteria absorb the former contract's done-definition precision and out-of-scope
+note; the Phase 3 goal evaluator validates them once for all tasks.
+
 ## Files to Read
 
 - [path] — [why]

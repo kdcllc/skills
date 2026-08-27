@@ -156,23 +156,34 @@ writes this counter — the driver already incremented it at claim time.
 
 Follow the `feature` skill's Phases 2–6 with two substitutions: **the story's
 acceptance criteria replace Phase 1 alignment** (there is no user to ask), and
-**Phase 7 (pull request) is deferred to the end of the whole run** — the loop never
-pushes; a human (or an explicitly enabled final step) runs `ship-pr` once to
-draft and create the PR/MR on the project's forge, or hand over. If the story is too ambiguous to derive a goal from,
+**Phase 7 (`pull_request`) is deferred to the end of the whole run** — the loop
+never pushes during per-story iterations. If the story is too ambiguous to derive a goal from,
 treat that as a blocking issue (step 4). If the derived goal's tasks need to write
 outside the story's declared `writes:` set, that is also a blocking issue (step
 4) — escalate it; never silently widen scope past what was declared.
 
 All invariants hold unchanged: implementer/test-writer execute, `evaluator` verifies every
 task and the final audit, fixes are always re-evaluated, 3 evaluation cycles max per task,
-tests climb ladder rungs 1–2 mid-story with rung 3 after the audit. Phase 6
-(`align-docs`) runs **per story**, so its doc updates land in the story's commit and
-documentation never drifts from shipped code.
+tests climb ladder rungs 1–2 mid-story with rung 3 after the audit.
+
+**Phase 6/7 controls** — the loop cannot ask questions, so flags are read from story
+backlog frontmatter and run configuration only (same naming as `goal.md`'s `phases:` block):
+
+- **`align_docs`** (per story, default `true`): Phase 6 (`align-docs`) runs **per
+  story** when enabled, so doc updates land in the story's commit and documentation
+  never drifts from shipped code. A story may set `align_docs: false` in its backlog
+  frontmatter to skip the per-story Phase 6 run; the skip is logged, never silent —
+  write "Phase 6 skipped per story frontmatter" to the orchestration log.
+- **`pull_request`** (loop-level, opt-in): the end-of-run ship step stays explicitly
+  enabled — a human or an opt-in final step runs `ship-pr` once to draft and create
+  the PR/MR on the project's forge, or hand over. Control this with loop-level
+  `pull_request` in run configuration (`pull_request: false` skips the ship step
+  with a logged skip, never silent); default remains opt-in as today.
 
 ## 3. Gate, commit, record
 
 Commit **only** when the final audit is APPROVED, the ladder rungs are green, and
-Phase 6 doc alignment is APPROVED:
+Phase 6 doc alignment is APPROVED (or skipped per story frontmatter):
 
 - One commit for the story: `feat: <story-id> <story title>` (include the story id).
 - **Manual mode only**: set the story's `passes: true` in `_goals/backlog.md`

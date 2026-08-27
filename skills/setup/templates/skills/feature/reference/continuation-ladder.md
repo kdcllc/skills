@@ -1,0 +1,58 @@
+# Continuation ladder (cycle-3 exhaustion)
+
+Enter this ladder when Phase 4 task execution reaches **cycle-3 exhaustion**
+(NEEDS FIXES after three implement→evaluate cycles without PASS). Apply rungs in
+order; every ladder fix attempt is re-evaluated — there is no exception.
+
+## Rung 5 — arbitration (unanimity check)
+
+If all three evaluator verdicts in the orchestration log flagged the same
+required-fix item (unanimous-failure heuristic), spawn `evaluator` in
+**arbitration mode** on `{{MODEL_FRONTIER_ALT_FAMILY}}` with the task file
+(including its Acceptance Criteria), all three verdicts, and all three implementer
+reports. Outcomes:
+`criteria-defective` → escalate to the user carrying the named defective criterion
+**verbatim**; arbiter/primary disagreement → escalate (never auto-resolve);
+`criteria-sound` → continue to rung 4.
+
+## Rung 4 — diagnosis-first
+
+Spawn `diagnostician` with the task file (including its Acceptance Criteria), all
+three implementer reports and evaluator verdicts, and the targeted verification
+command. If its
+**Signature Declaration** matches a previously tried fix signature → skip to rung 6
+if it recommended a split, else escalate. Otherwise run **ONE** diagnosis-driven
+implementation attempt: fresh `implementer` on `{{MODEL_FRONTIER}}` using the
+diagnostician's **Rewritten Required-Fixes** list; then mandatory re-evaluation.
+
+## Rung 6 — decomposition + selective retry
+
+Only on a diagnostician split recommendation. Derive subtask files with ownership
+contracts whose write sets are subsets of the parent task's, from the **failing
+pieces only** — unflagged work from earlier cycles stays as-is, is not re-run, and
+gets no separate evaluation. Each derived subtask gets one implement→evaluate
+cycle; the parent task completes when every derived subtask has an evaluator PASS;
+evaluator spawns never consume the attempt budget — only implementation attempts do.
+
+## Terminal escalation
+
+Escalate to the user with the full ladder history.
+
+## Hard guards
+
+Character-consistent with `{{IDE_DIR}}/ORCHESTRATION.md`:
+
+- At most **3 additional implementation attempts** after cycle 3, summed across rungs 4
+  and 6.
+- The diagnosis-driven implementation attempt costs 1 of the 3. Each rung-6 subtask
+  implement→evaluate cycle costs 1 of the 3. Before splitting, compare the
+  failing-subtask count against the remaining budget — if the count exceeds the
+  remaining budget, escalate instead of splitting.
+- A **repeated failure signature** stops the ladder immediately: the evaluator's
+  required-fixes list as recorded in the orchestration log, identical to an earlier
+  cycle's list item-for-item after normalizing whitespace and list numbering.
+- Every rung transition, spawn, and guard trip is an orchestration-log entry recording
+  the rung name.
+
+Token/cost budgets are NOT a guard in this kit — no harness exposes token counts to
+markdown policy.

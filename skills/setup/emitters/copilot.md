@@ -6,14 +6,17 @@ kit needs (subagent allowlists, `user-invocable`, model fallback arrays) require
 
 ## Emit
 
+Template skills are stored as `SKILL.template.md` so harnesses do not discover them
+in the kit repo; emit them as `SKILL.md`.
+
 | Source (resolved) | Destination | Translation |
 |-------------------|-------------|-------------|
 | `templates/agents/evaluator.md`, `qa-evaluator.md` | `.github/agents/evaluator.agent.md`, `qa-evaluator.agent.md` | frontmatter below; `model:` as fallback array of frontier models; add `user-invocable: false` |
 | `templates/agents/diagnostician.md` | `.github/agents/diagnostician.agent.md` | `model:` fallback array of frontier models; `user-invocable: false` (subagent-only, same as evaluators) |
 | `templates/agents/implementer.md`, `test-writer.md` | `.github/agents/{implementer,test-writer}.agent.md` | `model:` fallback array of light models; `user-invocable: false` |
 | `templates/agents/terminal.md` | `.github/agents/terminal.agent.md` | `model:` fallback array of **light** models (`{{COPILOT_MODEL_LIGHT}}`, same fallback-array shape used for implementer/test-writer — never frontier); `user-invocable: false`; `tools:` YAML array — check the live VS Code custom-agents page (`code.visualstudio.com/docs/agent-customization/custom-agents`) and the linked tools page at emit time; as of this writing those pages name `read`, `edit`, `search`, `execute`, `web` as the built-in tool categories and give no more specific run-command identifier in a `.agent.md` example, so emit `tools: ['read', 'execute']` — do not invent a narrower/namespaced form (e.g. a hypothetical `execute/runInTerminal`) unless the live page documents it that day; never include `edit`/write-capable tools by name |
-| `templates/skills/feature/SKILL.md` body | `.github/agents/feature.agent.md` | becomes the user-invocable orchestrator agent: `agents: [implementer, test-writer, evaluator, qa-evaluator, terminal, diagnostician]`, `tools` must include the `agent` tool; model = frontier array |
-| `templates/skills/feature/templates/*` (`goal.md`, `task.md`, `contract.md`) | `.github/skills/feature/templates/` when the skills path is used (skills first-class per the harness matrix) | travels with the `feature` skill body — same source, no per-file translation; **inlining fallback**: on a Copilot build that only supports inlining skills (no `.github/skills/` support detected), the `contract.md` template folds into the `feature.agent.md` body instead of a standalone file, and this limitation is recorded as a line in the emitted ORCHESTRATION.md (accepted limitation, not a silent drop) |
+| `templates/skills/feature/SKILL.template.md` body | `.github/agents/feature.agent.md` | becomes the user-invocable orchestrator agent: `agents: [implementer, test-writer, evaluator, qa-evaluator, terminal, diagnostician]`, `tools` must include the `agent` tool; model = frontier array |
+| `templates/skills/feature/templates/*` (`goal.md`, `task.md`) | `.github/skills/feature/templates/` when the skills path is used (skills first-class per the harness matrix) | travels with the `feature` skill body — same source, no per-file translation |
 | Other skills (`research`, `*-criteria`, `test-ladder`, `align-docs`, `ship-pr`) | `.github/skills/` if skills are supported in the current VS Code build, else inline their content into the agents that use them | copy `disable-model-invocation` as-is on the `.github/skills/*/SKILL.md` path — do not drop it; criteria + ladder content may also be appended to the evaluator/worker agents' bodies; align-docs and ship-pr can become additional `.agent.md` entries if inlining is too large |
 | `templates/ORCHESTRATION.md` | `ORCHESTRATION.md` at repo root (Copilot has no conventional home for it) | — |
 | Pointer | append to `.github/copilot-instructions.md` | "Feature work runs through the orchestrator/worker/evaluator system — see ORCHESTRATION.md. Start features with the `feature` agent." |

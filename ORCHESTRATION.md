@@ -7,12 +7,13 @@ every install:
 
 It describes the orchestrator/worker/evaluator system as a template with `{{TOKEN}}`
 placeholders and `<!-- BOOTSTRAP: ... -->` guidance. As of kit v0.18.0 — which renamed
-the verification subagents to `evaluator`/`qa-evaluator`, added pre-code **contracts**
-with two-party sign-off, and introduced `eval_depth` intensity routing — that covers:
+the verification subagents to `evaluator`/`qa-evaluator` and introduced `eval_depth`
+intensity routing — that covers:
 
 - the **seven-phase feature flow** — alignment, goal creation, goal evaluation, task
-  execution, final audit, docs alignment (`align-docs`), and an approval-gated pull
-  request (`ship-pr`) — with mandatory re-evaluate loops, 3-cycle retry limits, and
+  execution, final audit, optional docs alignment (`align-docs`), and an optional
+  approval-gated pull request (`ship-pr`) — with acceptance criteria at planning
+  (validated at Phase 3), mandatory re-evaluate loops, 3-cycle retry limits, and
   fix-cycle **model rotation** (different family on retry 2, frontier tier on retry 3);
 - **fresh-context subagents** with tiered model pinning (frontier evaluators, light
   workers), per-tier fallback chains, and a cost-ceiling policy in the model map;
@@ -22,12 +23,13 @@ with two-party sign-off, and introduced `eval_depth` intensity routing — that 
 - **plan-time ownership contracts** — per-task `writes`/`reads`/`depends_on`
   declarations, disjointness verified at goal evaluation, and an allowed-paths
   write fence in every worker prompt and context package;
-- **pre-code contracts with two-party sign-off** — the worker proposes what "done"
-  looks like before implementation starts, the evaluator counter-signs, and
-  `eval_depth: full|light` (orchestrator-set, never a skip) routes evaluation
+- **acceptance criteria at planning** — each task file carries `## Acceptance Criteria`
+  (criterion + verification method each) created at Phase 2 and validated once at
+  Phase 3; `eval_depth: full|light` (orchestrator-set, never a skip) routes evaluation
   intensity per task;
 - the **staged test ladder** (rungs 1–2 mid-cycle, full suites at cycle end);
-- an append-only **orchestration log** per goal, silent-success artifact verification,
+- an append-only **orchestration log** per goal (proxy token fields:
+  `context_chars`, `report_chars`, `est_tokens`), silent-success artifact verification,
   and untrusted-input rules in every agent;
 - a **GREENFIELD ONLY** `BOOTSTRAP:` comment in the canonical template that, on a
   greenfield `/setup`, adds an **Engineering practices** subsection (test-first / TDD
@@ -39,7 +41,7 @@ with two-party sign-off, and introduced `eval_depth` intensity routing — that 
 - the loop drivers' **slot-supervision structure** (the `LOOP_SLOTS`/`LOOP_WORKTREE`
   knob documentation below and the v0.12.0 write-set-admission and
   single-writer-integration responsibilities are not in this template's prose — the
-  `LOOP_WORKTREE` knob is covered in `templates/loop/SKILL.md`; `LOOP_SLOTS` and the
+  `LOOP_WORKTREE` knob is covered in `templates/loop/SKILL.template.md`; `LOOP_SLOTS` and the
   v0.12.0 write-set-admission / single-writer-integration responsibilities live only
   in the drivers, `templates/loop/loop.sh`/`loop.ps1`; driver-owned dispatch is
   already covered below via the guard table's Exit-condition row, and the
@@ -78,6 +80,12 @@ research handoff at Phase 3, the escalation **Ladder** line, closer-task rung-3 
 and loop dispatch/exit-funnel/merge-gate summary.
 
 v0.22.0 added the Phase 7 **forge adapter** — GitHub / Azure DevOps / GitLab / hand-over; Phase 7 is never deleted from an install.
+
+v0.23.0 **feature-skill slimming** — acceptance criteria at planning,
+optional gated Phases 6/7 via `goal.md`'s `phases:` block, proxy token logging in the
+orchestration log, per-phase ORCHESTRATION section reads, continuation ladder in
+`reference/continuation-ladder.md`, and template skills renamed `SKILL.template.md` for
+harness discovery hygiene.
 
 Running `/setup` in a target project compiles the template — along with the subagents
 and skills — into the native format of each targeted harness (Claude Code, Cursor,

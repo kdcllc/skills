@@ -138,7 +138,7 @@ function Test-BreakerStateValid {
 # [System.IO.File]::Move($tmp, $Path, $true) (overwrite variant, PowerShell 7+ /
 # .NET Core) — atomic on NTFS via ReplaceFile semantics, so a concurrent reader
 # can never observe a zero-length or partially-written file (the torn-read race
-# this story closes). The temp name is colon-free (templates/loop/SKILL.md:27).
+# this story closes). The temp name is colon-free (templates/loop/SKILL.template.md:27).
 function Write-BreakerState {
     param(
         [Parameter(Mandatory)] [string]$Path,

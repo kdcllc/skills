@@ -1,8 +1,8 @@
-**Who this is for / What you'll learn:** Kit **users** running non-trivial features through `/feature`, and **contributors** who need to understand what the orchestrator actually does phase by phase. You will learn the seven-phase lifecycle — alignment through pull request — including the contract gate, per-gate verdict vocabulary, fix-cycle model rotation, the Phase 4 continuation ladder on cycle-3 exhaustion (as of v0.20.0), escalation exits, the orchestration log, and orchestrator iron rules. For verdict rubrics and criteria depth see [evaluation-system.md](evaluation-system.md); for who gets spawned and model tiers see [agents-and-models.md](agents-and-models.md). To choose `/feature` over other modes, start with [decision-guide.md](decision-guide.md).
+**Who this is for / What you'll learn:** Kit **users** running non-trivial features through `/feature`, and **contributors** who need to understand what the orchestrator actually does phase by phase. You will learn the seven-phase lifecycle — alignment through pull request — including acceptance criteria at planning (validated at Phase 3), optional gated Phases 6/7, per-gate verdict vocabulary, fix-cycle model rotation, the Phase 4 continuation ladder on cycle-3 exhaustion (as of v0.20.0), proxy token logging in the orchestration log, escalation exits, and orchestrator iron rules. For verdict rubrics and criteria depth see [evaluation-system.md](evaluation-system.md); for who gets spawned and model tiers see [agents-and-models.md](agents-and-models.md). To choose `/feature` over other modes, start with [decision-guide.md](decision-guide.md).
 
 # Feature workflow (`/feature`)
 
-The `/feature` skill is the canonical coordinator for non-trivial implementation. As of v0.19.0, it runs seven evaluator-gated phases: the orchestrating session **coordinates only** — it prepares context packages, spawns subagents, interprets verdicts, and decides what happens next. All product code changes go to `implementer` or `test-writer`; all verification goes to `evaluator` (and optionally `qa-evaluator` after Phase 5). The canonical source is [`skills/setup/templates/skills/feature/SKILL.md`](../../skills/setup/templates/skills/feature/SKILL.md); your emitted instance lives under your harness's skills tree after `/setup`.
+The `/feature` skill is the canonical coordinator for non-trivial implementation. It runs seven evaluator-gated phases (Phases 6 and 7 are optional — gated on a `phases:` block in `goal.md`): the orchestrating session **coordinates only** — it prepares context packages, spawns subagents, interprets verdicts, and decides what happens next. All product code changes go to `implementer` or `test-writer`; all verification goes to `evaluator` (and optionally `qa-evaluator` after Phase 5). The canonical source is [`skills/setup/templates/skills/feature/SKILL.template.md`](../../skills/setup/templates/skills/feature/SKILL.template.md); your emitted instance lives under your harness's skills tree as `SKILL.md` after `/setup`.
 
 ## Seven-phase overview
 
@@ -30,8 +30,8 @@ flowchart TD
     P5Issues["ISSUES"]
     P5Remed["Fix + re-audit"]
     P5Esc["Escalate to user\n(max 3 cycles)"]
-    P6["Phase 6: Align docs"]
-    P7["Phase 7: Pull request\n(approval-gated)"]
+    P6["Phase 6: Align docs\n(optional)"]
+    P7["Phase 7: Pull request\n(optional, approval-gated)"]
     P7Skip["Skip: default branch\nor user declines PR"]
     Done["Delivered"]
 
@@ -75,8 +75,8 @@ Each gate uses its **own** verdict vocabulary — never collapsed:
 | 3 | Goal evaluation | **NEEDS REVISION** | **PASS** | 3 revise→re-evaluate |
 | 4 | Task evaluation | **NEEDS FIXES** | **PASS** | 3 implement→evaluate per task, then continuation ladder (rungs 5→4→6) before escalation (as of v0.20.0) |
 | 5 | Final audit | **ISSUES** | **APPROVED** | 3 fix→re-audit |
-
-Phase 4 also has a **contract gate** (max 2 propose→review rounds) before implementation dispatch — see below.
+| 6 | Doc alignment (optional) | **NEEDS REVISION** / per-doc **NEEDS FIXES** | **PASS** / doc audit **APPROVED** | 3 cycles per doc + plan/audit |
+| 7 | Pull request (optional) | n/a — gated on user approval | PR/MR created or hand-over | User approves draft |
 
 ## Phase 4 task lifecycle (one task)
 
@@ -86,21 +86,7 @@ sequenceDiagram
     participant W as Owner (implementer or test-writer)
     participant E as Evaluator
 
-    Note over O,E: Contract gate (max 2 rounds)
-    O->>W: Spawn contract mode — propose contract
-    W->>O: Contract with worker.agreed true
-    O->>E: Spawn contract mode — review proposal
-    alt Evaluator counter-signs
-        E->>O: evaluator.agreed true — gate complete
-    else Revision requested (round ≤ 2)
-        E->>O: One revision request
-        O->>W: Owner revises contract
-        W->>O: Revised contract
-        O->>E: Re-review (round 2 max)
-    end
-
-    Note over O,E: Implementation dispatch (both signoffs true)
-    O->>W: Full context package + signed contract
+    O->>W: Full context package (task file incl. Acceptance Criteria)
     W->>O: Completion report
     O->>O: Silent-success check (artifacts vs report)
     O->>E: Task evaluation
@@ -115,15 +101,15 @@ sequenceDiagram
     end
 ```
 
-Contract gate details: both `signoff.worker.agreed` and `signoff.evaluator.agreed` must be `true` before step 1 (implementation). If round 2 ends without agreement, the orchestrator tiebreaks or escalates — never proceeds on an unresolved contract. For contract sign-off schema and criteria depth, see [evaluation-system.md](evaluation-system.md). For which agent owns which task, see [agents-and-models.md](agents-and-models.md).
+Each task's `## Acceptance Criteria` (criterion + verification method each) is created at Phase 2 and validated once at Phase 3 — there is no separate pre-implementation sign-off gate. For criteria depth and evaluation rubrics, see [evaluation-system.md](evaluation-system.md). For which agent owns which task, see [agents-and-models.md](agents-and-models.md).
 
 ---
 
 ## Phase 1 — Alignment
 
-**No files are created.** The orchestrator asks 5–20 structured multiple-choice questions covering the problem, affected layer/lane, external surfaces, auth/permissions, error behavior, interface shape, existing patterns, and priority. Follow-up rounds run as needed.
+**No files are created.** The orchestrator asks 5–20 structured multiple-choice questions covering the problem, affected layer/lane, external surfaces, auth/permissions, error behavior, interface shape, existing patterns, and priority — plus **Phase 6 docs alignment?** (default yes) and **open a Phase 7 PR?** (default yes). Follow-up rounds run as needed.
 
-The orchestrator presents a **"My Understanding"** summary and **waits for explicit user confirmation** before Phase 2. There is no silent advance.
+The orchestrator presents a **"My Understanding"** summary and **waits for explicit user confirmation** before Phase 2. Phase 6/7 answers are recorded in `goal.md`'s `phases:` block during Phase 2. There is no silent advance.
 
 ---
 
@@ -133,8 +119,8 @@ Creates `_goals/[goal-name]/` containing:
 
 | Artifact | Template | Purpose |
 |----------|----------|---------|
-| `goal.md` | [`templates/goal.md`](../../skills/setup/templates/skills/feature/templates/goal.md) | Problem, Phase 1 Q&A summary, success criteria, constraints, task table |
-| `NN-task-name.md` | [`templates/task.md`](../../skills/setup/templates/skills/feature/templates/task.md) | One file per task, dependency order |
+| `goal.md` | [`templates/goal.md`](../../skills/setup/templates/skills/feature/templates/goal.md) | Problem, Phase 1 Q&A summary, `phases:` block (align_docs / pull_request), success criteria, constraints, task table |
+| `NN-task-name.md` | [`templates/task.md`](../../skills/setup/templates/skills/feature/templates/task.md) | One file per task with `## Acceptance Criteria`, dependency order |
 | `orchestration-log.md` | (orchestrator-owned) | Append-only spawn ledger — started empty |
 
 Every task file carries an **ownership contract** block:
@@ -158,7 +144,7 @@ Before Phase 3, the orchestrator verifies **write-set disjointness**: for every 
 
 ## Phase 3 — Goal evaluation
 
-Launch `evaluator` with `goal.md`, all task files, Phase 1 Q&A, and [`goal-criteria`](../../skills/setup/templates/skills/goal-criteria/SKILL.md) (path varies by emitted instance).
+Launch `evaluator` with `goal.md`, all task files, Phase 1 Q&A, and [`goal-criteria`](../../skills/setup/templates/skills/goal-criteria/SKILL.template.md) (path varies by emitted instance). The evaluator validates every task's `## Acceptance Criteria` once for all tasks.
 
 | Verdict | Action |
 |---------|--------|
@@ -174,18 +160,9 @@ Every revision is re-evaluated. There is no path to Phase 4 without an evaluator
 
 For each task in dependency order:
 
-### Contract gate (once per task, before implementation)
-
-1. Owner agent (`implementer` or `test-writer` per the task's `owner` field) proposes `_goals/[goal]/contracts/NN-task-name.contract.md` from [`templates/contract.md`](../../skills/setup/templates/skills/feature/templates/contract.md).
-2. `evaluator` in **contract mode** counter-signs or returns exactly one revision request.
-3. Bounded to **max 2 rounds** (stateless spawns).
-4. Implementation dispatch is refused until both `signoff.worker.agreed` and `signoff.evaluator.agreed` are `true`.
-
-For trivial tasks, the orchestrator may draft the contract directly.
-
 ### Implementation loop
 
-1. Launch owner with full context package (includes signed contract).
+1. Launch owner (`implementer` or `test-writer` per the task's `owner` field) with full context package (includes the task file and its Acceptance Criteria).
 2. Receive completion report. **Silent-success check:** empty/missing report but expected artifacts present ⇒ treat as completed (note "report lost, files verified"); no artifacts ⇒ respawn once. Never re-run a task whose artifacts already exist.
 3. Launch `evaluator` with task file, report, and task-criteria.
 4. Handle verdict:
@@ -204,9 +181,9 @@ Any verdict tagged `destructive`, `security`, or `infra` stops all cycles immedi
 
 When three implement→evaluate cycles end without **PASS**, the orchestrator runs this ladder before terminal escalation. Every ladder fix attempt is re-evaluated; there is no exception.
 
-1. **Rung 5 — arbitration (unanimity check).** If all three evaluator verdicts flagged the same required-fix item, spawn `evaluator` in **arbitration mode** on `{{MODEL_FRONTIER_ALT_FAMILY}}` with the task file, signed contract, all three verdicts, and all three implementer reports. Outcomes: `criteria-defective` → escalate carrying the named defective criterion **verbatim**; arbiter/primary disagreement → escalate (never auto-resolve); `criteria-sound` → rung 4.
+1. **Rung 5 — arbitration (unanimity check).** If all three evaluator verdicts flagged the same required-fix item, spawn `evaluator` in **arbitration mode** on `{{MODEL_FRONTIER_ALT_FAMILY}}` with the task file (including its Acceptance Criteria), all three verdicts, and all three implementer reports. Outcomes: `criteria-defective` → escalate carrying the named defective criterion **verbatim**; arbiter/primary disagreement → escalate (never auto-resolve); `criteria-sound` → rung 4.
 
-2. **Rung 4 — diagnosis-first.** Spawn `diagnostician` with the task file, signed contract, all three implementer reports and evaluator verdicts, and the targeted verification command. If its **Signature Declaration** matches a previously tried fix signature → skip to rung 6 if it recommended a split, else escalate. Otherwise **ONE** diagnosis-driven implementation attempt: fresh `implementer` on `{{MODEL_FRONTIER}}` executing the diagnostician's **Rewritten Required-Fixes** list, then mandatory re-evaluation.
+2. **Rung 4 — diagnosis-first.** Spawn `diagnostician` with the task file (including its Acceptance Criteria), all three implementer reports and evaluator verdicts, and the targeted verification command. If its **Signature Declaration** matches a previously tried fix signature → skip to rung 6 if it recommended a split, else escalate. Otherwise **ONE** diagnosis-driven implementation attempt: fresh `implementer` on `{{MODEL_FRONTIER}}` executing the diagnostician's **Rewritten Required-Fixes** list, then mandatory re-evaluation.
 
 3. **Rung 6 — decomposition + selective retry** (only on a diagnostician split recommendation). Derive subtask files with ownership contracts whose write sets are subsets of the parent's, from the **failing pieces only** — unflagged earlier work stays as-is, is not re-run, and gets no separate evaluation. Each derived subtask gets one implement→evaluate cycle; the parent completes when every derived subtask has an evaluator **PASS**.
 
@@ -252,11 +229,13 @@ Launch `evaluator` in **audit mode** over the whole goal: every task's requireme
 
 Optional: after approval, capture behavioral evidence and launch `qa-evaluator` for user-facing surfaces.
 
+After APPROVED + Quality Checks, read `goal.md`'s `phases:` block: when `align_docs: false`, skip Phase 6 with an orchestration-log entry ("Phase 6 skipped per goal.md"); when `pull_request: false`, skip Phase 7 likewise.
+
 ---
 
-## Phase 6 — Align docs
+## Phase 6 — Align docs (optional)
 
-Read and execute [`align-docs/SKILL.md`](../../skills/setup/templates/skills/align-docs/SKILL.md):
+When enabled via `goal.md`'s `phases:` block (`align_docs: true`, the default), read and execute [`align-docs/SKILL.template.md`](../../skills/setup/templates/skills/align-docs/SKILL.template.md):
 
 1. **Discover** shipped change surface (read-only: goal files + git diff).
 2. **Map** changes to affected docs; build per-doc edit list.
@@ -270,9 +249,9 @@ The feature is not documentation-complete until the doc audit returns **APPROVED
 
 ---
 
-## Phase 7 — Pull request
+## Phase 7 — Pull request (optional)
 
-Read and execute [`ship-pr/SKILL.md`](../../skills/setup/templates/skills/ship-pr/SKILL.md):
+When enabled via `goal.md`'s `phases:` block (`pull_request: true`, the default), read and execute [`ship-pr/SKILL.template.md`](../../skills/setup/templates/skills/ship-pr/SKILL.template.md):
 
 1. Gather branch + commit context; detect base branch.
 2. Analyze diff and commits.
@@ -281,7 +260,7 @@ Read and execute [`ship-pr/SKILL.md`](../../skills/setup/templates/skills/ship-p
 5. Push if needed; create PR with `gh`.
 6. Report PR URL.
 
-**Skip conditions:** work happened directly on the default branch (say so), or the user declines a PR. The PR is **never** created before approval.
+**Skip conditions:** `pull_request: false` in `goal.md` (logged, never silent), work happened directly on the default branch (say so), or the user declines a PR. The PR is **never** created before approval.
 
 ---
 
@@ -294,7 +273,7 @@ These are user-visible behaviors enforced throughout all phases:
 | **Never edit product code** | The orchestrating session coordinates only — context packages, spawns, verdicts, decisions. Spawning `terminal` for Quality Checks is coordination, not implementation. |
 | **Every fix is re-evaluated** | Fixes and revisions are **always** re-verified by an evaluator. No exception. |
 | **No phase advances without verdict** | Phase 4 tasks need evaluator **PASS**; Phase 5 needs **APPROVED**; Phase 3 needs **PASS** on the goal. |
-| **Max 3 cycles, then escalate** | As of v0.20.0, Phase 4 task execution continues through the continuation ladder (rungs 5→4→6) before escalation; Phase 3 and Phase 5 escalate after 3 cycles; contract gate caps at 2 rounds. |
+| **Max 3 cycles, then escalate** | As of v0.20.0, Phase 4 task execution continues through the continuation ladder (rungs 5→4→6) before escalation; Phase 3 and Phase 5 escalate after 3 cycles. |
 
 ### Escalation format
 
@@ -314,7 +293,7 @@ For `criteria-defective` escalations (rung 5 arbitration), the defective criteri
 
 ## Orchestration log
 
-Path: `_goals/[goal-name]/orchestration-log.md` — an **append-only spawn ledger**.
+Path: `_goals/[goal-name]/orchestration-log.md` — an **append-only spawn ledger**. The log header carries a running `est_tokens` total (sum of per-spawn estimates).
 
 **Before every subagent launch**, append an entry with:
 
@@ -323,14 +302,15 @@ Path: `_goals/[goal-name]/orchestration-log.md` — an **append-only spawn ledge
 - Routing reason
 - Task's `writes` claim (allowed-paths fence)
 - Expected outputs
+- `context_chars` — character length of the context package prompt
 
-For continuation-ladder transitions, spawns, and guard trips, entries include the **rung name**.
+For continuation-ladder transitions, spawns, guard trips, and phase skips (e.g. Phase 6/7 declined via `goal.md`'s `phases:` block), entries include the **rung name** or skip reason.
 
-**After the subagent returns**, append the outcome (report received, files verified, verdict) as a **new line under that entry**.
+**After the subagent returns**, append the outcome line with `report_chars` (character length of the completion report) and `est_tokens` = (`context_chars` + `report_chars`) / 4, labeled estimate — proxy fields only; no harness in this kit exposes true token counts.
 
 **Never write placeholder status lines** such as `Outcome: (pending)` or `TBD` — under append-only semantics they can never be resolved in place and rot into stale text. An entry with no outcome line yet **is** the pending state.
 
-Entries are never edited or deleted. Rejections and respawns are new entries. This ledger makes re-evaluation invariants and fix-cycle rotation auditable.
+Entries are never edited or deleted. Rejections and respawns are new entries. This ledger makes re-evaluation invariants, fix-cycle rotation, and token proxy totals auditable.
 
 ---
 
@@ -342,10 +322,11 @@ These are what **you** do in a typical `/feature` run — separate from any spec
 |------------|------|-------------|
 | **Alignment** | Phase 1 | Answer structured MCQs; confirm "My Understanding" before goal creation |
 | **Decision gates** | Phase 2 (and elsewhere) | Choose between viable approaches when the orchestrator presents tradeoffs |
-| **PR approval** | Phase 7 (when it runs) | Review the drafted PR title and body; approve or request edits before push/create |
+| **Phase 6/7 opt-in** | Phase 1 (recorded in Phase 2) | Confirm docs alignment and PR intent; defaults are yes — set `align_docs: false` or `pull_request: false` in `goal.md`'s `phases:` block to skip either phase |
+| **PR approval** | Phase 7 (when enabled and not skipped) | Review the drafted PR title and body; approve or request edits before push/create |
 | **Escalations** | Phase 4 after the continuation ladder completes (or immediately on a bypass-class verdict); other phases after 3 failed cycles | Respond with a decision from the options the orchestrator presents |
 
-You are not expected to spawn subagents, write contracts, or run Quality Checks — those are orchestrator responsibilities.
+You are not expected to spawn subagents or run Quality Checks — those are orchestrator responsibilities.
 
 ---
 
@@ -381,9 +362,11 @@ Three cycles used; the only exit to Phase 4 was evaluator **PASS**.
 
 ### Phase 4 — Task execution
 
-> CONTRACT GATE COMPLETE for both tasks: 01 rev 0 (worker+evaluator true), 02 rev 1 (worker+evaluator true).
+> *(Historical note: this v0.19.0-era run used a since-removed pre-implementation sign-off step; v0.23.0+ dispatches directly from task files with Acceptance Criteria validated at Phase 3.)*
 
-Contract gate ran before parallel dispatch — task 01's contract was orchestrator-drafted under the trivial-task provision; implementation ran via best-of-n-runner carrying the implementer role (+4/−4). Task 02's test-writer needed one revision round.
+> Pre-dispatch sign-off complete for both tasks: 01 rev 0 (worker+evaluator true), 02 rev 1 (worker+evaluator true).
+
+Pre-dispatch sign-off ran before parallel dispatch — task 01's proposal was orchestrator-drafted under the trivial-task provision; implementation ran via best-of-n-runner carrying the implementer role (+4/−4). Task 02's test-writer needed one revision round.
 
 > Task 01 (best-of-n-runner ⇒ implementer role): COMPLETE. ACTUAL branch name: `fix/loop-ps1-slot-interpolation` … --stat = 1 file, +4/−4
 
@@ -426,17 +409,16 @@ Delivery instead followed the goal's Delivery Procedure: merge commit `5825729` 
 ## Related guides
 
 - [decision-guide.md](decision-guide.md) — when to choose `/feature` vs `/research`, autonomous loop, or direct edit
-- [evaluation-system.md](evaluation-system.md) — verdict vocabulary, confidence ladder, contract sign-off, test ladder rungs, eval_depth
+- [evaluation-system.md](evaluation-system.md) — verdict vocabulary, confidence ladder, acceptance-criteria validation, test ladder rungs, eval_depth
 - [agents-and-models.md](agents-and-models.md) — six subagent roles, model tiers, rotation table, harness caveats
 
 ## Sources
 
-- [`skills/setup/templates/skills/feature/SKILL.md`](../../skills/setup/templates/skills/feature/SKILL.md) — canonical seven-phase workflow
-- [`skills/setup/templates/skills/feature/templates/goal.md`](../../skills/setup/templates/skills/feature/templates/goal.md) — goal artifact shape
-- [`skills/setup/templates/skills/feature/templates/task.md`](../../skills/setup/templates/skills/feature/templates/task.md) — task + ownership contract shape
-- [`skills/setup/templates/skills/feature/templates/contract.md`](../../skills/setup/templates/skills/feature/templates/contract.md) — pre-code contract shape
-- [`skills/setup/templates/skills/align-docs/SKILL.md`](../../skills/setup/templates/skills/align-docs/SKILL.md) — Phase 6 workflow
-- [`skills/setup/templates/skills/ship-pr/SKILL.md`](../../skills/setup/templates/skills/ship-pr/SKILL.md) — Phase 7 workflow
+- [`skills/setup/templates/skills/feature/SKILL.template.md`](../../skills/setup/templates/skills/feature/SKILL.template.md) — canonical seven-phase workflow
+- [`skills/setup/templates/skills/feature/templates/goal.md`](../../skills/setup/templates/skills/feature/templates/goal.md) — goal artifact shape (incl. `phases:` block)
+- [`skills/setup/templates/skills/feature/templates/task.md`](../../skills/setup/templates/skills/feature/templates/task.md) — task + ownership contract + Acceptance Criteria shape
+- [`skills/setup/templates/skills/align-docs/SKILL.template.md`](../../skills/setup/templates/skills/align-docs/SKILL.template.md) — Phase 6 workflow
+- [`skills/setup/templates/skills/ship-pr/SKILL.template.md`](../../skills/setup/templates/skills/ship-pr/SKILL.template.md) — Phase 7 workflow
 - [`skills/setup/templates/ORCHESTRATION.md`](../../skills/setup/templates/ORCHESTRATION.md) — architecture invariants, retry limits, continuation ladder, escalation format
 - [`skills/setup/templates/models.map.md`](../../skills/setup/templates/models.map.md) — continuation-ladder model pins
 - `_goals/loop-ps1-slot-interpolation-fix/goal.md` — exemplar goal (local gitignored artifact)

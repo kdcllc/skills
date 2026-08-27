@@ -62,27 +62,23 @@ Traditional single-agent execution suffers from:
 
 ### The Solution: Separation of Concerns
 
+```mermaid
+flowchart LR
+    Orch["Orchestrator\n(session running the feature skill)"]
+    Workers["Workers\n(implementer / test-writer)"]
+    Evals["Evaluators\n(evaluator / qa-evaluator)"]
+
+    Orch -->|"context package"| Workers
+    Workers -->|"completion report"| Orch
+    Orch -->|"work + context"| Evals
+    Evals -->|"verdict"| Orch
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│                                                                             │
-│   ORCHESTRATOR                    WORKERS                   EVALUATORS      │
-│   (Coordinates)                   (Execute)                 (Verify)        │
-│                                                                             │
-│   ┌───────────┐                  ┌───────────┐            ┌───────────┐    │
-│   │           │    context       │           │   output   │           │    │
-│   │  feature- │ ───────────────► │  impl-    │ ─────────► │           │    │
-│   │  orchest- │                  │  executor │            │ evaluator │    │
-│   │  rator    │ ◄─────────────── │           │ ◄───────── │           │    │
-│   │           │    verdict       │           │   verdict  │           │    │
-│   └───────────┘                  └───────────┘            └───────────┘    │
-│                                                                             │
-│   • Never executes               • Fresh context          • No stake in    │
-│   • Prepares context             • Focused task             outcome        │
-│   • Makes decisions              • Reports status         • Defaults to    │
-│   • Handles retries              • Checklists               pessimism      │
-│                                                                             │
-└─────────────────────────────────────────────────────────────────────────────┘
-```
+
+| Role | Traits |
+|------|--------|
+| Orchestrator (coordinates) | Never executes; prepares context; makes decisions; handles retries |
+| Workers (execute) | Fresh context; focused task; reports status; checklist-driven |
+| Evaluators (verify) | No stake in outcome; defaults to pessimism |
 
 ### Key Principle: Fresh Context Per Task
 
@@ -184,153 +180,129 @@ unknown or stale (evaluators should report which model produced the verdict).
 
 ### Complete Lifecycle
 
+```mermaid
+flowchart TD
+    P1["Phase 1: Alignment\n(no files created)"]
+    P1Confirm["User confirms\nMy Understanding"]
+    P2["Phase 2: Goal creation\n_goals/name/"]
+    P3Eval["Phase 3: Goal evaluation"]
+    P3Pass["PASS"]
+    P3Rev["NEEDS REVISION"]
+    P3Revise["Revise goal + tasks"]
+    P3Esc["Escalate to user\n(max 3 cycles)"]
+    P3Reject["REJECT → escalate"]
+    P4["Phase 4: Task execution\n(each task in order)"]
+    P4Pass["PASS → next task"]
+    P4Fix["NEEDS FIXES"]
+    P4FixCycle["Fix cycle\n(model rotation)"]
+    P4Ladder["Continuation ladder\n(rungs 5→4→6)"]
+    P4Esc["Escalate to user"]
+    P4Reject["REJECT → escalate"]
+    P5Audit["Phase 5: Final audit"]
+    P5App["APPROVED"]
+    P5QC["Quality Checks\nrung 3 via terminal"]
+    P5Issues["ISSUES"]
+    P5Remed["Fix + re-audit"]
+    P5Esc["Escalate to user\n(max 3 cycles)"]
+    P6["Phase 6: Align docs\n(optional)"]
+    P7["Phase 7: Pull request\n(optional, approval-gated)"]
+    P7Skip["Skip: default branch\nor user declines PR"]
+    Done["Delivered"]
+
+    P1 --> P1Confirm
+    P1Confirm --> P2
+    P2 --> P3Eval
+    P3Eval --> P3Pass
+    P3Eval --> P3Rev
+    P3Eval --> P3Reject
+    P3Rev --> P3Revise
+    P3Revise -->|"cycle ≤ 3"| P3Eval
+    P3Revise -->|"cycle > 3"| P3Esc
+    P3Pass --> P4
+    P4 --> P4Pass
+    P4 --> P4Fix
+    P4 --> P4Reject
+    P4Fix --> P4FixCycle
+    P4Fix -->|"bypass class: escalate at detection"| P4Esc
+    P4FixCycle -->|"cycle ≤ 3"| P4
+    P4FixCycle -->|"cycle > 3"| P4Ladder
+    P4Ladder -->|"ladder exhausted"| P4Esc
+    P4Ladder -->|"ladder attempt PASS"| P4Pass
+    P4Pass -->|"all tasks PASS"| P5Audit
+    P5Audit --> P5App
+    P5Audit --> P5Issues
+    P5Issues --> P5Remed
+    P5Remed -->|"cycle ≤ 3"| P5Audit
+    P5Remed -->|"cycle > 3"| P5Esc
+    P5App --> P5QC
+    P5QC --> P6
+    P6 --> P7
+    P7 --> Done
+    P7 --> P7Skip
+    P7Skip --> Done
 ```
-PHASE 1: ALIGNMENT (Structured Discovery)
-══════════════════════════════════════════
 
-    User Request ──► Stay in Agent Mode ──► Structured questions (5-20 MCQs)
-                                                  │
-                                    ┌─────────────┘
-                                    │
-                     (Follow-up rounds if needed)
-                                    │
-                                    ▼
-    Summarize "My Understanding" ──► User Confirms ──► Phase 2
+### Phase notes
 
-    IMPORTANT: No files created during this phase.
-    Covers: problem, affected layer/lane, external surfaces touched, auth/permissions,
-    behavior/error handling, interface shape, existing patterns to follow, priority.
+**Phase 1 — Alignment (structured discovery).** Stay in Agent Mode and ask structured
+questions (5-20 MCQs), with follow-up rounds if needed; then summarize "My
+Understanding" and wait for the user to confirm before Phase 2. IMPORTANT: no files
+are created during this phase. Discovery covers: problem, affected layer/lane,
+external surfaces touched, auth/permissions, behavior/error handling, interface
+shape, existing patterns to follow, priority.
 
+**Phase 2 — Goal creation (with decision gates).** Create `_goals/[name]/` and write
+`goal.md`. For each task: if multiple viable approaches exist, present them to the
+user and WAIT for the decision; only then create the task file. Each task file carries
+`## Acceptance Criteria` (criterion + verification method each); the Phase 3 evaluator
+validates these once for all tasks.
 
-PHASE 2: GOAL CREATION (With Decision Gates)
-════════════════════════════════════════════
+**Phase 3 — Goal evaluation (mandatory re-evaluate loop).** Launch the evaluator with
+the Phase 1 Q&A included (for the Discovery Coverage check). PASS → Phase 4; NEEDS
+REVISION → revise the goal + tasks and re-evaluate (3 max); REJECT → escalate to the
+user.
+INVARIANT: The ONLY exit to Phase 4 is a PASS verdict from the evaluator subagent.
+Revisions MUST be re-evaluated.
 
-    Create _goals/[name]/ ──► Write goal.md
-           │
-           ▼
-    FOR EACH TASK:
-    ┌─────────────────────────────────────────────┐
-    │ Multiple approaches? ──YES──► Present to   │
-    │         │                      user, WAIT  │
-    │         NO                          │      │
-    │         │◄──────────────────────────┘      │
-    │         ▼                                  │
-    │   Create task.md                           │
-    └─────────────────────────────────────────────┘
+**Phase 4 — Task execution (mandatory re-evaluate after every fix).** For each task,
+in dependency order:
 
+- Step 1: Launch implementer (or test-writer for the test task) — the context
+  package includes the task file (including its Acceptance Criteria)
+- Step 2: Receive completion report
+- Step 3: Launch evaluator
+- Step 4: Handle verdict — PASS → next task; NEEDS FIXES → fix cycle (model
+  rotation) and re-evaluate, 3 max, then the continuation ladder (rungs 5→4→6 — see
+  Evaluation & Retry Mechanisms) before escalation; REJECT → escalate to the user.
+  A verdict tagged with a bypass failure class (destructive/security/infra)
+  escalates at detection, on any cycle.
 
-PHASE 3: GOAL EVALUATION (Mandatory Re-Evaluate Loop)
-═════════════════════════════════════════════════════
+INVARIANT: A task is only marked complete after the evaluator returns PASS. There is
+no path where fixes are made and the orchestrator proceeds without re-verification.
 
-    Orchestrator ──► Launch evaluator
-                     (includes Phase 1 Q&A for Discovery Coverage check)
-           │
-           ▼
-    Receive Evaluation
-           │
-    ┌──────┼──────┐
-    │      │      │
-  PASS  NEEDS   REJECT
-    │    REV      │
-    │      │      │
-    ▼      ▼      ▼
- Phase4  Revise  User
-         & re-evaluate
-        (3 max)
+**Phase 5 — Final audit (mandatory re-audit loop).** All tasks complete → final
+evaluator audit. APPROVED → Quality Checks (ladder rung 3: full suites, via a
+`terminal` spawn); ISSUES → fix (ladder rungs 1–2), then re-audit (3 max).
+INVARIANT: The ONLY exit to Quality Checks is an APPROVED verdict from the audit
+subagent. Remediations MUST be re-audited.
 
-    INVARIANT: The ONLY exit to Phase 4 is a PASS verdict
-    from the evaluator subagent. Revisions MUST be re-evaluated.
+**Phase 6 — Align docs (evaluator-gated doc sync, optional).** After Phase 5 Quality
+Checks, the orchestrator reads `goal.md`'s `phases:` block — when `align_docs: false`,
+skip Phase 6 with an orchestration-log entry ("Phase 6 skipped per goal.md"). When
+enabled, Quality Checks green → the align-docs skill: discover the shipped surface →
+per-doc edit plan → evaluate the plan → implementer per doc → evaluate each doc →
+final doc audit (same re-evaluate invariants and 3-cycle limits as Phases 3–5).
+RULES: docs-only (never code), anti-invention (every claim traces to a read file),
+`_research/` and `_goals/` are READ-ONLY.
 
-
-PHASE 4: TASK EXECUTION (Mandatory Re-Evaluate After Every Fix)
-═══════════════════════════════════════════════════════════════
-
-    FOR EACH TASK (in dependency order):
-
-    Contract gate (before Step 1): owner agent proposes the contract from the task
-    file (or the orchestrator drafts it directly for trivial tasks) ──► evaluator
-    reviews in contract mode, counter-signs or requests one revision (max 2 rounds,
-    each a single stateless spawn) ──► both signoff.worker/evaluator agreed:true,
-    logged to the orchestration log ──► Step 1. No implementation dispatch before
-    both sign-offs land.
-
-    Step 1: Launch implementer (or test-writer for the test task) — context
-            package includes the signed contract
-    Step 2: Receive completion report
-    Step 3: Launch evaluator
-    Step 4: Handle verdict
-            │
-    ┌───────┼───────┐
-    │       │       │
-  PASS   NEEDS    REJECT
-    │    FIXES      │
-    │       │       │
-    ▼       ▼       ▼
-  Next   Re-impl  Escalate
-  Task   & re-evaluate to User
-        (3 max)
-
-    INVARIANT: A task is only marked complete after the evaluator
-    returns PASS. There is no path where fixes are made and the
-    orchestrator proceeds without re-verification. The contract gate is
-    a separate invariant: implementation never begins until both
-    signoff.worker.agreed and signoff.evaluator.agreed are true.
-
-
-PHASE 5: FINAL AUDIT (Mandatory Re-Audit Loop)
-══════════════════════════════════════════════
-
-    All Tasks Complete
-           │
-           ▼
-    Final evaluator audit
-           │
-    ┌──────┴──────┐
-    │             │
-    APPROVED     ISSUES
-    │             │
-    ▼             ▼
- Quality Checks  Fix & Re-audit
- (ladder rung 3) (ladder rungs 1–2,
-                  then re-audit; 3 max)
-
-    INVARIANT: The ONLY exit to Quality Checks is an
-    APPROVED verdict from the audit subagent. Remediations
-    MUST be re-audited.
-
-
-PHASE 6: ALIGN DOCS (Evaluator-Gated Doc Sync)
-══════════════════════════════════════════════
-
-    Quality Checks green
-           │
-           ▼
-    align-docs skill: discover shipped surface ──► per-doc edit plan
-           │
-           ▼
-    evaluate the plan ──► implementer per doc ──► evaluate each doc ──► final doc audit
-    (same re-evaluate invariants and 3-cycle limits as Phases 3–5)
-
-    RULES: docs-only (never code), anti-invention (every claim traces
-    to a read file), _research/ and _goals/ are READ-ONLY.
-
-
-PHASE 7: PULL REQUEST (Approval-Gated)
-══════════════════════════════════════
-
-    Docs aligned
-           │
-           ▼
-    ship-pr skill: analyze branch commits + diff
-           │
-           ▼
-    Draft PR (exec summary + technical breakdown)
-           │
-           ▼
-    Show draft ──► USER APPROVES ──► push (if needed) ──► create PR/MR or hand over ──► URL
-
-    INVARIANT: The PR is never created before the user approves the draft.
-```
+**Phase 7 — Pull request (approval-gated, optional).** After Phase 6 (or its skip),
+the orchestrator reads `goal.md`'s `phases:` block — when `pull_request: false`, skip
+Phase 7 with an orchestration-log entry ("Phase 7 skipped per goal.md"). When enabled,
+docs aligned → the ship-pr skill: analyze branch commits + diff → draft the PR (exec
+summary + technical breakdown) → show the draft → USER APPROVES → push (if needed) →
+create the PR/MR or hand over → URL. Also skip when the work happened directly on the
+default branch or the user declines a PR.
+INVARIANT: The PR is never created before the user approves the draft.
 
 ### Forge adapter (Phase 7 delivery)
 
@@ -458,22 +430,23 @@ is implemented. It covers **all user-facing surfaces**:
      QA skill), library entry points. -->
 - {{QA_SURFACES}}
 
-```
-Implementation complete (ladder rungs 1–2 green; rung 3 at cycle end)
-        │
-        ▼
-Exercise the affected surface and capture evidence
-(exact invocations, outputs, exit codes / status codes, screenshots, logs)
-        │
-        ▼
-Launch qa-evaluator ──► Verdict
-        │
-  ┌─────┼─────┐
-PASS  ISSUES  REJECT
-  │     │       │
-  ▼     ▼       ▼
-Done  Create  Escalate
-      fix tasks → implementer → evaluator → re-run QA
+```mermaid
+flowchart TD
+    Impl["Implementation complete\n(ladder rungs 1–2 green; rung 3 at cycle end)"]
+    Evidence["Exercise the affected surface and capture evidence\n(exact invocations, outputs, exit codes / status codes, screenshots, logs)"]
+    QA["Launch qa-evaluator"]
+    QAPass["PASS → done"]
+    QAIssues["ISSUES"]
+    QAReject["REJECT → escalate"]
+    FixTasks["Create fix tasks\n(implementer → evaluator)"]
+
+    Impl --> Evidence
+    Evidence --> QA
+    QA --> QAPass
+    QA --> QAIssues
+    QA --> QAReject
+    QAIssues --> FixTasks
+    FixTasks -->|"re-run QA"| QA
 ```
 
 QA never fixes issues — it finds them. Fixes flow back through the standard
@@ -514,6 +487,24 @@ Every subagent invocation requires a complete context package:
 └─────────────────────────────────────────────────────────────────┘
 ```
 
+### Orchestration log (spawn ledger)
+
+Maintain `_goals/[goal-name]/orchestration-log.md` as an append-only spawn ledger.
+The log header carries a running `est_tokens` total (sum of per-spawn estimates).
+
+For each subagent spawn:
+
+- **Before launch:** timestamp, agent, model (rotation/fallback), routing reason, task
+  `writes` fence, expected outputs, and `context_chars` (character length of the
+  context package prompt).
+- **After return:** outcome line with `report_chars` (character length of the completion
+  report) and `est_tokens` = (`context_chars` + `report_chars`) / 4, labeled estimate
+  — proxy fields only; no harness in this kit exposes true token counts.
+
+Ladder transitions, guard trips, and phase skips (e.g. Phase 6/7 declined via
+`goal.md`'s `phases:` block) are logged as separate entries. Append-only — rejections
+and respawns are new entries, never in-place edits.
+
 ---
 
 ## Evaluation & Retry Mechanisms
@@ -536,7 +527,7 @@ orchestrator runs this ladder before terminal human escalation. Apply in this or
    `criteria-sound` → continue to rung 4.
 
 3. **Rung 4 — diagnosis-first.** Spawn the `diagnostician` (frontier tier, no code writes)
-   with the task file, signed contract, and all three fix-cycle histories. If its
+   with the task file (including its Acceptance Criteria), and all three fix-cycle histories. If its
    hypothesis matches a previously tried fix signature → skip to rung 6 if it recommended
    a split, else escalate. Otherwise run **ONE** diagnosis-driven implementation attempt
    (fresh implementer on `{{MODEL_FRONTIER}}`, using the diagnostician's rewritten
@@ -584,7 +575,6 @@ backstop.
 | Phase | Max Cycles | On Exhaust |
 |-------|------------|------------|
 | Goal Evaluation (Phase 3) | 3 revise→re-evaluate | Escalate to user |
-| Contract Gate (Phase 4 pre-step) | 2 propose→review rounds (stateless spawns) | Orchestrator tiebreak or escalate to user |
 | Task Execution (Phase 4) | 3 implement→evaluate per task | Continuation ladder (rungs 5→4→6), then escalate to user |
 | Final Audit (Phase 5) | 3 fix→re-audit | Escalate to user |
 | Align Docs (Phase 6) | 3 per doc + 3 for plan and final doc audit | Escalate to user |
@@ -596,7 +586,6 @@ backstop.
 - **Phase 3**: Goal evaluation loop ONLY exits to Phase 4 via a PASS verdict. Revisions without re-evaluate are forbidden.
 - **Phase 4**: A task is ONLY marked complete after the evaluator returns PASS. Fixes without re-evaluate are forbidden.
   Fix cycles rotate models — cycle 2 uses a different model family, cycle 3 the frontier tier (see the model map) — and every spawn is recorded in the goal's append-only orchestration log.
-  The contract gate is a separate invariant: implementation is ONLY dispatched once both `signoff.worker.agreed` and `signoff.evaluator.agreed` are `true`.
 - **Phase 5**: Audit loop ONLY exits to Quality Checks via an APPROVED verdict. Remediations without re-audit are forbidden.
 - **Phase 6**: A doc is ONLY complete after the evaluator returns PASS; the doc set ONLY ships after the final doc audit returns APPROVED. `_research/`, `_goals/`, and code are never touched.
 - **Phase 7**: The PR/MR is ONLY created, or the hand-over printed, after the user approves the drafted title and body.
@@ -642,24 +631,25 @@ single-writer integrator; dispatched slots never re-select stories, never increm
 
 **Manual-mode view** (human-invoked or non-dispatched `auto-loop`):
 
-```
-_goals/backlog.md ──► pick highest-priority story with passes: false, attempts < 3
-        │
-        ▼
-Run the feature flow (Phases 2–6; backlog acceptance criteria replace Phase 1,
-align-docs runs per story so docs never drift)
-        │
-        ▼
-Evaluator PASS + ladder rungs green? ──NO──► attempts += 1; if attempts == 3:
-        │ YES                             mark blocked, log to ESCALATIONS.md,
-        ▼                                 move to next story
-Commit (one commit per story, docs included) ──► mark passes: true ──► append learnings
-        │
-        ▼
-All stories passed or blocked? ──YES──► print <promise>COMPLETE</promise> and stop
-        │ NO
-        ▼
-Next iteration (fresh context)
+```mermaid
+flowchart TD
+    Pick["_goals/backlog.md: pick highest-priority story\nwith passes: false, attempts < 3"]
+    RunFlow["Run the feature flow\n(Phases 2–6; backlog acceptance criteria replace Phase 1;\nalign-docs runs per story so docs never drift)"]
+    Gate{"Evaluator PASS +\nladder rungs green?"}
+    Blocked["attempts += 1; if attempts == 3:\nmark blocked, log to ESCALATIONS.md,\nmove to next story"]
+    CommitStory["Commit (one commit per story, docs included)\nmark passes: true, append learnings"]
+    AllDone{"All stories passed\nor blocked?"}
+    Sentinel["Print the completion sentinel\n(see Exit condition guard) and stop"]
+    NextIter["Next iteration\n(fresh context)"]
+
+    Pick --> RunFlow
+    RunFlow --> Gate
+    Gate -->|NO| Blocked
+    Gate -->|YES| CommitStory
+    Blocked --> NextIter
+    CommitStory --> AllDone
+    AllDone -->|YES| Sentinel
+    AllDone -->|NO| NextIter
 ```
 
 **Guards (non-negotiable):**
@@ -710,7 +700,8 @@ drifting run early. Headless entry point: `_loop/loop.sh [max-iterations]` (bash
 ├── skills/
 │   ├── feature/       # Feature coordination
 │   │   ├── SKILL.md
-│   │   └── templates/{goal.md,task.md,contract.md}
+│   │   ├── reference/continuation-ladder.md
+│   │   └── templates/{goal.md,task.md}
 │   │
 │   ├── research/ # Research → Plan
 │   │   ├── SKILL.md
@@ -728,7 +719,6 @@ drifting run early. Headless entry point: `_loop/loop.sh [max-iterations]` (bash
 
 _goals/backlog.md               # Story backlog for the autonomous loop (if enabled)
 _goals/<goal>/orchestration-log.md  # Append-only spawn ledger per goal
-_goals/<goal>/contracts/NN-task-name.contract.md  # Per-task sign-off (Phase 4 contract gate)
 _goals/breaker-state.json       # Model circuit breaker state (runtime, gitignored)
 _loop/{loop.sh,loop.ps1,breaker.sh,breaker.ps1,PROMPT.md}  # Headless loop driver (if enabled)
 ```

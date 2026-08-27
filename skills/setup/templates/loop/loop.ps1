@@ -380,7 +380,7 @@ $LoopHotspots = @(
     'skills/setup/emitters/copilot.md',
     'skills/setup/emitters/cursor.md',
     'skills/setup/templates/ORCHESTRATION.md',
-    'skills/setup/templates/skills/feature/SKILL.md'
+    'skills/setup/templates/skills/feature/SKILL.template.md'
 )
 
 # ConvertTo-LoopGlobPrefix <glob> -> returns the normalized PREFIX string;

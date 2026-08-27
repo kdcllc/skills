@@ -6,6 +6,9 @@ markdown, no frontmatter, **32 KiB combined cap**, read once per session).
 
 ## Emit
 
+Template skills are stored as `SKILL.template.md` so harnesses do not discover them
+in the kit repo; emit them as `SKILL.md`.
+
 | Source (resolved) | Destination | Translation |
 |-------------------|-------------|-------------|
 | `templates/ORCHESTRATION.md` | `ORCHESTRATION.md` at repo root | full doc lives here, NOT in AGENTS.md (size cap) |
