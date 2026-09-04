@@ -2,7 +2,7 @@
 
 [![skills.sh installs](https://skills.sh/b/kdcllc/skills)](https://skills.sh/kdcllc/skills)
 
-> Kit version: **0.27.0** (`skills/setup/VERSION`) · Version history: [CHANGELOG.md](CHANGELOG.md)
+> Kit version: **0.28.0** (`skills/setup/VERSION`) · Version history: [CHANGELOG.md](CHANGELOG.md)
 
 A portable orchestrator/worker/evaluator multi-agent system for AI coding harnesses —
 **Claude Code, Cursor, GitHub Copilot (VS Code), and OpenAI Codex** — packaged as one
@@ -133,13 +133,23 @@ cp -r skills/setup  <your-project>/.cursor/skills/     # Cursor
 Step 2a (the greenfield gate) and **asks** before scaffolding. It **shows** a
 recommended project tree and **creates nothing until you confirm**. First-class layouts
 are **TypeScript/Node** and **Python**; other stacks get a generic `src/` + `tests/`
-tree. After you confirm, it can optionally offer **skills.sh** stack skills with
-**1000+** installs — you pick which ones, installed **into this project**. **Existing
-projects are unchanged:** non-sparse repos skip the greenfield gate entirely.
+tree. Non-sparse repos skip the scaffold offer only.
+
+**Skill suggestions (Step 2b):** Runs for **every project** after Step 2 inspect —
+greenfield accept/decline and non-sparse alike — following the
+[find-skills](https://www.skills.sh/vercel-labs/skills/find-skills) workflow without
+installing that skill. Inspection signals include a web UI, the test framework (e.g.
+`pytest`), backend/web frameworks, infra/DevOps files, docs surfaces, and
+databases/ORMs; only skills with **1000+** installs are offered, at most **8**
+candidates total. You pick; skills install project-local with
+`npx skills add <owner>/<repo> --skill <picked-skill> -y`. Already-installed skills
+are never re-offered; picked skills are recorded in the emitted `ORCHESTRATION.md`
+skills table and the feature skill's layer → skills map.
 
 Then, in a session inside that project, run `/setup`. It detects which harnesses to
 target (multiple is normal), inspects the repo (stack, test commands, layers,
-user-facing surfaces), interviews you for what it can't infer (project name, model
+user-facing surfaces), suggests skills.sh skills from what it found (Step 2b),
+interviews you for what it can't infer (project name, model
 tiers, QA surfaces, research workflow, autonomous loop, delivery forge), writes
 `orchestration-kit.answers.json`, and runs the emitter:
 

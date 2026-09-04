@@ -27,6 +27,10 @@
 #     .gitignore dest-lines, bash -n, ps1 structural-parity, ps1 parse (pwsh-
 #     conditional), ps1 live run (pwsh-conditional), README citation, and
 #     checks B/D excluding the compiler copy at .claude/skills/setup/.
+#   - greenfield-setup Step 2b contract (no _loop/ required): assertions 125-135
+#     lock Step 2b skill-suggestions contract, docs/version claims, and $TMP
+#     mutations against skills/setup/SKILL.md, README.md, CHANGELOG.md, and
+#     docs/guide/getting-started.md.
 #
 # Every assertion is outcome-verifying: it inspects the resulting state file /
 # stdout / stderr / exit code and FAILs loudly (non-zero exit, explicit FAIL
@@ -792,6 +796,239 @@ if [[ "$_114_skip" -eq 1 && "$_114_overwrite" -eq 1 ]]; then
   report PASS "114: SKILL.md Step 2a states never-overwrite: skip an existing confirmed path and report the skip"
 else
   report FAIL "114: SKILL.md Step 2a never-overwrite rule" "skip=$_114_skip overwrite=$_114_overwrite"
+fi
+
+# ===========================================================================
+# Step 2b contract assertions (125-135, no _loop/loop.sh required).
+# Static structural greps against skills/setup/SKILL.md, README.md,
+# CHANGELOG.md, and docs/guide/getting-started.md — lock the Step 2b
+# skill-suggestions contract and docs/version claims landed by tasks 01–02.
+# Mutations (133) run ONLY on copies under $TMP; repo files are read-only.
+# ===========================================================================
+CHANGELOG_MD="$REPO_ROOT/CHANGELOG.md"
+GETTING_STARTED_MD="$REPO_ROOT/docs/guide/getting-started.md"
+
+_step2b_section="$(awk '/^## Step 2b — Skill suggestions/{flag=1} /^## Step 3 —/{flag=0} flag' \
+  "$SETUP_SKILL_MD")"
+_step4_section="$(awk '/^## Step 4 —/{flag=1} /^## Step 5 —/{flag=0} flag' \
+  "$SETUP_SKILL_MD")"
+_upgrading_section="$(awk '/^## Upgrading/{flag=1} flag' "$SETUP_SKILL_MD")"
+
+# ---------------------------------------------------------------------------
+# 125. SKILL.md heading order: Step 2b exists exactly once between Step 2
+#      and Step 3.
+# ---------------------------------------------------------------------------
+_125_count=0; _125_order=0
+_125_count="$(grep -cE -- '^## Step 2b — Skill suggestions$' "$SETUP_SKILL_MD")"
+_125_ln2="$(grep -nE -- '^## Step 2 — Inspect the repo$' "$SETUP_SKILL_MD" | head -1 | cut -d: -f1)"
+_125_ln2b="$(grep -nE -- '^## Step 2b — Skill suggestions$' "$SETUP_SKILL_MD" | head -1 | cut -d: -f1)"
+_125_ln3="$(grep -nE -- '^## Step 3 — Interview the user$' "$SETUP_SKILL_MD" | head -1 | cut -d: -f1)"
+if [[ "$_125_count" -eq 1 && -n "$_125_ln2" && -n "$_125_ln2b" && -n "$_125_ln3" \
+      && "$_125_ln2b" -gt "$_125_ln2" && "$_125_ln2b" -lt "$_125_ln3" ]]; then
+  _125_order=1
+fi
+if [[ "$_125_count" -eq 1 && "$_125_order" -eq 1 ]]; then
+  report PASS "125: SKILL.md Step 2b heading exists once between Step 2 and Step 3"
+else
+  report FAIL "125: SKILL.md Step 2b heading order" \
+    "count=$_125_count order=$_125_order ln2=$_125_ln2 ln2b=$_125_ln2b ln3=$_125_ln3"
+fi
+
+# ---------------------------------------------------------------------------
+# 126. Step 2b section: seven signal names, npx skills find, absent-signal
+#      sentence.
+# ---------------------------------------------------------------------------
+_126_lang=0; _126_web=0; _126_test=0; _126_backend=0; _126_infra=0
+_126_docs=0; _126_db=0; _126_find=0; _126_absent=0
+grep -qF -- 'Language / runtime' <<< "$_step2b_section" && _126_lang=1
+grep -qF -- 'Web UI present' <<< "$_step2b_section" && _126_web=1
+grep -qF -- 'Test framework' <<< "$_step2b_section" && _126_test=1
+grep -qF -- 'Backend / web framework' <<< "$_step2b_section" && _126_backend=1
+grep -qF -- 'Infra / DevOps' <<< "$_step2b_section" && _126_infra=1
+grep -qF -- 'Docs surfaces' <<< "$_step2b_section" && _126_docs=1
+grep -qF -- 'Databases / ORMs' <<< "$_step2b_section" && _126_db=1
+grep -qF -- 'npx skills find' <<< "$_step2b_section" && _126_find=1
+grep -qF -- 'A signal that is absent produces no query.' <<< "$_step2b_section" \
+  && _126_absent=1
+if [[ "$_126_lang" -eq 1 && "$_126_web" -eq 1 && "$_126_test" -eq 1 \
+      && "$_126_backend" -eq 1 && "$_126_infra" -eq 1 && "$_126_docs" -eq 1 \
+      && "$_126_db" -eq 1 && "$_126_find" -eq 1 && "$_126_absent" -eq 1 ]]; then
+  report PASS "126: Step 2b section names all seven signals, npx skills find, and the absent-signal sentence"
+else
+  report FAIL "126: Step 2b signal table" \
+    "lang=$_126_lang web=$_126_web test=$_126_test backend=$_126_backend infra=$_126_infra docs=$_126_docs db=$_126_db find=$_126_find absent=$_126_absent"
+fi
+
+# ---------------------------------------------------------------------------
+# 127. Step 2b: every project, once per, find-skills URL; Step 2a has no
+#      npx skills add line (install moved to Step 2b).
+# ---------------------------------------------------------------------------
+_127_every=0; _127_once=0; _127_url=0; _127_2a_no_add=1
+grep -qF -- 'every project' <<< "$_step2b_section" && _127_every=1
+grep -qF -- 'once per' <<< "$_step2b_section" && _127_once=1
+grep -qF -- 'https://www.skills.sh/vercel-labs/skills/find-skills' <<< "$_step2b_section" \
+  && _127_url=1
+grep -qF -- 'npx skills add' <<< "$_step2a_section" && _127_2a_no_add=0
+if [[ "$_127_every" -eq 1 && "$_127_once" -eq 1 && "$_127_url" -eq 1 \
+      && "$_127_2a_no_add" -eq 1 ]]; then
+  report PASS "127: Step 2b carries every-project/once-per/find-skills URL; Step 2a has no npx skills add line"
+else
+  report FAIL "127: Step 2b scope + Step 2a install absence" \
+    "every=$_127_every once=$_127_once url=$_127_url 2a_no_add=$_127_2a_no_add"
+fi
+
+# ---------------------------------------------------------------------------
+# 128. Step 2b dedupe: four skill dirs and never-re-offer sentence.
+# ---------------------------------------------------------------------------
+_128_claude=0; _128_cursor=0; _128_agents=0; _128_github=0; _128_never=0
+grep -qF -- '.claude/skills' <<< "$_step2b_section" && _128_claude=1
+grep -qF -- '.cursor/skills' <<< "$_step2b_section" && _128_cursor=1
+grep -qF -- '.agents/skills' <<< "$_step2b_section" && _128_agents=1
+grep -qF -- '.github/skills' <<< "$_step2b_section" && _128_github=1
+grep -qF -- 'Never re-offer a skill that is already installed.' <<< "$_step2b_section" \
+  && _128_never=1
+if [[ "$_128_claude" -eq 1 && "$_128_cursor" -eq 1 && "$_128_agents" -eq 1 \
+      && "$_128_github" -eq 1 && "$_128_never" -eq 1 ]]; then
+  report PASS "128: Step 2b names four skill dirs and the never-re-offer sentence"
+else
+  report FAIL "128: Step 2b dedupe dirs + never-re-offer" \
+    "claude=$_128_claude cursor=$_128_cursor agents=$_128_agents github=$_128_github never=$_128_never"
+fi
+
+# ---------------------------------------------------------------------------
+# 129. Step 2b cap + floor sentences; whole-file grep -cF equals 1 each.
+# ---------------------------------------------------------------------------
+_129_cap_in_2b=0; _129_floor_in_2b=0; _129_cap_count=0; _129_floor_count=0
+grep -qF -- 'Present at most 8 candidates in total and at most 3 per signal, ranked by install count.' \
+  <<< "$_step2b_section" && _129_cap_in_2b=1
+grep -qF -- 'Offer a skill only if its install count is 1000 or more.' \
+  <<< "$_step2b_section" && _129_floor_in_2b=1
+_129_cap_count="$(grep -cF -- 'Present at most 8 candidates in total and at most 3 per signal, ranked by install count.' \
+  "$SETUP_SKILL_MD")"
+_129_floor_count="$(grep -cF -- 'Offer a skill only if its install count is 1000 or more.' \
+  "$SETUP_SKILL_MD")"
+if [[ "$_129_cap_in_2b" -eq 1 && "$_129_floor_in_2b" -eq 1 \
+      && "$_129_cap_count" -eq 1 && "$_129_floor_count" -eq 1 ]]; then
+  report PASS "129: Step 2b cap/floor sentences present once each in SKILL.md"
+else
+  report FAIL "129: Step 2b cap/floor uniqueness" \
+    "cap_in_2b=$_129_cap_in_2b floor_in_2b=$_129_floor_in_2b cap_count=$_129_cap_count floor_count=$_129_floor_count"
+fi
+
+# ---------------------------------------------------------------------------
+# 130. Whole-file install-syntax: no npx skills add line contains @;
+#      Step 2b section contains Fail-open.
+# ---------------------------------------------------------------------------
+_130_no_at=1; _130_failopen=0
+while IFS= read -r _130_line; do
+  [[ "$_130_line" == *'@'* ]] && _130_no_at=0
+done < <(grep -F -- 'npx skills add' "$SETUP_SKILL_MD")
+grep -qF -- 'Fail-open' <<< "$_step2b_section" && _130_failopen=1
+if [[ "$_130_no_at" -eq 1 && "$_130_failopen" -eq 1 ]]; then
+  report PASS "130: no npx skills add line contains @; Step 2b carries Fail-open"
+else
+  report FAIL "130: install-syntax hygiene + Step 2b Fail-open" \
+    "no_at=$_130_no_at failopen=$_130_failopen"
+fi
+
+# ---------------------------------------------------------------------------
+# 131. Step 4 hand-off: domain-skill-rows, layer-skill-map, installed-count
+#      sentence.
+# ---------------------------------------------------------------------------
+_131_domain=0; _131_layer=0; _131_installed=0
+grep -qF -- 'domain-skill-rows' <<< "$_step4_section" && _131_domain=1
+grep -qF -- 'layer-skill-map' <<< "$_step4_section" && _131_layer=1
+grep -qF -- 'Only skills actually installed in this session or already present count as installed; printed fail-open commands do not.' \
+  <<< "$_step4_section" && _131_installed=1
+if [[ "$_131_domain" -eq 1 && "$_131_layer" -eq 1 && "$_131_installed" -eq 1 ]]; then
+  report PASS "131: Step 4 section names domain-skill-rows, layer-skill-map, and the installed-count sentence"
+else
+  report FAIL "131: Step 4 bootstrap hand-off" \
+    "domain=$_131_domain layer=$_131_layer installed=$_131_installed"
+fi
+
+# ---------------------------------------------------------------------------
+# 132. Upgrading section: script-only --upgrade never runs Step 2b.
+# ---------------------------------------------------------------------------
+_132_upgrade=0
+grep -qF -- 'A script-only `--upgrade` never runs Step 2b.' <<< "$_upgrading_section" \
+  && _132_upgrade=1
+if [[ "$_132_upgrade" -eq 1 ]]; then
+  report PASS "132: Upgrading section states script-only --upgrade never runs Step 2b"
+else
+  report FAIL "132: Upgrading Step 2b skip rule" "upgrade=$_132_upgrade"
+fi
+
+# ---------------------------------------------------------------------------
+# 133. Mutation (SKILL.md copy, $TMP only): deleting the Step 2b heading
+#      from a copy fails assertion-125's predicate; the real file still passes.
+# ---------------------------------------------------------------------------
+_133_copy="$TMP/skill_no_step2b_heading.md"
+cp "$SETUP_SKILL_MD" "$_133_copy"
+sed -i '/^## Step 2b — Skill suggestions$/d' "$_133_copy"
+_133_copy_fails=0; _133_real_passes=0
+_133_copy_count="$(grep -cE -- '^## Step 2b — Skill suggestions$' "$_133_copy")"
+_133_copy_ln2="$(grep -nE -- '^## Step 2 — Inspect the repo$' "$_133_copy" | head -1 | cut -d: -f1)"
+_133_copy_ln2b="$(grep -nE -- '^## Step 2b — Skill suggestions$' "$_133_copy" | head -1 | cut -d: -f1)"
+_133_copy_ln3="$(grep -nE -- '^## Step 3 — Interview the user$' "$_133_copy" | head -1 | cut -d: -f1)"
+if [[ "$_133_copy_count" -ne 1 || -z "$_133_copy_ln2b" \
+      || -z "$_133_copy_ln2" || -z "$_133_copy_ln3" \
+      || "$_133_copy_ln2b" -le "$_133_copy_ln2" || "$_133_copy_ln2b" -ge "$_133_copy_ln3" ]]; then
+  _133_copy_fails=1
+fi
+if [[ "$_125_count" -eq 1 && "$_125_order" -eq 1 ]]; then
+  _133_real_passes=1
+fi
+if [[ "$_133_copy_fails" -eq 1 && "$_133_real_passes" -eq 1 ]]; then
+  report PASS "133: mutation -- deleting Step 2b heading from a SKILL.md copy fails assertion-125's predicate; the real file still passes"
+else
+  report FAIL "133: mutation (Step 2b heading)" \
+    "copy_fails=$_133_copy_fails real_passes=$_133_real_passes copy_count=$_133_copy_count"
+fi
+
+# ---------------------------------------------------------------------------
+# 134. Docs/version: README + getting-started Step 2b headings; no stale
+#      'Existing projects are unchanged'; CHANGELOG v$KIT_VERSION entry.
+# ---------------------------------------------------------------------------
+_134_readme_2b=0; _134_readme_stale=0; _134_gs_heading=0; _134_gs_stale=0
+_134_changelog=0
+grep -qF -- 'Skill suggestions (Step 2b)' "$README_MD" && _134_readme_2b=1
+grep -qF -- 'Existing projects are unchanged' "$README_MD" && _134_readme_stale=1
+grep -qE -- '^## Skill suggestions \(Step 2b\)' "$GETTING_STARTED_MD" && _134_gs_heading=1
+grep -qF -- 'Existing projects are unchanged' "$GETTING_STARTED_MD" && _134_gs_stale=1
+grep -qE -- "^## v$KIT_VERSION" "$CHANGELOG_MD" && _134_changelog=1
+if [[ "$_134_readme_2b" -eq 1 && "$_134_readme_stale" -eq 0 && "$_134_gs_heading" -eq 1 \
+      && "$_134_gs_stale" -eq 0 && "$_134_changelog" -eq 1 ]]; then
+  report PASS "134: README/getting-started Step 2b docs present; no stale unchanged-projects phrase; CHANGELOG has v$KIT_VERSION"
+else
+  report FAIL "134: docs/version claims" \
+    "readme_2b=$_134_readme_2b readme_stale=$_134_readme_stale gs_heading=$_134_gs_heading gs_stale=$_134_gs_stale changelog=$_134_changelog"
+fi
+
+# ---------------------------------------------------------------------------
+# 135. README/getting-started install hygiene: every npx skills add line
+#      with -y also has --skill; none contains -g.
+# ---------------------------------------------------------------------------
+_135_readme_y_skill=1; _135_readme_no_g=1
+_135_gs_y_skill=1; _135_gs_no_g=1
+while IFS= read -r _135_line; do
+  [[ "$_135_line" == *' -g'* ]] && _135_readme_no_g=0
+  if [[ "$_135_line" == *' -y'* && "$_135_line" != *'--skill'* ]]; then
+    _135_readme_y_skill=0
+  fi
+done < <(grep -F -- 'npx skills add' "$README_MD")
+while IFS= read -r _135_line; do
+  [[ "$_135_line" == *' -g'* ]] && _135_gs_no_g=0
+  if [[ "$_135_line" == *' -y'* && "$_135_line" != *'--skill'* ]]; then
+    _135_gs_y_skill=0
+  fi
+done < <(grep -F -- 'npx skills add' "$GETTING_STARTED_MD")
+if [[ "$_135_readme_y_skill" -eq 1 && "$_135_readme_no_g" -eq 1 \
+      && "$_135_gs_y_skill" -eq 1 && "$_135_gs_no_g" -eq 1 ]]; then
+  report PASS "135: README/getting-started npx skills add lines pair -y with --skill and never pass -g"
+else
+  report FAIL "135: README/getting-started install hygiene" \
+    "readme_y_skill=$_135_readme_y_skill readme_no_g=$_135_readme_no_g gs_y_skill=$_135_gs_y_skill gs_no_g=$_135_gs_no_g"
 fi
 
 # ===========================================================================

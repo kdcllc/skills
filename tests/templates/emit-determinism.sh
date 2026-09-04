@@ -297,6 +297,13 @@ case_i_cursor_isolation_and_variants() {
     [[ -f "$f" ]] || return 1
     grep -qE '^model: \[' "$f" || return 1
   done
+  # Copilot: feature lands as BOTH the native agent and a complete skill tree —
+  # SKILL.md must exist next to reference/ + templates/ (regression: it was skipped).
+  [[ -f "$cc_ans/.github/agents/feature.agent.md" ]] || return 1
+  [[ -f "$cc_ans/.github/skills/feature/SKILL.md" ]] || return 1
+  grep -qxF 'name: feature' "$cc_ans/.github/skills/feature/SKILL.md" || return 1
+  [[ -f "$cc_ans/.github/skills/feature/templates/goal.md" ]] || return 1
+  [[ -f "$cc_ans/.github/skills/feature/reference/continuation-ladder.md" ]] || return 1
 }
 
 case_j_executables() {
@@ -413,9 +420,9 @@ else
 fi
 
 if case_i_cursor_isolation_and_variants; then
-  report PASS "(i) .cursor isolation, readonly agents, models.map parity, copilot+codex ORCH"
+  report PASS "(i) .cursor isolation, readonly agents, models.map parity, copilot+codex ORCH, copilot feature agent+SKILL.md"
 else
-  report FAIL "(i) .cursor isolation, readonly agents, models.map parity, copilot+codex ORCH"
+  report FAIL "(i) .cursor isolation, readonly agents, models.map parity, copilot+codex ORCH, copilot feature agent+SKILL.md"
 fi
 
 if case_j_executables; then

@@ -138,7 +138,7 @@ order-independent relative to Claude Code (self-contained emission).
 
 ### VERSION
 
-[`skills/setup/VERSION`](../../skills/setup/VERSION) holds the kit version (as of v0.27.0, **0.27.0**). Bump it when changing kit behavior that installs should pick up. Docs-only changes in this repo do not require a VERSION bump.
+[`skills/setup/VERSION`](../../skills/setup/VERSION) holds the kit version (as of v0.28.0, **0.28.0**). Bump it when changing kit behavior that installs should pick up. Docs-only changes in this repo do not require a VERSION bump.
 
 ### Manifest shape
 

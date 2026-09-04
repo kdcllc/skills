@@ -2,7 +2,7 @@
 
 # Getting Started
 
-This guide walks from zero to a working orchestration install. The kit ships as one installable `setup` skill under [`skills/setup/`](../../skills/setup/) that **compiles** a single canonical template source into each AI coding harness's native format. After install, `/setup` is the compile step — it detects your harness(es), inspects the repo, interviews you for what it cannot infer, resolves templates, emits per harness, and writes a manifest for clean upgrades.
+This guide walks from zero to a working orchestration install. The kit ships as one installable `setup` skill under [`skills/setup/`](../../skills/setup/) that **compiles** a single canonical template source into each AI coding harness's native format. After install, `/setup` is the compile step — it detects your harness(es), inspects the repo, suggests skills.sh skills from what it found (Step 2b), interviews you for what it cannot infer, resolves templates, emits per harness, and writes a manifest for clean upgrades.
 
 ## Install the setup skill
 
@@ -39,6 +39,7 @@ After any install path, open a session inside your project. The setup skill live
 
 1. **Detect target harness(es)** — evidence from existing `.claude/`, `.cursor/`, `.github/copilot-instructions.md` or `.github/agents/`, `.codex/` or `AGENTS.md`, plus the session you are running in. Multiple harnesses is normal.
 2. **Inspect the repo** — language(s), test commands, layers, user-facing surfaces, existing skills/agents/rules, external services (must be mocked in tests). Establish what you can read from code; do not ask what is already inferable.
+2b. **Skill suggestions** — runs for **every project** (greenfield accept, decline, or existing repo) **once per** interactive `/setup` session, after Step 2 inspect; derives queries from inspection signals, offers optional project-local skills (1000+ installs, at most 8 candidates). See [Skill suggestions (Step 2b)](#skill-suggestions-step-2b).
 3. **Interview the user** — project name, execution layer order, model tiers, QA surfaces, research workflow, autonomous loop, delivery forge, ground-truth doc — only what Steps 1–2 could not infer.
 4. **Write the answers file** — `orchestration-kit.answers.json` at the repo root (`schema: 1`; bootstrap id table in [`bootstrap-ids.md`](../../skills/setup/reference/bootstrap-ids.md)). Loop `bash .claude/skills/setup/bin/emit.sh --answers orchestration-kit.answers.json --check-answers` (or `.cursor/skills/setup`, `.github/skills/setup`) until exit 0, filling each listed bootstrap id.
 5. **Emit** — run the twin that fits your environment (output is one line; run inline, not via `terminal`):
@@ -58,36 +59,57 @@ After any install path, open a session inside your project. The setup skill live
 flowchart TD
     Detect["Step 1: Detect target harness(es)"]
     Inspect["Step 2: Inspect the repo"]
+    Suggest["Step 2b: Skill suggestions"]
     Interview["Step 3: Interview the user"]
     Answers["Step 4: Write answers file"]
     Emit["Step 5: Run emit.sh / emit.ps1"]
     Report["Step 6: Report"]
 
     Detect --> Inspect
-    Inspect --> Interview
+    Inspect --> Suggest
+    Suggest --> Interview
     Interview --> Answers
     Answers --> Emit
     Emit --> Report
 ```
 
-**Step 2a — Greenfield gate** runs separately from the main pipeline diagram above: it executes after Step 1 and **before** Step 2 when — and only when — the workspace is empty or near-empty (sparse). See the next section; non-sparse repos skip it entirely and proceed directly to inspect.
+**Step 2a — Greenfield gate** runs separately from the main pipeline diagram above: it executes after Step 1 and **before** Step 2 when — and only when — the workspace is empty or near-empty (sparse). See the next section; non-sparse repos skip it entirely and proceed directly to inspect; Step 2b skill suggestions still runs for them after inspect.
 
 Everything emitted is project-specific — layer order, test commands, evaluator auto-fail triggers, and model IDs come from your codebase and interview answers, not generic placeholders. For upgrading an existing install or editing canonical templates, see [contributing.md](contributing.md) — those procedures are not repeated here.
 
 ## Greenfield gate (Step 2a)
 
-On an empty or near-empty workspace, `/setup` runs Step 2a (the greenfield gate) and **asks** before scaffolding. It **shows** a recommended project tree and **creates nothing until you confirm**. First-class layouts are **TypeScript/Node** and **Python**; other stacks get a generic `src/` + `tests/` tree. After you confirm, it can optionally offer **skills.sh** stack skills with **1000+** installs — you pick which ones, installed **into this project**. **Existing projects are unchanged:** non-sparse repos skip the greenfield gate entirely.
+On an empty or near-empty workspace, `/setup` runs Step 2a (the greenfield gate) and **asks** before scaffolding. It **shows** a recommended project tree and **creates nothing until you confirm**. First-class layouts are **TypeScript/Node** and **Python**; other stacks get a generic `src/` + `tests/` tree. Non-sparse repos skip the scaffold offer only.
 
-The sparse heuristic (from [`skills/setup/SKILL.md`](../../skills/setup/SKILL.md) §Step 2a) treats a workspace as sparse **only if every present file** is on an allowlist (`.git/`, `.gitignore`, `LICENSE`, `README*`, `.editorconfig`, `.gitattributes`, `.DS_Store`, `Thumbs.db`, empty directories). **Any other file** — including `skills/setup/SKILL.md`, anything under `tests/` or `docs/`, a language manifest, or `main.py` — means **not sparse**. Hard rule: not sparse → skip Step 2a entirely (no scaffold offer, no skills.sh install step) and continue with Step 2 inspect.
+The sparse heuristic (from [`skills/setup/SKILL.md`](../../skills/setup/SKILL.md) §Step 2a) treats a workspace as sparse **only if every present file** is on an allowlist (`.git/`, `.gitignore`, `LICENSE`, `README*`, `.editorconfig`, `.gitattributes`, `.DS_Store`, `Thumbs.db`, empty directories). **Any other file** — including `skills/setup/SKILL.md`, anything under `tests/` or `docs/`, a language manifest, or `main.py` — means **not sparse**. Hard rule: not sparse → skip Step 2a entirely (no scaffold offer) and continue with Step 2 inspect.
 
-When sparse, `/setup` **always asks** whether to scaffold; it never silently scaffolds. If you decline, it creates no scaffold files, does not run the skills.sh step, and continues with the normal inspect → interview → emit path.
+When sparse, `/setup` **always asks** whether to scaffold; it never silently scaffolds. If you decline, it creates no scaffold files and continues with the normal inspect → skill suggestions (Step 2b) → interview → emit path.
 
 On the accept path:
 
 1. Interview the stack: **TypeScript/Node**, **Python**, or **Other**.
 2. Present the matching frozen tree as a list of paths — **create nothing until you explicitly confirm** that tree.
 3. After confirmation, create exactly the confirmed paths (never overwrite existing paths).
-4. Optionally offer skills.sh stack skills (1000+ install floor) for the chosen stack; install project-local with `npx skills add <owner>/<repo> --skill <picked-skill> -y`.
+
+Skill suggestions run in Step 2b for every project (see below).
+
+## Skill suggestions (Step 2b)
+
+Runs for **every project** — greenfield accept path, greenfield decline path, and
+non-sparse (existing) repos — **once per** interactive `/setup` session, after Step 2
+inspect. Workflow reference:
+[find-skills](https://www.skills.sh/vercel-labs/skills/find-skills) — the find-skills
+skill itself is **not** installed. Seven inspection signals drive search:
+language/runtime, web UI present, test framework, backend/web framework, infra/DevOps
+files, docs surfaces, and databases/ORMs (e.g. a web UI, `pytest`, frameworks, a
+`Dockerfile`, docs, database tooling). Offer a skill only if its install count is
+**1000+**; present at most **8** candidates total and at most **3** per signal, ranked
+by install count. You pick zero or more; install project-local with
+`npx skills add <owner>/<repo> --skill <picked-skill> -y`. Never re-offer a skill
+that is already installed (`.claude/skills`, `.cursor/skills`, `.agents/skills`,
+`.github/skills`). Picked skills are recorded in the emitted `ORCHESTRATION.md` skills
+table (`bootstrap.domain-skill-rows`) and the feature skill's layer → skills map
+(`bootstrap.layer-skill-map`). A script-only `--upgrade` never runs Step 2b.
 
 ## What `/setup` emits per harness
 
@@ -119,8 +141,9 @@ Worked example — Copilot + Codex (`harnesses: ["copilot","codex"]`):
 
 **GitHub Copilot** emits native `.github/agents/*.agent.md` files (subagent allowlists
 and model fallback arrays require that format) and skills as
-`.github/skills/<name>/SKILL.md` trees — the `feature` skill also lands as
-`.github/agents/feature.agent.md` with supporting files under `.github/skills/feature/`
+`.github/skills/<name>/SKILL.md` trees — the `feature` skill lands twice: as the native
+agent `.github/agents/feature.agent.md` and as the full `.github/skills/feature/` tree
+(`SKILL.md`, `reference/`, `templates/`)
 ([`copilot.md`](../../skills/setup/emitters/copilot.md) caveats; translation in
 [`bin/emit.sh`](../../skills/setup/bin/emit.sh)).
 
@@ -134,7 +157,7 @@ Every install also gets the single-copy `_kit/` tools — `_kit/log-spawn.sh` an
 
 `/setup` writes `orchestration-kit.manifest.json` at the project root. The manifest records:
 
-- **`kitVersion`** — contents of [`skills/setup/VERSION`](../../skills/setup/VERSION) at emit time (currently `0.27.0`)
+- **`kitVersion`** — contents of [`skills/setup/VERSION`](../../skills/setup/VERSION) at emit time (currently `0.28.0`)
 - **`answers`** — snapshot of the answers file used at emit (enables `--upgrade` without re-interviewing)
 - **`files`** — map of every emitted path to its SHA-256 hash
 - **`seedFiles`** — paths that are seeds, not managed content (today `_goals/backlog.md`)
@@ -168,4 +191,4 @@ With `/setup` complete, your project has agents, skills, an architecture doc, an
 - [`skills/setup/emitters/copilot.md`](../../skills/setup/emitters/copilot.md) — Copilot VS Code caveats
 - [`skills/setup/emitters/codex.md`](../../skills/setup/emitters/codex.md) — Codex caveats
 - `orchestration-kit.manifest.json` — example manifest shape (`kitVersion`, `files`, `seedFiles`)
-- [`skills/setup/VERSION`](../../skills/setup/VERSION) — kit version anchor (`0.27.0`)
+- [`skills/setup/VERSION`](../../skills/setup/VERSION) — kit version anchor (`0.28.0`)

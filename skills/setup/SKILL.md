@@ -1,6 +1,6 @@
 ---
 name: setup
-description: Install the orchestrator/worker/evaluator multi-agent system into the current project, compiled for its AI coding harness(es) — Claude Code, Cursor, GitHub Copilot (VS Code), and/or OpenAI Codex. Generates the six subagents (evaluator, qa-evaluator, implementer, test-writer, terminal, diagnostician) with tiered model pins — terminal is light-tier: it runs any Bash or PowerShell command and returns only the result the caller asked for — plus the orchestrator skills (feature, research), the criteria skills, an optional autonomous feature loop, and a project-specific ORCHESTRATION.md. On empty or near-empty (greenfield) directories it first asks whether to scaffold a project tree and creates nothing until the user confirms. Run once per project; re-run to upgrade or re-target.
+description: Install the orchestrator/worker/evaluator multi-agent system into the current project, compiled for its AI coding harness(es) — Claude Code, Cursor, GitHub Copilot (VS Code), and/or OpenAI Codex. Generates the six subagents (evaluator, qa-evaluator, implementer, test-writer, terminal, diagnostician) with tiered model pins — terminal is light-tier: it runs any Bash or PowerShell command and returns only the result the caller asked for — plus the orchestrator skills (feature, research), the criteria skills, an optional autonomous feature loop, and a project-specific ORCHESTRATION.md. On empty or near-empty (greenfield) directories it first asks whether to scaffold a project tree and creates nothing until the user confirms. After inspect, suggests skills.sh skills from inspection signals. Run once per project; re-run to upgrade or re-target.
 ---
 
 # Setup (Orchestration Kit Compiler)
@@ -54,15 +54,14 @@ Worked negative example: a repo containing `skills/setup/SKILL.md`, or a non-emp
 `tests/` directory, is **not** sparse and must skip Step 2a.
 
 **Hard rule — not sparse:** skip **entirely** `## Step 2a — Greenfield gate` (no
-scaffold offer, no skills.sh install step) and continue with Step 2 inspect below.
+scaffold offer) and continue with Step 2 inspect; Step 2b still runs.
 
 **Hard rule — sparse:** **always ask** whether to scaffold a new project. Never
 silently scaffold; never skip the question.
 
 ### Decline path
 
-If the user declines the scaffold: create no scaffold files, do not run the skills.sh
-step, set `flags.greenfield` in the answers file (Step 4) to `false`, and continue with the
+If the user declines the scaffold: create no scaffold files, set `flags.greenfield` in the answers file (Step 4) to `false`, and continue with the
 normal inspect → interview → emit path.
 
 ### Accept path — guide, then confirm
@@ -87,40 +86,12 @@ module, no failing test file, no CI):
 | **Python** | `pyproject.toml` (minimal `[project]` name + version), `.gitignore` (at least `__pycache__/`, `.venv/`, `*.egg-info/`), `README.md` (title), `src/`, `tests/` |
 | **Other / generic** | `.gitignore`, `README.md` (title), `src/`, `tests/` — no language manifest |
 
-### Accept path — skills.sh stack skills (greenfield only)
-
-Runs on the accept path only, after the tree exists and the stack is known. Search the
-skills.sh leaderboard first, then `npx skills find` for the chosen stack (`typescript`
-/ `node`, or `python`). Workflow reference:
-https://www.skills.sh/vercel-labs/skills/find-skills
-
-Offer a skill only if its install count is 1000 or more. Prefer listings whose GitHub
-owner is `vercel-labs` or `anthropics`; also prefer a listing whose owner is
-`microsoft` when it meets the floor. Still show other publishers that meet the floor.
-Never list a skill under 1000.
-
-Present each candidate with: skill name, what it does, install count, source
-(`owner/repo`), install command, and a skills.sh link. The user picks zero or more.
-Install **project-local** with exactly:
-
-`npx skills add <owner>/<repo> --skill <picked-skill> -y`
-Never pass -g (project-local only).
-
-**Why `--skill` is required:** `-y` skips confirmation and accepts defaults — without
-`--skill` the CLI installs **every** skill in that source, which is auto-install and
-out of scope. Optional `-a <agent>` only when the CLI agent id for a Step 1 harness is
-known; otherwise omit `-a` (do not guess). Do not vendor installed copies into the
-kit's `templates/` tree.
-
-**Fail-open:** if `npx` is missing, the command exits non-zero, or the network is
-unavailable, do not abort `/setup`. Print the exact `npx skills add …` commands for the
-user to run later, then continue — never stop before inspect/emit.
+Skill suggestions run in Step 2b for every project (see below).
 
 ### Accept-path hand-back (hard)
 
-After confirmed tree creation **and** after the skills.sh step (including its
-fail-open branch), the flow continues at Step 2 — Inspect the repo on the newly
-created tree, then Step 3 interview, then Steps 4–6 emit. This gate never ends the
+After confirmed tree creation, the flow continues at Step 2 — Inspect the repo on the newly
+created tree, then Step 2b skill suggestions, then Step 3 interview, then Steps 4–6 emit. This gate never ends the
 skill.
 
 ### Greenfield token disposition (hard)
@@ -157,10 +128,76 @@ Establish from the code (do not ask what you can read):
 - Lint / type-check / build commands **that are actually configured** — never invent
 - Code lanes/layers and their dependency order
 - User-facing surfaces: CLIs, API endpoints, web UI, library entry points
-- Existing skills/agents/rules, per-directory `AGENTS.md`/`CLAUDE.md`, canonical docs
+- Existing skills/agents/rules — enumerate installed skill directories under
+  `.claude/skills`, `.cursor/skills`, `.agents/skills`, and `.github/skills` (each
+  subdirectory name is an installed skill); per-directory `AGENTS.md`/`CLAUDE.md`, canonical docs
 - External services the code talks to (these must be mocked in tests)
 - Enumerate `git remote -v` and classify each remote per the forge taxonomy in
   `templates/ORCHESTRATION.md` § Forge adapter (Phase 7 delivery)
+
+## Step 2b — Skill suggestions
+
+Runs for **every project** — greenfield accept path, greenfield decline path, and
+non-sparse (existing) repos — **once per** interactive `/setup` session, after Step 2
+inspect so the signals below are known. Workflow reference:
+https://www.skills.sh/vercel-labs/skills/find-skills — the find-skills skill itself is
+**not** installed and **not** vendored; its workflow is embedded here.
+
+1. **Derive queries** from Step 2 inspection using the signal table below.
+2. **Leaderboard first**: check https://skills.sh/ for a well-known skill covering each
+   signal before running the CLI.
+3. **Search**: `npx skills find <query>` per derived query (optionally `--owner <owner>`
+   to scope).
+4. **Verify quality** before recommending: install count and publisher. Offer a skill only if its install count is 1000 or more. Prefer listings whose GitHub owner is
+   `vercel-labs` or `anthropics`; also prefer `microsoft` when it meets the floor. Still
+   show other publishers that meet the floor. Never list a skill under 1000.
+5. **Present**: each candidate with skill name, what it does, install count, source
+   (`owner/repo`), install command, and a skills.sh link. Present at most 8 candidates in total and at most 3 per signal, ranked by install count. Ties break toward the
+   preferred publishers.
+6. **User picks** zero or more. Never auto-install.
+7. **Install** project-local with exactly:
+
+`npx skills add <owner>/<repo> --skill <picked-skill> -y`
+Never pass -g (project-local only).
+
+**Why `--skill` is required:** `-y` skips confirmation and accepts defaults — without
+`--skill` the CLI installs **every** skill in that source, which is auto-install and
+out of scope. Optional `-a <agent>` only when the CLI agent id for a Step 1 harness is
+known; otherwise omit `-a` (do not guess). Do not vendor installed copies into the
+kit's `templates/` tree.
+
+8. **Fail-open**: if `npx` is missing, the command exits non-zero, or the network is
+   unavailable, do not abort `/setup`; print the exact `npx skills add …` commands to
+   run later, then continue to Step 3.
+
+**No results** for a query: say so and move on; never fabricate a candidate.
+
+| Signal | Evidence (from Step 2 inspect) | Queries for npx skills find |
+|--------|-------------------------------|------------------------------|
+| **Language / runtime** | e.g. `package.json` + `tsconfig.json`, `pyproject.toml` / `requirements.txt`, `*.csproj`, `go.mod`, `Cargo.toml` | `typescript`, `python`, `dotnet`, `go`, `rust` |
+| **Web UI present** | e.g. `react` / `next` / `vue` / `svelte` / `@angular` dependencies, `*.razor`, HTML templates + CSS, `tailwind.config.*` | `web design`, `ui`, the framework name, `accessibility` |
+| **Test framework** | e.g. `[tool.pytest]` / `pytest.ini` / `conftest.py`, `jest.config.*` / `vitest.config.*`, `playwright.config.*`, xunit / NUnit package refs | `pytest`, `jest`, `vitest`, `playwright`, `testing` |
+| **Backend / web framework** | e.g. `fastapi` / `django` / `flask`, `express` / `fastify` / `next`, `Microsoft.AspNetCore`, Spring | the framework name |
+| **Infra / DevOps** | e.g. `Dockerfile`, `docker-compose*`, Kubernetes manifests, `*.tf`, `*.bicep`, `.github/workflows/` | `docker`, `kubernetes`, `terraform`, `bicep`, `github actions` |
+| **Docs surfaces** | e.g. `docs/`, `mkdocs.yml`, `docusaurus.config.*` | `documentation` |
+| **Databases / ORMs** | e.g. `prisma/`, `sqlalchemy` / `alembic`, `Microsoft.EntityFrameworkCore`, `migrations/` | `prisma`, `sqlalchemy`, `database` |
+
+A signal that is absent produces no query.
+
+The agent may add **1–3 extra queries** beyond the table, each justified by a named
+inspection file (worked example: `requirements.txt` lists `langchain` → `langchain`). No
+extra query without named evidence.
+
+Worked examples: a repo with a web UI → e.g. offer a web design / UI guidance skill; a
+repo with `pytest` configured → e.g. offer a Python / pytest best-practices skill. Do
+not promise a specific skill name or install count.
+
+On a freshly scaffolded tree only the language signal is present, so the search reduces
+to the stack query (`typescript` / `node` or `python`).
+
+Before presenting, enumerate installed skill directories: `.claude/skills/*/`,
+`.cursor/skills/*/`, `.agents/skills/*/`, `.github/skills/*/` (a skill is installed if
+a directory with its name exists in any of them). Never re-offer a skill that is already installed. List installed matches to the user as already installed.
 
 ## Step 3 — Interview the user
 
@@ -207,6 +244,14 @@ Write `orchestration-kit.answers.json` at the repo root (`schema: 1`). Id table:
   "bootstrap": { "<id>": "verbatim replacement text", "other-id": "…" }
 }
 ```
+
+Skills installed in Step 2b are recorded through the existing bootstrap ids:
+`bootstrap.domain-skill-rows` gains one table row per installed skill
+(`| \`<skill>\` | Supporting | <one-line purpose> (\`owner/repo\`) |`) and
+`bootstrap.layer-skill-map` maps the layer that produced the signal to the skill.
+Only skills actually installed in this session or already present count as installed; printed fail-open commands do not.
+When no project skills exist, those two ids are answered per the existing rules (`""`
+deletes the comment).
 
 Do **not** put derived keys in `tokens` (marked "derived — do not set" below).
 `projectName` fills `PROJECT_NAME` when that token is absent. Omit `LINT_COMMAND` /
@@ -274,6 +319,9 @@ Manifest `options` is flat — `"forge": "<detected>"` plus optional `forgeHost`
 on upgrade.
 
 ## Upgrading / re-running
+
+A script-only `--upgrade` never runs Step 2b. A full interactive `/setup` re-run
+does run it (skipping installed skills).
 
 `bash $SETUP/bin/emit.sh --upgrade` (answers come from the manifest; add
 `--answers` only when the interview changed). Exit 4 lists user-modified files;

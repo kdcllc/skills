@@ -1049,21 +1049,12 @@ function Emit-SkillsFor([string]$h) {
     $name = [System.IO.Path]::GetFileName($d.Replace('\', '/'))
     if ($name -eq 'research' -and $script:Flags['research'] -ne $true) { continue }
     if ($h -eq 'copilot' -and $name -eq 'feature') {
+      # Copilot gets the orchestrator as a native agent (subagent allowlist +
+      # model array) AND as a first-class skill tree below — same as every
+      # other kit skill — so .github/skills/feature/ always has its SKILL.md.
       $src = "$($script:Tpl)/skills/feature/SKILL.template.md"
       Resolve-Template $src 'skills/feature/SKILL.template.md'
       Put-Emit '.github/agents/feature.agent.md' (Strip-AllNl (Translate-CopilotFeature $script:Resolved))
-      foreach ($sub in @('reference', 'templates')) {
-        $subDir = "$($script:Tpl)/skills/feature/$sub"
-        if ([System.IO.Directory]::Exists($subDir)) {
-          foreach ($f in (Get-FilesSorted $subDir '*' $true)) {
-            $fn = $f.Replace('\', '/')
-            $rel = ConvertTo-UnixRel $fn "$($script:Tpl)/skills/feature"
-            Resolve-Template $fn "skills/feature/$rel"
-            Put-Emit ".github/skills/feature/$rel" $script:Resolved
-          }
-        }
-      }
-      continue
     }
     Copy-SkillTree $name "$ide/skills/$name" $mode
   }

@@ -5,6 +5,34 @@ Kit version lives in `skills/setup/VERSION` and is written into each install's
 Versions without an entry (v0.14.0–v0.17.0 and earlier than v0.12.0) predate this
 changelog; their history lives in git and the research/design docs under `docs/`.
 
+## v0.28.0 — Signal-driven skill suggestions
+
+- **Step 2b for every project** — After Step 2 inspect, interactive `/setup` runs
+  skill suggestions for greenfield accept, greenfield decline, and non-sparse repos
+  alike; Step 2a no longer owns a skills.sh install step.
+- **Seven inspection signals** — Language/runtime, web UI, test framework,
+  backend/web framework, infra/DevOps files, docs surfaces, and databases/ORMs drive
+  `npx skills find` queries; absent signals produce no query.
+- **Embedded find-skills workflow** — Leaderboard check → search → quality verify →
+  present → user pick → install; references
+  https://www.skills.sh/vercel-labs/skills/find-skills without installing or
+  vendoring that skill.
+- **Quality and volume caps** — Offer only skills with **1000+** installs; present at
+  most **8** candidates total and **3** per signal, ranked by install count.
+- **Dedupe and install rule** — Never re-offer skills already present under
+  `.claude/skills`, `.cursor/skills`, `.agents/skills`, or `.github/skills`; install
+  project-local with `npx skills add <owner>/<repo> --skill <picked-skill> -y` (never
+  `-g`).
+- **Recording and upgrade boundary** — Installed skills fill
+  `bootstrap.domain-skill-rows` (ORCHESTRATION.md skills table) and
+  `bootstrap.layer-skill-map` (feature skill layer → skills routing). A script-only
+  `--upgrade` never runs Step 2b; a full interactive re-run does (skipping
+  already-installed skills).
+- **Fix: Copilot `feature` skill tree** — `emit.sh` / `emit.ps1` now emit
+  `.github/skills/feature/SKILL.md` alongside `.github/agents/feature.agent.md`;
+  previously only `reference/` and `templates/` were written, leaving a skill folder
+  with no `SKILL.md`. Existing Copilot installs pick it up on `--upgrade`.
+
 ## v0.27.0 — Deterministic emitter
 
 - **Scripted emit** — `/setup` Steps 4–6 are deterministic: the LLM writes

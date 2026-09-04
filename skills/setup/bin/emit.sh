@@ -934,23 +934,14 @@ emit_skills_for() { # harness
       continue
     fi
     if [ "$h" = copilot ] && [ "$name" = feature ]; then
+      # Copilot gets the orchestrator as a native agent (subagent allowlist +
+      # model array) AND as a first-class skill tree below — same as every
+      # other kit skill — so .github/skills/feature/ always has its SKILL.md.
       local src="$TPL/skills/feature/SKILL.template.md"
       local content
       resolve_template "$src" "skills/feature/SKILL.template.md"
       content="$RESOLVED"
       put_emit ".github/agents/feature.agent.md" "$(translate_copilot_feature "$content")"
-      local sub f rel
-      for sub in reference templates; do
-        if [ -d "$TPL/skills/feature/$sub" ]; then
-          while IFS= read -r f; do
-            [ -z "$f" ] && continue
-            rel="${f#"$TPL/skills/feature/"}"
-            resolve_template "$f" "skills/feature/$rel"
-            put_emit ".github/skills/feature/$rel" "$RESOLVED"
-          done < <(LC_ALL=C find "$TPL/skills/feature/$sub" -type f | LC_ALL=C sort)
-        fi
-      done
-      continue
     fi
     copy_skill_tree "$name" "$ide/skills/$name" "$mode"
   done < <(LC_ALL=C find "$TPL/skills" -mindepth 1 -maxdepth 1 -type d | LC_ALL=C sort)
