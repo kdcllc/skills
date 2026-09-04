@@ -97,9 +97,9 @@ Definitions trace to the kit's canonical sources. Version references use v0.20.0
 | Term | Definition |
 |------|------------|
 | **Kit** | The AI Orchestration Kit: a portable orchestrator/worker/evaluator multi-agent system packaged as one installable `setup` skill that compiles a single canonical template source into each harness's native format. |
-| **Harness** | An AI coding environment the kit targets: Claude Code, Cursor, GitHub Copilot (VS Code), or OpenAI Codex. `/setup` detects and emits per harness via emitters. |
+| **Harness** | An AI coding environment the kit targets: Claude Code, Cursor, GitHub Copilot (VS Code), or OpenAI Codex. `/setup` detects target harnesses; `skills/setup/bin/emit.sh` / `emit.ps1` emits resolved templates per harness. |
 | **Canonical templates** | The single source tree under `skills/setup/templates/` (Claude Code format). All project-specific content is resolved here before emission; edits belong in templates, not in emitted instance files. |
-| **Emitter** | A per-harness compile instruction file under `skills/setup/emitters/` (for example `cursor.md`, `claude-code.md`) that maps resolved templates into that harness's native layout. |
+| **Emitter** | A caveats-only note per harness under `skills/setup/emitters/` (for example `cursor.md`, `claude-code.md`); the translation rules themselves live in `skills/setup/bin/emit.sh` / `emit.ps1`. |
 | **Instance (emitted install)** | The generated orchestration tree `/setup` writes into a target project — agents, skills, `ORCHESTRATION.md`, optional `_loop/`, and `orchestration-kit.manifest.json`. In this repo the instance is gitignored and is not source of truth. |
 | **Orchestrator** | The main session (feature or research coordinator) that prepares context, makes decisions, and spawns subagents — it coordinates and never executes implementation itself. |
 | **Worker (implementer / test-writer)** | Fresh-context subagents on the light model tier that execute tasks: `implementer` for implementation and fixes, `test-writer` for outcome-verifying tests with external services mocked. |

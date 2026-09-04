@@ -39,25 +39,35 @@ After any install path, open a session inside your project. The setup skill live
 
 1. **Detect target harness(es)** — evidence from existing `.claude/`, `.cursor/`, `.github/copilot-instructions.md` or `.github/agents/`, `.codex/` or `AGENTS.md`, plus the session you are running in. Multiple harnesses is normal.
 2. **Inspect the repo** — language(s), test commands, layers, user-facing surfaces, existing skills/agents/rules, external services (must be mocked in tests). Establish what you can read from code; do not ask what is already inferable.
-3. **Interview the user** — project name, execution layer order, model tiers, QA surfaces, research workflow, autonomous loop, GitHub/`gh` availability, ground-truth doc — only what Steps 1–2 could not infer.
-4. **Resolve the canonical templates** — in a scratch copy, replace every `{{TOKEN}}` and act on + delete every `<!-- BOOTSTRAP: ... -->` comment under [`skills/setup/templates/`](../../skills/setup/templates/).
-5. **Emit per harness** — follow each target's emitter ([`claude-code.md`](../../skills/setup/emitters/claude-code.md), [`cursor.md`](../../skills/setup/emitters/cursor.md), [`copilot.md`](../../skills/setup/emitters/copilot.md), [`codex.md`](../../skills/setup/emitters/codex.md)).
-6. **Write manifest, verify, report** — write `orchestration-kit.manifest.json`, run emitter verify steps, report what was emitted and how to start.
+3. **Interview the user** — project name, execution layer order, model tiers, QA surfaces, research workflow, autonomous loop, delivery forge, ground-truth doc — only what Steps 1–2 could not infer.
+4. **Write the answers file** — `orchestration-kit.answers.json` at the repo root (`schema: 1`; bootstrap id table in [`bootstrap-ids.md`](../../skills/setup/reference/bootstrap-ids.md)). Loop `bash .claude/skills/setup/bin/emit.sh --answers orchestration-kit.answers.json --check-answers` (or `.cursor/skills/setup`, `.github/skills/setup`) until exit 0, filling each listed bootstrap id.
+5. **Emit** — run the twin that fits your environment (output is one line; run inline, not via `terminal`):
+
+   ```bash
+   bash .claude/skills/setup/bin/emit.sh --answers orchestration-kit.answers.json
+   # or: pwsh .claude/skills/setup/bin/emit.ps1 --answers orchestration-kit.answers.json
+   # (Cursor: .cursor/skills/setup; Copilot: .github/skills/setup)
+   ```
+
+   Requires `jq` for the Bash twin; use `emit.ps1` when jq is missing. If
+   `orchestration-kit.manifest.json` already exists, run with `--dry-run` first. Exit
+   code 4 lists user-modified files — confirm with `--force`.
+6. **Report** — read the summary line (`emit: written N · unchanged M · pruned P · seeds-kept S · warnings W · manifest orchestration-kit.manifest.json · kit <VERSION>`), delete the answers file (the manifest holds `answers`), and start with `/feature`.
 
 ```mermaid
 flowchart TD
     Detect["Step 1: Detect target harness(es)"]
     Inspect["Step 2: Inspect the repo"]
     Interview["Step 3: Interview the user"]
-    Resolve["Step 4: Resolve canonical templates"]
-    Emit["Step 5: Emit per harness"]
-    Manifest["Step 6: Write manifest, verify, report"]
+    Answers["Step 4: Write answers file"]
+    Emit["Step 5: Run emit.sh / emit.ps1"]
+    Report["Step 6: Report"]
 
     Detect --> Inspect
     Inspect --> Interview
-    Interview --> Resolve
-    Resolve --> Emit
-    Emit --> Manifest
+    Interview --> Answers
+    Answers --> Emit
+    Emit --> Report
 ```
 
 **Step 2a — Greenfield gate** runs separately from the main pipeline diagram above: it executes after Step 1 and **before** Step 2 when — and only when — the workspace is empty or near-empty (sparse). See the next section; non-sparse repos skip it entirely and proceed directly to inspect.
@@ -81,37 +91,56 @@ On the accept path:
 
 ## What `/setup` emits per harness
 
-Each harness has an emitter under [`skills/setup/emitters/`](../../skills/setup/emitters/) that maps resolved templates into that harness's native layout. The table below summarizes destinations; paths trace to the emitter Emit sections.
+As of v0.27.0, per-harness translation (path mapping, frontmatter shape, pointer rules)
+runs inside [`skills/setup/bin/emit.sh`](../../skills/setup/bin/emit.sh) /
+[`emit.ps1`](../../skills/setup/bin/emit.ps1) — not in LLM prose. See
+[`skills/setup/bin/README.md`](../../skills/setup/bin/README.md) for the full CLI contract.
+Emitter files under [`skills/setup/emitters/`](../../skills/setup/emitters/) are **caveats
+only** (live model-check URLs, silent-fallback warnings). The table below summarizes
+per-harness output paths; path mapping and translation rules live in
+[`skills/setup/bin/emit.sh`](../../skills/setup/bin/emit.sh) (CLI contract:
+[`bin/README.md`](../../skills/setup/bin/README.md)).
 
 | Harness | Agents | Skills | Architecture doc | Model map / pointer |
 |---------|--------|--------|------------------|---------------------|
 | **Claude Code** | `.claude/agents/*.md` | `.claude/skills/*` | `.claude/ORCHESTRATION.md` | `.claude/skills/setup-models.map.md`; CLAUDE.md pointer appended |
 | **Cursor** | `.cursor/agents/*.md` | `.cursor/skills/*` | `.cursor/ORCHESTRATION.md` | `.cursor/skills/setup-models.map.md`; `.cursor/rules/orchestration.mdc` pointer rule |
-| **GitHub Copilot (VS Code)** | `.github/agents/*.agent.md` | `.github/skills/` when supported | `ORCHESTRATION.md` at repo root | Pointer appended to `.github/copilot-instructions.md` |
+| **GitHub Copilot (VS Code)** | `.github/agents/*.agent.md` | `.github/skills/<name>/SKILL.md` | `ORCHESTRATION.md` at repo root | Pointer appended to `.github/copilot-instructions.md` |
 | **OpenAI Codex** | `.codex/agents/*.md` (bodies) | — (roles in TOML) | `ORCHESTRATION.md` at repo root | `.codex/config.toml` + `.codex/agents/*.toml`; short pointer appended to root `AGENTS.md` |
+
+Worked example — Copilot + Codex (`harnesses: ["copilot","codex"]`):
+`bash .claude/skills/setup/bin/emit.sh --answers orchestration-kit.answers.json`
+(or `.github/skills/setup`). Lands: `.github/agents/*.agent.md`,
+`.github/skills/<name>/SKILL.md`, `.codex/config.toml`, `AGENTS.md`.
 
 **Cursor self-contained tree (as of v0.19.0):** targeting Cursor emits a **self-contained** `.cursor/` tree — agents, skills, the architecture doc, the model map, and the pointer rule — with **no dependency on `.claude/`**. The Cursor emitter never reads or relies on an emitted `.claude/` tree; every file resolves `{{IDE_DIR}}` → `.cursor`. This matches the kit's canonical shipped behavior via [`skills/setup/emitters/cursor.md`](../../skills/setup/emitters/cursor.md).
 
-**Claude Code** is the canonical format — its emitter is mostly a copy of resolved templates into `.claude/` ([`claude-code.md`](../../skills/setup/emitters/claude-code.md)).
+**Claude Code** is the canonical format — the emit script writes resolved templates into `.claude/` with near-1:1 paths ([`claude-code.md`](../../skills/setup/emitters/claude-code.md) caveats).
 
-**GitHub Copilot** emits native `.agent.md` files because subagent allowlists and model fallback arrays require that format ([`copilot.md`](../../skills/setup/emitters/copilot.md)). Skills land under `.github/skills/` when the current VS Code build supports them; otherwise content may inline into agent bodies.
+**GitHub Copilot** emits native `.github/agents/*.agent.md` files (subagent allowlists
+and model fallback arrays require that format) and skills as
+`.github/skills/<name>/SKILL.md` trees — the `feature` skill also lands as
+`.github/agents/feature.agent.md` with supporting files under `.github/skills/feature/`
+([`copilot.md`](../../skills/setup/emitters/copilot.md) caveats; translation in
+[`bin/emit.sh`](../../skills/setup/bin/emit.sh)).
 
 **OpenAI Codex** is structurally different: role instructions live under `.codex/agents/*.md`, role config in `.codex/config.toml` and per-role `.codex/agents/*.toml`, with the full architecture doc at repo-root `ORCHESTRATION.md` (not in `AGENTS.md`, which has a size cap) ([`codex.md`](../../skills/setup/emitters/codex.md)).
 
-When the autonomous loop is enabled, all harnesses share single-copy `_loop/` drivers (`loop.sh`, `loop.ps1`, breaker helpers, `PROMPT.md`) and a seed `_goals/backlog.md` (create if missing; never overwrite). Loop driver details belong in [autonomous-loop.md](autonomous-loop.md).
+Every install also gets the single-copy `_kit/` tools — `_kit/log-spawn.sh` and `_kit/log-spawn.ps1` — which the `feature` skill uses to append the per-goal orchestration log (context packages and reports are stored under `_goals/<goal>/spawns/`). When the autonomous loop is enabled, all harnesses share single-copy `_loop/` drivers (`loop.sh`, `loop.ps1`, breaker helpers, `PROMPT.md`) and a seed `_goals/backlog.md` (create if missing; never overwrite). Loop driver details belong in [autonomous-loop.md](autonomous-loop.md).
 
-> **Instance note (this repo):** the AI Orchestration Kit dogfoods its own skill. The emitted instance (`.claude/`, `.cursor/`, `_goals/`, `_loop/`, `orchestration-kit.manifest.json`) in **this repository** is gitignored — it is not source of truth. Canonical content lives under `skills/setup/templates/`; re-run `/setup` after template edits to refresh the local instance.
+> **Instance note (this repo):** the AI Orchestration Kit dogfoods its own skill. The emitted instance (`.claude/`, `.cursor/`, `_goals/`, `_kit/`, `_loop/`, `orchestration-kit.manifest.json`) in **this repository** is gitignored — it is not source of truth. Canonical content lives under `skills/setup/templates/`; re-run `/setup` after template edits to refresh the local instance.
 
 ## The manifest and seed files
 
 `/setup` writes `orchestration-kit.manifest.json` at the project root. The manifest records:
 
-- **`kitVersion`** — contents of [`skills/setup/VERSION`](../../skills/setup/VERSION) at emit time (currently `0.23.0`)
+- **`kitVersion`** — contents of [`skills/setup/VERSION`](../../skills/setup/VERSION) at emit time (currently `0.27.0`)
+- **`answers`** — snapshot of the answers file used at emit (enables `--upgrade` without re-interviewing)
 - **`files`** — map of every emitted path to its SHA-256 hash
 - **`seedFiles`** — paths that are seeds, not managed content (today `_goals/backlog.md`)
 - **`harnesses`**, **`options`**, **`installedAt`** — which harnesses were targeted and which optional features were enabled
 
-Re-running `/setup` reads the manifest, diffs file hashes against the working tree to spot your local modifications, regenerates from templates, and shows a diff before overwriting anything you edited. Unmodified files update silently.
+Re-running `/setup` reads the manifest, diffs file hashes against the working tree to spot your local modifications, and re-emits with `bash .claude/skills/setup/bin/emit.sh --upgrade` (or `.cursor/skills/setup`, `.github/skills/setup`; add `--answers` only when the interview changed). Pre-v0.27.0 installs have no embedded `answers` — run Steps 1–4 once, then `--answers … --upgrade`. Use `--dry-run` to preview; exit 4 lists blocked paths. Unmodified files update silently.
 
 **`seedFiles` semantics:** seeds are emitted **create-if-missing, never overwritten**. Their hash is recorded at emit time but drift is expected — it is never read as user modification and is exempt from the upgrade diff-confirm flow. Today the only seed is `_goals/backlog.md`; you own its content from first install onward.
 
@@ -133,9 +162,10 @@ With `/setup` complete, your project has agents, skills, an architecture doc, an
 
 - [`README.md`](../../README.md) — install options, greenfield gate, emission summary, first-session pointers, upgrade and seed-file semantics
 - [`skills/setup/SKILL.md`](../../skills/setup/SKILL.md) — `/setup` workflow steps, greenfield gate (Step 2a), emit steps, manifest write
-- [`skills/setup/emitters/claude-code.md`](../../skills/setup/emitters/claude-code.md) — Claude Code emit destinations
-- [`skills/setup/emitters/cursor.md`](../../skills/setup/emitters/cursor.md) — Cursor self-contained `.cursor/` emit destinations
-- [`skills/setup/emitters/copilot.md`](../../skills/setup/emitters/copilot.md) — GitHub Copilot emit destinations
-- [`skills/setup/emitters/codex.md`](../../skills/setup/emitters/codex.md) — OpenAI Codex emit destinations
+- [`skills/setup/bin/README.md`](../../skills/setup/bin/README.md) — emitter CLI contract (flags, exit codes, determinism)
+- [`skills/setup/emitters/claude-code.md`](../../skills/setup/emitters/claude-code.md) — Claude Code caveats
+- [`skills/setup/emitters/cursor.md`](../../skills/setup/emitters/cursor.md) — Cursor caveats
+- [`skills/setup/emitters/copilot.md`](../../skills/setup/emitters/copilot.md) — Copilot VS Code caveats
+- [`skills/setup/emitters/codex.md`](../../skills/setup/emitters/codex.md) — Codex caveats
 - `orchestration-kit.manifest.json` — example manifest shape (`kitVersion`, `files`, `seedFiles`)
-- [`skills/setup/VERSION`](../../skills/setup/VERSION) — kit version anchor (`0.23.0`)
+- [`skills/setup/VERSION`](../../skills/setup/VERSION) — kit version anchor (`0.27.0`)

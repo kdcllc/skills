@@ -19,7 +19,7 @@ test is a failed task.
 - **Assert outcomes.** A test must fail if the behavior regresses. Asserting "no
   exception was raised" or mocking the unit under test itself are auto-fails.
 - **Mock all external services.** No test may hit the network or a live service.
-  <!-- BOOTSTRAP: name the boundary to mock, e.g. "mock at the shared transport layer
+  <!-- BOOTSTRAP[mock-boundary]: name the boundary to mock, e.g. "mock at the shared transport layer
   (InvokeCommand / Graph client), not at requests/httpx level" and the fixtures/tools
   available (pytest fixtures, MSW, respx, ...). -->
 - **Follow the project's test conventions.** Read existing tests first and match their
@@ -46,6 +46,7 @@ test is a failed task.
 ## Completion report format
 
 ```markdown
+**Model (self-reported)**: [the model the harness reports you are running; if unknown, write "unknown"]
 ## Test Task Complete
 
 ### Coverage map
@@ -58,4 +59,12 @@ test is a failed task.
 
 ### Gaps
 - [anything in scope you could not test, and why]
+
+### Footprint
+files_read: [N] (~[C] chars)
+commands_run: [N]
 ```
+
+Footprint is a self-estimate: count the files you opened and sum their sizes (round
+to the nearest thousand chars); count shell commands you ran. Never omit the block —
+write `files_read: 0 (~0 chars)` if you read nothing.

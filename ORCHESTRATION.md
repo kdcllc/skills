@@ -1,111 +1,18 @@
 # Orchestration Architecture
 
-The canonical architecture template lives inside the installable skill, so it ships with
-every install:
+The canonical architecture template lives inside the installable skill:
 
 **[`skills/setup/templates/ORCHESTRATION.md`](skills/setup/templates/ORCHESTRATION.md)**
 
 It describes the orchestrator/worker/evaluator system as a template with `{{TOKEN}}`
-placeholders and `<!-- BOOTSTRAP: ... -->` guidance. As of kit v0.18.0 — which renamed
-the verification subagents to `evaluator`/`qa-evaluator` and introduced `eval_depth`
-intensity routing — that covers:
+placeholders and `<!-- BOOTSTRAP: ... -->` guidance. Summary:
 
-- the **seven-phase feature flow** — alignment, goal creation, goal evaluation, task
-  execution, final audit, optional docs alignment (`align-docs`), and an optional
-  approval-gated pull request (`ship-pr`) — with acceptance criteria at planning
-  (validated at Phase 3), mandatory re-evaluate loops, 3-cycle retry limits, and
-  fix-cycle **model rotation** (different family on retry 2, frontier tier on retry 3);
-- **fresh-context subagents** with tiered model pinning (frontier evaluators, light
-  workers), per-tier fallback chains, and a cost-ceiling policy in the model map;
-- **hardened evaluation**: existence checks with a ✅/⚠️/❌/🔍 confidence ladder,
-  anti-fabrication rules, a required devil's-advocate section in goal evaluation,
-  calibration exemplars, a hard per-criterion threshold, and execute-before-score;
-- **plan-time ownership contracts** — per-task `writes`/`reads`/`depends_on`
-  declarations, disjointness verified at goal evaluation, and an allowed-paths
-  write fence in every worker prompt and context package;
-- **acceptance criteria at planning** — each task file carries `## Acceptance Criteria`
-  (criterion + verification method each) created at Phase 2 and validated once at
-  Phase 3; `eval_depth: full|light` (orchestrator-set, never a skip) routes evaluation
-  intensity per task;
-- the **staged test ladder** (rungs 1–2 mid-cycle, full suites at cycle end);
-- an append-only **orchestration log** per goal (proxy token fields:
-  `context_chars`, `report_chars`, `est_tokens`), silent-success artifact verification,
-  and untrusted-input rules in every agent;
-- a **GREENFIELD ONLY** `BOOTSTRAP:` comment in the canonical template that, on a
-  greenfield `/setup`, adds an **Engineering practices** subsection (test-first / TDD
-  and SOLID — documentation-only conventions, not evaluator auto-fail triggers), keyed
-  off this install's greenfield decision / `options.greenfield`;
-- the optional **autonomous loop** with structural guards — protected paths enforced by
-  the loop drivers (`loop.sh`/`loop.ps1`, PowerShell 7+), circuit breakers, memory size
-  gates, one human-approved PR per run;
-- the loop drivers' **slot-supervision structure** (the `LOOP_SLOTS`/`LOOP_WORKTREE`
-  knob documentation below and the v0.12.0 write-set-admission and
-  single-writer-integration responsibilities are not in this template's prose — the
-  `LOOP_WORKTREE` knob is covered in `templates/loop/SKILL.template.md`; `LOOP_SLOTS` and the
-  v0.12.0 write-set-admission / single-writer-integration responsibilities live only
-  in the drivers, `templates/loop/loop.sh`/`loop.ps1`; driver-owned dispatch is
-  already covered below via the guard table's Exit-condition row, and the
-  retirement + exit-aggregation material is now carried by this template's guard
-  table's Circuit-breaker and Exit-condition rows) —
-  `LOOP_SLOTS` (default 2, clamped `[1,3]`; live under the N>1-iff-worktree rule
-  shipped in v0.12.0: honored when `LOOP_WORKTREE=1`, clamps to effective 1 when
-  `LOOP_WORKTREE=0` (with a stderr note only when `LOOP_SLOTS>1` was set explicitly))
-  and `LOOP_WORKTREE` (default 0 = main-tree
-  iteration; `=1` runs each iteration in a driver-managed worktree with a
-  tracked-instance preflight); and the drivers' new responsibilities shipped in
-  v0.12.0: driver-owned story selection (dispatch), write-set admission, and
-  single-writer integration (§4/§6 of the parallel-dispatch design) — with a new
-  exit code 5 = setup or integration failure. The drivers' v0.13.0 responsibilities:
-  completion and exit aggregation (§7) — per-slot CB1/CB2 retirement instead of a
-  run-fatal stop, the run's exit codes 0–3 aggregated across slots at precedence
-  4>3>2>1>0 (exit 4 short-circuiting), drained completion gated on zero quarantined
-  branches, and quarantine marker files (`.loop-worktrees/QUARANTINE-<branch>.md`
-  — slashes in the branch become dashes) embedding the dispatched prompt.
+- **Seven-phase feature flow** — alignment through optional docs alignment and pull request; acceptance criteria at planning; evaluator gates and fix-cycle model rotation
+- **Fresh-context subagents** — tiered model pinning, explicit model per spawn, per-tier fallback chains
+- **Hardened evaluation** — confidence ladder, anti-fabrication, `eval_depth`, `PASS (with notes)`, continuation ladder after cycle 3 when `phases.ladder: auto`
+- **Ownership contracts** — per-task `writes`/`reads`/`depends_on`, write fences, staged test ladder
+- **Continuation ladder** — rungs 5→4→6 on Phase 4 exhaustion when enabled; see [`docs/research-autonomous-escalation.md`](docs/research-autonomous-escalation.md)
+- **Autonomous loop** — optional headless iteration with structural guards in loop drivers
+- **Self-contained Cursor emission** — a **self-contained** `.cursor/` tree (skills, architecture doc, model map) with no cross-harness reads
 
-v0.19.0 made the Cursor install fully self-contained — skills, the architecture doc, and the
-model map now emit under `.cursor/` with no reliance on native `.claude/` cross-reads —
-resolved `{{IDE_DIR}}` per emitter rather than once globally, replaced the model-tier
-table's resolved single-harness IDs with a reference to the emitted model map, and added
-an emit-time obligation to check Cursor's live model list before emitting agent
-frontmatter.
-
-v0.20.0 added the Phase 4 **continuation ladder** after fix-cycle exhaustion — rung 5
-arbitration (unanimous-failure heuristic), rung 4 diagnosis-first (`diagnostician`), rung 6
-decomposition + selective retry — with a closed failure-class taxonomy, always-escalate
-bypass for destructive/security/infra, and hard guards (attempt cap after cycle 3, repeated
-failure signature, orchestration-log transitions).
-
-v0.21.0 synced the canonical architecture template to shipped v0.12–v0.20 behavior —
-research handoff at Phase 3, the escalation **Ladder** line, closer-task rung-3 carve-out,
-and loop dispatch/exit-funnel/merge-gate summary.
-
-v0.22.0 added the Phase 7 **forge adapter** — GitHub / Azure DevOps / GitLab / hand-over; Phase 7 is never deleted from an install.
-
-v0.23.0 **feature-skill slimming** — acceptance criteria at planning,
-optional gated Phases 6/7 via `goal.md`'s `phases:` block, proxy token logging in the
-orchestration log, per-phase ORCHESTRATION section reads, continuation ladder in
-`reference/continuation-ladder.md`, and template skills renamed `SKILL.template.md` for
-harness discovery hygiene.
-
-Running `/setup` in a target project compiles the template — along with the subagents
-and skills — into the native format of each targeted harness (Claude Code, Cursor,
-GitHub Copilot, OpenAI Codex). See [`README.md`](README.md) for install steps,
-[`docs/research-multi-harness-upgrade.md`](docs/research-multi-harness-upgrade.md) for
-the harness research, [`docs/research-squad-ideas.md`](docs/research-squad-ideas.md) for
-the adopted hardening patterns,
-[`docs/research-harness-design-upgrade.md`](docs/research-harness-design-upgrade.md) for
-the v0.18.0 evaluator-vocabulary + contracts study,
-[`docs/research-autonomous-escalation.md`](docs/research-autonomous-escalation.md) for
-the v0.20.0 continuation-ladder study,
-[`docs/research-forge-adapter-support.md`](docs/research-forge-adapter-support.md) for
-the forge-adapter study, and
-[`docs/design-parallel-dispatch.md`](docs/design-parallel-dispatch.md) for the
-verdict-gated design for WIP-limited parallel dispatch in the autonomous loop (partially
-shipped — §1/§2/§5-supervision (v0.11.0); §3.2 (parts 1-3 v0.10.0, part 4 v0.12.0);
-§4/§6 (v0.12.0); §3.3 (v0.12.0, extending STORY-010's per-slot counters); §7 shipped
-(v0.13.0 — §7.1/§7.2 deviations ratified or resolved in place; §7.3 aggregation); §5
-shipped (v0.13.0: retirement + quarantine markers, extending v0.11.0's supervision —
-argued deviation on marker location recorded in place); see its Status block).
-
-Edit the template in the skill's `templates/` directory only; this file is just a
-pointer.
+Version history: [CHANGELOG.md](CHANGELOG.md). Running `/setup` compiles the template into each targeted harness's native format. Edit the template in the skill's `templates/` directory only; this file is just a pointer.

@@ -36,6 +36,7 @@ TASK_CRITERIA="$TEMPLATES/skills/task-criteria/SKILL.template.md"
 MODELS_MAP="$TEMPLATES/models.map.md"
 SETUP_SKILL="$REPO_ROOT/skills/setup/SKILL.md"
 EMITTERS="$REPO_ROOT/skills/setup/emitters"
+EMIT_SH="$REPO_ROOT/skills/setup/bin/emit.sh"
 VERSION_FILE="$REPO_ROOT/skills/setup/VERSION"
 ROOT_README="$REPO_ROOT/README.md"
 ROOT_ORCHESTRATION="$REPO_ROOT/ORCHESTRATION.md"
@@ -46,6 +47,7 @@ EMITTED_DIAG_CURSOR="$REPO_ROOT/.cursor/agents/diagnostician.md"
 
 fail_count=0
 pass_count=0
+skip_count=0
 
 report() { # report <PASS|FAIL> <name> [detail]
   local status="$1" name="$2" detail="${3:-}"
@@ -56,6 +58,11 @@ report() { # report <PASS|FAIL> <name> [detail]
     fail_count=$((fail_count + 1))
     echo "FAIL: $name${detail:+ -- $detail}" >&2
   fi
+}
+
+skip_report() { # skip_report <name>
+  skip_count=$((skip_count + 1))
+  echo "SKIP: $1"
 }
 
 frontmatter() {
@@ -186,7 +193,7 @@ for f in "${model_id_files[@]}"; do
     filtered_hits=""
     while IFS= read -r line; do
       [[ -z "$line" ]] && continue
-      if grep -qF 'BOOTSTRAP:' <<<"$line"; then
+      if grep -qF 'BOOTSTRAP[' <<<"$line"; then
         continue
       fi
       # Allow resolved-ID cells in the markdown model table (pipe-delimited rows).
@@ -222,23 +229,19 @@ if ! rg -qF 'tools: Agent(implementer, test-writer, evaluator, qa-evaluator, ter
   check6_ok=0
   check6_detail="claude-code spawn-allowlist missing diagnostician"
 fi
-if [[ $check6_ok -eq 1 ]] && ! rg -q 'diagnostician\.agent\.md' "$EMITTERS/copilot.md" 2>/dev/null; then
+if [[ $check6_ok -eq 1 ]] && ! rg -q '\.github/agents/\$\{role\}\.agent\.md' "$EMIT_SH" 2>/dev/null; then
   check6_ok=0
-  check6_detail="copilot emit row for diagnostician.agent.md missing"
+  check6_detail="emit.sh copilot agent path missing"
 fi
 if [[ $check6_ok -eq 1 ]] \
    && ! rg -qF 'agents: [implementer, test-writer, evaluator, qa-evaluator, terminal, diagnostician]' \
-        "$EMITTERS/copilot.md" 2>/dev/null; then
+        "$EMIT_SH" 2>/dev/null; then
   check6_ok=0
-  check6_detail="copilot agents: allowlist missing diagnostician"
+  check6_detail="emit.sh copilot agents: allowlist missing diagnostician"
 fi
-if [[ $check6_ok -eq 1 ]] && rg -qE 'all (\*\*)?five(\*\*)? roles' "$EMITTERS/copilot.md" 2>/dev/null; then
+if [[ $check6_ok -eq 1 ]] && ! rg -qF '[agents.diagnostician]' "$EMIT_SH" 2>/dev/null; then
   check6_ok=0
-  check6_detail="copilot.md still enumerates five roles"
-fi
-if [[ $check6_ok -eq 1 ]] && ! rg -qF '[agents.diagnostician]' "$EMITTERS/codex.md" 2>/dev/null; then
-  check6_ok=0
-  check6_detail="codex [agents.diagnostician] table missing"
+  check6_detail="emit.sh [agents.diagnostician] table missing"
 fi
 cursor_harness="$(awk '/^## Harness specifics/{p=1;next} p&&/^## Verify/{exit} p' "$EMITTERS/cursor.md" 2>/dev/null)"
 if [[ $check6_ok -eq 1 ]] && ! grep -q 'diagnostician' <<<"${cursor_harness:-}"; then
@@ -254,7 +257,7 @@ fi
 # ===========================================================================
 # 7. {{MODEL_FRONTIER_ALT_FAMILY}} documented in setup skill and models.map.md.
 # ===========================================================================
-step4_region="$(awk '/^## Step 4 — Resolve the canonical templates/{p=1;next} p&&/^## /{exit} p' "$SETUP_SKILL" 2>/dev/null)"
+step4_region="$(awk '/^### Placeholder reference/{p=1;next} p&&/^## /{exit} p' "$SETUP_SKILL" 2>/dev/null)"
 check7_ok=1
 if ! grep -qF '{{MODEL_FRONTIER_ALT_FAMILY}}' <<<"${step4_region:-}"; then
   check7_ok=0
@@ -368,30 +371,111 @@ else
 fi
 
 # ===========================================================================
-# 12. VERSION 0.22.0, README version prose, no five-subagent phrasing.
+# phases.ladder gate in feature skills and continuation-ladder reference.
+# ===========================================================================
+check_ladder_ok=1
+check_ladder_detail=""
+for feat in \
+  "$FEATURE_SKILL" \
+  "$FEATURE_CLAUDE" \
+  "$FEATURE_CURSOR"; do
+  rel="${feat#"$REPO_ROOT"/}"
+  if [[ "$rel" == .claude/* || "$rel" == .cursor/* ]]; then
+    inst="${rel%%/*}"
+    if [[ ! -d "$REPO_ROOT/$inst" ]]; then
+      continue
+    fi
+  fi
+  if [[ ! -f "$feat" ]] || ! grep -qF 'phases.ladder' "$feat"; then
+    check_ladder_ok=0
+    check_ladder_detail="$rel: phases.ladder missing"
+    break
+  fi
+done
+if [[ $check_ladder_ok -eq 1 ]]; then
+  for ladder in "$LADDER_REF" "$LADDER_CLAUDE" "$LADDER_CURSOR"; do
+    rel="${ladder#"$REPO_ROOT"/}"
+    if [[ "$rel" == .claude/* || "$rel" == .cursor/* ]]; then
+      inst="${rel%%/*}"
+      if [[ ! -d "$REPO_ROOT/$inst" ]]; then
+        continue
+      fi
+    fi
+    if [[ ! -f "$ladder" ]] || ! grep -qF 'phases.ladder' "$ladder"; then
+      check_ladder_ok=0
+      check_ladder_detail="$rel: phases.ladder missing"
+      break
+    fi
+  done
+fi
+if [[ $check_ladder_ok -eq 1 ]]; then
+  report PASS "phases.ladder gate in feature skills and continuation-ladder reference"
+else
+  report FAIL "phases.ladder gate in feature skills and continuation-ladder reference" \
+    "$check_ladder_detail"
+fi
+
+# ===========================================================================
+# 12. Dynamic VERSION, README version prose, instance/manifest pins, no five-subagent phrasing.
 # ===========================================================================
 check12_ok=1
-if [[ ! -f "$VERSION_FILE" ]] || [[ "$(cat "$VERSION_FILE")" != "0.23.0" ]]; then
+check12_detail=""
+KIT_VERSION="$(tr -d '[:space:]' < "$VERSION_FILE" 2>/dev/null || true)"
+MANIFEST="$REPO_ROOT/orchestration-kit.manifest.json"
+CLAUDE_VERSION="$REPO_ROOT/.claude/skills/setup/VERSION"
+CURSOR_VERSION="$REPO_ROOT/.cursor/skills/setup/VERSION"
+if [[ ! -f "$VERSION_FILE" ]] || [[ ! "$KIT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   check12_ok=0
+  check12_detail="skills/setup/VERSION missing or not semver"
 fi
-if ! grep -q '0\.23\.0' "$ROOT_README" 2>/dev/null; then
+if [[ $check12_ok -eq 1 ]] && ! grep -qF -- "Kit version: **$KIT_VERSION**" "$ROOT_README" 2>/dev/null; then
   check12_ok=0
-fi
-if rg -q 'five subagents' "$ROOT_README" "$SETUP_SKILL" 2>/dev/null; then
-  check12_ok=0
-fi
-if ! grep -qF 'six subagents' "$SETUP_SKILL" 2>/dev/null; then
-  check12_ok=0
+  check12_detail="README Kit version line missing or wrong"
 fi
 if [[ $check12_ok -eq 1 ]]; then
-  report PASS "VERSION 0.23.0, README version prose, no five-subagent phrasing in README or setup SKILL"
+  for ivf in "$CLAUDE_VERSION" "$CURSOR_VERSION"; do
+    rel="${ivf#"$REPO_ROOT"/}"
+    if [[ ! -f "$ivf" ]]; then
+      skip_report "check 12: $rel absent"
+      continue
+    fi
+    if [[ "$(tr -d '[:space:]' < "$ivf")" != "$KIT_VERSION" ]]; then
+      check12_ok=0
+      check12_detail="$rel != $KIT_VERSION"
+      break
+    fi
+  done
+fi
+if [[ $check12_ok -eq 1 ]]; then
+  if [[ ! -f "$MANIFEST" ]]; then
+    skip_report "check 12: orchestration-kit.manifest.json absent"
+  else
+    manifest_ver="$(grep -m1 '"kitVersion"' "$MANIFEST" 2>/dev/null | \
+      sed -E 's/.*"kitVersion"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/')"
+    if [[ "$manifest_ver" != "$KIT_VERSION" ]]; then
+      check12_ok=0
+      check12_detail="manifest kitVersion '$manifest_ver' != $KIT_VERSION"
+    fi
+  fi
+fi
+if [[ $check12_ok -eq 1 ]] && rg -q 'five subagents' "$ROOT_README" "$SETUP_SKILL" 2>/dev/null; then
+  check12_ok=0
+  check12_detail="five-subagent phrasing still present"
+fi
+if [[ $check12_ok -eq 1 ]] && ! grep -qF 'six subagents' "$SETUP_SKILL" 2>/dev/null; then
+  check12_ok=0
+  check12_detail="six subagents missing from setup SKILL"
+fi
+if [[ $check12_ok -eq 1 ]]; then
+  report PASS "VERSION $KIT_VERSION, README Kit version prose, instance/manifest pins, no five-subagent phrasing"
 else
-  report FAIL "VERSION 0.23.0, README version prose, no five-subagent phrasing in README or setup SKILL"
+  report FAIL "VERSION $KIT_VERSION, README Kit version prose, instance/manifest pins, no five-subagent phrasing" \
+    "$check12_detail"
 fi
 
 echo
 echo "=== escalation-ladder summary ==="
-echo "PASS: $pass_count   FAIL: $fail_count"
+echo "PASS: $pass_count   FAIL: $fail_count   SKIP: $skip_count"
 if ((fail_count)); then
   echo "RESULT: $fail_count assertion(s) FAILED"
   exit 1

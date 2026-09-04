@@ -10,7 +10,7 @@ Every path in the kit repo belongs to one of three layers. Treat them differentl
 
 | Layer | Role | Key paths (tracked unless noted) |
 |-------|------|----------------------------------|
-| **CANONICAL** | Source of truth — what `/setup` reads and compiles | `skills/setup/templates/` (Claude Code format), `skills/setup/emitters/` (per-harness compile instructions), `skills/setup/reference/` (verified harness facts), `skills/setup/VERSION` (kit version written into each install's manifest) |
+| **CANONICAL** | Source of truth — what `/setup` reads and compiles | `skills/setup/templates/` (Claude Code format), `skills/setup/bin/` (`emit.sh` + `emit.ps1` — deterministic emit), `skills/setup/fixtures/` (`self-answers.json` for dogfood), `skills/setup/emitters/` (per-harness caveats), `skills/setup/reference/` (`harness-matrix.md`, `bootstrap-ids.md`), `skills/setup/VERSION` (kit version written into each install's manifest) |
 | **INSTANCE** | Emitted by `/setup` and self-install in **this repo only** — gitignored, re-runnable, never committed | Entire `.claude/`; **partial** `.cursor/` only — `.cursor/skills/`, `.cursor/agents/`, `.cursor/rules/`, `.cursor/ORCHESTRATION.md` (the rest of `.cursor/` is **not** gitignored); `.agents/skills/` (self-install `--symlink` canonical tree); `.loop-worktrees/` (loop driver scratch); `_goals/`, `_loop/`, `_research/`; `orchestration-kit.manifest.json` |
 | **REPO DOCS** | Tracked documentation for users and contributors | `README.md`, root `ORCHESTRATION.md` (architecture **pointer**), `docs/` (including this guide suite) |
 
@@ -31,22 +31,19 @@ When you change canonical kit content, exercise the full path before committing 
 ```mermaid
 flowchart TD
     Edit["Edit canonical templates\nskills/setup/templates/"]
-    SelfInstall["bash scripts/self-install.sh\n(skill copy)"]
-    Setup["/setup re-emit\n(full instance)"]
+    SelfInstall["bash scripts/self-install.sh\n(skill copy + emit)"]
     Exercise["Exercise the change end-to-end"]
     Commit["Commit the canonical side"]
 
     Edit --> SelfInstall
-    SelfInstall --> Setup
-    Setup --> Exercise
+    SelfInstall --> Exercise
     Exercise --> Commit
 ```
 
-1. **Edit** templates (and emitters or reference docs when harness translation changes).
-2. **Self-install** copies top-level skills into harness skill directories so `/setup` is reachable in-session without `npx`.
-3. **Re-run `/setup`** inside a session in this repo to emit the full instance (agents, loop drivers, manifest, project-specific resolved content).
-4. **Exercise** the change — run workflows, spot-check emitted files, run the test harnesses below.
-5. **Commit** only canonical and repo-doc paths; instance output stays gitignored.
+1. **Edit** templates (and `bin/emit.*` when translation logic changes; emitters or reference docs when harness caveats change).
+2. **Self-install** copies top-level skills into harness skill directories and emits the instance from `skills/setup/fixtures/self-answers.json` (unless `--no-emit`).
+3. **Exercise** the change — run workflows, spot-check emitted files, run the test harnesses below.
+4. **Commit** only canonical and repo-doc paths; instance output stays gitignored.
 
 If you also changed emitter mappings or `skills/setup/SKILL.md`, include those tracked paths in the commit. Bump `skills/setup/VERSION` when kit behavior changes (see [VERSION, manifest, and upgrades](#version-manifest-and-upgrades)).
 
@@ -79,63 +76,69 @@ pwsh -NoProfile -File scripts/self-install.ps1
 
 | Flag | Semantics |
 |------|-----------|
-| `--dry-run` | Prints planned destination paths to stdout; writes nothing; exits 0. Combined with `--symlink`, prints the symlink plan. |
+| `--dry-run` | Prints planned destination paths to stdout; writes nothing; exits 0. Combined with `--symlink`, prints the symlink plan. When emit runs, passes `--dry-run` to `emit.sh` (action lines only; no writes). |
 | `--symlink` | Places the canonical real tree at `.agents/skills/<name>/` and makes `.claude/skills/<name>` and `.cursor/skills/<name>` symlinks pointing there. Fails loudly on symlink failure; **never** falls back to copy. |
 | `--force` | Accepted and ignored — overwrite is already the default. |
+| `--no-emit` | Copy skills only; skip emit (legacy behaviour). |
+| `--force-emit` | Pass `--force` to `emit.sh` (overwrite user-modified instance files). |
 
-### What self-install is not
+### What self-install emits
 
-Self-install does **not** replace `/setup`. It does **not** run `/setup` and does **not** emit `/setup` artifacts: no `_loop/`, no agents, no `orchestration-kit.manifest.json`, and no other compiled instance content. After self-install, invoke `/setup` in a repo session to produce the full local instance.
+After copying skills, self-install runs `skills/setup/bin/emit.sh --answers skills/setup/fixtures/self-answers.json` unless `--no-emit`. That produces the full gitignored instance (agents, loop drivers, manifest, project-specific resolved content) with zero LLM involvement. Consumer projects still use `/setup` Steps 1–6 in a session; self-install is kit-repo dogfood only.
 
 Nothing the self-install scripts write reaches git — all destination paths are listed in [`.gitignore`](../../.gitignore).
 
 ## Editing templates
 
-All canonical orchestration content lives under [`skills/setup/templates/`](../../skills/setup/templates/) in Claude Code format. `/setup`, as of v0.19.0, resolves templates in a scratch copy before emission.
+All canonical orchestration content lives under [`skills/setup/templates/`](../../skills/setup/templates/) in Claude Code format. As of v0.27.0, `skills/setup/bin/emit.*` resolves and translates templates deterministically.
 
-### Placeholders and BOOTSTRAP comments
+### Template grammar (authoring)
 
-Templates use:
+- **`{{TOKEN}}`** — replaced from `answers.tokens` (and derived keys such as `{{IDE_DIR}}` resolved per harness).
+- **`<!-- BOOTSTRAP[id]: … -->`** — `id` matches `^[a-z0-9]+(-[a-z0-9]+)*$`; the whole comment is replaced by `answers.bootstrap[id]` verbatim; `""` deletes silently; missing keys warn and appear in `--check-answers` output. Whole-line comments collapse to ≤1 blank between neighbours. Class-d instruction comments use the `kit-` prefix and are always deleted.
+- **`<!-- IF flag -->` … `<!-- ENDIF flag -->`** (and `!flag`) — keep or drop the span; nesting allowed; mismatch ⇒ exit 6. Flags include `research`, `loop`, `greenfield`, `lint`, `typecheck`, `models_pinned`, per-target `is_*`, and harness-membership `want_*`.
 
-- **`{{TOKEN}}` placeholders** — project-specific values (`{{PROJECT_NAME}}`, test commands, model tiers, etc.) that `/setup` must replace before emit.
-- **`<!-- BOOTSTRAP: ... -->` comments** — conditional guidance that `/setup` acts on and **deletes** at emit time (for example greenfield-only sections keyed off `options.greenfield`).
+Resolution order: IF → BOOTSTRAP[id] → `{{TOKEN}}`. Id table:
+[`skills/setup/reference/bootstrap-ids.md`](../../skills/setup/reference/bootstrap-ids.md). Verify greps emitted files for stray `{{…}}`, `<!-- BOOTSTRAP`, and `<!-- IF` — zero hits required.
 
-Table rows or sections that do not apply after resolution are **removed**, not left as placeholders. A global verify step greps emitted files for `{{` and `BOOTSTRAP:` — zero hits required.
-
-The full placeholder reference table lives in [`skills/setup/SKILL.md`](../../skills/setup/SKILL.md) (Step 4 — Placeholder reference). Read it before adding or renaming tokens.
+The full placeholder reference table lives in [`skills/setup/SKILL.md`](../../skills/setup/SKILL.md) (Step 4). Read it before adding or renaming tokens.
 
 ### Where harness-specific logic belongs
 
 | Concern | Location |
 |---------|----------|
 | Canonical prose and structure | `skills/setup/templates/` |
-| Per-harness translation (frontmatter shape, path mapping, pointer rules) | `skills/setup/emitters/` |
+| Harness-agnostic tool twins (`log-spawn.sh` / `log-spawn.ps1`, no tokens) | `skills/setup/templates/tools/` — emitted single-copy to `_kit/log-spawn.sh` / `_kit/log-spawn.ps1` (`_kit/` is gitignored in this repo) |
+| Per-harness translation (frontmatter shape, path mapping, pointer rules) | `skills/setup/bin/emit.sh` / `emit.ps1` — see [`bin/README.md`](../../skills/setup/bin/README.md) |
+| Harness caveats (live model-check URLs, silent-fallback warnings) | `skills/setup/emitters/` |
 | Verified harness capabilities and friction points | `skills/setup/reference/harness-matrix.md` |
 
-When live vendor docs contradict the harness matrix, trust the live docs for emission, then **update the matrix** with a new verified-on date. The matrix is the kit's ledger of verified facts; emitters implement translation on top of it.
+When live vendor docs contradict the harness matrix, trust the live docs for emission, then **update the matrix** with a new verified-on date. The matrix is the kit's ledger of verified facts; `bin/emit.*` implements translation on top of it.
 
-## Emitters
+## Emitters (caveats only)
 
-Each supported harness has one emitter file under [`skills/setup/emitters/`](../../skills/setup/emitters/). `/setup` Step 5 follows the emitter for each target harness exactly.
+As of v0.27.0, per-harness translation runs in [`skills/setup/bin/emit.sh`](../../skills/setup/bin/emit.sh) /
+[`emit.ps1`](../../skills/setup/bin/emit.ps1). Emitter files under
+[`skills/setup/emitters/`](../../skills/setup/emitters/) hold **caveats only** — live
+model-list check URLs, silent-fallback warnings, and similar harness friction — not
+translation tables. Full CLI contract: [`skills/setup/bin/README.md`](../../skills/setup/bin/README.md).
 
-| Emitter file | Target harness | What it maps (summary) |
-|--------------|----------------|------------------------|
-| [`claude-code.md`](../../skills/setup/emitters/claude-code.md) | Claude Code (`.claude/`) | Mostly a copy of resolved templates: agents, skills, `ORCHESTRATION.md`, model map reference, loop artifacts (`_loop/`, `_goals/backlog.md` seed) when loop enabled |
-| [`cursor.md`](../../skills/setup/emitters/cursor.md) | Cursor (self-contained `.cursor/`) | Agents (model/frontmatter translation), skills, `.cursor/ORCHESTRATION.md`, `setup-models.map.md`, `.cursor/rules/orchestration.mdc` pointer rule, loop skill — as of v0.19.0 emits a full `.cursor/` tree with no reliance on `.claude/` cross-reads |
-| [`copilot.md`](../../skills/setup/emitters/copilot.md) | GitHub Copilot VS Code (`.github/`) | `.github/agents/*.agent.md`, `.github/skills/`, root `ORCHESTRATION.md`, `copilot-instructions.md` pointer, loop drivers — Copilot-native frontmatter and cost-ceiling rules |
-| [`codex.md`](../../skills/setup/emitters/codex.md) | OpenAI Codex (`AGENTS.md` + `.codex/`) | Root `ORCHESTRATION.md`, short `AGENTS.md` pointer, `.codex/agents/*.md` bodies, `.codex/config.toml` role tables, loop drivers |
+| Emitter file | Target harness | Caveats cover |
+|--------------|----------------|---------------|
+| [`claude-code.md`](../../skills/setup/emitters/claude-code.md) | Claude Code (`.claude/`) | Live model list URL; inherit/unpinned behaviour |
+| [`cursor.md`](../../skills/setup/emitters/cursor.md) | Cursor (self-contained `.cursor/`) | Silent fallback to Composer; live model list URL |
+| [`copilot.md`](../../skills/setup/emitters/copilot.md) | GitHub Copilot VS Code (`.github/`) | Cost-ceiling policy; model fallback arrays |
+| [`codex.md`](../../skills/setup/emitters/codex.md) | OpenAI Codex (`AGENTS.md` + `.codex/`) | Role config in TOML; `AGENTS.md` size cap |
 
-### Drift obligation
-
-Each emitter's **Emit** table lists which template files it maps to which instance paths. When you change a canonical template file, update every emitter that maps it — otherwise `/setup` will emit stale or missing translations for that harness. Treat emitter tables as part of the contract alongside the templates they reference.
-
-The Cursor emitter, as of v0.19.0, is order-independent relative to Claude Code (self-contained emission). Copilot may reuse parts of an emitted `.claude/` tree when both are targeted; see the Step 5 compose paragraph in [`skills/setup/SKILL.md`](../../skills/setup/SKILL.md).
+When you change a canonical template file, update `bin/emit.*` if translation paths
+change — emitters no longer carry Emit tables. The Cursor emitter, as of v0.19.0, is
+order-independent relative to Claude Code (self-contained emission).
 
 ## VERSION, manifest, and upgrades
 
 ### VERSION
 
-[`skills/setup/VERSION`](../../skills/setup/VERSION) holds the kit version (as of v0.21.0, **0.21.0**). Bump it when changing kit behavior that installs should pick up. Docs-only changes in this repo do not require a VERSION bump.
+[`skills/setup/VERSION`](../../skills/setup/VERSION) holds the kit version (as of v0.27.0, **0.27.0**). Bump it when changing kit behavior that installs should pick up. Docs-only changes in this repo do not require a VERSION bump.
 
 ### Manifest shape
 
@@ -145,6 +148,10 @@ The Cursor emitter, as of v0.19.0, is order-independent relative to Claude Code 
 - `files`: map of emitted path → SHA-256 hash
 - `seedFiles`: paths created-if-missing, never overwritten on upgrade
 
+As of v0.27.0, it also records `answers` (snapshot of the answers file used at emit),
+`primary` (primary harness id), and flat `options` flags (`"forge": "<detected>"` plus
+optional `forgeHost`; see [`skills/setup/SKILL.md`](../../skills/setup/SKILL.md) Upgrading).
+
 In this repo the manifest is gitignored (instance layer). See the live example shape in `orchestration-kit.manifest.json` after a local `/setup` run.
 
 ### Upgrade flow
@@ -152,11 +159,11 @@ In this repo the manifest is gitignored (instance layer). See the live example s
 For installed projects (including dogfood in this repo):
 
 1. **Re-pull** the kit — for example `npx skills add kdcllc/skills` again, or `npx agent-skills-cli update` (run `npx agent-skills-cli check` first to see installed skills).
-2. **Re-run `/setup`** — it reads the manifest, diffs file hashes against the working tree to detect **user-modified** emitted files, regenerates, and shows a diff before overwriting anything you edited (as of v0.19.0).
+2. **Re-emit** — `bash .claude/skills/setup/bin/emit.sh --upgrade` (or `.cursor/skills/setup`, `.github/skills/setup`; answers come from the manifest; add `--answers` only when the interview changed). Pre-v0.27.0 installs have no embedded `answers` — run `/setup` Steps 1–4 once, then `--answers … --upgrade`. Exit 4 lists user-modified files; confirm with `--force`. Use `--dry-run` to preview.
 
 **Hash diff protects local modifications:** Unmodified emitted files update silently; modified files require confirmation before overwrite.
 
-**`seedFiles` semantics (as of v0.19.0):** The manifest lists `_goals/backlog.md` in `seedFiles`. Seeds are created only when missing, never overwritten on upgrade, and their hash drift is **expected** — not treated as user modification. The recorded hash is an emit-time record only.
+**`seedFiles` semantics (as of v0.27.0):** The manifest lists `_goals/backlog.md` in `seedFiles` only (not in `files`). Seeds are created only when missing, never overwritten on upgrade, and are exempt from the hash-diff overwrite flow.
 
 **Stale-file pruning (as of v0.19.0):** After regeneration, paths in the old manifest but absent from the new emit set are deleted if unmodified, or reported for manual removal if the user edited them.
 
@@ -182,7 +189,7 @@ When `_loop/` is absent (fresh clone before `/setup`), loop-instance assertions 
 
 ### Standalone template guards
 
-Four tracked structural guards live under `tests/templates/` — [`cursor-isolation.sh`](../../tests/templates/cursor-isolation.sh), [`invocation-flags.sh`](../../tests/templates/invocation-flags.sh), [`escalation-ladder.sh`](../../tests/templates/escalation-ladder.sh) (added with the v0.20.0 continuation-ladder goal), and [`template-currency.sh`](../../tests/templates/template-currency.sh) (added with the v0.21.0 template-currency goal; locks the six template-currency claims — research handoff at Phase 3, escalation **Ladder** line, closer-task rung-3 carve-out, loop dispatch/exit-funnel/merge-gate — with SKIP-when-absent instance-mirror assertions). The escalation-ladder guard locks the Phase 4 continuation-ladder subsection, failure-class taxonomy identity across canonical templates, diagnostician template and dual-instance emission wiring, and `{{MODEL_FRONTIER_ALT_FAMILY}}` documentation. Run any guard directly with `bash tests/templates/<name>.sh`; they are not invoked by `tests/loop-harness/run.sh`.
+Tracked structural guards live under `tests/templates/` — [`cursor-isolation.sh`](../../tests/templates/cursor-isolation.sh), [`invocation-flags.sh`](../../tests/templates/invocation-flags.sh), [`escalation-ladder.sh`](../../tests/templates/escalation-ladder.sh) (added with the v0.20.0 continuation-ladder goal), [`template-currency.sh`](../../tests/templates/template-currency.sh) (added with the v0.21.0 template-currency goal; locks the six template-currency claims — research handoff at Phase 3, escalation **Ladder** line, closer-task rung-3 carve-out, loop dispatch/exit-funnel/merge-gate — with SKIP-when-absent instance-mirror assertions), [`skill-slimming.sh`](../../tests/templates/skill-slimming.sh), [`forge-adapter.sh`](../../tests/templates/forge-adapter.sh), [`model-enforcement.sh`](../../tests/templates/model-enforcement.sh) (v0.24.0 policy strings), [`log-spawn.sh`](../../tests/templates/log-spawn.sh) (v0.25.0: runs the canonical `log-spawn` twins against a mktemp fixture — entries, measured fields, io/work running totals (v0.26.0: Footprint ingestion, `--work-chars`, pre-v0.26 fallback), exit codes, twin parity when `pwsh` is present — plus the `_kit/` emit wiring), and `tests/templates/emit-determinism.sh` (v0.27.0: byte-identical re-emit and twin parity when `pwsh` is present). The escalation-ladder guard locks the Phase 4 continuation-ladder subsection, failure-class taxonomy identity across canonical templates, diagnostician template and dual-instance emission wiring, and `{{MODEL_FRONTIER_ALT_FAMILY}}` documentation. Run any guard directly with `bash tests/templates/<name>.sh`; they are not invoked by `tests/loop-harness/run.sh`.
 
 ### Documentation suite checker
 
@@ -205,7 +212,8 @@ Install and user-side usage topics belong in [getting-started.md](getting-starte
 | Copy skills for local dogfood | `bash scripts/self-install.sh` |
 | Preview self-install plan | `bash scripts/self-install.sh --dry-run` |
 | Symlink mode (single canonical tree) | `bash scripts/self-install.sh --symlink` |
-| Full instance emit | `/setup` in a repo session (after self-install) |
+| Full instance emit | `bash scripts/self-install.sh` (copy + emit from fixture) or `/setup` in a consumer project |
+| Emitter CLI contract | `skills/setup/bin/README.md` |
 | Edit architecture template | `skills/setup/templates/ORCHESTRATION.md` |
 | Placeholder reference | `skills/setup/SKILL.md` |
 | Harness verified facts | `skills/setup/reference/harness-matrix.md` |
@@ -221,10 +229,12 @@ Install and user-side usage topics belong in [getting-started.md](getting-starte
 - [`ORCHESTRATION.md`](../../ORCHESTRATION.md) — root architecture pointer and v0.18.0–v0.21.0 capability summary
 - [`.gitignore`](../../.gitignore) — instance paths gitignored in this repo
 - [`skills/setup/SKILL.md`](../../skills/setup/SKILL.md) — `/setup` workflow, placeholder reference, manifest and upgrade semantics
-- [`skills/setup/emitters/claude-code.md`](../../skills/setup/emitters/claude-code.md) — Claude Code emission map
-- [`skills/setup/emitters/cursor.md`](../../skills/setup/emitters/cursor.md) — Cursor self-contained emission map
-- [`skills/setup/emitters/copilot.md`](../../skills/setup/emitters/copilot.md) — Copilot VS Code emission map
-- [`skills/setup/emitters/codex.md`](../../skills/setup/emitters/codex.md) — Codex emission map
+- [`skills/setup/bin/README.md`](../../skills/setup/bin/README.md) — emitter CLI contract (flags, exit codes, determinism)
+- [`skills/setup/reference/bootstrap-ids.md`](../../skills/setup/reference/bootstrap-ids.md) — bootstrap id and flag table
+- [`skills/setup/emitters/claude-code.md`](../../skills/setup/emitters/claude-code.md) — Claude Code caveats
+- [`skills/setup/emitters/cursor.md`](../../skills/setup/emitters/cursor.md) — Cursor caveats
+- [`skills/setup/emitters/copilot.md`](../../skills/setup/emitters/copilot.md) — Copilot VS Code caveats
+- [`skills/setup/emitters/codex.md`](../../skills/setup/emitters/codex.md) — Codex caveats
 - [`skills/setup/reference/harness-matrix.md`](../../skills/setup/reference/harness-matrix.md) — verified per-harness capability ledger
 - [`scripts/self-install.sh`](../../scripts/self-install.sh) — bash self-install flags and copy/symlink logic
 - [`scripts/self-install.ps1`](../../scripts/self-install.ps1) — PowerShell twin

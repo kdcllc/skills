@@ -1,0 +1,80 @@
+{
+  "schema": 1,
+  "projectName": "AI Orchestration Kit",
+  "harnesses": [
+    "claude-code",
+    "cursor"
+  ],
+  "primary": "claude-code",
+  "flags": {
+    "research": true,
+    "loop": true,
+    "greenfield": false,
+    "lint": false,
+    "typecheck": false,
+    "models_pinned": true
+  },
+  "forge": {
+    "kind": "github",
+    "host": ""
+  },
+  "tokens": {
+    "PROJECT_NAME": "AI Orchestration Kit",
+    "STACK_SUMMARY": "A markdown-only meta-repository: the product is the orchestration kit itself — canonical Claude-format templates under `skills/setup/templates/` (agents, skills, loop, model map, architecture doc), per-harness emitter instructions under `skills/setup/emitters/`, and a verified harness capability matrix under `skills/setup/reference/`. Research ground truth lives in `docs/` (`docs/research-multi-harness-upgrade.md` is the canonical domain reference). The only executable code is the loop driver and circuit-breaker templates (bash + PowerShell twins), the repo's structural checks, and the self-install scripts. There is no application runtime and no test framework — verification is structural (greps, syntax checks, frontmatter validation via `(cd .claude && bash checks.sh)`).",
+    "EXECUTION_LAYERS": "templates/ (canonical source) → emitters/ → reference/harness-matrix.md → docs/ + root README.md/ORCHESTRATION.md",
+    "GROUND_TRUTH_DOC": "docs/research-multi-harness-upgrade.md",
+    "QA_SURFACES": "- **Emitted install artifacts** — the output a /setup run produces in a target project. Evidence: grep output proving zero unresolved tokens/bootstrap comments; frontmatter validation (every `name:` matches its folder/file); `bash -n` output for the emitted loop.sh; link-check output proving relative links in the emitted README/architecture doc resolve.",
+    "SETUP_COMMANDS": "# none — git clone only",
+    "TARGETED_TEST_COMMAND": "grep -n '{{[A-Z_]*}}\\|BOOTSTRAP:' <changed-file>",
+    "FULL_TEST_COMMAND": "(cd .claude && bash checks.sh)",
+    "TEST_FRAMEWORKS": "bash (checks.sh and tests/*.sh)",
+    "EVALUATOR_AUTO_FAIL_TRIGGERS": "- Unresolved '{{...}}' template token, or a leftover bootstrap comment (an HTML\n  comment opening with the word BOOTSTRAP), in any emitted/instance file.\n- A template token used anywhere under skills/setup/templates/ that is not documented\n  in the placeholder table of skills/setup/SKILL.md.\n- Frontmatter `name:` not matching its folder name (skills) or file name (agents).\n- Hardcoded model IDs anywhere outside the model map (canonical:\n  skills/setup/templates/models.map.md; instance: {{IDE_DIR}}/skills/setup-models.map.md).\n- Instance- or session-specific content leaked INTO canonical templates — the\n  canonical kit under skills/setup/ must stay project-agnostic (product isolation).\n- Template ↔ emitter drift — an emitter under skills/setup/emitters/ referencing\n  files, paths, or keys that no longer exist in templates/.",
+    "QA_AUTO_FAIL_TRIGGERS": "- An emitted file containing a leftover '{{...}}' template token or bootstrap comment.\n- A broken relative link in README.md or ORCHESTRATION.md (root pointer or an emitted\n  architecture doc instance).\n- An emitted (or canonical) loop.sh failing `bash -n`."
+  },
+  "models": {
+    "claude-code": {
+      "frontier": "opus",
+      "light": "sonnet",
+      "alt_family": "opus",
+      "frontier_alt_family": "gpt-5.6-sol-medium",
+      "loop_chain": "sonnet"
+    },
+    "cursor": {
+      "frontier": "cursor-grok-4.6-xhigh",
+      "light": "composer-2.5-fast",
+      "alt_family": "gpt-5.6-sol-medium",
+      "frontier_alt_family": "gpt-5.6-sol-medium",
+      "loop_chain": "sonnet"
+    }
+  },
+  "bootstrap": {
+    "auto-fail-sins-evaluator": "- Unresolved '{{...}}' template token, or a leftover bootstrap comment (an HTML\n  comment opening with the word BOOTSTRAP), in any emitted/instance file.\n- A template token used anywhere under skills/setup/templates/ that is not documented\n  in the placeholder table of skills/setup/SKILL.md.\n- Frontmatter `name:` not matching its folder name (skills) or file name (agents).\n- Hardcoded model IDs anywhere outside the model map (canonical:\n  skills/setup/templates/models.map.md; instance: {{IDE_DIR}}/skills/setup-models.map.md).\n- Instance- or session-specific content leaked INTO canonical templates — the\n  canonical kit under skills/setup/ must stay project-agnostic (product isolation).\n- Template ↔ emitter drift — an emitter under skills/setup/emitters/ referencing\n  files, paths, or keys that no longer exist in templates/.",
+    "auto-fail-sins-qa": "- - An emitted file containing a leftover '{{...}}' template token or bootstrap comment.\n- A broken relative link in README.md or ORCHESTRATION.md (root pointer or an emitted\n  architecture doc instance).\n- An emitted (or canonical) loop.sh failing `bash -n`.",
+    "auto-fail-triggers": "",
+    "critical-reference-rows": "",
+    "doc-buckets": "",
+    "domain-skill-rows": "",
+    "execution-layers": "",
+    "fallback-chains": "| Tier | Chain (first available wins) |\n|------|------------------------------|\n| `frontier` | opus → sonnet → (omit pin — harness default) |\n| `light` | sonnet → haiku → (omit pin — harness default) |\n\nCursor fallback (same policy, Cursor IDs): `cursor-grok-4.6-xhigh` → `composer-2.5-fast`\n→ (omit pin); light: `composer-2.5-fast` → (omit pin). Cursor silently substitutes a\ncompatible model under team-admin/plan restrictions, or when the resolved ID is\nunknown/stale (a rotated-out or misspelled model name) — evaluators must report which\nmodel produced the verdict.",
+    "frontier-alt-family": "| Ladder step | Model pin |\n|-------------|-----------|\n| Diagnosis-driven implementation attempt (rung 4) | Claude Code `opus` / Cursor `cursor-grok-4.6-xhigh` |\n| Evaluator arbitration mode (rung 5) | `gpt-5.6-sol-medium` — a different model **family** from the primary evaluator at frontier tier (analytical diversity at the capability floor) |\n\n**Claude Code note:** `gpt-5.6-sol-medium` is pinned for arbitration on both harnesses.\nClaude Code accepts full cross-provider model IDs when configured in the user's\nenvironment; if unavailable, org allowlists may ignore the pin — evaluators should\nreport which model produced the verdict.",
+    "full-suite-commands": "",
+    "greenfield-practices": "",
+    "layer-skill-map": "",
+    "loop-fallback": "| Chain (first available wins) | Resolves |\n|-------------------------------|----------|\n| sonnet → (omit pin — harness default) | `sonnet` |\n\nLight-tier by default — the loop's iterations are implementer/test-writer-shaped work,\nsame as the `light` row above. Ends with the same omit-the-pin rule as the tables\nabove: a trip past the last chain entry clears the model pin and the harness default\ntakes over (no hardcoded model IDs outside this file). The resolved chain is one\ncomma-separated string with no spaces around commas — neither driver twin trims chain\nentries.",
+    "mock-boundary": "",
+    "models-map-caveats": "- **Claude Code env overrides**: `CLAUDE_CODE_SUBAGENT_MODEL` and\n  `CLAUDE_CODE_EFFORT_LEVEL` override frontmatter; org `availableModels` allowlists can\n  cause pins to be ignored.\n- Model values: Claude aliases (`opus`, `sonnet`, `haiku`) or full IDs are both valid;\n  `inherit` is the frontmatter default if a tier is deliberately unpinned.\n- **Cursor silent fallback**: under team-admin/plan restrictions, or when the resolved\n  ID is unknown/stale (a rotated-out or misspelled model name), Cursor substitutes a\n  compatible model without erroring — evaluators should state their expected model in\n  their prompt and report which model produced the verdict.\n- **Cursor Cloud Agents** are main→L1 only; the QA-gate flow still works, but\n  nested L2 worker spawns from an L1 agent are not available in cloud.",
+    "models-map-effort": "Reasoning-effort pins: evaluators `high`, workers `medium` — Claude Code `effort:`\nfrontmatter. Cursor's effort is encoded directly in the model slug for the four IDs\nabove (`cursor-grok-4.6-xhigh`, `composer-2.5-fast`, `gpt-5.6-sol-medium`) — no\nseparate `effort:` key and no bracket params on this instance (live schema verified\n2026-08-21: `name`, `description`, `model`, `readonly`, `is_background` — no `tools:`\nkey).",
+    "models-map-fix-cycle": "| Fix cycle | Implementer model |\n|-----------|-------------------|\n| 1 | `sonnet` (normal) / Cursor `composer-2.5-fast` (normal) |\n| 2 | Claude Code `opus` (single-provider — bump tier early); Cursor `gpt-5.6-sol-medium` (different family at a comparable coding tier) |\n| 3 | Claude Code `opus` with effort `xhigh`; Cursor `cursor-grok-4.6-xhigh` |",
+    "models-map-live-check": "**Live-checked 2026-08-24**: the four Cursor model slugs below\n(`cursor-grok-4.6-xhigh`, `composer-2.5-fast`, `gpt-5.6-sol-medium` — including the\npost-cycle-3 arbitration pin) were confirmed present in the live Cursor model list on\nthat date. Unknown or stale IDs are substituted silently by Cursor — no error surfaces —\nso re-verify against the live list before rotating any of these.",
+    "models-map-title": "# Model Map (resolved — Claude Code + Cursor, self-install instance)",
+    "path-test-conventions": "| Changed path | First impacted files |\n|--------------|----------------------|\n| `skills/setup/templates/agents/*.md` | `skills/setup/emitters/*.md` (mapping tables), `skills/setup/templates/ORCHESTRATION.md` (subagent tables) |\n| `skills/setup/templates/skills/*/` | `skills/setup/emitters/*.md`, `skills/setup/templates/ORCHESTRATION.md` (skills table, file tree) |\n| `skills/setup/templates/loop/*` | `skills/setup/emitters/*.md`, `skills/setup/SKILL.md` (loop extras), `skills/setup/templates/ORCHESTRATION.md` (loop section) |\n| `skills/setup/templates/models.map.md` | every template using model tiers (agents, ORCHESTRATION.md), `skills/setup/SKILL.md` placeholder table |\n| `skills/setup/SKILL.md` (placeholder table) | the whole `skills/setup/templates/` tree (token usage) |\n| `skills/setup/emitters/*.md` | the template files that emitter maps (drift check) |\n| `skills/setup/reference/harness-matrix.md` | `docs/research-multi-harness-upgrade.md`, `skills/setup/emitters/*.md` |",
+    "qa-evaluator-surfaces": "- - **Emitted install artifacts** — the output a /setup run produces in a target\n  project. Evidence: grep output proving zero unresolved tokens/bootstrap comments;\n  frontmatter validation (every `name:` matches its folder/file); `bash -n` output\n  for the emitted loop.sh; link-check output proving relative links in the emitted\n  README/architecture doc resolve.",
+    "qa-surfaces": "- - **Emitted install artifacts** — the output a /setup run produces in a target\n  project. Evidence: grep output proving zero unresolved tokens/bootstrap comments;\n  frontmatter validation (every `name:` matches its folder/file); `bash -n` output\n  for the emitted loop.sh; link-check output proving relative links in the emitted\n  README/architecture doc resolve.",
+    "qa-surfaces-keep": "### Emitted install artifacts (the output of a /setup run in a target project)\n\n- Zero unresolved '{{...}}' template tokens and zero leftover bootstrap comments in\n  every emitted file — demonstrated by grep output over the full emitted tree.\n- Every emitted agent and skill file has valid frontmatter and its `name:` matches its\n  folder name (skills) or file name (agents) — demonstrated by validation output.\n- The emitted `_loop/loop.sh` passes `bash -n` and is executable.\n- Relative links in the emitted README section and architecture doc\n  (ORCHESTRATION.md instance) resolve to real files — demonstrated by link-check\n  output.\n- The emitted model map is the only place model IDs appear; agent frontmatter uses the\n  tiers/aliases it defines.\n- The manifest (`orchestration-kit.manifest.json`) lists every emitted file with a\n  correct sha256.",
+    "quality-check-commands": "",
+    "rendered-siblings": "",
+    "shared-libs": "shared infrastructure: the\n  canonical template source (skills/setup/templates/), the placeholder vocabulary in\n  skills/setup/SKILL.md, and the emitters (skills/setup/emitters/) — build on them.\n  Never re-implement what the shared core provides.",
+    "skills-tree": "",
+    "stack-note": ""
+  }
+}

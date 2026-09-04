@@ -25,6 +25,7 @@ cd "$REPO_ROOT" || exit 1
 
 TEMPLATES="$REPO_ROOT/skills/setup/templates"
 EMITTERS="$REPO_ROOT/skills/setup/emitters"
+EMIT_SH="$REPO_ROOT/skills/setup/bin/emit.sh"
 SETUP_SKILL_MD="$REPO_ROOT/skills/setup/SKILL.md"
 RESEARCH_DOC="$REPO_ROOT/docs/research-token-efficient-skills.md"
 ROOT_README="$REPO_ROOT/README.md"
@@ -154,7 +155,7 @@ fi
 #    naming all seven flagged skills; plus a subagents-table `terminal` row.
 # ===========================================================================
 orch="$TEMPLATES/ORCHESTRATION.md"
-region="$(sed -n '/BOOTSTRAP: append one row per project domain skill/,/Domain skills are the project.s knowledge base/p' "$orch")"
+region="$(sed -n '/BOOTSTRAP\[domain-skill-rows\]: append one row per project domain skill/,/Domain skills are the project.s knowledge base/p' "$orch")"
 flagged_names=(goal-criteria task-criteria qa-criteria test-ladder align-docs ship-pr auto-loop)
 region_ok=1
 if [[ -z "$region" ]]; then
@@ -262,11 +263,11 @@ done
 # ===========================================================================
 # 13. emitters/codex.md registers [agents.terminal] + agents/terminal.toml.
 # ===========================================================================
-codex="$EMITTERS/codex.md"
+codex="$EMIT_SH"
 if grep -qF '[agents.terminal]' "$codex" && grep -qF 'agents/terminal.toml' "$codex"; then
-  report PASS "emitters/codex.md registers [agents.terminal] + agents/terminal.toml"
+  report PASS "emit.sh registers [agents.terminal] + agents/terminal.toml"
 else
-  report FAIL "emitters/codex.md registers [agents.terminal] + agents/terminal.toml"
+  report FAIL "emit.sh registers [agents.terminal] + agents/terminal.toml"
 fi
 
 # ===========================================================================

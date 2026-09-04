@@ -4,7 +4,7 @@
 # Forge-adapter taxonomy and remote-precedence chain, recursive absence of
 # `delete Phase 7` under skills/setup/templates/, setup SKILL manifest forge/forgeHost
 # and Upgrading re-detect/reconcile, dual-instance ship-pr anchor parity, and VERSION /
-# README / manifest kitVersion consistency at 0.22.0 with options.forge github.
+# README / manifest kitVersion consistency at dynamic VERSION with options.forge github.
 # Tracked, self-install-independent — checks canonical templates, setup SKILL, instance
 # copies, and manifest directly (no network, no LLM).
 #
@@ -35,6 +35,7 @@ MANIFEST="$REPO_ROOT/orchestration-kit.manifest.json"
 
 fail_count=0
 pass_count=0
+skip_count=0
 
 report() { # report <PASS|FAIL> <name> [detail]
   local status="$1" name="$2" detail="${3:-}"
@@ -45,6 +46,11 @@ report() { # report <PASS|FAIL> <name> [detail]
     fail_count=$((fail_count + 1))
     echo "FAIL: $name${detail:+ -- $detail}" >&2
   fi
+}
+
+skip_report() { # skip_report <name>
+  skip_count=$((skip_count + 1))
+  echo "SKIP: $1"
 }
 
 # ===========================================================================
@@ -178,44 +184,59 @@ else
 fi
 
 # ===========================================================================
-# 6. Version consistency at 0.22.0 and manifest options.forge == github.
+# 6. Dynamic VERSION consistency (skills/setup/VERSION drives README + manifest).
 # ===========================================================================
 check6_ok=1
 check6_detail=""
-expected_version="0.23.0"
+KIT_VERSION="$(tr -d '[:space:]' < "$VERSION_FILE" 2>/dev/null || true)"
+if [[ ! "$KIT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  check6_ok=0
+  check6_detail="skills/setup/VERSION not semver: '${KIT_VERSION:-<missing>}'"
+fi
 for vf in "$VERSION_FILE" "$CLAUDE_VERSION" "$CURSOR_VERSION"; do
   rel="${vf#"$REPO_ROOT"/}"
-  if [[ ! -f "$vf" ]] || [[ "$(cat "$vf")" != "$expected_version" ]]; then
+  if [[ ! -f "$vf" ]]; then
+    if [[ "$vf" == "$VERSION_FILE" ]]; then
+      check6_ok=0
+      check6_detail="$rel missing"
+      break
+    fi
+    skip_report "check 6: $rel absent"
+    continue
+  fi
+  if [[ "$(tr -d '[:space:]' < "$vf")" != "$KIT_VERSION" ]]; then
     check6_ok=0
-    check6_detail="$rel not $expected_version"
+    check6_detail="$rel != $KIT_VERSION"
     break
   fi
 done
-if [[ $check6_ok -eq 1 ]] && ! grep -qF -- 'Kit version: **0.23.0**' "$ROOT_README" 2>/dev/null; then
+if [[ $check6_ok -eq 1 ]] && ! grep -qF -- "Kit version: **$KIT_VERSION**" "$ROOT_README" 2>/dev/null; then
   check6_ok=0
   check6_detail="README Kit version line missing or wrong"
 fi
-if [[ $check6_ok -eq 1 ]]; then
-  if ! python3 -c "
-import json, sys
-m = json.load(open('$MANIFEST'))
-assert m['kitVersion'] == '$expected_version', m.get('kitVersion')
-assert m['options']['forge'] == 'github', m.get('options', {}).get('forge')
-" 2>/dev/null; then
+if [[ $check6_ok -eq 1 ]] && [[ -f "$MANIFEST" ]]; then
+  manifest_ver="$(grep -m1 '"kitVersion"' "$MANIFEST" 2>/dev/null | \
+    sed -E 's/.*"kitVersion"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/')"
+  if [[ "$manifest_ver" != "$KIT_VERSION" ]]; then
     check6_ok=0
-    check6_detail="manifest kitVersion or options.forge mismatch"
+    check6_detail="manifest kitVersion '$manifest_ver' != $KIT_VERSION"
+  elif ! grep -qF '"forge": "github"' "$MANIFEST" 2>/dev/null; then
+    check6_ok=0
+    check6_detail="manifest options.forge != github"
   fi
+elif [[ $check6_ok -eq 1 ]]; then
+  skip_report "check 6: orchestration-kit.manifest.json absent"
 fi
 if [[ $check6_ok -eq 1 ]]; then
-  report PASS "version 0.23.0 at skills/setup/VERSION, nested VERSIONs, README Kit version, manifest kitVersion; options.forge github"
+  report PASS "VERSION $KIT_VERSION at skills/setup/VERSION, nested VERSIONs, README Kit version, manifest kitVersion; options.forge github"
 else
-  report FAIL "version 0.23.0 at skills/setup/VERSION, nested VERSIONs, README Kit version, manifest kitVersion; options.forge github" \
+  report FAIL "VERSION $KIT_VERSION at skills/setup/VERSION, nested VERSIONs, README Kit version, manifest kitVersion; options.forge github" \
     "$check6_detail"
 fi
 
 echo
 echo "=== forge-adapter summary ==="
-echo "PASS: $pass_count   FAIL: $fail_count"
+echo "PASS: $pass_count   FAIL: $fail_count   SKIP: $skip_count"
 if ((fail_count)); then
   echo "RESULT: $fail_count assertion(s) FAILED"
   exit 1

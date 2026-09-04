@@ -70,9 +70,10 @@ matches a fix already attempted.
 
 ## Report format
 
-Return exactly this structure — all five sections, in this order:
+Return exactly this structure — all five sections, in this order; Footprint is a trailing block, not a sixth frozen section:
 
 ```markdown
+**Model (self-reported)**: [the model the harness reports you are running; if unknown, write "unknown"]
 ## Diagnosis Report: [task name]
 
 ### Root-Cause Hypothesis
@@ -94,7 +95,15 @@ which subtask carries the failure]
 [Explicit yes or no: does this hypothesis match a fix signature already attempted in
 cycles 1–3? If yes, name the matching cycle (cycle 1, 2, or 3) and the signature it
 matches. If no, state why the hypothesis is novel relative to prior attempts.]
+
+### Footprint
+files_read: [N] (~[C] chars)
+commands_run: [N]
 ```
+
+Footprint is a self-estimate: count the files you opened and sum their sizes (round
+to the nearest thousand chars); count shell commands you ran. Never omit the block —
+write `files_read: 0 (~0 chars)` if you read nothing.
 
 Report honestly: a weak hypothesis reported with clear Evidence is more useful than
 a confident guess with no proof.

@@ -62,14 +62,15 @@ The orchestrator's prompt tells you which mode you are in:
 
 ## Auto-fail triggers (instant REJECT or NEEDS FIXES, regardless of everything else)
 
-<!-- BOOTSTRAP: replace with this project's specific sins, e.g.:
+<!-- BOOTSTRAP[auto-fail-sins-evaluator]: replace with this project's specific sins, e.g.:
 - Re-implemented shared core auth/transport instead of reusing it
 - Swallowed or masked auth errors (401/403)
 - Ignored pagination on list endpoints
 - Secrets or credentials in code, logs, or test fixtures
 - Tests that assert nothing (no meaningful assertions, or mock the unit under test)
-- Live calls to external services from tests -->
+- Live calls to external services from tests
 - {{EVALUATOR_AUTO_FAIL_TRIGGERS}}
+-->
 
 ## Calibration exemplars (illustrative shape, not verbatim text)
 
@@ -102,7 +103,8 @@ These are shape references for calibration, not scripts to copy verbatim.
 Return exactly this structure (arbitration mode excepted — see **Arbitration mode**):
 
 ```markdown
-## Verdict: [PASS | NEEDS FIXES | REJECT]
+**Model (self-reported)**: [the model the harness reports you are running; if unknown, write "unknown"]
+## Verdict: [PASS | PASS (with notes) | NEEDS FIXES | REJECT]
 **Score**: N/5
 **failure_class:** [required on every non-PASS verdict — value from taxonomy below]
 
@@ -112,12 +114,24 @@ Return exactly this structure (arbitration mode excepted — see **Arbitration m
 ### Issues found
 1. **[severity: blocker/major/minor]** [file:line] — [what is wrong and why it matters]
 
+### Notes (non-blocking)
+- [used ONLY with PASS (with notes) — list every minor here; never drop]
+
 ### Required fixes (if NEEDS FIXES)
 - [ ] [specific, actionable fix]
+
+### Footprint
+files_read: [N] (~[C] chars)
+commands_run: [N]
 ```
 
+Footprint is a self-estimate: count the files you opened and sum their sizes (round
+to the nearest thousand chars); count shell commands you ran. Never omit the block —
+write `files_read: 0 (~0 chars)` if you read nothing.
+
 Every **non-PASS** verdict (`NEEDS FIXES` or `REJECT`) MUST include `failure_class:`.
-Omit it on PASS only.
+Omit it on PASS only. `PASS (with notes)` is a PASS for `failure_class` purposes
+(omitted) and for phase advancement.
 
 **Failure-class taxonomy (closed set):** `implementation` (default) · `criteria-defect` · `destructive` · `security` · `infra`.
 
@@ -143,6 +157,12 @@ PASS requires: every requirement verified, no blockers, no auto-fail triggers, t
 tests green. NEEDS FIXES: fixable issues — list them exhaustively so one fix cycle
 suffices. REJECT: the approach itself is wrong or an auto-fail trigger fired; explain
 what decision the user must make.
+
+`PASS (with notes)` is returned when every issue found is severity `minor`
+(definition: the task-criteria skill's "Minor" rule) — minors are listed under
+`### Notes (non-blocking)`, never dropped; `NEEDS FIXES` requires at least one
+`major` or `blocker`; downgrading an issue to `minor` must state why (the existing
+"Never talk yourself into a PASS" rule stays verbatim).
 
 ## Arbitration mode
 

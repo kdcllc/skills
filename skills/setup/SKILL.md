@@ -8,8 +8,8 @@ description: Install the orchestrator/worker/evaluator multi-agent system into t
 You are installing a multi-agent orchestration system (orchestrator coordinates,
 worker subagents execute with fresh context, skeptical evaluators verify) into the
 **current project**. The kit keeps ONE canonical template source in Claude Code format
-(`templates/`) and **compiles** it per harness via the instruction files in `emitters/`.
-Consult `reference/harness-matrix.md` for verified capabilities and friction points —
+(`templates/`). `bin/emit.sh` / `emit.ps1` compiles it per harness; `emitters/`
+are caveats only. Consult `reference/harness-matrix.md` for verified capabilities and friction points —
 when live harness docs contradict it, trust the docs and update the matrix.
 
 Skim `templates/ORCHESTRATION.md` first so you understand what you are instantiating.
@@ -62,7 +62,7 @@ silently scaffold; never skip the question.
 ### Decline path
 
 If the user declines the scaffold: create no scaffold files, do not run the skills.sh
-step, set `options.greenfield` to `false` at emit time (Step 6), and continue with the
+step, set `flags.greenfield` in the answers file (Step 4) to `false`, and continue with the
 normal inspect → interview → emit path.
 
 ### Accept path — guide, then confirm
@@ -128,29 +128,22 @@ skill.
 The frozen trees include **no** test runner and no failing test file, so nothing about
 testing can be inferred from them. Step 3 **must ask** for the targeted and full test
 commands, the setup commands, and the test framework name(s), and **must never invent**
-`npm test` / `pytest`. Then resolve the four inference-only tokens by this table. Every
-`{{TOKEN}}` in the scratch copy must be replaced or its containing row/sentence
-deleted, so Step 6's grep for `{{` stays at zero hits.
+`npm test` / `pytest`. Record the four inference-only values in answers `tokens`:
 
 | Token | User supplied a value | User has none |
 |-------|----------------------|---------------|
-| `{{TARGETED_TEST_COMMAND}}` | replace **every** occurrence under `templates/` (today 5 sites: `ORCHESTRATION.md` code block, `agents/implementer.md`, `agents/test-writer.md`, `skills/test-ladder/SKILL.template.md`, `skills/task-criteria/SKILL.template.md` — **none** is a table row) | there is no token-only table row for this token; replace every occurrence with the literal `(not configured)` |
-| `{{FULL_TEST_COMMAND}}` | replace **every** occurrence (today 9 sites; the only token-only table row among these four tokens is the `templates/ORCHESTRATION.md` Quality-checks / rung-3 row, plus 8 prose/code-block sites) | delete that table row if its cell is only this token; replace every remaining occurrence with `(not configured)` |
-| `{{TEST_FRAMEWORKS}}` | replace the occurrence (`agents/test-writer.md` prose) | replace with `not configured` |
-| `{{SETUP_COMMANDS}}` | replace the occurrence (`ORCHESTRATION.md` code block) | TypeScript/Node accept path: `npm install`; Python accept path: `pip install -e .`; Other or decline: `(not configured)` |
+| `TARGETED_TEST_COMMAND` | the user's command | `(not configured)` |
+| `FULL_TEST_COMMAND` | the user's command | `(not configured)` |
+| `TEST_FRAMEWORKS` | the user's name(s) | `not configured` |
+| `SETUP_COMMANDS` | the user's command | TypeScript/Node accept path: `npm install`; Python accept path: `pip install -e .`; Other or decline: `(not configured)` |
 
-Do **not** analogize to the lint/typecheck "remove the row" rule: `{{LINT_COMMAND}}`
-and `{{TYPECHECK_COMMAND}}` each occupy **exactly one** table row, so deleting the row
-is complete. Every test/setup/framework token above has at least one **non-table** site
-(prose or code block), so row-deletion alone always leaves a `{{` behind. The counts
-above are a snapshot — the rule is replace every occurrence, not a frozen inventory.
+Omit `LINT_COMMAND` / `TYPECHECK_COMMAND` from `tokens` when the matching flag is false.
 
 ### Greenfield signal (hard)
 
-Record the branch in the Step 6 manifest `options`: `"greenfield": true` **only** when
-the user accepted **and** confirmed a tree; otherwise `"greenfield": false`. Downstream
-`<!-- BOOTSTRAP: ... -->` resolution keys off that flag — do not rely on remembering
-which branch ran.
+Set `flags.greenfield` in the answers file (Step 4) to `true` only when the user
+accepted and confirmed a tree, otherwise `false`. The emitter writes
+`options.greenfield` from it. Do not rely on remembering which branch ran.
 
 ## Step 2 — Inspect the repo
 
@@ -175,38 +168,60 @@ Ask (multiple-choice where possible) only what you could not infer:
 
 1. **Project name** as it should appear in docs (propose one).
 2. **Execution layer order** — confirm your inferred chain.
-3. **Model tiers** — fill `templates/models.map.md` for each target harness: pick
-   CURRENT frontier and light model IDs (check the harness's live model list; IDs
-   rotate). Offer "inherit/unpinned" as an option (then strip model keys and the tier
-   column from emitted files).
+3. **Model tiers** — for each target harness: pick CURRENT frontier and light
+   model IDs (check the harness's live model list; IDs rotate). Offer
+   "inherit/unpinned" as an option (`flags.models_pinned` false).
 4. **QA gate surfaces** — which user-facing surfaces qa-evaluator covers; any existing
    evidence-producing skills (API smoke, visual QA)?
-5. **Research workflow** — wanted? If not, skip the `research` skill and delete its
-   section from ORCHESTRATION.md.
+5. **Research workflow** — wanted? Record `flags.research`.
 6. **Autonomous loop** — wanted? If yes: confirm sandbox strategy (worktree/container),
    max iterations, and that commits stay local (no auto-push) unless they say otherwise.
-   If no: skip `templates/loop/` and delete the Autonomous Loop section.
+   Record `flags.loop`.
 7. **Delivery forge (Phase 7)** — present the detected forge and the chosen remote.
    Confirm or override with any of `github` / `azuredevops` / `gitlab` / `none`
    (plus `forgeHost` for self-hosted). The `ship-pr` skill is always emitted;
    `none` means the draft + hand-over branch.
 8. **Ground-truth doc** — the committed reference file for domain decisions.
 
-## Step 4 — Resolve the canonical templates
+The live model check happens here — the script never fetches anything. See `emitters/`
+for each harness's live-check URL and silent-fallback / cost-tier warnings.
 
-In a scratch copy, resolve every `{{TOKEN}}` and act on + delete every
-`<!-- BOOTSTRAP: ... -->` comment in `templates/`. Rules:
+## Step 4 — Write the answers file
 
-- Table rows / sections that don't apply are removed, not left as placeholders.
-- Evaluator auto-fail triggers must name **this project's** sins (from Step 2). Generic
-  filler is a bootstrap failure.
-- Model tiers resolve from the completed model map; keep the resolved
-  `models.map.md` as the single place model IDs live.
-- Every token resolves **once** in the scratch copy — with one exception: `{{IDE_DIR}}`
-  is re-resolved **per emitter** whenever an emitter emits its own copy of a resolved
-  file for its target harness (`.claude`, `.cursor`, `.github`, `.codex`), because each
-  emitter's copy must point at its own config dir. No other token is re-resolved this
-  way.
+Write `orchestration-kit.answers.json` at the repo root (`schema: 1`). Id table:
+`reference/bootstrap-ids.md`.
+
+```json
+{
+  "schema": 1,
+  "projectName": "…",
+  "harnesses": ["claude-code"],
+  "primary": "claude-code",
+  "flags": { "research": true, "loop": true, "greenfield": false,
+             "lint": true, "typecheck": false, "models_pinned": true },
+  "forge": { "kind": "github", "host": "" },
+  "tokens": { "PROJECT_NAME": "…", "STACK_SUMMARY": "…", "EXECUTION_LAYERS": "…" },
+  "models": { "claude-code": { "frontier": "opus", "light": "sonnet",
+                               "alt_family": "…", "frontier_alt_family": "…",
+                               "loop_chain": "sonnet" } },
+  "bootstrap": { "<id>": "verbatim replacement text", "other-id": "…" }
+}
+```
+
+Do **not** put derived keys in `tokens` (marked "derived — do not set" below).
+`projectName` fills `PROJECT_NAME` when that token is absent. Omit `LINT_COMMAND` /
+`TYPECHECK_COMMAND` when the matching flag is false. A bootstrap id may be
+deliberately left unanswered when the project has nothing to say — the comment is
+deleted (`""` counts as answered; a missing key is listed).
+
+`$SETUP` is the directory containing this SKILL.md (e.g. `.claude/skills/setup`). Then loop:
+
+```
+bash $SETUP/bin/emit.sh --answers orchestration-kit.answers.json --check-answers
+```
+
+Ask the user about each listed id, fill `bootstrap`, and repeat `--check-answers`
+until exit 0.
 
 ### Placeholder reference
 
@@ -214,146 +229,66 @@ In a scratch copy, resolve every `{{TOKEN}}` and act on + delete every
 |-------|---------|
 | `{{PROJECT_NAME}}` | Display name of the project |
 | `{{STACK_SUMMARY}}` | 2–5 sentence stack note |
-| `{{IDE_DIR}}` | Config dir of the harness **being emitted**, resolved per emitter (`.claude`, `.cursor`, `.github`, `.codex`); single-copy shared artifacts (`_loop/*`) resolve it to the **primary** harness's dir |
-| `{{MODEL_FRONTIER}}` / `{{MODEL_LIGHT}}` | Tier → model ID for the primary harness (from the model map) |
-| `{{CURSOR_MODEL_*}}`, `{{COPILOT_MODEL_*}}`, `{{CODEX_MODEL_*}}` | Per-harness tier IDs (model map only) |
-| `{{MODEL_ALT_FAMILY}}` | Different-family model at light-comparable tier, used by fix-cycle rotation (model map) |
-| `{{MODEL_FRONTIER_ALT_FAMILY}}` | Different-family model at frontier tier, used by evaluator arbitration mode after cycle 3 (model map) |
-| `{{LOOP_MODEL_CHAIN}}` | Comma-separated loop fallback chain, first = preferred (from the model map's "Loop fallback chain" row); empty ⇒ the breaker still tracks state but never passes a model flag |
+| `{{IDE_DIR}}` | derived — do not set. Config dir of the harness **being emitted**, resolved per emitter (`.claude`, `.cursor`, `.github`, `.codex`); single-copy shared artifacts (`_loop/*`) resolve it to the **primary** harness's dir |
+| `{{MODEL_FRONTIER}}` / `{{MODEL_LIGHT}}` | derived — do not set. Tier → model ID for the primary harness (from the model map) |
+| `{{CLAUDE_MODEL_*}}`, `{{CURSOR_MODEL_*}}`, `{{COPILOT_MODEL_*}}`, `{{CODEX_MODEL_*}}` | derived — do not set. Per-harness tier IDs (model map only) |
+| `{{MODEL_ALT_FAMILY}}` | derived — do not set. Different-family model at light-comparable tier, used by fix-cycle rotation (model map) |
+| `{{MODEL_FRONTIER_ALT_FAMILY}}` | derived — do not set. Different-family model at frontier tier, used by evaluator arbitration mode after cycle 3 (model map) |
+| `{{LOOP_MODEL_CHAIN}}` | derived — do not set. Comma-separated loop fallback chain, first = preferred (from the model map's "Loop fallback chain" row); empty ⇒ the breaker still tracks state but never passes a model flag |
 | `{{EXECUTION_LAYERS}}` | Dependency-ordered layer chain |
 | `{{GROUND_TRUTH_DOC}}` | Committed domain ground-truth doc path |
 | `{{QA_SURFACES}}` | User-facing surfaces + evidence each produces |
 | `{{SETUP_COMMANDS}}` | Dependency install commands |
 | `{{TARGETED_TEST_COMMAND}}` / `{{FULL_TEST_COMMAND}}` | Staged test commands |
 | `{{TEST_FRAMEWORKS}}` | Test framework(s) in use |
-| `{{LINT_COMMAND}}` / `{{TYPECHECK_COMMAND}}` | Only if configured; else remove rows |
+| `{{LINT_COMMAND}}` / `{{TYPECHECK_COMMAND}}` | Only if configured; else omit from `tokens` |
 | `{{EVALUATOR_AUTO_FAIL_TRIGGERS}}` / `{{QA_AUTO_FAIL_TRIGGERS}}` | Project-specific instant-fail conditions |
 
-## Step 5 — Emit per harness
+## Step 5 — Emit
 
-For each target harness, follow its emitter exactly:
+Run the twin that fits this environment **inline** — the output is one line; the
+terminal-spawn rule does not apply:
 
-| Harness | Emitter |
-|---------|---------|
-| Claude Code | `emitters/claude-code.md` |
-| Cursor | `emitters/cursor.md` |
-| GitHub Copilot (VS Code) | `emitters/copilot.md` |
-| OpenAI Codex | `emitters/codex.md` |
+- `bash $SETUP/bin/emit.sh --answers orchestration-kit.answers.json`
+- `pwsh $SETUP/bin/emit.ps1 --answers orchestration-kit.answers.json`
 
-Emitters compose: run Claude Code first when it is among the targets — VS Code reuses
-parts of the emitted `.claude/` tree. The Cursor emitter is self-contained (it emits its
-own full `.cursor/` tree and never reads `.claude/`), so it is order-independent
-relative to the other emitters.
+This kit repo's own dogfood uses `scripts/self-install.sh`. If `orchestration-kit.manifest.json` already exists, run with `--dry-run` first.
 
-**Seed files (create if missing; never overwrite)**: `_goals/backlog.md` is emitted as
-a *seed*, not as managed content — the user owns it from the first install onward.
-Create it only when it does not exist; on every re-run or upgrade leave an existing
-seed untouched, even when its recorded manifest hash no longer matches (see Step 6).
+| Exit | Meaning | Action |
+|------|---------|--------|
+| 0 | ok | continue to Step 6 |
+| 2 | usage / jq missing / answers unreadable | install `jq` or use `emit.ps1`; fix the path |
+| 3 | answers invalid **or** `--check-answers` found unanswered ids | fix answers |
+| 4 | user-modified files (listed on stderr) | show the user the listed files, ask, `--force` |
+| 5 | verify failed | report the listed verify hits as a kit bug |
+| 6 | template syntax | kit bug |
 
-**Loop extras (all harnesses)**: both loop drivers (`_loop/loop.sh` and
-`_loop/loop.ps1`), their circuit-breaker helper twins (`_loop/breaker.sh` and
-`_loop/breaker.ps1`, sourced/dot-sourced by the drivers), and `_loop/PROMPT.md` are
-always emitted for loop-enabled installs, regardless of target harness or detected OS —
-the drivers refuse to dispatch without `PROMPT.md`, so every loop-enabled install emits
-it even when Claude Code is not among the targets. The user picks the driver that
-matches their platform at invocation time. If the loop is enabled,
-append to the project's `.gitattributes` (create if missing) so parallel/append-only
-state merges cleanly and the loop drivers always check out with the line endings
-their interpreters require:
+## Step 6 — Report
 
-```
-_goals/LEARNINGS.md merge=union
-_goals/ESCALATIONS.md merge=union
-_goals/*/orchestration-log.md merge=union
-*.sh text eol=lf
-*.ps1 text eol=lf
-```
-
-Also append `_goals/breaker-state.json` to the project's `.gitignore` (create if
-missing) — this is runtime scratch written by the breaker helpers at run time and
-must never enter commits. Append two more lines to the same list: `.loop-worktrees/`
-(the per-slot worktree scratch created and destroyed by the driver at
-`LOOP_WORKTREE=1`) and `_goals/breaker-state.json.tmp.*` (crash-orphaned temp files
-left behind by the breaker's write-temp-then-rename, per STORY-009).
-
-**Checks scripts on Windows**: the kit does not emit a structural-checks script
-itself. If a project's install adopts one (as the kit's own repository does), emit a
-`.ps1` twin with the same checks and exit semantics — the pattern mirrors the loop
-drivers (`checks.sh` / `checks.ps1`, behaviorally identical, no OS-detection
-branching).
-
-## Step 6 — Manifest, verify, report
-
-1. Write `orchestration-kit.manifest.json` at the project root:
-   ```json
-   {
-     "kit": "agent-kit",
-     "kitVersion": "<contents of VERSION>",
-     "installedAt": "<ISO date>",
-     "harnesses": ["claude-code", "..."],
-     "options": { "research": true, "loop": false, "greenfield": false, "forge": "<detected>" },
-     "files": { "<emitted path>": "<sha256>" },
-     "seedFiles": ["_goals/backlog.md"]
-   }
-   ```
-   `options.greenfield` is `true` **only** when Step 2a's accept path ran and the user
-   confirmed a tree; on the decline path, or when Step 2a was skipped as not sparse, it
-   is `false`.
-   `options.forge` is one of `github`, `azuredevops`, `gitlab`, or `none`.
-   Optional `"forgeHost"` maps a self-hosted host. A manifest override beats detection
-   at ship-pr runtime.
-   `seedFiles` lists the emitted paths that are seeds (today exactly one): their hash
-   is recorded in `files` at emit time and is EXEMPT from the upgrade diff-confirm
-   flow. Semantics:
-   a seed's recorded hash is an emit-time record; drift is expected and is never read as user modification.
-   `_goals/LEARNINGS.md`, `_goals/ESCALATIONS.md`, and `_goals/breaker-state.json`
-   are runtime/user artifacts the kit does not emit — never manifested in `files` or
-   `seedFiles`, no hash ever recorded.
-2. Run each emitter's Verify section. Global check: grep every emitted file for `{{`
-   and `BOOTSTRAP:` — zero hits. Also: `pwsh -NoProfile -Command` parser check on
-   emitted `.ps1` files when pwsh is available; otherwise note the skip in the report.
-3. Report: files emitted per harness, the layer order / commands / model tiers baked
-   in, and how to start (`/feature` — or the harness's equivalent invocation).
+Read the summary line (`emit: written N · unchanged M · pruned P · seeds-kept S · warnings W · manifest orchestration-kit.manifest.json · kit <VERSION>`).
+Delete `orchestration-kit.answers.json` (the manifest holds `answers`).
+Report written / pruned / warnings and the next step (`/feature`).
+The script writes the manifest; schema in `bin/README.md`.
+Manifest `options` is flat — `"forge": "<detected>"` plus optional `forgeHost`.
+`seedFiles` lists seeds (today `_goals/backlog.md`); they are never overwritten
+on upgrade.
 
 ## Upgrading / re-running
 
-If `orchestration-kit.manifest.json` exists: compare its `kitVersion` to `VERSION`,
-diff manifest hashes against the working tree to find user-modified files, regenerate
-into the scratch copy, and show the user a diff for any file they modified before
-overwriting it. Unmodified files update silently. Update the manifest last.
+`bash $SETUP/bin/emit.sh --upgrade` (answers come from the manifest; add
+`--answers` only when the interview changed). Exit 4 lists user-modified files;
+show the user, then `--force` if they confirm. `--dry-run` prints planned actions
+and still exits 4 when any path is blocked.
+
+Prune: kit-owned paths in the previous manifest that are not in the new emit set
+are deleted when unchanged, else kept and warned; seeds are never pruned.
+
+pre-v0.27.0 installs have no `answers` — run Steps 1–4 once, then `--answers … --upgrade`.
 
 On every re-run, re-detect the forge from the current remotes. If detection agrees
 with the manifest, refresh silently. If it disagrees (remote migrated, e.g.
 GitHub → Azure DevOps), surface both values and ask — never silently flip, never
 keep a stale value unmentioned.
 
-**Stale-file pruning**: after regenerating the new emit set, compare it against the
-previous manifest's `files` keys. A key present in the previous manifest but absent
-from the new emit set names a file the kit no longer produces — delete it if it
-matches its previously recorded hash (unmodified), or report it for the user to
-remove themselves if its hash has drifted (user-modified — never silently delete
-someone's edits). The v0.18.0 evaluator rename is the reference case: an upgrade
-from a pre-rename install prunes the two pre-v0.18.0 verification-role agent copies —
-the predecessors of today's `evaluator.md` and `qa-evaluator.md`, one per role — from
-every manifest-keyed instance directory (`.claude/`, `.cursor/`, `.github/`, `.codex/`,
-per the harnesses that were targeted), leaving only the current `evaluator.md` /
-`qa-evaluator.md` files behind.
-**Limit**: manifest-key pruning only reaches files the manifest actually keys — it
-does NOT reach un-keyed copies, such as a self-install's nested
-`skills/setup/templates/` tree (a vendored copy of the kit's own canonical templates,
-never entered into `files`). Those copies are stale until whatever install mechanism
-created that nested copy is re-run; the pruning step here cannot detect or clean
-them.
-
-Paths listed in `seedFiles` are outside this flow: create a seed if it is missing,
-otherwise leave it exactly as it is — never overwrite it, never diff-confirm it, and
-never report its hash drift as a user modification (the recorded hash is an emit-time
-record only). Runtime/user artifacts (`_goals/LEARNINGS.md`, `_goals/ESCALATIONS.md`,
-`_goals/breaker-state.json`) have no manifest entry and are never touched.
-
-**Pre-v0.19.0 dual-install migration**: upgrading a project that was installed before
-v0.19.0 with both `claude-code` and `cursor` targeted adds the Cursor emitter's
-self-contained copies — `.cursor/skills/*`, `.cursor/ORCHESTRATION.md`, and
-`.cursor/skills/setup-models.map.md` — to the emit set and their paths as new keys in
-the manifest's `files`. No stale-file prunes are expected from this change: previously
-emitted `.cursor/` files are refreshed in place, not removed.
+Paths listed in `seedFiles` are outside the overwrite flow: create a seed if it is
+missing, otherwise leave it exactly as it is.

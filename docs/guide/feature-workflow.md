@@ -73,7 +73,7 @@ Each gate uses its **own** verdict vocabulary — never collapsed:
 | Phase | Gate | Loop verdict | Exit verdict | Max cycles |
 |-------|------|--------------|--------------|------------|
 | 3 | Goal evaluation | **NEEDS REVISION** | **PASS** | 3 revise→re-evaluate |
-| 4 | Task evaluation | **NEEDS FIXES** | **PASS** | 3 implement→evaluate per task, then continuation ladder (rungs 5→4→6) before escalation (as of v0.20.0) |
+| 4 | Task evaluation | **NEEDS FIXES** | **PASS** / **PASS (with notes)** | 3 implement→evaluate per task, then continuation ladder when `phases.ladder: auto` (rungs 5→4→6) before escalation |
 | 5 | Final audit | **ISSUES** | **APPROVED** | 3 fix→re-audit |
 | 6 | Doc alignment (optional) | **NEEDS REVISION** / per-doc **NEEDS FIXES** | **PASS** / doc audit **APPROVED** | 3 cycles per doc + plan/audit |
 | 7 | Pull request (optional) | n/a — gated on user approval | PR/MR created or hand-over | User approves draft |
@@ -107,9 +107,9 @@ Each task's `## Acceptance Criteria` (criterion + verification method each) is c
 
 ## Phase 1 — Alignment
 
-**No files are created.** The orchestrator asks 5–20 structured multiple-choice questions covering the problem, affected layer/lane, external surfaces, auth/permissions, error behavior, interface shape, existing patterns, and priority — plus **Phase 6 docs alignment?** (default yes) and **open a Phase 7 PR?** (default yes). Follow-up rounds run as needed.
+**No files are created.** The orchestrator asks 5–20 structured multiple-choice questions covering the problem, affected layer/lane, external surfaces, auth/permissions, error behavior, interface shape, existing patterns, and priority — plus **Phase 6 docs alignment?** (default **no** — say yes when the change touches user-facing docs) and **open a Phase 7 PR?** (default yes). Follow-up rounds run as needed.
 
-The orchestrator presents a **"My Understanding"** summary and **waits for explicit user confirmation** before Phase 2. Phase 6/7 answers are recorded in `goal.md`'s `phases:` block during Phase 2. There is no silent advance.
+The orchestrator presents a **"My Understanding"** summary and **waits for explicit user confirmation** before Phase 2. Phase 6/7 answers and `ladder:` (default `escalate` for interactive goals) are recorded in `goal.md`'s `phases:` block during Phase 2. There is no silent advance.
 
 ---
 
@@ -131,7 +131,7 @@ reads:               # read-only interface briefs
 depends_on:          # quoted task id prefixes, e.g. "01-name"
 owner: implementer   # or test-writer
 rewrite_semantics: whole-file   # or targeted-insertion
-eval_depth: full     # orchestrator-set; see evaluation-system.md
+eval_depth: light     # orchestrator-set; default light — full when contract/consumer/agent/criteria/infra task; see evaluation-system.md
 ```
 
 Before Phase 3, the orchestrator verifies **write-set disjointness**: for every pair of tasks without a `depends_on` ordering, their `writes` sets must not intersect.
@@ -162,24 +162,26 @@ For each task in dependency order:
 
 ### Implementation loop
 
-1. Launch owner (`implementer` or `test-writer` per the task's `owner` field) with full context package (includes the task file and its Acceptance Criteria).
+1. Launch owner (`implementer` or `test-writer` per the task's `owner` field) with full context package (includes the task file, its Acceptance Criteria, and a `## Model` section: `requested: <id> · tier: light|frontier · rotation: cycle N or n/a`).
 2. Receive completion report. **Silent-success check:** empty/missing report but expected artifacts present ⇒ treat as completed (note "report lost, files verified"); no artifacts ⇒ respawn once. Never re-run a task whose artifacts already exist.
 3. Launch `evaluator` with task file, report, and task-criteria.
 4. Handle verdict:
 
 | Verdict | Action |
 |---------|--------|
-| **PASS** | Mark complete, next task |
-| **NEEDS FIXES** | Fix cycle with evaluator's required-fixes list, re-evaluate (max 3 cycles, then continuation ladder) |
+| **PASS** / **PASS (with notes)** | Mark complete, next task (notes copied into the orchestration log) |
+| **NEEDS FIXES** | Fix cycle with evaluator's required-fixes list, re-evaluate (max 3 cycles, then ladder or escalation per `phases.ladder`) |
 | **REJECT** | Escalate |
+
+**Resume policy:** re-evaluations resume the same evaluator with a delta prompt listing only the applied fixes. The implementer may be resumed for fix cycle 1 only; cycles 2–3 are fresh spawns (model rotation applies).
 
 ### Bypass at detection
 
 Any verdict tagged `destructive`, `security`, or `infra` stops all cycles immediately and escalates — from cycle 1, not only after exhaustion (as of v0.20.0). Full taxonomy in [evaluation-system.md](evaluation-system.md).
 
-### Continuation ladder (on cycle-3 exhaustion, as of v0.20.0)
+### Continuation ladder (on cycle-3 exhaustion, when `phases.ladder: auto`)
 
-When three implement→evaluate cycles end without **PASS**, the orchestrator runs this ladder before terminal escalation. Every ladder fix attempt is re-evaluated; there is no exception.
+When three implement→evaluate cycles end without **PASS**, read `goal.md`'s `phases.ladder`. **`escalate`** (default, or key absent): escalate to the user with "Run the continuation ladder" as option 1. **`auto`**: run this ladder before terminal escalation. Every ladder fix attempt is re-evaluated; there is no exception.
 
 1. **Rung 5 — arbitration (unanimity check).** If all three evaluator verdicts flagged the same required-fix item, spawn `evaluator` in **arbitration mode** on `{{MODEL_FRONTIER_ALT_FAMILY}}` with the task file (including its Acceptance Criteria), all three verdicts, and all three implementer reports. Outcomes: `criteria-defective` → escalate carrying the named defective criterion **verbatim**; arbiter/primary disagreement → escalate (never auto-resolve); `criteria-sound` → rung 4.
 
@@ -235,11 +237,11 @@ After APPROVED + Quality Checks, read `goal.md`'s `phases:` block: when `align_d
 
 ## Phase 6 — Align docs (optional)
 
-When enabled via `goal.md`'s `phases:` block (`align_docs: true`, the default), read and execute [`align-docs/SKILL.template.md`](../../skills/setup/templates/skills/align-docs/SKILL.template.md):
+When enabled via `goal.md`'s `phases:` block (`align_docs: true`), read and execute [`align-docs/SKILL.template.md`](../../skills/setup/templates/skills/align-docs/SKILL.template.md):
 
 1. **Discover** shipped change surface (read-only: goal files + git diff).
 2. **Map** changes to affected docs; build per-doc edit list.
-3. **Evaluate** the edit plan (`evaluator`) — PASS / NEEDS REVISION / REJECT, 3-cycle limit.
+3. **Evaluate** the edit plan (`evaluator`) — PASS / NEEDS REVISION / REJECT, 3-cycle limit. When the edit list is 3 docs or fewer, this step folds into step 5 (one evaluator spawn covers plan + audit).
 4. **Execute** per doc via `implementer`; evaluate each doc (3 cycles max per doc).
 5. **Final doc audit** — APPROVED / ISSUES, 3-cycle limit.
 
@@ -293,24 +295,37 @@ For `criteria-defective` escalations (rung 5 arbitration), the defective criteri
 
 ## Orchestration log
 
-Path: `_goals/[goal-name]/orchestration-log.md` — an **append-only spawn ledger**. The log header carries a running `est_tokens` total (sum of per-spawn estimates).
+Path: `_goals/[goal-name]/orchestration-log.md` — an **append-only spawn ledger**. As of v0.25.0 the orchestrator never hand-writes it: every entry goes through the emitted tool `_kit/log-spawn.sh` (or `pwsh _kit/log-spawn.ps1` on Windows — same flags, byte-identical output; canonical source [`skills/setup/templates/tools/log-spawn.sh`](../../skills/setup/templates/tools/log-spawn.sh)). As of v0.26.0 the header's running `io_est_tokens` / `work_est_tokens` totals read "see latest entry" because the script only appends.
 
-**Before every subagent launch**, append an entry with:
+**File, then script.** The flow for every spawn is:
 
-- Timestamp
-- Agent (+ model / rotation if applicable)
-- Routing reason
-- Task's `writes` claim (allowed-paths fence)
-- Expected outputs
-- `context_chars` — character length of the context package prompt
+1. Write the full context package to `_goals/[goal]/spawns/NN-context.md` (NN = next free two-digit number). This file **is** the verbatim record.
+2. Run `spawn` — it appends the before-launch entry and measures `context_chars` from the file:
 
-For continuation-ladder transitions, spawns, guard trips, and phase skips (e.g. Phase 6/7 declined via `goal.md`'s `phases:` block), entries include the **rung name** or skip reason.
+   ```bash
+   _kit/log-spawn.sh spawn --goal my-goal --agent implementer --phase "Phase 4 task 02" \
+     --model-requested <id> --context _goals/my-goal/spawns/03-context.md \
+     --writes "src/foo.ts" --why "task 02" --expect "completion report"
+   ```
 
-**After the subagent returns**, append the outcome line with `report_chars` (character length of the completion report) and `est_tokens` = (`context_chars` + `report_chars`) / 4, labeled estimate — proxy fields only; no harness in this kit exposes true token counts.
+   Entry shape: `### <ts> — SPAWN implementer (Phase 4 task 02) [#03]` followed by bullets for `agent · model requested`, `why`, `writes claim`, `expected output`, and `context: <path> · context_chars: <N>`.
+3. Save the agent's report **verbatim** to `spawns/NN-report.md`, then run `outcome`:
 
-**Never write placeholder status lines** such as `Outcome: (pending)` or `TBD` — under append-only semantics they can never be resolved in place and rot into stale text. An entry with no outcome line yet **is** the pending state.
+   ```bash
+   _kit/log-spawn.sh outcome --goal my-goal --spawn 03 --report _goals/my-goal/spawns/03-report.md \
+     --verdict "PASS" --model-reported "<the agent's first line>"
+   ```
 
-Entries are never edited or deleted. Rejections and respawns are new entries. This ledger makes re-evaluation invariants, fix-cycle rotation, and token proxy totals auditable.
+   Entry shape: `- OUTCOME [#03]: PASS · model reported: <…> · report: <path> · report_chars: <R> · io_est_tokens: <T> · work_read_chars: <C|n/a> · work_est_tokens: <W|n/a> · running io: <X> · running work: <Y>` where `io_est_tokens` = (`context_chars` + `report_chars`) / 4 — orchestrator I/O proxy (chars/4), not the subagent's spend — and `work_est_tokens` comes from the agent report's **`### Footprint`** block (`files_read: N (~C chars)`; W = C/4, or `n/a` if missing). `model requested` is recorded before launch, `model reported` after return.
+4. Everything else — phase completions, continuation-ladder transitions (with the **rung name**), guard trips, and phase skips (e.g. Phase 6/7 declined via `goal.md`'s `phases:` block) — is a `note`: `_kit/log-spawn.sh note --goal my-goal --text "Phase 4 complete"`.
+
+**Exit codes:** 0 ok · 2 usage error (unknown flag/subcommand, missing required flag, context file not named `NN-context.md`) · 3 ledger integrity (duplicate `SPAWN [#NN]`, `outcome` without its `SPAWN`, or a second `OUTCOME [#NN]`) · 4 missing goal directory or artifact file.
+
+The orchestrator runs the script **inline** — its output is a single line, so it is explicitly exempt from the "spawn `terminal` for commands" rule.
+
+**Never write placeholder status lines** such as `Outcome: (pending)` or `TBD` — under append-only semantics they can never be resolved in place and rot into stale text. A `SPAWN` with no `OUTCOME` yet **is** the pending state.
+
+Entries are never edited or deleted. Rejections and respawns are new entries with new numbers. This ledger makes re-evaluation invariants, fix-cycle rotation, and io/work proxy totals auditable.
 
 ---
 
@@ -322,9 +337,9 @@ These are what **you** do in a typical `/feature` run — separate from any spec
 |------------|------|-------------|
 | **Alignment** | Phase 1 | Answer structured MCQs; confirm "My Understanding" before goal creation |
 | **Decision gates** | Phase 2 (and elsewhere) | Choose between viable approaches when the orchestrator presents tradeoffs |
-| **Phase 6/7 opt-in** | Phase 1 (recorded in Phase 2) | Confirm docs alignment and PR intent; defaults are yes — set `align_docs: false` or `pull_request: false` in `goal.md`'s `phases:` block to skip either phase |
+| **Phase 6/7 opt-in** | Phase 1 (recorded in Phase 2) | Confirm docs alignment and PR intent; Phase 6 defaults to no — set `align_docs: true` or `pull_request: false` in `goal.md`'s `phases:` block to enable or skip either phase |
 | **PR approval** | Phase 7 (when enabled and not skipped) | Review the drafted PR title and body; approve or request edits before push/create |
-| **Escalations** | Phase 4 after the continuation ladder completes (or immediately on a bypass-class verdict); other phases after 3 failed cycles | Respond with a decision from the options the orchestrator presents |
+| **Escalations** | Phase 4 after cycle 3 when `phases.ladder: escalate` (or after the continuation ladder when `auto`); other phases after 3 failed cycles | Respond with a decision from the options the orchestrator presents |
 
 You are not expected to spawn subagents or run Quality Checks — those are orchestrator responsibilities.
 

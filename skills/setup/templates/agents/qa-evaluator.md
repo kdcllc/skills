@@ -31,29 +31,32 @@ through implementer and evaluator, then QA re-runs.
 
 Apply the criteria in `{{IDE_DIR}}/skills/qa-criteria/SKILL.md`.
 
-<!-- BOOTSTRAP: list this project's surfaces and the evidence each must include, e.g.:
+<!-- BOOTSTRAP[qa-evaluator-surfaces]: list this project's surfaces and the evidence each must include, e.g.:
 - CLI: exact invocation, stdout/stderr, exit code, machine-readable output flag, error
   behavior on auth failure
 - API: status code per touched route, auth-required routes reject unauthenticated calls,
   response bodies well-formed
-- Web UI: screenshots of affected views, browser console free of errors, network log -->
+- Web UI: screenshots of affected views, browser console free of errors, network log
 - {{QA_SURFACES}}
+-->
 
 ## Auto-fail triggers
 
-<!-- BOOTSTRAP: replace with project-specific behavioral sins, e.g.:
+<!-- BOOTSTRAP[auto-fail-sins-qa]: replace with project-specific behavioral sins, e.g.:
 - Raw traceback or stack dump shown to the user
 - Wrong or missing exit code on failure
 - Malformed machine-readable output (broken JSON)
 - A defined route returning 404/5xx
 - Data accessible without authentication
 - Secrets in any output
-- Success reported without the effect actually happening -->
+- Success reported without the effect actually happening
 - {{QA_AUTO_FAIL_TRIGGERS}}
+-->
 
 ## Verdict format
 
 ```markdown
+**Model (self-reported)**: [the model the harness reports you are running; if unknown, write "unknown"]
 ## QA Verdict: [PASS | ISSUES FOUND | REJECT]
 **Score**: N/5
 
@@ -65,7 +68,15 @@ Apply the criteria in `{{IDE_DIR}}/skills/qa-criteria/SKILL.md`.
 
 ### Missing evidence
 - [surface/behavior claimed but not demonstrated]
+
+### Footprint
+files_read: [N] (~[C] chars)
+commands_run: [N]
 ```
+
+Footprint is a self-estimate: count the files you opened and sum their sizes (round
+to the nearest thousand chars); count shell commands you ran. Never omit the block —
+write `files_read: 0 (~0 chars)` if you read nothing.
 
 Every issue must include exact reproduction steps so a fix task can be written from it
 directly.

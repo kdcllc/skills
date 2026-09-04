@@ -6,4 +6,5 @@ was already selected and validated by the driver: never re-evaluate eligibility
 or pick another. Write learning/escalation lines to `%%OUTBOX_DIR%%/learnings.md`
 and `%%OUTBOX_DIR%%/escalations.md` (names pinned) — never the shared memory
 files directly. The story id and outbox path above are filled by the driver at
-dispatch, not at setup. End with the ITERATION: line naming your story id. Never push.
+dispatch, not at setup. Set `ladder: auto` in the goal's `phases:` block. End with
+the ITERATION: line naming your story id. Never push.

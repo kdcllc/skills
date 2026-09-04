@@ -7,6 +7,15 @@
 #
 # Usage:   _loop/loop.sh [max-iterations]        (default 10)
 # CLI:     override with LOOP_CLI, e.g. LOOP_CLI="codex exec" or LOOP_CLI="claude -p"
+# USAGE:   LOOP_USAGE_FORMAT = auto (default) | claude | codex | cursor | none —
+#          auto resolves from the basename of the first word of LOOP_CLI once at
+#          startup; splices machine-readable flags into LOOP_CLI before dispatch.
+#          Silent-none: when LOOP_USAGE_FORMAT is unset and auto resolves to none,
+#          the driver prints no usage banner/line and does not alter argv (path-
+#          invoked test stubs stay byte-identical). Explicit LOOP_USAGE_FORMAT=none
+#          prints the banner and `usage: unavailable (format none)` per slot.
+#          LOOP_USAGE_LOG — when set, each usage line is appended prefixed with
+#          `<ISO ts> slot=<s> story=<id> `.
 # SLOTS:   override with LOOP_SLOTS (default 2, clamped [1,3]) — N>1 is honored only
 #          when LOOP_WORKTREE=1 (worktree isolation makes concurrent slots sound);
 #          otherwise effective concurrency is held at 1.
@@ -56,6 +65,47 @@ MAX_ITER="${1:-10}"   # total dispatches ACROSS all active slots (fill/poll/reap
                        # slot row it lands in.
 LOOP_CLI="${LOOP_CLI:-claude -p}"
 LOOP_MODEL_FLAG="${LOOP_MODEL_FLAG:-}"
+
+# --- LOOP_USAGE_FORMAT: resolve once at startup, optional flag splice ---------
+usage_explicit=0
+if [[ -n "${LOOP_USAGE_FORMAT+x}" ]]; then
+  usage_explicit=1
+  usage_format="${LOOP_USAGE_FORMAT}"
+else
+  usage_format="auto"
+fi
+
+_loop_resolve_usage_format() {
+  local fmt="$1"
+  if [[ "$fmt" == "auto" ]]; then
+    local cli_base
+    cli_base="$(basename "${LOOP_CLI%% *}")"
+    case "$cli_base" in
+      claude) fmt="claude" ;;
+      codex) fmt="codex" ;;
+      agent|cursor-agent) fmt="cursor" ;;
+      *) fmt="none" ;;
+    esac
+  fi
+  printf '%s' "$fmt"
+}
+
+usage_format_resolved="$(_loop_resolve_usage_format "$usage_format")"
+
+if [[ "$usage_format_resolved" != "none" ]] && ! command -v jq >/dev/null 2>&1; then
+  echo "usage: unavailable (jq not on PATH)"
+  usage_format_resolved="none"
+  usage_explicit=1
+fi
+
+if [[ "$usage_format_resolved" != "none" || "$usage_explicit" -eq 1 ]]; then
+  echo "usage format: $usage_format_resolved"
+fi
+
+case "$usage_format_resolved" in
+  claude|cursor) LOOP_CLI="$LOOP_CLI --output-format json" ;;
+  codex) LOOP_CLI="$LOOP_CLI --json" ;;
+esac
 # Absolute paths, resolved BEFORE any `cd` happens anywhere below (the child
 # subshell dispatched per-slot cd's into that slot's worktree at
 # LOOP_WORKTREE=1) -- both were relative and depended on the invocation cwd.
@@ -156,6 +206,133 @@ detect_rate_limit() {
   grep -qiE 'rate.?limit|too many requests|quota (exceeded|reached|hit)' <<< "$output" && return 0
   grep -qiE '429.*(error|status|http|rate|too many)|(error|status|http|rate|too many).*429' <<< "$output" && return 0
   return 1
+}
+
+# _loop_last_json_line <raw> [needle] -> last line starting with `{`, optionally
+# containing <needle> (empty needle = any `{` line).
+_loop_last_json_line() {
+  local raw="$1" needle="${2:-}" line last=""
+  while IFS= read -r line || [[ -n "$line" ]]; do
+    [[ "$line" == \{* ]] || continue
+    if [[ -z "$needle" || "$line" == *"$needle"* ]]; then
+      last="$line"
+    fi
+  done <<< "$raw"
+  printf '%s' "$last"
+}
+
+# _loop_json_field <json-line> <field> -> first grep -o match digits/text after field.
+_loop_json_field() {
+  local json="$1" field="$2" match
+  match="$(grep -oE "\"${field}\":[0-9]+(\.[0-9]+)?" <<< "$json" | head -1)" || true
+  [[ -z "$match" ]] && return 1
+  sed "s/\"${field}\"://" <<< "$match"
+}
+
+# _loop_format_usage_line <input> <output> <cache_read> <cache_write> <cost> <fmt>
+_loop_format_usage_line() {
+  local inp="${1:-n/a}" out="${2:-n/a}" cr="${3:-n/a}" cw="${4:-n/a}" cost="${5:-n/a}" fmt="$6"
+  [[ -z "$inp" ]] && inp="n/a"
+  [[ -z "$out" ]] && out="n/a"
+  [[ -z "$cr" ]] && cr="n/a"
+  [[ -z "$cw" ]] && cw="n/a"
+  [[ -z "$cost" ]] && cost="n/a"
+  printf 'usage: input=%s output=%s cache_read=%s cache_write=%s cost_usd=%s format=%s\n' \
+    "$inp" "$out" "$cr" "$cw" "$cost" "$fmt"
+}
+
+# _loop_decode_slot_output <raw> <fmt> -> sets _loop_decoded_output and
+# _loop_usage_line (printed after tail -n 25 when due).
+_loop_decode_slot_output() {
+  local raw="$1" fmt="$2"
+  _loop_decoded_output="$raw"
+  _loop_usage_line=""
+
+  if [[ "$fmt" == "none" ]]; then
+    if (( usage_explicit == 1 )); then
+      _loop_usage_line="usage: unavailable (format none)"
+    fi
+    return 0
+  fi
+
+  local envelope decoded inp out cr cw cost uline
+  case "$fmt" in
+    claude)
+      envelope="$(_loop_last_json_line "$raw" '"type":"result"')"
+      if [[ -z "$envelope" ]]; then
+        _loop_usage_line="usage: unavailable (no envelope)"
+        return 0
+      fi
+      decoded="$(jq -r '.result // empty' <<< "$envelope" 2>/dev/null)" || decoded=""
+      if [[ -z "$decoded" ]]; then
+        _loop_usage_line="usage: unavailable (no envelope)"
+        return 0
+      fi
+      _loop_decoded_output="$decoded"
+      inp="$(_loop_json_field "$envelope" input_tokens 2>/dev/null)" || inp=""
+      out="$(_loop_json_field "$envelope" output_tokens 2>/dev/null)" || out=""
+      cr="$(_loop_json_field "$envelope" cache_read_input_tokens 2>/dev/null)" || cr=""
+      cw="$(_loop_json_field "$envelope" cache_creation_input_tokens 2>/dev/null)" || cw=""
+      cost="$(_loop_json_field "$envelope" total_cost_usd 2>/dev/null)" || cost=""
+      _loop_usage_line="$(_loop_format_usage_line "$inp" "$out" "$cr" "$cw" "$cost" "$fmt")"
+      ;;
+    cursor)
+      envelope="$(_loop_last_json_line "$raw" "")"
+      if [[ -z "$envelope" ]]; then
+        _loop_usage_line="usage: unavailable (no envelope)"
+        return 0
+      fi
+      decoded="$(jq -r '.result // empty' <<< "$envelope" 2>/dev/null)" || decoded=""
+      if [[ -z "$decoded" ]]; then
+        _loop_usage_line="usage: unavailable (no envelope)"
+        return 0
+      fi
+      _loop_decoded_output="$decoded"
+      inp="$(_loop_json_field "$envelope" inputTokens 2>/dev/null)" || inp=""
+      out="$(_loop_json_field "$envelope" outputTokens 2>/dev/null)" || out=""
+      cr="$(_loop_json_field "$envelope" cacheReadTokens 2>/dev/null)" || cr=""
+      cw="$(_loop_json_field "$envelope" cacheWriteTokens 2>/dev/null)" || cw=""
+      _loop_usage_line="$(_loop_format_usage_line "$inp" "$out" "$cr" "$cw" "n/a" "$fmt")"
+      ;;
+    codex)
+      local line agent_line=""
+      local sum_in=0 sum_out=0 sum_cached=0 found_agent=0 found_turn=0
+      while IFS= read -r line || [[ -n "$line" ]]; do
+        if [[ "$line" == *'"type":"agent_message"'* ]]; then
+          agent_line="$line"
+          found_agent=1
+        fi
+        if [[ "$line" == *'"type":"turn.completed"'* ]]; then
+          found_turn=1
+          local ti to tc
+          ti="$(_loop_json_field "$line" input_tokens 2>/dev/null)" || ti="0"
+          to="$(_loop_json_field "$line" output_tokens 2>/dev/null)" || to="0"
+          tc="$(_loop_json_field "$line" cached_input_tokens 2>/dev/null)" || tc="0"
+          sum_in=$(( sum_in + ti ))
+          sum_out=$(( sum_out + to ))
+          sum_cached=$(( sum_cached + tc ))
+        fi
+      done <<< "$raw"
+      if (( found_agent == 0 )); then
+        _loop_usage_line="usage: unavailable (no envelope)"
+        return 0
+      fi
+      decoded="$(jq -r '.item.text // empty' <<< "$agent_line" 2>/dev/null)" || decoded=""
+      if [[ -z "$decoded" ]]; then
+        _loop_usage_line="usage: unavailable (no envelope)"
+        return 0
+      fi
+      _loop_decoded_output="$decoded"
+      if (( found_turn == 0 )); then
+        _loop_usage_line="$(_loop_format_usage_line "n/a" "n/a" "n/a" "n/a" "n/a" "$fmt")"
+      else
+        _loop_usage_line="$(_loop_format_usage_line "$sum_in" "$sum_out" "$sum_cached" "n/a" "n/a" "$fmt")"
+      fi
+      ;;
+    *)
+      _loop_usage_line="usage: unavailable (format none)"
+      ;;
+  esac
 }
 
 # --- Slot table --------------------------------------------------------------
@@ -944,21 +1121,34 @@ _loop_reap_slot() {
   slot_state[s]="idle"
   active_slots=$((active_slots - 1))   # refill trigger: slot exit, not merge
 
-  # Identifier preservation (cycle-3): `output` is populated, verbatim, from
-  # the per-slot output file the child wrote to -- never a reimplementation.
-  local output
-  output="$(cat "$out_file")"
+  # Identifier preservation (cycle-3): `output` is populated from the per-slot
+  # output file the child wrote to (decoded `result` text when a usage format
+  # is active) -- never a reimplementation. `raw` keeps the undecoded capture
+  # for rate-limit detection.
+  local raw output
+  raw="$(cat "$out_file")"
   rm -f "$out_file"
 
-  printf '%s\n' "$output" | tail -n 25
+  _loop_decode_slot_output "$raw" "$usage_format_resolved"
+  output="$_loop_decoded_output"
 
   local detected
-  if detect_rate_limit "$output"; then
+  if detect_rate_limit "$raw"; then
     detected=1
   else
     detected=0
   fi
   breaker_record "$STATE_FILE" "$detected" "$(date +%s)"
+
+  printf '%s\n' "$output" | tail -n 25
+
+  if [[ "$usage_format_resolved" != "none" || "$usage_explicit" -eq 1 ]]; then
+    printf '%s\n' "$_loop_usage_line"
+    if [[ -n "${LOOP_USAGE_LOG:-}" ]]; then
+      printf '%s slot=%s story=%s %s\n' "$(date -Is)" "$s" "$story" "$_loop_usage_line" \
+        >> "$LOOP_USAGE_LOG"
+    fi
+  fi
 
   # --- Integrator step 1: ITERATION validation, BEFORE sentinel handling
   # (goal-pinned reap order). A dispatched slot must NEVER emit the

@@ -16,7 +16,7 @@ clean every surface is.
 
 ## Per-surface criteria
 
-<!-- BOOTSTRAP: keep only the surfaces this project has; sharpen with project specifics. -->
+<!-- BOOTSTRAP[qa-surfaces-keep]: keep only the surfaces this project has; sharpen with project specifics.
 
 ### CLI / command surfaces
 - Exact invocation shown; output is what a user would expect and understand.
@@ -31,6 +31,7 @@ clean every surface is.
 ### Web UI surfaces
 - Screenshots show the affected views rendering correctly.
 - Browser console is free of errors; network log shows no failed requests.
+-->
 
 ## Cross-cutting checks
 

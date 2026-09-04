@@ -8,6 +8,15 @@
 #
 # Usage:   pwsh _loop/loop.ps1 [MaxIterations]   (default 10)
 # CLI:     override with $env:LOOP_CLI, e.g. $env:LOOP_CLI = "codex exec" or "claude -p"
+# USAGE:   $env:LOOP_USAGE_FORMAT = auto (default) | claude | codex | cursor | none —
+#          auto resolves from the basename of the first word of LOOP_CLI once at
+#          startup; splices machine-readable flags into cli args before dispatch.
+#          Silent-none: when LOOP_USAGE_FORMAT is unset and auto resolves to none,
+#          the driver prints no usage banner/line and does not alter argv (path-
+#          invoked test stubs stay byte-identical). Explicit LOOP_USAGE_FORMAT=none
+#          prints the banner and `usage: unavailable (format none)` per slot.
+#          LOOP_USAGE_LOG — when set, each usage line is appended prefixed with
+#          `<ISO ts> slot=<s> story=<id> `.
 # SLOTS:   override with $env:LOOP_SLOTS (default 2, clamped [1,3]) -- N>1 is
 #          honored only when $env:LOOP_WORKTREE = 1 (worktree isolation makes
 #          concurrent slots sound); otherwise effective concurrency is held at 1.
@@ -90,6 +99,37 @@ $BacklogFile = Join-Path (Get-Location).Path '_goals/backlog.md'
 
 $LoopModelFlag = $env:LOOP_MODEL_FLAG
 if ($null -eq $LoopModelFlag) { $LoopModelFlag = '' }
+
+# --- LOOP_USAGE_FORMAT: resolve once at startup, optional flag splice ---------
+$usageExplicit = $false
+if ($null -ne $env:LOOP_USAGE_FORMAT) {
+    $usageExplicit = $true
+    $usageFormatRaw = $env:LOOP_USAGE_FORMAT
+} else {
+    $usageFormatRaw = 'auto'
+}
+
+function Resolve-LoopUsageFormat {
+    param([string]$Fmt)
+    if ($Fmt -eq 'auto') {
+        $cliPartsLocal = $LoopCli.Trim() -split '\s+'
+        $cliBase = [IO.Path]::GetFileName($cliPartsLocal[0])
+        switch ($cliBase) {
+            'claude' { return 'claude' }
+            'codex' { return 'codex' }
+            'agent' { return 'cursor' }
+            'cursor-agent' { return 'cursor' }
+            default { return 'none' }
+        }
+    }
+    return $Fmt
+}
+
+$usageFormatResolved = Resolve-LoopUsageFormat -Fmt $usageFormatRaw
+
+if ($usageFormatResolved -ne 'none' -or $usageExplicit) {
+    Write-Output "usage format: $usageFormatResolved"
+}
 
 # Dot-source the breaker helper twin (never invoked as a separate process — same
 # process/scope as loop.sh's `source`).
@@ -181,6 +221,127 @@ function Test-RateLimited {
         }
     }
     return $false
+}
+
+function Get-LoopLastJsonLine {
+    param(
+        [Parameter(Mandatory)] [AllowEmptyString()] [string]$Raw,
+        [string]$Needle = ''
+    )
+    $last = ''
+    foreach ($line in (($Raw -replace "`r`n", "`n") -split "`n")) {
+        if (-not $line.StartsWith('{')) { continue }
+        if ($Needle -eq '' -or $line.Contains($Needle)) { $last = $line }
+    }
+    return $last
+}
+
+function Format-LoopUsageLine {
+    param(
+        [string]$InputTokens = 'n/a',
+        [string]$OutputTokens = 'n/a',
+        [string]$CacheRead = 'n/a',
+        [string]$CacheWrite = 'n/a',
+        [string]$CostUsd = 'n/a',
+        [Parameter(Mandatory)] [string]$Format
+    )
+    if ([string]::IsNullOrEmpty($InputTokens)) { $InputTokens = 'n/a' }
+    if ([string]::IsNullOrEmpty($OutputTokens)) { $OutputTokens = 'n/a' }
+    if ([string]::IsNullOrEmpty($CacheRead)) { $CacheRead = 'n/a' }
+    if ([string]::IsNullOrEmpty($CacheWrite)) { $CacheWrite = 'n/a' }
+    if ([string]::IsNullOrEmpty($CostUsd)) { $CostUsd = 'n/a' }
+    return "usage: input=$InputTokens output=$OutputTokens cache_read=$CacheRead cache_write=$CacheWrite cost_usd=$CostUsd format=$Format"
+}
+
+function ConvertFrom-LoopSlotOutput {
+    param(
+        [Parameter(Mandatory)] [AllowEmptyString()] [string]$Raw,
+        [Parameter(Mandatory)] [string]$Fmt
+    )
+    $decoded = $Raw
+    $usageLine = ''
+
+    if ($Fmt -eq 'none') {
+        if ($usageExplicit) {
+            $usageLine = 'usage: unavailable (format none)'
+        }
+        return @{ Output = $decoded; UsageLine = $usageLine }
+    }
+
+    try {
+        switch ($Fmt) {
+            'claude' {
+                $envelope = Get-LoopLastJsonLine -Raw $Raw -Needle '"type":"result"'
+                if ($envelope -eq '') {
+                    return @{ Output = $decoded; UsageLine = 'usage: unavailable (no envelope)' }
+                }
+                $obj = $envelope | ConvertFrom-Json
+                if ($null -eq $obj.result -or $obj.result -eq '') {
+                    return @{ Output = $decoded; UsageLine = 'usage: unavailable (no envelope)' }
+                }
+                $decoded = [string]$obj.result
+                $inp = if ($null -ne $obj.usage.input_tokens) { [string]$obj.usage.input_tokens } else { '' }
+                $out = if ($null -ne $obj.usage.output_tokens) { [string]$obj.usage.output_tokens } else { '' }
+                $cr = if ($null -ne $obj.usage.cache_read_input_tokens) { [string]$obj.usage.cache_read_input_tokens } else { '' }
+                $cw = if ($null -ne $obj.usage.cache_creation_input_tokens) { [string]$obj.usage.cache_creation_input_tokens } else { '' }
+                $cost = if ($null -ne $obj.total_cost_usd) { [string]$obj.total_cost_usd } else { '' }
+                $usageLine = Format-LoopUsageLine -InputTokens $inp -OutputTokens $out -CacheRead $cr `
+                    -CacheWrite $cw -CostUsd $cost -Format $Fmt
+            }
+            'cursor' {
+                $envelope = Get-LoopLastJsonLine -Raw $Raw
+                if ($envelope -eq '') {
+                    return @{ Output = $decoded; UsageLine = 'usage: unavailable (no envelope)' }
+                }
+                $obj = $envelope | ConvertFrom-Json
+                if ($null -eq $obj.result -or $obj.result -eq '') {
+                    return @{ Output = $decoded; UsageLine = 'usage: unavailable (no envelope)' }
+                }
+                $decoded = [string]$obj.result
+                $inp = if ($null -ne $obj.usage.inputTokens) { [string]$obj.usage.inputTokens } else { '' }
+                $out = if ($null -ne $obj.usage.outputTokens) { [string]$obj.usage.outputTokens } else { '' }
+                $cr = if ($null -ne $obj.usage.cacheReadTokens) { [string]$obj.usage.cacheReadTokens } else { '' }
+                $cw = if ($null -ne $obj.usage.cacheWriteTokens) { [string]$obj.usage.cacheWriteTokens } else { '' }
+                $usageLine = Format-LoopUsageLine -InputTokens $inp -OutputTokens $out -CacheRead $cr `
+                    -CacheWrite $cw -CostUsd 'n/a' -Format $Fmt
+            }
+            'codex' {
+                $agentLine = ''
+                $sumIn = 0; $sumOut = 0; $sumCached = 0; $foundTurn = $false
+                foreach ($line in (($Raw -replace "`r`n", "`n") -split "`n")) {
+                    if ($line.Contains('"type":"agent_message"')) { $agentLine = $line }
+                    if ($line.Contains('"type":"turn.completed"')) {
+                        $foundTurn = $true
+                        $turn = $line | ConvertFrom-Json
+                        if ($null -ne $turn.usage.input_tokens) { $sumIn += [int]$turn.usage.input_tokens }
+                        if ($null -ne $turn.usage.output_tokens) { $sumOut += [int]$turn.usage.output_tokens }
+                        if ($null -ne $turn.usage.cached_input_tokens) { $sumCached += [int]$turn.usage.cached_input_tokens }
+                    }
+                }
+                if ($agentLine -eq '') {
+                    return @{ Output = $decoded; UsageLine = 'usage: unavailable (no envelope)' }
+                }
+                $msg = $agentLine | ConvertFrom-Json
+                if ($null -eq $msg.item.text -or $msg.item.text -eq '') {
+                    return @{ Output = $decoded; UsageLine = 'usage: unavailable (no envelope)' }
+                }
+                $decoded = [string]$msg.item.text
+                if (-not $foundTurn) {
+                    $usageLine = Format-LoopUsageLine -Format $Fmt
+                } else {
+                    $usageLine = Format-LoopUsageLine -InputTokens ([string]$sumIn) -OutputTokens ([string]$sumOut) `
+                        -CacheRead ([string]$sumCached) -CacheWrite 'n/a' -CostUsd 'n/a' -Format $Fmt
+                }
+            }
+            default {
+                $usageLine = 'usage: unavailable (format none)'
+            }
+        }
+    } catch {
+        return @{ Output = $decoded; UsageLine = 'usage: unavailable (no envelope)' }
+    }
+
+    return @{ Output = $decoded; UsageLine = $usageLine }
 }
 
 # --- Slot table --------------------------------------------------------------
@@ -317,6 +478,12 @@ $cliCmd = $cliParts[0]
 $cliArgs = @()
 if ($cliParts.Length -gt 1) {
     $cliArgs = $cliParts[1..($cliParts.Length - 1)]
+}
+
+switch ($usageFormatResolved) {
+    'claude' { $cliArgs += '--output-format'; $cliArgs += 'json' }
+    'cursor' { $cliArgs += '--output-format'; $cliArgs += 'json' }
+    'codex' { $cliArgs += '--json' }
 }
 
 # Bash `set -e` aborts the whole script if a git command fails; PowerShell has no such
@@ -1091,12 +1258,20 @@ function Invoke-LoopReapSlot {
     $slots[$Slot].State = 'idle'
     $script:activeSlots = $script:activeSlots - 1   # refill trigger: slot exit, not merge
 
-    # Identifier preservation (cycle-3 twin mirror): $output is populated,
-    # verbatim, from the per-slot output file the job wrote to -- never a
-    # reimplementation.
-    $output = Get-Content -Raw -LiteralPath $outFilePath
-    if ($null -eq $output) { $output = '' }
+    # Identifier preservation (cycle-3 twin mirror): $output is populated from
+    # the per-slot output file the job wrote to (decoded `result` text when a
+    # usage format is active) -- never a reimplementation. $raw keeps the
+    # undecoded capture for rate-limit detection.
+    $raw = Get-Content -Raw -LiteralPath $outFilePath
+    if ($null -eq $raw) { $raw = '' }
     Remove-Item -LiteralPath $outFilePath -Force -ErrorAction SilentlyContinue
+
+    $decodeResult = ConvertFrom-LoopSlotOutput -Raw $raw -Fmt $usageFormatResolved
+    $output = $decodeResult.Output
+    $usageLine = $decodeResult.UsageLine
+
+    $detected = if (Test-RateLimited -Output $raw) { 1 } else { 0 }
+    Breaker-Record -Path $StateFile -RateLimited $detected -Now ([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())
 
     # Trailing-newline trim keeps sentinel/last-N-lines logic keyed off the
     # same (unpadded) content as bash's command substitution, which strips
@@ -1105,8 +1280,13 @@ function Invoke-LoopReapSlot {
     $lines = ($output -replace "`r`n", "`n") -split "`n"
     $lines | Select-Object -Last 25 | ForEach-Object { Write-Output $_ }
 
-    $detected = if (Test-RateLimited -Output $output) { 1 } else { 0 }
-    Breaker-Record -Path $StateFile -RateLimited $detected -Now ([DateTimeOffset]::UtcNow.ToUnixTimeSeconds())
+    if ($usageFormatResolved -ne 'none' -or $usageExplicit) {
+        Write-Output $usageLine
+        if (-not [string]::IsNullOrEmpty($env:LOOP_USAGE_LOG)) {
+            $ts = Get-Date -Format 'yyyy-MM-ddTHH:mm:sszzz'
+            Add-Content -LiteralPath $env:LOOP_USAGE_LOG -Value "$ts slot=$Slot story=$story $usageLine"
+        }
+    }
 
     # --- Integrator step 1: ITERATION validation, BEFORE sentinel handling
     # (goal-pinned reap order). A dispatched slot must NEVER emit the

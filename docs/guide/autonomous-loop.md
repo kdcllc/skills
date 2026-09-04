@@ -52,9 +52,10 @@ flowchart TD
 
 **Evaluation-gated commit.** The iteration follows `/feature` Phases 2–6 with the story's acceptance criteria replacing Phase 1 alignment. Phase 7 (`pull_request`) is deferred to the end of the whole run — the loop never pushes during per-story iterations. A commit lands only on evaluator PASS (or APPROVED for audits) plus green test-ladder rungs 1–2; rung 3 runs per story after that story's Phase 5 audit. Details of verdicts and the ladder live in [evaluation-system.md](evaluation-system.md). As of v0.20.0, iterations inherit Phase 4's continuation ladder (rungs 5→4→6 on fix-cycle exhaustion, before terminal escalation) because each iteration runs the phased flow; the drivers' per-story attempt cap and circuit breakers stay the unchanged outer backstop. Ladder mechanics are documented in [feature-workflow.md](feature-workflow.md).
 
-**Phase 6/7 controls** — the loop cannot ask questions, so flags are read from story backlog frontmatter and run configuration only (same naming as `goal.md`'s `phases:` block):
+**Phase 6/7 and ladder controls** — the loop cannot ask questions, so flags are read from story backlog frontmatter and run configuration only (same naming as `goal.md`'s `phases:` block):
 
 - **`align_docs`** (per story, default `true`): Phase 6 (`align-docs`) runs **per story** when enabled, so doc updates land in the story's commit and documentation never drifts from shipped code. A story may set `align_docs: false` in its backlog frontmatter to skip the per-story Phase 6 run; the skip is logged, never silent — write "Phase 6 skipped per story frontmatter" to the orchestration log.
+- **`ladder`** (per story, fixed `auto`): loop-created goals always set `ladder: auto` in `goal.md`'s `phases:` block so cycle-3 exhaustion runs the continuation ladder unattended; the drivers' attempt cap and circuit breakers remain the outer backstop.
 - **`pull_request`** (loop-level, opt-in): the end-of-run ship step stays explicitly enabled — a human or an opt-in final step runs `ship-pr` once to draft and create the PR/MR on the project's forge, or hand over. Control this with loop-level `pull_request` in run configuration (`pull_request: false` skips the ship step with a logged skip, never silent); default remains opt-in as today.
 
 **Breaker checks.** After each reap, the driver evaluates per-slot circuit breakers (CB1 no-progress, CB2 repeated signatures), the model rate-limit breaker, and protected-path diffs (CB0). Trips **retire** the slot rather than stopping the whole run on first failure — unless CB0 fires (exit 4).
@@ -109,6 +110,36 @@ LOOP_SLOTS>1 requires LOOP_WORKTREE=1 (worktree isolation); running with 1
 ```
 
 This note fires **only** when `LOOP_SLOTS>1` was explicitly set — not on every default run (avoids warning fatigue when the default is 2 but worktree mode is off).
+
+### `LOOP_USAGE_FORMAT` and `LOOP_USAGE_LOG`
+
+As of **v0.26.0**, both drivers capture real per-iteration token usage from the headless CLI when the format is active. Resolved once at startup from `LOOP_USAGE_FORMAT`:
+
+| Value | Meaning |
+|-------|---------|
+| **`auto`** (default when unset) | Basename of the first word of `LOOP_CLI`: `claude` → claude; `codex` → codex; `agent` or `cursor-agent` → cursor; anything else → none |
+| **`claude`** | Splices `--output-format json` before the prompt; parses the last `{` line with `"type":"result"` for `usage` + `total_cost_usd` |
+| **`codex`** | Splices `--json` before the prompt; parses JSONL `turn.completed.usage` (summed) and the last `agent_message` for decoded text |
+| **`cursor`** | Splices `--output-format json` before the prompt (requires `-p`/print mode); parses camelCase `usage` + `result` |
+| **`none`** | No flag splice; no usage extraction |
+
+**Silent-none rule:** when `LOOP_USAGE_FORMAT` is **unset** and `auto` resolves to `none`, the driver prints nothing new — no banner, no `usage:` line (existing behaviour byte-for-byte). Only an **explicit** `LOOP_USAGE_FORMAT=none` prints the `usage format: none` banner and `usage: unavailable (format none)` per slot.
+
+When a format is active, the driver prints a normalized line immediately after each slot's existing `tail -n 25` output block:
+
+```text
+usage: input=<n> output=<n> cache_read=<n|n/a> cache_write=<n|n/a> cost_usd=<x|n/a> format=<f>
+```
+
+Unparseable output yields `usage: unavailable (no envelope)`. Set **`LOOP_USAGE_LOG`** to a file path to append the `usage:` line prefixed with an ISO timestamp, slot id, and story id (`<ISO> slot=<s> story=<story> usage: …`) after each reap; default unset — no new tracked file.
+
+**`jq` (bash only):** decoding the CLI's `result` string requires `jq` on PATH. When `jq` is missing, the bash driver prints `usage: unavailable (jq not on PATH)` once at startup and forces `none` for that run — the loop never breaks. PowerShell uses built-in `ConvertFrom-Json`. Per-harness flag details and verification dates are in [`harness-matrix.md`](../../skills/setup/reference/harness-matrix.md) § Token usage exposure.
+
+These proxy fields in the orchestration log (`io_est_tokens`, `work_est_tokens`) are **not** billed usage — only this `usage:` line is real.
+
+### `ladder` (goal `phases:` block)
+
+Loop-created goals always set **`ladder: auto`** in `goal.md`'s `phases:` block (alongside `align_docs` and `pull_request`) so cycle-3 exhaustion runs the continuation ladder unattended. Interactive `/feature` goals default to `ladder: escalate` instead.
 
 For parallel-dispatch design rationale (slot accounting, worktree lifecycle, write-set admission, integrator), see [Parallel dispatch design](../design-parallel-dispatch.md).
 

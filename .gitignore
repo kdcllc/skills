@@ -9,6 +9,8 @@
 .cursor/ORCHESTRATION.md
 .agents/skills/
 _goals/
+_kit/
+# emitted tools (log-spawn twins), re-emitted by /setup
 _loop/
 _research/
 orchestration-kit.manifest.json
@@ -19,3 +21,4 @@ Thumbs.db
 
 # Loop runtime scratch (driver worktrees)
 .loop-worktrees/
+_goals/breaker-state.json

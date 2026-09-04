@@ -15,7 +15,7 @@ Every gate has its **own** verdict set. Never collapse them into one triple.
 | Gate | Phase / context | Verdicts | Binding source |
 |------|-----------------|----------|----------------|
 | **Goal evaluation** | Phase 3 — goal + task files | **PASS**, **NEEDS REVISION**, **REJECT** | [`goal-criteria/SKILL.template.md`](../../skills/setup/templates/skills/goal-criteria/SKILL.template.md) |
-| **Task evaluation** | Phase 4 — completed task work | **PASS**, **NEEDS FIXES**, **REJECT** | [`task-criteria/SKILL.template.md`](../../skills/setup/templates/skills/task-criteria/SKILL.template.md) |
+| **Task evaluation** | Phase 4 — completed task work | **PASS**, **PASS (with notes)**, **NEEDS FIXES**, **REJECT** | [`task-criteria/SKILL.template.md`](../../skills/setup/templates/skills/task-criteria/SKILL.template.md) |
 | **Final audit** | Phase 5 — whole goal | **APPROVED**, **ISSUES** | [`feature/SKILL.template.md`](../../skills/setup/templates/skills/feature/SKILL.template.md) (Phase 5); lifecycle in [`ORCHESTRATION.md`](../../skills/setup/templates/ORCHESTRATION.md) |
 | **Align-docs plan evaluation** | Phase 6.3 — doc edit plan | **PASS**, **NEEDS REVISION**, **REJECT** | [`align-docs/SKILL.template.md`](../../skills/setup/templates/skills/align-docs/SKILL.template.md) |
 | **Doc audit** | Phase 6.5 — whole doc change set | **APPROVED**, **ISSUES** | [`align-docs/SKILL.template.md`](../../skills/setup/templates/skills/align-docs/SKILL.template.md) |
@@ -133,15 +133,14 @@ Task evaluation verifies every acceptance criterion is addressed ([`task-criteri
 
 ## Evaluation depth (`eval_depth: full|light`)
 
-As of v0.19.0, every v0.18.0+ task file declares `eval_depth: full` or `eval_depth: light` in its ownership block ([`goal-criteria/SKILL.template.md`](../../skills/setup/templates/skills/goal-criteria/SKILL.template.md) § Evaluation depth).
+Every task file declares `eval_depth: full` or `eval_depth: light` in its ownership block ([`task.md`](../../skills/setup/templates/skills/feature/templates/task.md)); **default is `light`**.
 
 | Rule | Detail |
 |------|--------|
 | Who sets it | Orchestrator at planning time only — workers never set it |
-| `light` is never a skip | Every task still ends in a real verdict: **PASS** / **NEEDS FIXES** / **REJECT** |
-| Unexplained `light` | A **NEEDS REVISION** finding at goal evaluation |
+| `light` is never a skip | Every task still ends in a real verdict: **PASS** / **PASS (with notes)** / **NEEDS FIXES** / **REJECT** |
+| `full` required (state why) | Contract/scaffold tasks; tasks with **interface consumers** (later tasks that build on output as an interface — mirroring, documenting, or testing does not count); tasks writing agent files, criteria skills, loop drivers/breakers, or shared infrastructure named in the goal |
 | Missing field | Fails closed to `full` — flag in output; do not reject the goal for omission alone |
-| Stated reason | Required in the task file or goal Discovery Summary when `light` is assigned |
 
 ### Light rubric (shortened, not skipped)
 
@@ -159,6 +158,10 @@ Under `eval_depth: light` ([`task-criteria/SKILL.template.md`](../../skills/setu
 - Reuse & patterns (dimension 3)
 
 Auto-fail triggers still apply.
+
+### `PASS (with notes)` and severity `minor`
+
+When every issue found is severity **`minor`**, the evaluator returns **`PASS (with notes)`** — minors are listed under `### Notes (non-blocking)`, never dropped; **`NEEDS FIXES`** requires at least one **`major`** or **`blocker`**. Per [`task-criteria/SKILL.template.md`](../../skills/setup/templates/skills/task-criteria/SKILL.template.md) § Severity: minor, `minor` is wording, formatting, comment text, log phrasing, or non-normative prose that no requirement or acceptance criterion names and that changes no behavior, exit code, or output.
 
 ## Ownership-contract verification (goal evaluation)
 
@@ -256,21 +259,25 @@ Fixes and revisions are **always** re-evaluated — there is no exception ([`fea
 
 ## Orchestration log (append-only audit trail)
 
-Each goal maintains `_goals/[goal-name]/orchestration-log.md` ([`feature/SKILL.template.md`](../../skills/setup/templates/skills/feature/SKILL.template.md) § Orchestration log). The log header carries a running `est_tokens` total.
+Each goal maintains `_goals/[goal-name]/orchestration-log.md` ([`feature/SKILL.template.md`](../../skills/setup/templates/skills/feature/SKILL.template.md) § Orchestration log). As of v0.25.0 it is written only by the emitted `_kit/log-spawn.sh` / `_kit/log-spawn.ps1` twins ([`templates/tools/log-spawn.sh`](../../skills/setup/templates/tools/log-spawn.sh)); as of v0.26.0 the header's running `io_est_tokens` / `work_est_tokens` totals say "see latest entry".
 
-**Entry-before-launch** — append before every subagent spawn:
+**Artifacts are the verbatim record.** Every context package is saved to `_goals/[goal]/spawns/NN-context.md` before launch and every report to `spawns/NN-report.md` after return — unedited. The log references those files rather than quoting them, so an auditor reads exactly what the agent read and wrote. Agents end every report with a **`### Footprint`** block — `files_read: N (~C chars)` and `commands_run: N` as the last non-blank lines inside the report fence ([`agents/evaluator.md`](../../skills/setup/templates/agents/evaluator.md)).
 
-- Timestamp, agent, model (and any rotation/fallback)
-- Why this agent was routed
-- The task's `writes` claim (allowed-paths fence)
-- Expected outputs
-- `context_chars` — character length of the context package prompt
+**Entry-before-launch** (`spawn`) — records timestamp, agent, **model requested** (and rotation/fallback), why this agent was routed, the task's `writes` claim (allowed-paths fence), expected outputs, and `context_chars` measured from the context file. The heading carries `[#NN]`.
 
-**Outcome-after** — when the agent returns, append the outcome line with `report_chars` (character length of the completion report) and `est_tokens` = (`context_chars` + `report_chars`) / 4, labeled estimate — proxy fields only; no harness exposes true token counts. Never write placeholder pending lines (`"Outcome: (pending)"`, `"TBD"`) — an entry with no outcome line yet **is** the pending state.
+**Outcome-after** (`outcome`) — appends `- OUTCOME [#NN]: <verdict> · model reported: <…> · report: <path> · report_chars: <R> · io_est_tokens: <T> · work_read_chars: <C|n/a> · work_est_tokens: <W|n/a> · running io: <X> · running work: <Y>`. `[#NN]` links each OUTCOME to its SPAWN; the script refuses an outcome without a matching SPAWN or a second outcome for the same NN (exit 3).
 
-Ladder transitions, guard trips, and phase skips (e.g. Phase 6/7 declined via `goal.md`'s `phases:` block) are logged as separate entries.
+| Field | Meaning |
+|-------|---------|
+| `io_est_tokens` T | (`context_chars` + `report_chars`) / 4 — **orchestrator I/O proxy** (chars/4), not the subagent's spend |
+| `work_read_chars` / `work_est_tokens` W | Parsed from the Footprint `files_read: N (~C chars)` line (W = C/4); **`n/a`** when the line is absent or malformed — a report-format defect for the evaluator, not a ledger error. Optional `--work-chars C` overrides parsing |
+| `running io` / `running work` | Previous totals plus T / W (`running io` falls back to pre-v0.26 `running total` when no `running io` exists; W=`n/a` adds 0) |
 
-**Append-only:** never edit or delete entries. Rejections and respawns are new entries.
+Neither proxy field is billed usage — only the loop driver's `usage:` line (when `LOOP_USAGE_FORMAT` is active) records real token counts from the headless CLI. Never write placeholder pending lines (`"Outcome: (pending)"`, `"TBD"`) — a SPAWN with no OUTCOME yet **is** the pending state.
+
+Ladder transitions, guard trips, and phase skips (e.g. Phase 6/7 declined via `goal.md`'s `phases:` block) are logged as separate `note` entries.
+
+**Append-only:** the script never rewrites a line; entries are never edited or deleted. Rejections and respawns are new entries.
 
 The ledger is what makes re-evaluation invariants and fix-cycle model rotation **verifiable** after the fact — maintainers compare logged verdicts against what actually happened afterward when tuning criteria skills ([`agents/evaluator.md`](../../skills/setup/templates/agents/evaluator.md) tuning note).
 

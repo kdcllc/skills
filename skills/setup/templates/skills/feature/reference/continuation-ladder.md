@@ -1,6 +1,8 @@
 # Continuation ladder (cycle-3 exhaustion)
 
-Enter this ladder when Phase 4 task execution reaches **cycle-3 exhaustion**
+This ladder runs only when `goal.md`'s `phases.ladder` is `auto` (loop-created goals
+set it; interactive goals default to `escalate`, where the user is offered the ladder
+as an explicit option). Enter when Phase 4 task execution reaches **cycle-3 exhaustion**
 (NEEDS FIXES after three implement→evaluate cycles without PASS). Apply rungs in
 order; every ladder fix attempt is re-evaluated — there is no exception.
 
@@ -54,5 +56,6 @@ Character-consistent with `{{IDE_DIR}}/ORCHESTRATION.md`:
 - Every rung transition, spawn, and guard trip is an orchestration-log entry recording
   the rung name.
 
-Token/cost budgets are NOT a guard in this kit — no harness exposes token counts to
-markdown policy.
+Token/cost budgets are not a guard in interactive mode (no harness exposes true usage to the
+orchestrator); the headless loop records real usage per iteration via
+`LOOP_USAGE_FORMAT` — gating on it is a future knob, not this ladder's.

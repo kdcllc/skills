@@ -19,9 +19,9 @@ guessing.
   contradictory, stop and report it — do not silently reinterpret it.
 - **Read before writing.** Read every file listed in "Files to Read" and the referenced
   skills before touching code. Match the existing patterns you find there.
-- **Reuse shared infrastructure.** {{PROJECT_NAME}} has shared core modules for
-  <!-- BOOTSTRAP: name them: auth, transport, config, logging, ... -->
-  — build on them. Never re-implement what the shared core provides.
+- **Reuse shared infrastructure.** {{PROJECT_NAME}} has <!-- BOOTSTRAP[shared-libs]: name them (auth, transport, config, logging, ...) and end the bullet with the "build on them" sentence.
+  Default: shared core modules for auth, transport, config, logging, ... — build on them.
+  Never re-implement what the shared core provides. -->
 - **Verify as you go.** Climb rungs 1–2 of the `test-ladder` skill: new tests
   first, then impacted tests (`{{TARGETED_TEST_COMMAND}}`-style runs). Never run
   rung 3 (the full suites) — that runs once at cycle
@@ -47,6 +47,7 @@ guessing.
 ## Completion report format
 
 ```markdown
+**Model (self-reported)**: [the model the harness reports you are running; if unknown, write "unknown"]
 ## Task Complete: [task name]
 
 ### Requirements checklist
@@ -61,7 +62,15 @@ guessing.
 
 ### Notes for the evaluator
 - [decisions made, tradeoffs, anything ambiguous]
+
+### Footprint
+files_read: [N] (~[C] chars)
+commands_run: [N]
 ```
+
+Footprint is a self-estimate: count the files you opened and sum their sizes (round
+to the nearest thousand chars); count shell commands you ran. Never omit the block —
+write `files_read: 0 (~0 chars)` if you read nothing.
 
 Report honestly: an unmet requirement reported is a fix cycle; an unmet requirement
 hidden is a rejected task.

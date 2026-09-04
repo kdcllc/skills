@@ -2,7 +2,7 @@
 
 [![skills.sh installs](https://skills.sh/b/kdcllc/skills)](https://skills.sh/kdcllc/skills)
 
-> Kit version: **0.23.0** (`skills/setup/VERSION`) · Version history: [CHANGELOG.md](CHANGELOG.md)
+> Kit version: **0.27.0** (`skills/setup/VERSION`) · Version history: [CHANGELOG.md](CHANGELOG.md)
 
 A portable orchestrator/worker/evaluator multi-agent system for AI coding harnesses —
 **Claude Code, Cursor, GitHub Copilot (VS Code), and OpenAI Codex** — packaged as one
@@ -30,22 +30,30 @@ Optional: start an unattended run (sandboxed!) with `_loop/loop.sh 10` or
 - A **seven-phase feature workflow** (`/feature`): alignment → goal creation → goal
   evaluation → task execution → final audit → optional docs alignment → optional
   approval-gated pull request. Acceptance criteria are defined at planning and
-  validated at Phase 3; Phases 6 and 7 are gated on a `phases:` block in `goal.md`.
-  No phase advances without an evaluator verdict; fixes are always re-evaluated
-  (3-cycle limits, explicit escalation).
+  validated at Phase 3; Phase 6 is off by default (`align_docs: false`); Phase 7 remains
+  gated on `goal.md`'s `phases:` block. After cycle-3 exhaustion, interactive `/feature`
+  escalates with the continuation ladder offered (`phases.ladder: escalate`, default);
+  the autonomous loop sets `ladder: auto`. No phase advances without an evaluator
+  verdict; fixes are always re-evaluated (3-cycle limits, explicit escalation).
 - **Six subagents with tiered model pinning**: `evaluator`, `qa-evaluator`, and
   `diagnostician` on the frontier tier (effort high), `implementer`, `test-writer`, and
-  `terminal` on the light tier (effort medium) — `terminal` runs Bash or PowerShell and
-  returns only the result the caller asked for, so the raw stream stays out of the
-  frontier session. Model IDs are configuration (`models.map.md`), with per-tier fallback
-  chains, a never-fall-up rule, and a cost-ceiling policy.
+  `terminal` on the light tier (effort medium) — every spawn passes its model explicitly
+  and agents self-report in the first line of each report (`**Model (self-reported)**: ...`).
+  `terminal` runs Bash or PowerShell and returns only the result the caller asked for, so
+  the raw stream stays out of the frontier session. Model IDs are configuration
+  (`models.map.md`), with per-tier fallback chains, a never-fall-up rule, and a
+  cost-ceiling policy.
 - **Hardened evaluation** (patterns adopted from studying
   [bradygaster/squad](https://github.com/bradygaster/squad)): existence checks with a
   ✅/⚠️/❌/🔍 confidence ladder and anti-fabrication rules, a required devil's-advocate
   section in goal evaluation, fix-cycle **model rotation**, execute-before-score,
-  `eval_depth` intensity routing, a post-exhaustion **continuation ladder**, and an
-  append-only **orchestration log** per goal with proxy token fields. How each piece
-  arrived is in [CHANGELOG.md](CHANGELOG.md); mechanics are in
+  `PASS (with notes)` for wording-only minors, `eval_depth: light` default (with stated
+  `full` triggers), a post-exhaustion **continuation ladder**, and an append-only
+  **orchestration log** per goal with `io_est_tokens` (orchestrator I/O proxy, chars/4)
+  and `work_est_tokens` (subagent self-reported Footprint /4) — appended by the emitted
+  `_kit/log-spawn.sh` / `.ps1` twins, with every context package and verbatim report
+  stored under `_goals/<goal>/spawns/`. How each piece arrived is in
+  [CHANGELOG.md](CHANGELOG.md); mechanics are in
   [docs/guide/evaluation-system.md](docs/guide/evaluation-system.md).
 - A **staged test ladder** (`test-ladder`): new tests → impacted tests mid-cycle; full
   suites at cycle end — in a goal's designated closer task when it has one, and in the
@@ -53,9 +61,14 @@ Optional: start an unattended run (sandboxed!) with `_loop/loop.sh 10` or
 - An optional **autonomous loop** (`auto-loop` + `_loop/loop.sh` / `_loop/loop.ps1`):
   one backlog story per fresh-context iteration, evaluation-gated commits, circuit
   breakers enforced in the loop drivers (not prose), optional parallel slots in
-  driver-managed worktrees, a six-code exit contract, and a single human-approved PR
-  at run end. Knobs, exit codes, and the safety model are documented in
+  driver-managed worktrees, a six-code exit contract, real per-iteration token usage
+  capture when the headless CLI exposes it (`LOOP_USAGE_FORMAT`), and a single
+  human-approved PR at run end. Knobs, exit codes, and the safety model are documented in
   [docs/guide/autonomous-loop.md](docs/guide/autonomous-loop.md).
+- A **deterministic emitter** (`bin/emit.sh` / `emit.ps1` in the installed `setup` skill): after the LLM
+  interview, one answers file and one script command compile canonical templates into
+  every targeted harness — same inputs yield byte-identical output; upgrades re-emit
+  from manifest-embedded `answers`.
 
 ## Documentation
 
@@ -76,9 +89,9 @@ Developer guide: [docs/guide/README.md](docs/guide/README.md).
 
 | Path | What it is |
 |------|------------|
-| [`skills/setup/`](skills/setup/) | The installable skill (the compiler): `SKILL.md` workflow, `VERSION`, `emitters/` (per-harness compile instructions), `reference/harness-matrix.md` (verified harness facts), and `templates/` — the canonical source: architecture doc, `models.map.md`, six agents, the skills (each a `SKILL.template.md`, renamed to `SKILL.md` at emit), and the loop drivers |
+| [`skills/setup/`](skills/setup/) | The installable skill (the compiler): `SKILL.md` workflow, `VERSION`, `bin/emit.sh` + `emit.ps1` (deterministic emit), `emitters/` (per-harness caveats), `reference/harness-matrix.md` (verified harness facts), and `templates/` — the canonical source: architecture doc, `models.map.md`, six agents, the skills (each a `SKILL.template.md`, renamed to `SKILL.md` at emit), and the loop drivers |
 | [`docs/`](docs/) | The `guide/` developer suite (see §Documentation) plus the research and design studies behind shipped behavior — for example [research-autonomous-escalation.md](docs/research-autonomous-escalation.md) (→ the v0.20.0 continuation ladder) and [research-multi-harness-upgrade.md](docs/research-multi-harness-upgrade.md) (per-harness ground truth) |
-| [`tests/`](tests/) | `docs-link-check.sh` (guide integrity), `templates/` (6 canonical-template sync guards), `loop-harness/run.sh` (behavioral suite incl. self-install assertions) |
+| [`tests/`](tests/) | `docs-link-check.sh` (guide integrity), `templates/` (9 canonical-template sync guards), `loop-harness/run.sh` (behavioral suite incl. self-install assertions) |
 | [`scripts/`](scripts/) | `self-install.sh` / `self-install.ps1` — first-mile dogfood copy (see §Self-install) |
 | [`ORCHESTRATION.md`](ORCHESTRATION.md) | Pointer to the canonical architecture template inside the skill |
 | [`CHANGELOG.md`](CHANGELOG.md) | Version history (v0.12.0 →) |
@@ -127,8 +140,18 @@ projects are unchanged:** non-sparse repos skip the greenfield gate entirely.
 Then, in a session inside that project, run `/setup`. It detects which harnesses to
 target (multiple is normal), inspects the repo (stack, test commands, layers,
 user-facing surfaces), interviews you for what it can't infer (project name, model
-tiers, QA surfaces, research workflow, autonomous loop, delivery forge), and
-emits:
+tiers, QA surfaces, research workflow, autonomous loop, delivery forge), writes
+`orchestration-kit.answers.json`, and runs the emitter:
+
+```bash
+bash .claude/skills/setup/bin/emit.sh --answers orchestration-kit.answers.json
+# or: pwsh .claude/skills/setup/bin/emit.ps1 --answers orchestration-kit.answers.json
+# (Cursor: .cursor/skills/setup; Copilot: .github/skills/setup)
+```
+
+The Bash twin requires `jq`; use `emit.ps1` when jq is missing. If a manifest already
+exists, run with `--dry-run` first. See [`skills/setup/bin/README.md`](skills/setup/bin/README.md)
+for flags and exit codes.
 
 | Generated | Purpose |
 |-----------|---------|
@@ -142,10 +165,13 @@ emits:
 | `skills/align-docs` | Phase 6: evaluator-gated sync of all docs to shipped code |
 | `skills/ship-pr` | Phase 7: approval-gated forge delivery (GitHub / Azure DevOps / GitLab / hand-over) |
 | `skills/auto-loop` + `_loop/` + `_goals/backlog.md` | Autonomous loop with structural guards (optional) |
+| `_kit/log-spawn.sh` + `_kit/log-spawn.ps1` | Single-copy orchestration-log writer twins (`spawn` / `outcome` / `note`) |
 | `ORCHESTRATION.md` | The architecture doc, filled in for the project |
-| `orchestration-kit.manifest.json` | Kit version + file hashes, enabling clean upgrades |
+| `orchestration-kit.manifest.json` | Kit version + file hashes + embedded `answers`, enabling clean upgrades |
 
 Everything is generated with project-specific content. Layer order, test commands, evaluator auto-fail triggers, and model IDs are derived from the codebase and your answers, never left generic.
+
+`bin/` arrives with every installed skill copy (it sits beside `SKILL.md` in each `skills/setup`); it is not an emit-set/manifest path.
 
 Targeting Cursor emits a self-contained `.cursor/` tree containing agents, skills, the architecture doc, and the model map, with no dependency on `.claude/`.
 
@@ -161,11 +187,11 @@ piece shipped is in [CHANGELOG.md](CHANGELOG.md).
 
 This repo dogfoods its own skill. `bash scripts/self-install.sh` — or
 `pwsh -NoProfile -File scripts/self-install.ps1` (PowerShell 7+) — copies the
-top-level skills into `.claude/skills/` and `.cursor/skills/` offline (no npx); then
-run `/setup` in a repo session to emit the full instance. Everything emitted is
-gitignored — the canonical source stays under `skills/setup/`. Script flags, the
-dogfood loop, repo anatomy, and the test harnesses are documented in
-[docs/guide/contributing.md](docs/guide/contributing.md).
+top-level skills into `.claude/skills/` and `.cursor/skills/` offline (no npx), then
+emits the full instance from `skills/setup/fixtures/self-answers.json` unless
+`--no-emit`. Everything emitted is gitignored — the canonical source stays under
+`skills/setup/`. Script flags, the dogfood loop, repo anatomy, and the test harnesses
+are documented in [docs/guide/contributing.md](docs/guide/contributing.md).
 
 ## Model tiers
 
@@ -181,11 +207,19 @@ names.
 
 1. **Re-pull the kit** with whichever CLI you installed with:
    `npx skills add kdcllc/skills` again, or `npx agent-skills-cli update`.
-2. **Re-run `/setup`.** It reads `orchestration-kit.manifest.json`, diffs file hashes
-   to spot your local modifications, and shows a diff before touching anything you
-   edited. Seed files like `_goals/backlog.md` are never overwritten. Always re-run
-   `/setup` after upgrading (updating `_loop/` drivers by hand skips new `.gitignore`
-   lines).
+2. **Re-emit from the manifest** — answers are embedded in
+   `orchestration-kit.manifest.json` as of v0.27.0:
+
+   ```bash
+   bash .claude/skills/setup/bin/emit.sh --upgrade
+   # add --answers orchestration-kit.answers.json only when the interview changed
+   # (Cursor: .cursor/skills/setup; Copilot: .github/skills/setup)
+   ```
+
+   Pre-v0.27.0 installs have no embedded `answers` — run `/setup` Steps 1–4 once to
+   create an answers file, then `--answers … --upgrade`. Exit code 4 lists
+   user-modified files; confirm with `--force`. Use `--dry-run` to preview planned
+   actions. Seed files like `_goals/backlog.md` are never overwritten.
 
 Manifest semantics, seed files, and stale-file pruning are documented in
 [docs/guide/contributing.md](docs/guide/contributing.md); kit maintainers bump
@@ -193,8 +227,9 @@ Manifest semantics, seed files, and stale-file pruning are documented in
 
 ## Editing the templates
 
-Templates use `{{TOKEN}}` placeholders and `<!-- BOOTSTRAP: ... -->` comments the setup
-skill must resolve and delete. The placeholder reference lives in
-`skills/setup/SKILL.md`. All canonical content lives under `skills/setup/templates/`;
-per-harness differences belong in `emitters/`, verified facts in
+Templates use `{{TOKEN}}` placeholders, `<!-- BOOTSTRAP[id]: … -->` comments (replaced
+from `answers.bootstrap[id]`), and `<!-- IF flag -->` … `<!-- ENDIF flag -->` spans.
+The placeholder reference lives in `skills/setup/SKILL.md`. All canonical content lives
+under `skills/setup/templates/`; per-harness translation is implemented in
+`skills/setup/bin/emit.*`; harness caveats live in `emitters/` and verified facts in
 `reference/harness-matrix.md`.

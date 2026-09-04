@@ -26,11 +26,12 @@ rewrite_semantics: [whole-file|targeted-insertion]
 #  them wholesale and never assumes another agent will reconcile the result.
 #  targeted-insertion is for large shared documents: surgical edits that leave every
 #  unrelated line untouched.]
-eval_depth: [full|light]
-# [orchestrator-set at planning time — never set by a worker. Default: full. light is a
-#  shortened rubric (requirements walk + targeted tests + write-fence check only,
-#  skipping the deep correctness/reuse dimensions) — light NEVER skips evaluation,
-#  every task still ends in a real verdict.]
+eval_depth: [light|full]
+# [orchestrator-set at planning time — never set by a worker. Default: light. full is
+#  required (state why) for contract tasks, tasks with interface consumers (mirroring,
+#  documenting, or testing the output does not count), and tasks
+#  writing agents/criteria/drivers/shared infra — light NEVER skips evaluation, every
+#  task still ends in a real verdict.]
 ```
 
 ## Requirements (exhaustive — the evaluator verifies every item)

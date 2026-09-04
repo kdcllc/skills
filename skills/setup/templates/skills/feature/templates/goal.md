@@ -20,8 +20,9 @@ checks tasks against this — every answered decision must be reflected in a tas
 
 ```yaml
 phases:
-  align_docs: true|false    # recorded from Phase 1 answers; checked after Phase 5 APPROVED (default true)
+  align_docs: true|false    # recorded from Phase 1 answers; checked after Phase 5 APPROVED (default false)
   pull_request: true|false  # recorded from Phase 1 answers; checked after Phase 5 APPROVED (default true)
+  ladder: escalate|auto      # escalate (default): on cycle-3 exhaustion, escalate to the user with the continuation ladder offered; auto: run the ladder (loop-created goals).
 ```
 
 ## Out of Scope

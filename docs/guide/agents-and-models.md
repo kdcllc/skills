@@ -2,7 +2,7 @@
 
 # Agents and Model Configuration
 
-The kit separates **coordination and verification** (frontier tier) from **execution** (light tier). One orchestrating main session prepares context, makes decisions, and spawns subagents — it never implements tasks itself. Six specialized subagents handle implementation, testing, command execution, evaluation, and post-exhaustion diagnosis (as of v0.20.0). Model IDs, fallback chains, and fix-cycle rotation are configured in a single template file that `/setup` resolves per harness.
+The kit separates **coordination and verification** (frontier tier) from **execution** (light tier). One orchestrating main session prepares context, makes decisions, and spawns subagents — it never implements tasks itself. Every spawn passes its model explicitly (the model map's resolved ID for the agent's tier); each agent report starts with **`**Model (self-reported)**: ...`**. Six specialized subagents handle implementation, testing, command execution, evaluation, and post-exhaustion diagnosis. Model IDs, fallback chains, and fix-cycle rotation are configured in a single template file that `/setup` resolves per harness.
 
 ## The six subagents at a glance
 
@@ -16,6 +16,20 @@ The kit separates **coordination and verification** (frontier tier) from **execu
 | `diagnostician` | `frontier` (`{{MODEL_FRONTIER}}`) | Nothing — diagnosis-only report | Edit files or write product code; re-litigate whether the acceptance criteria are sound (rung-5 arbitration's job) |
 
 The sections below quote or paraphrase the canonical agent templates under [`skills/setup/templates/agents/`](../../skills/setup/templates/agents/). Capabilities not confirmed there are omitted.
+
+## Report Footprint (all six agents)
+
+As of **v0.26.0**, every agent completion report ends with a machine-readable **`### Footprint`** block — the last non-blank lines inside the report fence:
+
+```markdown
+### Footprint
+files_read: <N> (~<C> chars)
+commands_run: <N>
+```
+
+`C` is the agent's estimate of total characters read (sum of file sizes opened; rounding to the nearest thousand is fine). `terminal` reports `files_read: 0` and `commands_run: 1` (or the count it ran). The block is never omitted — write `files_read: 0 (~0 chars)` when nothing was read.
+
+**Why it exists:** `_kit/log-spawn.* outcome` parses the `files_read: N (~C chars)` line and emits `work_read_chars: C · work_est_tokens: C/4` on the orchestration-log OUTCOME line (integer division), or `work_read_chars: n/a · work_est_tokens: n/a` when the line is absent or malformed. That **`work_est_tokens`** value is the subagent's self-reported working footprint — distinct from **`io_est_tokens`**, which measures only orchestrator↔subagent I/O chars/4. Neither is billed usage; the loop driver's `usage:` line (when `LOOP_USAGE_FORMAT` is active) is the only real token count. See [evaluation-system.md](evaluation-system.md) § Orchestration log.
 
 ## Evaluator
 
@@ -195,7 +209,12 @@ Additional rules from the map:
 - Max **3** fallback attempts, then omit the model pin and take the harness default.
 - Fallbacks are silent to the user but **logged in the orchestration log**.
 - Apply at most **one** complexity adjustment per spawn — no cascading bumps.
-- Tasks that author or edit agent, skill, or prompt files use the frontier tier, never the docs/light tier.
+- **Prompts are executable — narrowly**: only tasks that edit `templates/agents/*` or
+  `templates/skills/*-criteria/*` use the frontier tier; skills, emitters, drivers, docs,
+  and tests stay on the light tier.
+- **Every spawn names its model.** The orchestrator passes the tier's resolved ID
+  explicitly on every spawn and records requested vs self-reported in the orchestration log;
+  `inherit` is legitimate only for a tier the install deliberately left unpinned.
 
 The autonomous loop has its own light-tier chain resolving `{{LOOP_MODEL_CHAIN}}` when the loop is installed — same omit-the-pin rule at the end.
 

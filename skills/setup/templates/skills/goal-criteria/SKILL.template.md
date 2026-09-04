@@ -97,10 +97,20 @@ task files use the current `templates/task.md` ownership-contract shape (the one
 carrying `eval_depth`); older task files predate the field by construction.
 
 For v0.18.0+ goals: every task file declares `eval_depth: full` or `eval_depth: light`.
-A `light` assignment carries an orchestrator-stated reason (in the task file or the
-goal's Discovery Summary) — an unexplained `light` is a NEEDS REVISION finding. A task
+The default is `light`. `full` is REQUIRED (with the reason stated in the task file)
+when the task is a contract/scaffold task, has interface consumers (a later task
+builds on its output as an interface — tasks that merely mirror, document, or test
+the output are NOT consumers), or writes agent files, criteria skills, loop
+drivers/breakers, or shared infrastructure named in the goal. An unexplained `full`
+on a task meeting none of those triggers is an informational note, not NEEDS
+REVISION; a `light` on a task that meets a trigger IS NEEDS REVISION. A task
 file missing the field entirely fails closed to `full` — flag it in the evaluation
 output; do not reject the goal for the omission alone.
+
+### Continuation ladder (`ladder:`)
+
+The goal's `phases:` block must declare `ladder:` as `escalate` or `auto`. A missing
+`ladder:` key is read as `escalate` (informational note only).
 
 ## 4. Scope Discipline
 

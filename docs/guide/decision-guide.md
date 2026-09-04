@@ -46,8 +46,8 @@ flowchart TD
 
 - **Direct edit** — typo fixes, comment updates, one-line mechanical changes, or config tweaks you can verify yourself in the same session. The `/feature` skill is invoked to start **any non-trivial feature**; it is not the right path for a one-line mechanical fix.
 - **`/research` → `/feature`** — the research skill covers domain topics an external research agent must investigate **before** implementation. It produces a verifiable report and goal structure, then hands off to `/feature` at goal evaluation (Phase 3 onward).
-- **`/feature`** — full orchestrated feature flow with human decision gates throughout. See [feature-workflow.md](feature-workflow.md).
-- **Autonomous loop** — one backlog story per fresh-context iteration from `_goals/backlog.md`. Each story's acceptance criteria replace Phase 1 alignment; if a story is too ambiguous to derive a goal from, it is treated as **blocked**, not loop-suitable.
+- **`/feature`** — full orchestrated feature flow with human decision gates throughout. After cycle-3 exhaustion on a stuck task, interactive goals default to **`phases.ladder: escalate`**: the orchestrator presents options with "Run the continuation ladder" as option 1 rather than auto-running rungs 5→4→6. Phase 6 (docs alignment) is opt-in (`align_docs: false` by default). See [feature-workflow.md](feature-workflow.md).
+- **Autonomous loop** — one backlog story per fresh-context iteration from `_goals/backlog.md`. Loop-created goals set **`phases.ladder: auto`** so cycle-3 exhaustion runs the continuation ladder unattended. Each story's acceptance criteria replace Phase 1 alignment; if a story is too ambiguous to derive a goal from, it is treated as **blocked**, not loop-suitable.
 
 ## Mode comparison
 

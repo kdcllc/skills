@@ -4,11 +4,12 @@
 # fence, the templates tree's `.claude/`-reference absence, the ORCHESTRATION
 # template's model-map referencing, the setup skill's per-emitter `{{IDE_DIR}}`
 # semantics and multiline-safe absence of the pre-fix Cursor-reuse pairing, the
-# harness matrix's v0.19.0 policy note and non-contradictory Cursor model-pin /
-# effort-pin cells, the model map's live-verification guidance, and the root docs'
-# v0.19.0 version prose. Tracked, self-install-independent -- checks the canonical
-# templates/ source tree and root docs directly (no `.claude/`, no `.cursor/`, no
-# `_loop/`, no install manifest, no self-install required).
+# harness matrix's non-contradictory Cursor model-pin / effort-pin cells, the
+# model map's live-verification guidance, root ORCHESTRATION.md's `self-contained`
+# anchor (7c), and a dynamic VERSION pin from skills/setup/VERSION through README,
+# instance VERSION copies, and manifest kitVersion (7d). Tracked,
+# self-install-independent — checks canonical templates, root docs, and instance
+# paths when present.
 #
 # Copy this repo's `tests/` + `skills/` + `README.md` + `ORCHESTRATION.md` subtree
 # into a mktemp dir, mutate a file under test, then run the COPIED script: HERE and
@@ -35,9 +36,12 @@ MODELS_MAP="$REPO_ROOT/skills/setup/templates/models.map.md"
 VERSION_FILE="$REPO_ROOT/skills/setup/VERSION"
 ROOT_README="$REPO_ROOT/README.md"
 ROOT_ORCHESTRATION="$REPO_ROOT/ORCHESTRATION.md"
+EMIT_SH="$REPO_ROOT/skills/setup/bin/emit.sh"
+EMIT_README="$REPO_ROOT/skills/setup/bin/README.md"
 
 fail_count=0
 pass_count=0
+skip_count=0
 
 report() { # report <PASS|FAIL> <name> [detail]
   local status="$1" name="$2" detail="${3:-}"
@@ -48,6 +52,11 @@ report() { # report <PASS|FAIL> <name> [detail]
     fail_count=$((fail_count + 1))
     echo "FAIL: $name${detail:+ -- $detail}" >&2
   fi
+}
+
+skip_report() { # skip_report <name>
+  skip_count=$((skip_count + 1))
+  echo "SKIP: $1"
 }
 
 # ===========================================================================
@@ -77,42 +86,34 @@ else
   report FAIL "cursor.md: self-containment statement present ('as a **self-contained** tree')"
 fi
 
-# 2d. The templates/models.map.md -> .cursor/skills/setup-models.map.md EMIT-TABLE row
-#     exists, anchored to the row's own structure (line begins with the source cell
-#     `| \`templates/models.map.md\` |` AND that same line contains the destination
-#     text `.cursor/skills/setup-models.map.md`) -- a whole-file substring grep for
-#     just the destination text is NOT decidable here: the Verify section further
-#     down also says "`.cursor/skills/setup-models.map.md` exists." (~line 75) and
-#     "`setup-models.map.md`'s **Cursor column**" (~line 77), so deleting only the
-#     EMIT-TABLE row would leave a whole-file grep green.
-if [[ -f "$CURSOR_MD" ]] \
-  && grep -qE '^\| `templates/models\.map\.md` \|.*\.cursor/skills/setup-models\.map\.md' "$CURSOR_MD" 2>/dev/null; then
-  report PASS "cursor.md: templates/models.map.md -> .cursor/skills/setup-models.map.md EMIT-TABLE row exists"
+# 2d. models.map.md → per-harness setup-models.map.md: write site + kit-owned predicate.
+if [[ -f "$EMIT_SH" ]] \
+  && grep -qE 'put_emit "\$\(ide_dir_for "\$h"\)/skills/setup-models\.map\.md"' "$EMIT_SH" 2>/dev/null \
+  && grep -qF '.cursor/skills/setup-models.map.md' "$EMIT_SH" 2>/dev/null \
+  && grep -qF '.claude/skills/setup-models.map.md|.cursor/skills/setup-models.map.md' "$EMIT_SH" 2>/dev/null; then
+  report PASS "emit.sh: put_emit skills/setup-models.map.md write site + is_kit_owned literals"
 else
-  report FAIL "cursor.md: templates/models.map.md -> .cursor/skills/setup-models.map.md EMIT-TABLE row exists" \
-    "row anchored on '| \`templates/models.map.md\` |' + destination text not found (or file missing)"
+  report FAIL "emit.sh: put_emit skills/setup-models.map.md write site + is_kit_owned literals" \
+    "put_emit/ide_dir_for write site or is_kit_owned destination literals not found in $EMIT_SH"
 fi
 
-# 2e. The pointer-rule fenced block (```markdown ... ```) contains zero `.claude`
-#     substrings when EXTRACTED and grepped in isolation -- not merely absent from
-#     the whole file (a whole-file check would pass even if the fence itself still
-#     said `.claude`, as long as some other line balanced it out).
-if [[ -f "$CURSOR_MD" ]]; then
-  fence_content="$(awk '/^```markdown$/,/^```$/' "$CURSOR_MD")"
-  if [[ -n "$fence_content" ]]; then
-    fence_claude_count="$(grep -c '\.claude' <<<"$fence_content" || true)"
-    if [[ "${fence_claude_count:-0}" -eq 0 ]]; then
-      report PASS "cursor.md: pointer-rule fenced block contains zero .claude substrings"
+# 2e. Embedded .mdc pointer content in emit.sh contains zero `.claude` substrings.
+if [[ -f "$EMIT_SH" ]]; then
+  mdc_content="$(awk '/^pointer_cursor_mdc\(\)/,/^}/' "$EMIT_SH")"
+  if [[ -n "$mdc_content" ]]; then
+    mdc_claude_count="$(grep -c '\.claude' <<<"$mdc_content" || true)"
+    if [[ "${mdc_claude_count:-0}" -eq 0 ]]; then
+      report PASS "emit.sh: embedded pointer_cursor_mdc contains zero .claude substrings"
     else
-      report FAIL "cursor.md: pointer-rule fenced block contains zero .claude substrings" \
-        "found $fence_claude_count occurrence(s) inside the extracted fence"
+      report FAIL "emit.sh: embedded pointer_cursor_mdc contains zero .claude substrings" \
+        "found $mdc_claude_count occurrence(s) inside pointer_cursor_mdc"
     fi
   else
-    report FAIL "cursor.md: pointer-rule fenced block contains zero .claude substrings" \
-      "no \`\`\`markdown ... \`\`\` fence found -- extraction returned empty"
+    report FAIL "emit.sh: embedded pointer_cursor_mdc contains zero .claude substrings" \
+      "pointer_cursor_mdc() block not found"
   fi
 else
-  report FAIL "cursor.md: pointer-rule fenced block contains zero .claude substrings" "file missing"
+  report FAIL "emit.sh: embedded pointer_cursor_mdc contains zero .claude substrings" "file missing"
 fi
 
 # 2f. An {{IDE_DIR}} -> .cursor resolution statement exists.
@@ -200,25 +201,28 @@ else
   report FAIL "SKILL.md: {{IDE_DIR}} row mentions 'resolved per emitter'"
 fi
 
-# 5c. Step 4 carries the re-resolution rule.
-if grep -qE 're-resolved \*\*per emitter\*\*' "$SETUP_SKILL_MD" 2>/dev/null; then
-  report PASS "SKILL.md: Step 4 carries the 're-resolved **per emitter**' rule"
+# 5c. Token resolution per harness: README prose + emit.sh ide_dir_for behaviour.
+if grep -qF 'translates per harness' "$EMIT_README" 2>/dev/null \
+   && grep -qF 'ide_dir_for()' "$EMIT_SH" 2>/dev/null \
+   && grep -qF 'TOKENS[IDE_DIR]="$(ide_dir_for "$h")"' "$EMIT_SH" 2>/dev/null; then
+  report PASS "bin/README.md + emit.sh: tokens resolved per harness (ide_dir_for + IDE_DIR assignment)"
 else
-  report FAIL "SKILL.md: Step 4 carries the 're-resolved **per emitter**' rule"
+  report FAIL "bin/README.md + emit.sh: tokens resolved per harness (ide_dir_for + IDE_DIR assignment)"
 fi
 
-# 5d. The compose note's "Claude Code first" ordering survives.
-if grep -qF 'run Claude Code first when it is among the targets' "$SETUP_SKILL_MD" 2>/dev/null; then
-  report PASS "SKILL.md: compose note keeps 'run Claude Code first when it is among the targets'"
+# 5d. Single-copy artifacts are written from the primary harness in emit.sh.
+if grep -qF 'emit_single_copy' "$EMIT_SH" 2>/dev/null \
+   && grep -qF 'PRIMARY' "$EMIT_SH" 2>/dev/null; then
+  report PASS "emit.sh: single-copy artifacts emitted from the primary harness"
 else
-  report FAIL "SKILL.md: compose note keeps 'run Claude Code first when it is among the targets'"
+  report FAIL "emit.sh: single-copy artifacts emitted from the primary harness"
 fi
 
-# 5e. _loop/PROMPT.md is named in the Loop-extras paragraph.
-if grep -qF '_loop/PROMPT.md' "$SETUP_SKILL_MD" 2>/dev/null; then
-  report PASS "SKILL.md: _loop/PROMPT.md named in the Loop-extras paragraph"
+# 5e. _loop/PROMPT.md is a single-copy artifact named in emit.sh.
+if grep -qF 'PROMPT.md' "$EMIT_SH" 2>/dev/null; then
+  report PASS "emit.sh: _loop/PROMPT.md named as a single-copy loop artifact"
 else
-  report FAIL "SKILL.md: _loop/PROMPT.md named in the Loop-extras paragraph"
+  report FAIL "emit.sh: _loop/PROMPT.md named as a single-copy loop artifact"
 fi
 
 # ===========================================================================
@@ -315,20 +319,52 @@ else
   report FAIL "README.md: no remaining claim that Cursor reuses .claude/ for kit files" "file missing"
 fi
 
-# 7c. Root ORCHESTRATION.md mentions v0.19.0.
-if grep -q 'v0.19.0' "$ROOT_ORCHESTRATION" 2>/dev/null; then
-  report PASS "ORCHESTRATION.md: mentions v0.19.0"
+# 7c. Root ORCHESTRATION.md mentions self-contained (pointer, not version history).
+if grep -qF 'self-contained' "$ROOT_ORCHESTRATION" 2>/dev/null; then
+  report PASS "ORCHESTRATION.md: mentions self-contained"
 else
-  report FAIL "ORCHESTRATION.md: mentions v0.19.0"
+  report FAIL "ORCHESTRATION.md: mentions self-contained"
 fi
 
-# 7d. skills/setup/VERSION equals exactly 0.23.0 (whole-file compare).
-if [[ -f "$VERSION_FILE" ]] && [[ "$(cat "$VERSION_FILE")" == "0.23.0" ]]; then
-  report PASS "skills/setup/VERSION equals exactly 0.23.0"
+# 7d. skills/setup/VERSION semver, README Kit version line, instance VERSIONs (SKIP if absent).
+KIT_VERSION="$(tr -d '[:space:]' < "$VERSION_FILE" 2>/dev/null || true)"
+check7d_ok=1
+check7d_detail=""
+if [[ ! "$KIT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  check7d_ok=0
+  check7d_detail="VERSION not semver: '${KIT_VERSION:-<missing>}'"
+elif ! grep -qF -- "Kit version: **$KIT_VERSION**" "$ROOT_README" 2>/dev/null; then
+  check7d_ok=0
+  check7d_detail="README missing Kit version: **$KIT_VERSION**"
 else
-  version_contents="$(cat "$VERSION_FILE" 2>/dev/null)"
-  report FAIL "skills/setup/VERSION equals exactly 0.23.0" \
-    "contents: '${version_contents:-<missing>}'"
+  for ivf in "$REPO_ROOT/.claude/skills/setup/VERSION" "$REPO_ROOT/.cursor/skills/setup/VERSION"; do
+    rel="${ivf#"$REPO_ROOT"/}"
+    if [[ ! -f "$ivf" ]]; then
+      skip_report "7d: $rel absent"
+      continue
+    fi
+    if [[ "$(tr -d '[:space:]' < "$ivf")" != "$KIT_VERSION" ]]; then
+      check7d_ok=0
+      check7d_detail="$rel != $KIT_VERSION"
+      break
+    fi
+  done
+  if [[ $check7d_ok -eq 1 ]] && [[ -f "$REPO_ROOT/orchestration-kit.manifest.json" ]]; then
+    manifest_ver="$(grep -m1 '"kitVersion"' "$REPO_ROOT/orchestration-kit.manifest.json" 2>/dev/null | \
+      sed -E 's/.*"kitVersion"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/')"
+    if [[ "$manifest_ver" != "$KIT_VERSION" ]]; then
+      check7d_ok=0
+      check7d_detail="manifest kitVersion != $KIT_VERSION"
+    fi
+  elif [[ $check7d_ok -eq 1 ]]; then
+    skip_report "7d: orchestration-kit.manifest.json absent"
+  fi
+fi
+if [[ $check7d_ok -eq 1 ]]; then
+  report PASS "skills/setup/VERSION semver + README Kit version **$KIT_VERSION** (+ instance/manifest when present)"
+else
+  report FAIL "skills/setup/VERSION semver + README Kit version **$KIT_VERSION** (+ instance/manifest when present)" \
+    "$check7d_detail"
 fi
 
 # ===========================================================================
@@ -360,7 +396,7 @@ fi
 
 echo
 echo "=== cursor-isolation summary ==="
-echo "PASS: $pass_count   FAIL: $fail_count"
+echo "PASS: $pass_count   FAIL: $fail_count   SKIP: $skip_count"
 if ((fail_count)); then
   echo "RESULT: $fail_count assertion(s) FAILED"
   exit 1

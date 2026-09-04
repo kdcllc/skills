@@ -7,17 +7,20 @@
 # Twin: self-install.sh (bash) — behaviorally identical —
 # same defaults, guards, and exit codes; any divergence is a bug.
 #
-# Does not run /setup or emit any /setup artifacts (_loop/, manifest, agents).
-# Dest paths are the definition; this script does not invoke npx or any
-# network tool.
+# After copying skills, runs skills/setup/bin/emit.ps1 from
+# skills/setup/fixtures/self-answers.json unless --no-emit. Dest paths are the
+# definition; this script does not invoke npx or any network tool.
 #
-# Usage:  scripts/self-install.ps1 [--dry-run] [--symlink] [--force]
+# Usage:  scripts/self-install.ps1 [--dry-run] [--symlink] [--force] [--no-emit] [--force-emit]
 #   --dry-run  Print planned dest paths to stdout; write nothing; exit 0.
-#              Combined with --symlink, prints the symlink plan.
+#              Combined with --symlink, prints the symlink plan. When emit runs,
+#              passes --dry-run to emit.ps1 (action lines only; no writes).
 #   --symlink  Canonical real tree at .agents/skills/<name>/;
 #              .claude/skills/<name> and .cursor/skills/<name> become symlinks.
 #              Fails loudly on symlink failure; never falls back to copy.
 #   --force    Accepted and ignored (overwrite is already the default).
+#   --no-emit  Copy skills only; skip emit (legacy behaviour).
+#   --force-emit  Pass --force to emit.ps1 (overwrite user-modified instance files).
 #
 # Exit codes: 0 = success (including dry-run); non-zero = any error.
 
@@ -36,15 +39,19 @@ $script:ScriptName = Split-Path -Leaf $PSCommandPath
 # _Usage is printed only on the unknown-flag path; never on missing-skills or
 # install-failure paths. Binding decision — sh twin must match.
 function _Usage {
-    [Console]::Error.WriteLine("Usage: $script:ScriptName [--dry-run] [--symlink] [--force]")
+    [Console]::Error.WriteLine("Usage: $script:ScriptName [--dry-run] [--symlink] [--force] [--no-emit] [--force-emit]")
     [Console]::Error.WriteLine("  --dry-run  Print planned dest paths; write nothing; exit 0.")
     [Console]::Error.WriteLine("  --symlink  Symlink mode: canonical tree at .agents/skills/<name>/;")
     [Console]::Error.WriteLine("             .claude/skills/<name> and .cursor/skills/<name> become symlinks.")
     [Console]::Error.WriteLine("  --force    Accepted and ignored (overwrite is already the default).")
+    [Console]::Error.WriteLine("  --no-emit  Copy skills only; skip emit.")
+    [Console]::Error.WriteLine("  --force-emit  Pass --force to emit.ps1.")
 }
 
 $DryRun = $false
 $Symlink = $false
+$NoEmit = $false
+$ForceEmit = $false
 
 # Parse GNU-style --flags from $args so `pwsh -File self-install.ps1 --dry-run` works.
 foreach ($arg in $args) {
@@ -52,6 +59,8 @@ foreach ($arg in $args) {
         '--dry-run' { $DryRun = $true }
         '--symlink' { $Symlink = $true }
         '--force'   { }
+        '--no-emit' { $NoEmit = $true }
+        '--force-emit' { $ForceEmit = $true }
         default {
             [Console]::Error.WriteLine("error: unknown argument: $arg")
             _Usage
@@ -82,7 +91,23 @@ if ($SkillNames.Count -eq 0) {
     exit 1
 }
 
-# Dry-run: print the plan and exit without writing anything.
+function Invoke-RunEmit {
+    $emitArgs = @(
+        '--root', $RepoRoot,
+        '--kit', (Join-Path $RepoRoot 'skills/setup'),
+        '--answers', (Join-Path $RepoRoot 'skills/setup/fixtures/self-answers.json'),
+        '--upgrade'
+    )
+    if ($ForceEmit) { $emitArgs += '--force' }
+    if ($DryRun) { $emitArgs += '--dry-run' }
+    & pwsh -NoProfile -File (Join-Path $RepoRoot 'skills/setup/bin/emit.ps1') @emitArgs
+    $script:EmitExitCode = $LASTEXITCODE
+    if ($script:EmitExitCode -eq 4) {
+        [Console]::Error.WriteLine('re-run with --force-emit to overwrite user-modified instance files')
+    }
+}
+
+# Dry-run: print the plan; optionally print emit dry-run lines; write nothing.
 if ($DryRun) {
     foreach ($name in $SkillNames) {
         if ($Symlink) {
@@ -93,6 +118,10 @@ if ($DryRun) {
             Write-Output "[dry-run] copy: $RepoRoot/.claude/skills/$name/"
             Write-Output "[dry-run] copy: $RepoRoot/.cursor/skills/$name/"
         }
+    }
+    if (-not $NoEmit) {
+        Invoke-RunEmit
+        if ($script:EmitExitCode -ne 0) { exit $script:EmitExitCode }
     }
     exit 0
 }
@@ -306,6 +335,13 @@ try {
     }
 
     Write-Output "done: $($SkillNames.Count) skill(s) installed"
+    if (-not $NoEmit) {
+        Invoke-RunEmit
+        if ($script:EmitExitCode -ne 0) {
+            $script:FinalExitCode = $script:EmitExitCode
+            exit $script:EmitExitCode
+        }
+    }
     $script:InstallSucceeded = $true
     exit 0
 

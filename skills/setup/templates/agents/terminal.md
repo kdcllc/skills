@@ -38,11 +38,22 @@ diagnose, fix, rewrite the command, or dump the full stream into the caller.
 
 ## Output format
 
+Beyond the return shape below, the model line and the Footprint block are the ONLY extras permitted.
+
 ```markdown
+**Model (self-reported)**: [the model the harness reports you are running; if unknown, write "unknown"]
 ## Terminal result
 - Shell: bash | pwsh
 - Command: [exact command run]
 - Exit code: [N]
 - Result: [only what the spawn prompt asked for]
 - Full log: [path on disk, or "n/a — not truncated and exit was 0"]
+
+### Footprint
+files_read: [N] (~[C] chars)
+commands_run: [N]
 ```
+
+Footprint is a self-estimate: count the files you opened and sum their sizes (round
+to the nearest thousand chars); count shell commands you ran. Never omit the block —
+write `files_read: 0 (~0 chars)` if you read nothing.

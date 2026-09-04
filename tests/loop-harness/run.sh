@@ -45,7 +45,7 @@ cd "$REPO_ROOT" || exit 1
 
 BREAKER_SH="$REPO_ROOT/skills/setup/templates/loop/breaker.sh"
 BREAKER_PS1="$REPO_ROOT/skills/setup/templates/loop/breaker.ps1"
-LOOP_SH="$REPO_ROOT/skills/setup/templates/loop/loop.sh"
+LOOP_SH="${LOOP_DRIVER_SH:-$REPO_ROOT/skills/setup/templates/loop/loop.sh}"
 LOOP_PS1="$REPO_ROOT/skills/setup/templates/loop/loop.ps1"
 INSTANCE_LOOP_SH="$REPO_ROOT/_loop/loop.sh"
 INSTANCE_LOOP_PS1="$REPO_ROOT/_loop/loop.ps1"
@@ -170,7 +170,7 @@ fi
 _cm_dir="$TMP/si-cm"
 cp -a "$SI_FIX" "$_cm_dir"
 _cm_exit=0
-( cd "$TMP" && bash "$_cm_dir/scripts/self-install.sh" ) 2>/dev/null || _cm_exit=$?
+( cd "$TMP" && bash "$_cm_dir/scripts/self-install.sh" --no-emit ) 2>/dev/null || _cm_exit=$?
 _cm_claude_setup="$_cm_dir/.claude/skills/setup/SKILL.md"
 _cm_cursor_setup="$_cm_dir/.cursor/skills/setup/SKILL.md"
 _cm_claude_other="$_cm_dir/.claude/skills/other/SKILL.md"
@@ -201,10 +201,10 @@ fi
 # ---------------------------------------------------------------------------
 _ow_dir="$TMP/si-ow"
 cp -a "$SI_FIX" "$_ow_dir"
-( cd "$TMP" && bash "$_ow_dir/scripts/self-install.sh" ) 2>/dev/null
+( cd "$TMP" && bash "$_ow_dir/scripts/self-install.sh" --no-emit ) 2>/dev/null
 printf 'STALE_BYTES\n' > "$_ow_dir/.claude/skills/setup/SKILL.md"
 _ow_exit=0
-( cd "$TMP" && bash "$_ow_dir/scripts/self-install.sh" ) 2>/dev/null || _ow_exit=$?
+( cd "$TMP" && bash "$_ow_dir/scripts/self-install.sh" --no-emit ) 2>/dev/null || _ow_exit=$?
 _ow_bytes_match=0
 diff -q "$_ow_dir/.claude/skills/setup/SKILL.md" \
         "$_ow_dir/skills/setup/SKILL.md" >/dev/null 2>&1 && _ow_bytes_match=1
@@ -220,7 +220,7 @@ fi
 _fo_dir="$TMP/si-fo"
 cp -a "$SI_FIX" "$_fo_dir"
 _fo_exit=0
-( cd "$TMP" && bash "$_fo_dir/scripts/self-install.sh" --force ) 2>/dev/null || _fo_exit=$?
+( cd "$TMP" && bash "$_fo_dir/scripts/self-install.sh" --force --no-emit ) 2>/dev/null || _fo_exit=$?
 _fo_claude_ok=0; _fo_cursor_ok=0
 [[ -f "$_fo_dir/.claude/skills/setup/SKILL.md" && \
    -f "$_fo_dir/.claude/skills/other/SKILL.md" ]] && _fo_claude_ok=1
@@ -238,7 +238,7 @@ fi
 _dr_dir="$TMP/si-dr"
 cp -a "$SI_FIX" "$_dr_dir"
 _dr_exit=0
-( cd "$TMP" && bash "$_dr_dir/scripts/self-install.sh" --dry-run ) 2>/dev/null || _dr_exit=$?
+( cd "$TMP" && bash "$_dr_dir/scripts/self-install.sh" --dry-run --no-emit ) 2>/dev/null || _dr_exit=$?
 _dr_claude_absent=0; _dr_cursor_absent=0
 [[ ! -d "$_dr_dir/.claude/skills" ]] && _dr_claude_absent=1
 [[ ! -d "$_dr_dir/.cursor/skills" ]] && _dr_cursor_absent=1
@@ -256,7 +256,7 @@ _ds_dir="$TMP/si-ds"
 cp -a "$SI_FIX" "$_ds_dir"
 _ds_exit=0
 _ds_out="$TMP/si-ds-out.txt"
-( cd "$TMP" && bash "$_ds_dir/scripts/self-install.sh" --dry-run --symlink ) \
+( cd "$TMP" && bash "$_ds_dir/scripts/self-install.sh" --dry-run --symlink --no-emit ) \
   >"$_ds_out" 2>/dev/null || _ds_exit=$?
 _ds_agents_named=0; _ds_claude_named=0; _ds_cursor_named=0
 grep -qF '.agents/skills/' "$_ds_out" && _ds_agents_named=1
@@ -321,7 +321,7 @@ cp -a "$SI_FIX" "$_kb_dir"
 mkdir -p "$_kb_dir/.claude/skills/keepme"
 printf 'keepme\n' > "$_kb_dir/.claude/skills/keepme/SKILL.md"
 _kb_exit=0
-( cd "$TMP" && bash "$_kb_dir/scripts/self-install.sh" ) 2>/dev/null || _kb_exit=$?
+( cd "$TMP" && bash "$_kb_dir/scripts/self-install.sh" --no-emit ) 2>/dev/null || _kb_exit=$?
 _kb_keepme=0
 [[ -f "$_kb_dir/.claude/skills/keepme/SKILL.md" ]] && _kb_keepme=1
 if [[ "$_kb_exit" -eq 0 && "$_kb_keepme" -eq 1 ]]; then
@@ -380,7 +380,7 @@ if ln -s /dev/null "$TMP/si-symlink-probe" 2>/dev/null; then
   _sl_dir="$TMP/si-sl"
   cp -a "$SI_FIX" "$_sl_dir"
   _sl_exit=0
-  ( cd "$TMP" && bash "$_sl_dir/scripts/self-install.sh" --symlink ) 2>/dev/null || _sl_exit=$?
+  ( cd "$TMP" && bash "$_sl_dir/scripts/self-install.sh" --symlink --no-emit ) 2>/dev/null || _sl_exit=$?
   _sl_agents_real=0; _sl_claude_link=0; _sl_cursor_link=0
   _sl_claude_tgt_ok=0; _sl_cursor_tgt_ok=0
   { [[ -d "$_sl_dir/.agents/skills/setup" ]] && [[ ! -L "$_sl_dir/.agents/skills/setup" ]]; } \
@@ -410,8 +410,8 @@ fi
 _mt_dir="$TMP/si-mt"
 cp -a "$SI_FIX" "$_mt_dir"
 _mt_exit1=0; _mt_exit2=0
-( cd "$TMP" && bash "$_mt_dir/scripts/self-install.sh" --symlink ) 2>/dev/null || _mt_exit1=$?
-( cd "$TMP" && bash "$_mt_dir/scripts/self-install.sh" ) 2>/dev/null || _mt_exit2=$?
+( cd "$TMP" && bash "$_mt_dir/scripts/self-install.sh" --symlink --no-emit ) 2>/dev/null || _mt_exit1=$?
+( cd "$TMP" && bash "$_mt_dir/scripts/self-install.sh" --no-emit ) 2>/dev/null || _mt_exit2=$?
 _mt_claude_real=0; _mt_cursor_real=0; _mt_bytes_ok=0
 { [[ -d "$_mt_dir/.claude/skills/setup" ]] && [[ ! -L "$_mt_dir/.claude/skills/setup" ]]; } \
   && _mt_claude_real=1
@@ -459,7 +459,7 @@ if command -v pwsh &>/dev/null; then
   _pwsh_dir="$TMP/si-pwsh"
   cp -a "$SI_FIX" "$_pwsh_dir"
   _pwsh_exit=0
-  ( cd "$TMP" && pwsh -NoProfile -File "$_pwsh_dir/scripts/self-install.ps1" ) 2>/dev/null \
+  ( cd "$TMP" && pwsh -NoProfile -File "$_pwsh_dir/scripts/self-install.ps1" --no-emit ) 2>/dev/null \
     || _pwsh_exit=$?
   _pwsh_claude_ok=0; _pwsh_cursor_ok=0
   [[ -f "$_pwsh_dir/.claude/skills/setup/SKILL.md" && \
@@ -491,7 +491,7 @@ if [[ -f "$CHECKS_SH" ]]; then
   grep -qF ".claude/skills/setup" "$CHECKS_SH" && grep -qF -- '-prune' "$CHECKS_SH" \
     && _d_prune=1
   _setup_has_tokens=0
-  if grep -rqE '\{\{[A-Z_]+\}\}|<!-- BOOTSTRAP' \
+  if grep -rqE '\{\{[A-Z_]+\}\}|<!-- (BOOTSTRAP|IF|ENDIF)' \
         "$REPO_ROOT/.claude/skills/setup" 2>/dev/null; then
     _setup_has_tokens=1
   fi
@@ -516,12 +516,13 @@ fi
 # Static structural greps against skills/setup/SKILL.md,
 # skills/setup/templates/ORCHESTRATION.md, skills/setup/VERSION, and
 # README.md -- lock the Step 2a greenfield gate, its GREENFIELD ONLY
-# BOOTSTRAP template hook, and the 0.19.0 / 1000-install claims. Mutations
+# BOOTSTRAP template hook, and the dynamic Kit version / 1000-install claims. Mutations
 # (108-110) run ONLY on copies under $TMP; the real repo files are read-only.
 # ===========================================================================
 ORCH_TPL="$REPO_ROOT/skills/setup/templates/ORCHESTRATION.md"
 VERSION_FILE="$REPO_ROOT/skills/setup/VERSION"
 README_MD="$REPO_ROOT/README.md"
+KIT_VERSION="$(tr -d '[:space:]' < "$VERSION_FILE")"
 
 # ---------------------------------------------------------------------------
 # 100. SKILL.md carries the Step 2a heading and the options.greenfield flag.
@@ -628,37 +629,54 @@ fi
 #      'GREENFIELD ONLY', and 'options.greenfield'.
 # ---------------------------------------------------------------------------
 _106_bootstrap=0; _106_greenfield_only=0; _106_flag=0
-grep -qF -- '<!-- BOOTSTRAP' "$ORCH_TPL" && _106_bootstrap=1
+grep -qF -- '<!-- IF greenfield -->' "$ORCH_TPL" && _106_bootstrap=1
 grep -qF -- 'GREENFIELD ONLY' "$ORCH_TPL" && _106_greenfield_only=1
 grep -qF -- 'options.greenfield' "$ORCH_TPL" && _106_flag=1
 if [[ "$_106_bootstrap" -eq 1 && "$_106_greenfield_only" -eq 1 && "$_106_flag" -eq 1 ]]; then
-  report PASS "106: templates/ORCHESTRATION.md carries '<!-- BOOTSTRAP', 'GREENFIELD ONLY', and 'options.greenfield'"
+  report PASS "106: templates/ORCHESTRATION.md carries '<!-- IF greenfield -->', 'GREENFIELD ONLY', and 'options.greenfield'"
 else
-  report FAIL "106: templates/ORCHESTRATION.md BOOTSTRAP/GREENFIELD ONLY/options.greenfield" \
-    "bootstrap=$_106_bootstrap greenfield_only=$_106_greenfield_only flag=$_106_flag"
+  report FAIL "106: templates/ORCHESTRATION.md IF greenfield/GREENFIELD ONLY/options.greenfield" \
+    "if_greenfield=$_106_bootstrap greenfield_only=$_106_greenfield_only flag=$_106_flag"
 fi
 
 # ---------------------------------------------------------------------------
-# 107. skills/setup/VERSION is exactly 0.23.0; README.md documents 0.23.0
-#      plus TypeScript, Python, and the 1000-install floor.
-#      NOTE: the expected version is hardcoded (not derived from VERSION_FILE)
-#      so this assertion still catches a wrong VERSION file, not just README
-#      drift -- assertion 110 is the mutation control proving that non-
-#      vacuity. The next version bump must update both 0.23.0 literals below.
+# 107. skills/setup/VERSION semver; README Kit version + TypeScript/Python/1000+;
+#      instance VERSION copies and manifest kitVersion (SKIP when absent).
 # ---------------------------------------------------------------------------
 _107_version_exact=0
-[[ "$(tr -d '[:space:]' < "$VERSION_FILE")" == "0.23.0" ]] && _107_version_exact=1
+[[ "$KIT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] && _107_version_exact=1
 _107_readme_version=0; _107_readme_ts=0; _107_readme_py=0; _107_readme_1000=0
-grep -qF -- '0.23.0' "$README_MD" && _107_readme_version=1
+_107_instance_ok=1; _107_manifest_ok=1
+grep -qF -- "Kit version: **$KIT_VERSION**" "$README_MD" && _107_readme_version=1
 grep -qF -- 'TypeScript' "$README_MD" && _107_readme_ts=1
 grep -qF -- 'Python' "$README_MD" && _107_readme_py=1
 grep -qF -- '1000+' "$README_MD" && _107_readme_1000=1
-if [[ "$_107_version_exact" -eq 1 && "$_107_readme_version" -eq 1 && "$_107_readme_ts" -eq 1 \
-      && "$_107_readme_py" -eq 1 && "$_107_readme_1000" -eq 1 ]]; then
-  report PASS "107: skills/setup/VERSION is exactly 0.23.0; README.md documents 0.23.0 + TypeScript + Python + 1000"
+for _107_ivf in \
+  "$REPO_ROOT/.claude/skills/setup/VERSION" \
+  "$REPO_ROOT/.cursor/skills/setup/VERSION"; do
+  _107_rel="${_107_ivf#"$REPO_ROOT"/}"
+  if [[ ! -f "$_107_ivf" ]]; then
+    report SKIP "107: $_107_rel absent"
+    continue
+  fi
+  if [[ "$(tr -d '[:space:]' < "$_107_ivf")" != "$KIT_VERSION" ]]; then
+    _107_instance_ok=0
+  fi
+done
+if [[ ! -f "$MANIFEST_JSON" ]]; then
+  report SKIP "107: orchestration-kit.manifest.json absent"
 else
-  report FAIL "107: VERSION==0.23.0 + README claims" \
-    "version=$_107_version_exact readme_version=$_107_readme_version ts=$_107_readme_ts py=$_107_readme_py 1000=$_107_readme_1000"
+  _107_manifest_ver="$(grep -m1 '"kitVersion"' "$MANIFEST_JSON" 2>/dev/null | \
+    sed -E 's/.*"kitVersion"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/')"
+  [[ "$_107_manifest_ver" == "$KIT_VERSION" ]] || _107_manifest_ok=0
+fi
+if [[ "$_107_version_exact" -eq 1 && "$_107_readme_version" -eq 1 && "$_107_readme_ts" -eq 1 \
+      && "$_107_readme_py" -eq 1 && "$_107_readme_1000" -eq 1 \
+      && "$_107_instance_ok" -eq 1 && "$_107_manifest_ok" -eq 1 ]]; then
+  report PASS "107: skills/setup/VERSION is $KIT_VERSION; README + instance/manifest pins + TypeScript + Python + 1000"
+else
+  report FAIL "107: VERSION==$KIT_VERSION + README/instance/manifest claims" \
+    "version=$_107_version_exact readme_version=$_107_readme_version ts=$_107_readme_ts py=$_107_readme_py 1000=$_107_readme_1000 instance=$_107_instance_ok manifest=$_107_manifest_ok"
 fi
 
 # ---------------------------------------------------------------------------
@@ -701,15 +719,15 @@ fi
 
 # ---------------------------------------------------------------------------
 # 110. Mutation ($TMP-only VERSION file): a file containing 0.16.0 fails the
-#      ==0.23.0 predicate; the real skills/setup/VERSION passes.
+#      ==$KIT_VERSION predicate; the real skills/setup/VERSION passes.
 # ---------------------------------------------------------------------------
 _110_bad="$TMP/VERSION_bad"
 printf '0.16.0\n' > "$_110_bad"
 _110_bad_fails=0; _110_real_passes=0
-[[ "$(tr -d '[:space:]' < "$_110_bad")" == "0.23.0" ]] || _110_bad_fails=1
-[[ "$(tr -d '[:space:]' < "$VERSION_FILE")" == "0.23.0" ]] && _110_real_passes=1
+[[ "$(tr -d '[:space:]' < "$_110_bad")" == "$KIT_VERSION" ]] || _110_bad_fails=1
+[[ "$(tr -d '[:space:]' < "$VERSION_FILE")" == "$KIT_VERSION" ]] && _110_real_passes=1
 if [[ "$_110_bad_fails" -eq 1 && "$_110_real_passes" -eq 1 ]]; then
-  report PASS "110: mutation -- a temp VERSION file containing 0.16.0 fails the ==0.23.0 predicate; the real skills/setup/VERSION passes"
+  report PASS "110: mutation -- a temp VERSION file containing 0.16.0 fails the ==$KIT_VERSION predicate; the real skills/setup/VERSION passes"
 else
   report FAIL "110: mutation (VERSION 0.16.0)" \
     "bad_fails=$_110_bad_fails real_passes=$_110_real_passes"
@@ -1485,13 +1503,16 @@ fi
 # invocation forms inline, matching the copilot/codex emitter cells, while
 # keeping the "as in the Claude Code emitter" pointer.
 # ---------------------------------------------------------------------------
-if [[ -f "$CURSOR_MD" ]] \
-   && grep -qF 'as in the Claude Code emitter' "$CURSOR_MD" \
-   && grep -qF '_loop/loop.sh [max-iterations]' "$CURSOR_MD" \
-   && grep -qF 'pwsh _loop/loop.ps1 [MaxIterations]' "$CURSOR_MD"; then
-  report PASS "20: A1 -- cursor.md loop row carries the literal per-OS invocation forms inline"
+if [[ -f "$ORCH_TPL" ]]; then
+  _orch_loop_flat="$(tr -s '[:space:]' ' ' < "$ORCH_TPL")"
+  if grep -qF '_loop/loop.sh [max-iterations]' <<< "$_orch_loop_flat" \
+     && grep -qF 'pwsh _loop/loop.ps1 [MaxIterations]' <<< "$_orch_loop_flat"; then
+    report PASS "20: A1 -- ORCHESTRATION.md carries literal bash + pwsh loop invocation forms"
+  else
+    report FAIL "20: A1" "literal invocation forms not found in $ORCH_TPL (whitespace-flattened grep)"
+  fi
 else
-  report FAIL "20: A1" "literal invocation forms not found in $CURSOR_MD"
+  report FAIL "20: A1" "ORCHESTRATION template missing"
 fi
 
 # ---------------------------------------------------------------------------
@@ -1512,8 +1533,8 @@ fi
 # 22 (A3, task-02 coverage): the seedFiles contract lands in BOTH Step 6's
 # manifest schema example AND the Upgrading section of skills/setup/SKILL.md.
 # ---------------------------------------------------------------------------
-step6_block="$(awk '/^## Step 6/{flag=1} /^## Upgrading/{flag=0} flag' "$SETUP_SKILL_MD")"
-upgrading_block="$(awk '/^## Upgrading/{flag=1} flag' "$SETUP_SKILL_MD")"
+step6_block="$(awk '/^## Step 6 —/{flag=1} /^## Upgrading/{flag=0} flag' "$SETUP_SKILL_MD")"
+upgrading_block="$(awk '/^## Upgrading \//{flag=1} flag' "$SETUP_SKILL_MD")"
 if grep -qF 'seedFiles' <<< "$step6_block" && grep -qF 'seedFiles' <<< "$upgrading_block"; then
   report PASS "22: A3 -- 'seedFiles' present in both Step 6's schema example and the Upgrading section"
 else
@@ -1521,12 +1542,11 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 23 (A3, task-02 coverage; PRECISION FIX story-006 task-03 judge): the
-# _goals/backlog.md CELL (the table row containing the literal
-# "_goals/backlog.md") in each emitter carries a "create if missing" note
-# WITHIN THAT SAME LINE -- not a whole-file grep, which a decoy note
-# elsewhere on an unrelated row (e.g. codex.md:12's AGENTS.md cell) could
-# satisfy even if the backlog cell itself lost its note.
+# 23 (A3, task-02 coverage; PRECISION FIX story-006 task-03 judge): the line
+# naming "_goals/backlog.md" in each emitter caveat file must carry a
+# "create if missing" note WITHIN THAT SAME LINE -- not a whole-file grep,
+# which a decoy note elsewhere on an unrelated line (e.g. codex.md's AGENTS.md
+# mention) could satisfy even if the backlog line itself lost its note.
 # ---------------------------------------------------------------------------
 a3_row_check() { # a3_row_check <file> -> 0 if the _goals/backlog.md row contains "create if missing"
   local f="$1" row
@@ -1535,13 +1555,13 @@ a3_row_check() { # a3_row_check <file> -> 0 if the _goals/backlog.md row contain
   [[ -n "$row" ]] && grep -qF 'create if missing' <<< "$row"
 }
 a3_missing=()
-for f in "$CLAUDE_CODE_MD" "$CODEX_MD" "$COPILOT_MD"; do
+for f in "$CLAUDE_CODE_MD" "$CODEX_MD" "$COPILOT_MD" "$CURSOR_MD"; do
   a3_row_check "$f" || a3_missing+=("$f")
 done
 if ((${#a3_missing[@]} == 0)); then
-  report PASS "23 (row-scoped): A3 -- 'create if missing' present WITHIN the _goals/backlog.md row in all three emitter tables (claude-code.md, codex.md, copilot.md)"
+  report PASS "23 (row-scoped): A3 -- 'create if missing' present WITHIN the _goals/backlog.md line in all four emitter caveat files"
 else
-  report FAIL "23 (row-scoped): A3" "'create if missing' absent from the _goals/backlog.md row of: ${a3_missing[*]}"
+  report FAIL "23 (row-scoped): A3" "'create if missing' absent from the _goals/backlog.md line of: ${a3_missing[*]}"
 fi
 
 # 23-mutation-proof: a codex.md copy with the backlog-cell note deleted but
@@ -1591,11 +1611,11 @@ fi
 # 25 (story-007, check J mutation -- POSITIVE): an INTERNALLY-CONSISTENT
 # manifest copy -- every managed (non-seed) entry's hash recomputed against
 # the CURRENT working tree first (so this proves the seed join itself, not
-# story-induced drift), the seed entry (_goals/backlog.md) left at its
-# existing recorded value (proving drift never fails a seed), and
+# story-induced drift), _goals/backlog.md seed-only (absent from manifest
+# `files`, present in `seedFiles`), the seed file exists on disk, and
 # .claude/checks.sh's own entry set to its CURRENT hash (a fresh record, so
 # "self, excluded" is exercised without relying on a stale value) -- must
-# PASS with BOTH "seed, exempt" and "self, excluded" on stdout.
+# PASS with the J line present and the self-excluded line on stdout.
 # ---------------------------------------------------------------------------
 j_pos_manifest="$TMP/j_positive_manifest.json"
 python3 - "$REPO_ROOT" "$MANIFEST_JSON" "$j_pos_manifest" <<'PY'
@@ -1620,11 +1640,13 @@ j_pos_out="$TMP/j_pos_out.txt"
 j_pos_err="$TMP/j_pos_err.txt"
 CHECKS_MANIFEST="$j_pos_manifest" "$CHECKS_SH" > "$j_pos_out" 2> "$j_pos_err"
 if grep -qE '^PASS  J: manifest hash join' "$j_pos_out" \
-   && grep -qF 'J: seed, exempt -- _goals/backlog.md' "$j_pos_out" \
+   && jq -e '.files|has("_goals/backlog.md")|not' "$REPO_ROOT/orchestration-kit.manifest.json" \
+   && jq -e '.seedFiles|index("_goals/backlog.md")!=null' "$REPO_ROOT/orchestration-kit.manifest.json" \
+   && [[ -f "$REPO_ROOT/_goals/backlog.md" ]] \
    && grep -qF 'J: self, excluded -- .claude/checks.sh' "$j_pos_out"; then
-  report PASS "25: check J mutation (POSITIVE) -- internally-consistent manifest PASSES with BOTH 'seed, exempt' and 'self, excluded' on stdout"
+  report PASS "25: check J mutation (POSITIVE) -- manifest PASSES; backlog seed-only (not in files); seed exists; self excluded line present"
 else
-  report FAIL "25: check J mutation (POSITIVE)" "expected PASS + both self/seed lines on stdout; not found"
+  report FAIL "25: check J mutation (POSITIVE)" "expected PASS J + seed-only backlog manifest shape + seed file + self excluded line"
 fi
 
 # ---------------------------------------------------------------------------
@@ -4925,6 +4947,217 @@ if grep -qF 'eval_depth' "$TASK_TPL"; then
   report PASS "118: feature/templates/task.md contains eval_depth"
 else
   report FAIL "118: feature/templates/task.md contains eval_depth" "no 'eval_depth' match in $TASK_TPL"
+fi
+
+# ===========================================================================
+# 119–124 (token-efficiency-c-metric / LOOP_USAGE_FORMAT): new numbered
+# assertions AFTER the current last one. Do not renumber 42 (expected_f42
+# silent-none golden) or 57 (CLI-invocation grep) — both stay byte-identical.
+# ===========================================================================
+
+# Shared envelope stub: records argv (one arg per line) and prints a claude
+# result envelope whose `result` carries a valid ITERATION: line.
+usage_write_claude_stub() { # usage_write_claude_stub <stub_path> <argv_file>
+  local stub="$1" argv_file="$2"
+  cat > "$stub" <<STUBEOF
+#!/usr/bin/env bash
+printf '%s\n' "\$@" > "$argv_file"
+printf '%s\n' '{"type":"result","result":"ITERATION: STORY-101 passed","total_cost_usd":0.01,"usage":{"input_tokens":10,"output_tokens":5,"cache_read_input_tokens":3,"cache_creation_input_tokens":2}}'
+exit 0
+STUBEOF
+  chmod +x "$stub"
+}
+
+usage_write_codex_stub() { # usage_write_codex_stub <stub_path>
+  local stub="$1"
+  cat > "$stub" <<'STUBEOF'
+#!/usr/bin/env bash
+printf '%s\n' '{"type":"turn.completed","usage":{"input_tokens":4,"output_tokens":2,"cached_input_tokens":1}}'
+printf '%s\n' '{"type":"turn.completed","usage":{"input_tokens":6,"output_tokens":3,"cached_input_tokens":2}}'
+printf '%s\n' '{"type":"item.completed","item":{"type":"agent_message","text":"ITERATION: STORY-101 passed"}}'
+exit 0
+STUBEOF
+  chmod +x "$stub"
+}
+
+usage_write_text_stub() { # usage_write_text_stub <stub_path>
+  local stub="$1"
+  cat > "$stub" <<'STUBEOF'
+#!/usr/bin/env bash
+echo "ITERATION: STORY-101 passed"
+exit 0
+STUBEOF
+  chmod +x "$stub"
+}
+
+usage_story_passed() { # usage_story_passed <sandbox> → 0 iff STORY-101 passes: true
+  grep -A5 '## STORY-101' "$1/_goals/backlog.md" 2>/dev/null | grep -qF 'passes: true'
+}
+
+# ---------------------------------------------------------------------------
+# 119 (a): LOOP_USAGE_FORMAT=claude — stub prints a type=result envelope.
+# If jq is absent, assert the unavailable banner and SKIP field checks.
+# ---------------------------------------------------------------------------
+USAGE_A_DIR="$TMP/usage-claude-sandbox"
+make_sandbox "$USAGE_A_DIR" ".claude" 1 1
+usage_a_argv="$TMP/usage-a-argv.txt"
+usage_a_log="$TMP/usage-a.log"
+rm -f "$usage_a_argv" "$usage_a_log"
+usage_write_claude_stub "$USAGE_A_DIR/_loop/stub-claude.sh" "$usage_a_argv"
+usage_a_out="$TMP/usage-a-stdout.txt"
+usage_a_err="$TMP/usage-a-stderr.txt"
+( cd "$USAGE_A_DIR" && env -u LOOP_SLOTS -u LOOP_WORKTREE \
+    LOOP_USAGE_FORMAT=claude LOOP_USAGE_LOG="$usage_a_log" \
+    LOOP_CLI="$USAGE_A_DIR/_loop/stub-claude.sh" bash ./_loop/loop.sh 2 ) \
+  >"$usage_a_out" 2>"$usage_a_err"
+usage_a_rc=$?
+
+if ! command -v jq >/dev/null 2>&1; then
+  if grep -qF 'usage: unavailable (jq not on PATH)' "$usage_a_out"; then
+    report PASS "119: (a) claude usage — jq absent, unavailable (jq not on PATH) banner present"
+  else
+    report FAIL "119: (a) claude usage (jq absent)" "missing jq-unavailable banner rc=$usage_a_rc"
+  fi
+  report SKIP "119: (a) claude usage field checks" "jq not on PATH"
+else
+  usage_a_line_ok=0
+  grep -qF 'usage: input=10 output=5 cache_read=3 cache_write=2 cost_usd=0.01 format=claude' "$usage_a_out" \
+    && usage_a_line_ok=1
+  usage_a_banner_ok=0
+  grep -qF 'usage format: claude' "$usage_a_out" && usage_a_banner_ok=1
+  usage_a_story_ok=0
+  usage_story_passed "$USAGE_A_DIR" && usage_a_story_ok=1
+  if [[ "$usage_a_rc" -eq 0 && "$usage_a_line_ok" -eq 1 && "$usage_a_banner_ok" -eq 1 \
+        && "$usage_a_story_ok" -eq 1 ]]; then
+    report PASS "119: (a) claude usage — usage: input=10 … format=claude and STORY-101 passed"
+  else
+    report FAIL "119: (a) claude usage" \
+      "rc=$usage_a_rc line_ok=$usage_a_line_ok banner_ok=$usage_a_banner_ok story_ok=$usage_a_story_ok"
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# 120 (b): LOOP_USAGE_FORMAT=codex — JSONL with two turn.completed + agent_message.
+# ---------------------------------------------------------------------------
+USAGE_B_DIR="$TMP/usage-codex-sandbox"
+make_sandbox "$USAGE_B_DIR" ".claude" 1 1
+usage_write_codex_stub "$USAGE_B_DIR/_loop/stub-codex.sh"
+usage_b_out="$TMP/usage-b-stdout.txt"
+if ! command -v jq >/dev/null 2>&1; then
+  report SKIP "120: (b) codex usage field checks" "jq not on PATH"
+else
+  ( cd "$USAGE_B_DIR" && env -u LOOP_SLOTS -u LOOP_WORKTREE \
+      LOOP_USAGE_FORMAT=codex LOOP_CLI="$USAGE_B_DIR/_loop/stub-codex.sh" \
+      bash ./_loop/loop.sh 2 ) >"$usage_b_out" 2>"$TMP/usage-b-stderr.txt"
+  usage_b_rc=$?
+  usage_b_line_ok=0
+  grep -qF 'usage: input=10 output=5 cache_read=3 cache_write=n/a cost_usd=n/a format=codex' "$usage_b_out" \
+    && usage_b_line_ok=1
+  usage_b_story_ok=0
+  usage_story_passed "$USAGE_B_DIR" && usage_b_story_ok=1
+  if [[ "$usage_b_rc" -eq 0 && "$usage_b_line_ok" -eq 1 && "$usage_b_story_ok" -eq 1 ]]; then
+    report PASS "120: (b) codex usage — summed input=10 output=5 cache_read=3 cache_write=n/a format=codex and STORY-101 passed"
+  else
+    report FAIL "120: (b) codex usage" \
+      "rc=$usage_b_rc line_ok=$usage_b_line_ok story_ok=$usage_b_story_ok"
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# 121 (c): explicit LOOP_USAGE_FORMAT=none prints unavailable (format none);
+#         same stub with the knob unset → grep -c usage == 0 (silent-none).
+# ---------------------------------------------------------------------------
+USAGE_C_DIR="$TMP/usage-none-sandbox"
+make_sandbox "$USAGE_C_DIR" ".claude" 1 1
+usage_write_text_stub "$USAGE_C_DIR/_loop/stub-text.sh"
+usage_c_out="$TMP/usage-c-stdout.txt"
+( cd "$USAGE_C_DIR" && env -u LOOP_SLOTS -u LOOP_WORKTREE -u LOOP_USAGE_LOG \
+    LOOP_USAGE_FORMAT=none LOOP_CLI="$USAGE_C_DIR/_loop/stub-text.sh" \
+    bash ./_loop/loop.sh 2 ) >"$usage_c_out" 2>"$TMP/usage-c-stderr.txt"
+usage_c_rc=$?
+usage_c_unavail=0
+grep -qF 'usage: unavailable (format none)' "$usage_c_out" && usage_c_unavail=1
+usage_c_banner=0
+grep -qF 'usage format: none' "$usage_c_out" && usage_c_banner=1
+usage_c_story_ok=0
+usage_story_passed "$USAGE_C_DIR" && usage_c_story_ok=1
+
+USAGE_C2_DIR="$TMP/usage-silent-sandbox"
+make_sandbox "$USAGE_C2_DIR" ".claude" 1 1
+usage_write_text_stub "$USAGE_C2_DIR/_loop/stub-text.sh"
+usage_c2_out="$TMP/usage-c2-stdout.txt"
+( cd "$USAGE_C2_DIR" && env -u LOOP_SLOTS -u LOOP_WORKTREE -u LOOP_USAGE_FORMAT -u LOOP_USAGE_LOG \
+    LOOP_CLI="$USAGE_C2_DIR/_loop/stub-text.sh" bash ./_loop/loop.sh 2 ) \
+  >"$usage_c2_out" 2>"$TMP/usage-c2-stderr.txt"
+usage_c2_count="$(grep -c usage "$usage_c2_out" || true)"
+
+if [[ "$usage_c_rc" -eq 0 && "$usage_c_unavail" -eq 1 && "$usage_c_banner" -eq 1 \
+      && "$usage_c_story_ok" -eq 1 && "$usage_c2_count" == "0" ]]; then
+  report PASS "121: (c) explicit none → usage: unavailable (format none); unset knob → grep -c usage = 0"
+else
+  report FAIL "121: (c) explicit none / silent-none" \
+    "rc=$usage_c_rc unavail=$usage_c_unavail banner=$usage_c_banner story_ok=$usage_c_story_ok silent_count=$usage_c2_count"
+fi
+
+# ---------------------------------------------------------------------------
+# 122 (d): LOOP_USAGE_LOG from (a) has one line with slot= and story=.
+# ---------------------------------------------------------------------------
+if ! command -v jq >/dev/null 2>&1; then
+  report SKIP "122: (d) LOOP_USAGE_LOG" "jq not on PATH (a skipped field checks)"
+elif [[ -f "$usage_a_log" ]] \
+     && [[ "$(wc -l < "$usage_a_log" | tr -d ' ')" == "1" ]] \
+     && grep -qF 'slot=' "$usage_a_log" && grep -qF 'story=' "$usage_a_log"; then
+  report PASS "122: (d) LOOP_USAGE_LOG — one line with slot= and story="
+else
+  report FAIL "122: (d) LOOP_USAGE_LOG" "file=$( [[ -f "$usage_a_log" ]] && echo present || echo missing ) contents=$(head -2 "$usage_a_log" 2>/dev/null | tr '\n' '|')"
+fi
+
+# ---------------------------------------------------------------------------
+# 123 (e): argv proof for (a) — --output-format json precedes the prompt.
+# ---------------------------------------------------------------------------
+if ! command -v jq >/dev/null 2>&1; then
+  report SKIP "123: (e) argv --output-format json precedes prompt" "jq not on PATH"
+else
+  usage_e_ok=0
+  if [[ -f "$usage_a_argv" ]]; then
+    fmt_ln="$(grep -nxF -- '--output-format' "$usage_a_argv" | head -1 | cut -d: -f1)"
+    last_ln="$(wc -l < "$usage_a_argv" | tr -d ' ')"
+    if [[ -n "$fmt_ln" && -n "$last_ln" ]] \
+       && [[ "$(sed -n "$((fmt_ln + 1))p" "$usage_a_argv")" == "json" ]] \
+       && (( fmt_ln < last_ln )); then
+      usage_e_ok=1
+    fi
+  fi
+  if [[ "$usage_e_ok" -eq 1 ]]; then
+    report PASS "123: (e) argv proof — --output-format json precedes the prompt"
+  else
+    report FAIL "123: (e) argv proof" "argv=$(tr '\n' ' ' < "$usage_a_argv" 2>/dev/null)"
+  fi
+fi
+
+# ---------------------------------------------------------------------------
+# 124 (f): basename auto — symlink <tmp>/bin/claude → stub, LOOP_CLI with -p,
+#          LOOP_USAGE_FORMAT unset → banner usage format: claude.
+# ---------------------------------------------------------------------------
+USAGE_F_DIR="$TMP/usage-basename-sandbox"
+make_sandbox "$USAGE_F_DIR" ".claude" 1 1
+usage_f_bin="$TMP/usage-f-bin"
+mkdir -p "$usage_f_bin"
+usage_f_argv="$TMP/usage-f-argv.txt"
+rm -f "$usage_f_argv"
+usage_write_claude_stub "$USAGE_F_DIR/_loop/stub-claude.sh" "$usage_f_argv"
+if ln -s "$USAGE_F_DIR/_loop/stub-claude.sh" "$usage_f_bin/claude" 2>/dev/null; then
+  usage_f_out="$TMP/usage-f-stdout.txt"
+  ( cd "$USAGE_F_DIR" && env -u LOOP_SLOTS -u LOOP_WORKTREE -u LOOP_USAGE_FORMAT -u LOOP_USAGE_LOG \
+      LOOP_CLI="$usage_f_bin/claude -p" bash ./_loop/loop.sh 2 ) \
+    >"$usage_f_out" 2>"$TMP/usage-f-stderr.txt"
+  if grep -qF 'usage format: claude' "$usage_f_out"; then
+    report PASS "124: (f) basename auto — LOOP_CLI=<tmp>/bin/claude -p, unset format → usage format: claude"
+  else
+    report FAIL "124: (f) basename auto" "stdout missing 'usage format: claude'"
+  fi
+else
+  report SKIP "124: (f) basename auto (symlink unsupported)"
 fi
 
 echo

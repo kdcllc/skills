@@ -6,17 +6,20 @@
 # Twin: self-install.ps1 (PowerShell 7+) — behaviorally identical —
 # same defaults, guards, and exit codes; any divergence is a bug.
 #
-# Does not run /setup or emit any /setup artifacts (_loop/, manifest, agents).
-# Dest paths are the definition; this script does not invoke npx or any
-# network tool.
+# After copying skills, runs skills/setup/bin/emit.sh from
+# skills/setup/fixtures/self-answers.json unless --no-emit. Dest paths are the
+# definition; this script does not invoke npx or any network tool.
 #
-# Usage:  scripts/self-install.sh [--dry-run] [--symlink] [--force]
+# Usage:  scripts/self-install.sh [--dry-run] [--symlink] [--force] [--no-emit] [--force-emit]
 #   --dry-run  Print planned dest paths to stdout; write nothing; exit 0.
-#              Combined with --symlink, prints the symlink plan.
+#              Combined with --symlink, prints the symlink plan. When emit runs,
+#              passes --dry-run to emit.sh (action lines only; no writes).
 #   --symlink  Canonical real tree at .agents/skills/<name>/;
 #              .claude/skills/<name> and .cursor/skills/<name> become symlinks.
 #              Fails loudly on symlink failure; never falls back to copy.
 #   --force    Accepted and ignored (overwrite is already the default).
+#   --no-emit  Copy skills only; skip emit (legacy behaviour).
+#   --force-emit  Pass --force to emit.sh (overwrite user-modified instance files).
 #
 # Exit codes: 0 = success (including dry-run); non-zero = any error.
 set -euo pipefail
@@ -27,21 +30,27 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 # _usage is printed only on the unknown-flag path; never on missing-skills or
 # install-failure paths. Binding decision — ps1 twin must match.
 _usage() {
-  echo "Usage: $(basename "$0") [--dry-run] [--symlink] [--force]" >&2
+  echo "Usage: $(basename "$0") [--dry-run] [--symlink] [--force] [--no-emit] [--force-emit]" >&2
   echo "  --dry-run  Print planned dest paths; write nothing; exit 0." >&2
   echo "  --symlink  Symlink mode: canonical tree at .agents/skills/<name>/;" >&2
   echo "             .claude/skills/<name> and .cursor/skills/<name> become symlinks." >&2
   echo "  --force    Accepted and ignored (overwrite is already the default)." >&2
+  echo "  --no-emit  Copy skills only; skip emit." >&2
+  echo "  --force-emit  Pass --force to emit.sh." >&2
 }
 
 DRY_RUN=0
 SYMLINK=0
+NO_EMIT=0
+FORCE_EMIT=0
 
 for _arg in "$@"; do
   case "$_arg" in
     --dry-run) DRY_RUN=1 ;;
     --symlink) SYMLINK=1 ;;
     --force)   ;;
+    --no-emit) NO_EMIT=1 ;;
+    --force-emit) FORCE_EMIT=1 ;;
     *)
       echo "error: unknown argument: $_arg" >&2
       _usage
@@ -72,7 +81,24 @@ if (( ${#SKILL_NAMES[@]} == 0 )); then
   exit 1
 fi
 
-# Dry-run: print the plan and exit without writing anything.
+_run_emit() {
+  local _emit_args=(--root "$REPO_ROOT" --kit "$REPO_ROOT/skills/setup"
+    --answers "$REPO_ROOT/skills/setup/fixtures/self-answers.json" --upgrade)
+  if (( FORCE_EMIT == 1 )); then
+    _emit_args+=(--force)
+  fi
+  if (( DRY_RUN == 1 )); then
+    _emit_args+=(--dry-run)
+  fi
+  bash "$REPO_ROOT/skills/setup/bin/emit.sh" "${_emit_args[@]}"
+  local _rc=$?
+  if (( _rc == 4 )); then
+    echo "re-run with --force-emit to overwrite user-modified instance files" >&2
+  fi
+  return "$_rc"
+}
+
+# Dry-run: print the plan; optionally print emit dry-run lines; write nothing.
 if (( DRY_RUN == 1 )); then
   for _name in "${SKILL_NAMES[@]}"; do
     if (( SYMLINK == 1 )); then
@@ -84,6 +110,9 @@ if (( DRY_RUN == 1 )); then
       echo "[dry-run] copy: $REPO_ROOT/.cursor/skills/$_name/"
     fi
   done
+  if (( NO_EMIT == 0 )); then
+    _run_emit || exit $?
+  fi
   exit 0
 fi
 
@@ -246,3 +275,7 @@ for _name in "${SKILL_NAMES[@]}"; do
 done
 
 echo "done: ${#SKILL_NAMES[@]} skill(s) installed"
+
+if (( NO_EMIT == 0 )); then
+  _run_emit || exit $?
+fi

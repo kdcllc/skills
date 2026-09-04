@@ -131,9 +131,20 @@ dimension, or command output verification.
 Example — **ambiguous**: AC 7 says "match existing patterns" without naming which module
 or convention file is the reference — two evaluators could disagree on PASS.
 
+## Severity: minor
+
+`minor` is wording, formatting, comment text, log phrasing, or non-normative prose that
+(a) no requirement or acceptance criterion names and (b) changes no behavior, exit code,
+or output. Anything named by a requirement or AC, anything that alters behavior, and
+anything on the auto-fail list is never `minor`.
+
 ## Verdicts
 
 - **PASS**: every requirement and acceptance criterion verified, ladder rungs 1–2 green,
   no auto-fails.
+- **PASS (with notes)**: every requirement and acceptance criterion verified, rungs
+  1–2 green, no auto-fails; the only issues found are `minor` and are listed under
+  `### Notes (non-blocking)`. Counts as PASS for phase advancement.
 - **NEEDS FIXES**: exhaustive required-fixes list (task loops back at most 3 times).
+  Requires at least one `major` or `blocker`.
 - **REJECT**: approach wrong or auto-fail fired; escalation needed.

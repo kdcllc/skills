@@ -1,6 +1,6 @@
 # {{PROJECT_NAME}} Orchestration Architecture
 
-<!-- BOOTSTRAP: This is a template. Every `{{TOKEN}}` must be replaced and every
+<!-- BOOTSTRAP[kit-meta]: This is a template. Every `{{TOKEN}}` must be replaced and every
      `BOOTSTRAP:` comment resolved (fill the section, then delete the comment)
      when this file is instantiated into a project. See the setup
      skill for the placeholder reference. -->
@@ -9,17 +9,16 @@ A guide to how the feature and research orchestration system works for **{{PROJE
 including subagent delegation, evaluation cycles, and retry mechanisms.
 
 > **Stack note:** {{STACK_SUMMARY}}
-> <!-- BOOTSTRAP: 2–5 sentences — language/runtime, package manager, major code lanes
+> <!-- BOOTSTRAP[stack-note]: 2–5 sentences — language/runtime, package manager, major code lanes
 >      (backend/frontend/CLI/etc.), and where the canonical domain reference lives
 >      (domain skill and/or docs file). -->
 
-<!-- BOOTSTRAP: GREENFIELD ONLY — resolve from this install's in-session greenfield
+<!-- IF greenfield -->
+### Engineering practices
+
+<!-- BOOTSTRAP[greenfield-practices]: GREENFIELD ONLY — resolve from this install's in-session greenfield
      decision, i.e. the Step 2a accept-and-confirm path. That decision is persisted as
-     the manifest's `options.greenfield`, but this resolution step (Step 4) runs
-     *before* Step 6 writes the manifest, so key off the decision recorded in this
-     session and never off a not-yet-written or stale manifest file. When that
-     decision is true, add an **Engineering practices** subsection here, at a heading
-     level that fits this top-matter site: 4–8 sentences, stack-agnostic, stating that
+     the manifest's `options.greenfield`. 4–8 sentences, stack-agnostic, stating that
      new behavior is developed test-first — a failing test is written before the
      production code that satisfies it — and that
      modules follow SOLID: one reason to change per unit, dependencies declared
@@ -27,9 +26,16 @@ including subagent delegation, evaluation cycles, and retry mechanisms.
      accumulate unrelated responsibilities. Name no language, runtime, or package
      manager; the stack note above already carries that. These are authoring
      conventions for a fresh codebase, not evaluator auto-fail triggers — do not add them
-     to the auto-fail table or to any evaluator criteria. When `options.greenfield` is
-     false or absent — an existing-project install, a declined scaffold, or a Step 2a
-     that was skipped as not sparse — delete this comment and add no subsection. -->
+     to the auto-fail table or to any evaluator criteria.
+
+New behavior is developed test-first — a failing test is written before the
+production code that satisfies it — and modules follow SOLID: one reason to
+change per unit, dependencies declared against ports/abstractions rather than
+concretions, and no god-files that accumulate unrelated responsibilities. These
+are authoring conventions for a fresh codebase, not evaluator auto-fail
+triggers.
+-->
+<!-- ENDIF greenfield -->
 
 ---
 
@@ -38,11 +44,15 @@ including subagent delegation, evaluation cycles, and retry mechanisms.
 1. [Core Concepts](#core-concepts)
 2. [Component Overview](#component-overview)
 3. [Feature Flow](#feature-flow)
+<!-- IF research -->
 4. [Research Flow](#research-flow)
+<!-- ENDIF research -->
 5. [QA Evaluation (Optional Behavioral Gate)](#qa-evaluation-optional-behavioral-gate)
 6. [Subagent Communication Protocol](#subagent-communication-protocol)
 7. [Evaluation & Retry Mechanisms](#evaluation--retry-mechanisms)
+<!-- IF loop -->
 8. [Autonomous Loop (Optional)](#autonomous-loop-optional)
+<!-- ENDIF loop -->
 9. [Quick Reference](#quick-reference)
 
 ---
@@ -90,6 +100,10 @@ Each subagent invocation:
 
 This eliminates fatigue and bias completely.
 
+Exception for re-checks: the evaluator is resumed with a delta prompt listing only
+the applied fixes; the implementer may be resumed for fix cycle 1 only (cycles 2–3
+are fresh spawns). Fresh context remains the rule for first spawns.
+
 ### Subagent Invocation: Retry on Transient Failures
 
 Subagent invocations can fail due to transient issues (network timeouts, rate limits, temporary service unavailability). When this happens:
@@ -115,21 +129,47 @@ ON subagent invocation failure:
 | Skill | Type | Purpose |
 |-------|------|---------|
 | `feature` | Coordinator | Plans and executes feature implementation across {{PROJECT_NAME}} layers |
+<!-- IF research -->
 | `research` | Coordinator | Research → Plan workflow for domain topics |
+<!-- ENDIF research -->
 | `goal-criteria` | Reference | Criteria for goal evaluation |
 | `task-criteria` | Reference | Criteria for task evaluation |
 | `qa-criteria` | Reference | Criteria for user-facing QA evaluation |
 | `test-ladder` | Supporting | New tests → impacted tests mid-cycle; full suites (rung 3) only at cycle end |
 | `align-docs` | Coordinator | Phase 6: evaluator-gated sync of all docs to shipped code (docs-only) |
 | `ship-pr` | Delivery | Phase 7: draft + create the PR/MR on the project's forge, or hand over (approval-gated) |
-<!-- BOOTSTRAP: append one row per project domain skill (the canonical knowledge base
+<!-- BOOTSTRAP[domain-skill-rows]: append one row per project domain skill (the canonical knowledge base
      for the problem domain) and per supporting skill (TDD workflow, test ladder,
      smoke testing, frontend rules, visual QA, ...). Only list skills that exist. -->
 
+<!-- IF research -->
+<!-- IF loop -->
 > `goal-criteria`, `task-criteria`, `qa-criteria`, `test-ladder`, `align-docs`,
 > `ship-pr`, and `auto-loop` set `disable-model-invocation: true` — they load via
 > `/name` or a cited path, not session-start auto-discovery. `feature` and
 > `research` remain auto-invocable.
+<!-- ENDIF loop -->
+<!-- IF !loop -->
+> `goal-criteria`, `task-criteria`, `qa-criteria`, `test-ladder`, `align-docs`,
+> and `ship-pr` set `disable-model-invocation: true` — they load via
+> `/name` or a cited path, not session-start auto-discovery. `feature` and
+> `research` remain auto-invocable.
+<!-- ENDIF !loop -->
+<!-- ENDIF research -->
+<!-- IF !research -->
+<!-- IF loop -->
+> `goal-criteria`, `task-criteria`, `qa-criteria`, `test-ladder`, `align-docs`,
+> `ship-pr`, and `auto-loop` set `disable-model-invocation: true` — they load via
+> `/name` or a cited path, not session-start auto-discovery. `feature`
+> remains auto-invocable.
+<!-- ENDIF loop -->
+<!-- IF !loop -->
+> `goal-criteria`, `task-criteria`, `qa-criteria`, `test-ladder`, `align-docs`,
+> and `ship-pr` set `disable-model-invocation: true` — they load via
+> `/name` or a cited path, not session-start auto-discovery. `feature`
+> remains auto-invocable.
+<!-- ENDIF !loop -->
+<!-- ENDIF !research -->
 
 > Domain skills are the project's knowledge base — the orchestration skills above
 > reference them but do not replace them. Supporting skills are routed into subagent
@@ -138,6 +178,7 @@ ON subagent invocation failure:
 
 ### Subagents (`{{IDE_DIR}}/agents/`)
 
+<!-- IF models_pinned -->
 | Subagent | Behavioral Style | Use Case | Model Tier |
 |----------|------------------|----------|------------|
 | `evaluator` | Skeptical, problem-finding | Goal / task / code verification | frontier, effort high |
@@ -146,6 +187,17 @@ ON subagent invocation failure:
 | `test-writer` | Coverage-obsessed | Test creation, all external services mocked | light, effort medium |
 | `terminal` | Compact command runner | Any Bash or PowerShell command — returns only the result the caller asked for | light, effort medium |
 | `diagnostician` | Analytical, diagnosis-only | Root-cause analysis after fix-cycle exhaustion — no code writes | frontier |
+<!-- ENDIF models_pinned -->
+<!-- IF !models_pinned -->
+| Subagent | Behavioral Style | Use Case |
+|----------|------------------|----------|
+| `evaluator` | Skeptical, problem-finding | Goal / task / code verification |
+| `qa-evaluator` | Skeptical, user-perspective | Behavioral QA of user-facing surfaces |
+| `implementer` | Focused, checklist-driven | Implementation + fixes |
+| `test-writer` | Coverage-obsessed | Test creation, all external services mocked |
+| `terminal` | Compact command runner | Any Bash or PowerShell command — returns only the result the caller asked for |
+| `diagnostician` | Analytical, diagnosis-only | Root-cause analysis after fix-cycle exhaustion — no code writes |
+<!-- ENDIF !models_pinned -->
 
 The roster is six subagents — `evaluator`, `qa-evaluator`, `implementer`, `test-writer`,
 `terminal`, and `diagnostician` — each with a dedicated agent file under `{{IDE_DIR}}/agents/`.
@@ -155,6 +207,7 @@ PowerShell command plus the result shape it needs; `terminal` executes it and re
 only that result, so the raw stream never lands in the caller. Rung 3 is always a
 `terminal` spawn.
 
+<!-- IF models_pinned -->
 **Model tiers:** The orchestrator (main session) and both evaluators run the **frontier**
 tier — delegation and evaluating have a capability floor. The light-tier agents — the
 two workers **plus** `terminal` — run the **light** tier — checklist-driven execution
@@ -171,8 +224,9 @@ Copilot a subagent cannot run a stronger model than the session (so the session 
 must run the frontier tier); Cursor silently falls back to a compatible model under
 admin/plan restrictions, and does the same — without erroring — when the resolved ID is
 unknown or stale (evaluators should report which model produced the verdict).
-<!-- BOOTSTRAP: if the project does not pin models, delete the Model Tier column
-     and this paragraph. -->
+Every spawn passes its model explicitly; agents self-report the model in their first
+report line.
+<!-- ENDIF models_pinned -->
 
 ---
 
@@ -271,14 +325,18 @@ in dependency order:
   package includes the task file (including its Acceptance Criteria)
 - Step 2: Receive completion report
 - Step 3: Launch evaluator
-- Step 4: Handle verdict — PASS → next task; NEEDS FIXES → fix cycle (model
-  rotation) and re-evaluate, 3 max, then the continuation ladder (rungs 5→4→6 — see
-  Evaluation & Retry Mechanisms) before escalation; REJECT → escalate to the user.
+- Step 4: Handle verdict — PASS or PASS (with notes) → next task (`PASS (with notes)`
+  counts as PASS; copy notes into the orchestration log); NEEDS FIXES → fix cycle (model
+  rotation) and re-evaluate, 3 max, then read `goal.md`'s `phases.ladder`: `auto` → the
+  continuation ladder (rungs 5→4→6 — see Evaluation & Retry Mechanisms) before
+  escalation; `escalate` (default) → escalate to the user with the ladder offered as
+  option 1; REJECT → escalate to the user.
   A verdict tagged with a bypass failure class (destructive/security/infra)
   escalates at detection, on any cycle.
 
-INVARIANT: A task is only marked complete after the evaluator returns PASS. There is
-no path where fixes are made and the orchestrator proceeds without re-verification.
+INVARIANT: A task is only marked complete after the evaluator returns PASS or
+PASS (with notes) (`PASS (with notes)` counts as PASS). There is no path where
+fixes are made and the orchestrator proceeds without re-verification.
 
 **Phase 5 — Final audit (mandatory re-audit loop).** All tasks complete → final
 evaluator audit. APPROVED → Quality Checks (ladder rung 3: full suites, via a
@@ -286,7 +344,8 @@ evaluator audit. APPROVED → Quality Checks (ladder rung 3: full suites, via a
 INVARIANT: The ONLY exit to Quality Checks is an APPROVED verdict from the audit
 subagent. Remediations MUST be re-audited.
 
-**Phase 6 — Align docs (evaluator-gated doc sync, optional).** After Phase 5 Quality
+**Phase 6 — Align docs (evaluator-gated doc sync, optional).** Default is
+`align_docs: false`; enabled by the Phase 1 answer. After Phase 5 Quality
 Checks, the orchestrator reads `goal.md`'s `phases:` block — when `align_docs: false`,
 skip Phase 6 with an orchestration-log entry ("Phase 6 skipped per goal.md"). When
 enabled, Quality Checks green → the align-docs skill: discover the shipped surface →
@@ -368,7 +427,7 @@ SEQUENTIAL: {{EXECUTION_LAYERS}}
                 ▼
             Align Docs (Phase 6) ──► Pull Request (Phase 7)
 ```
-<!-- BOOTSTRAP: {{EXECUTION_LAYERS}} is the project's dependency-ordered layer chain,
+<!-- BOOTSTRAP[execution-layers]: {{EXECUTION_LAYERS}} is the project's dependency-ordered layer chain,
      e.g. "Shared Core (if new lane) → Capability Module → CLI → Packaging". -->
 
 Per-task and TDD verification follows the `test-ladder` skill: rung 1 (new
@@ -382,14 +441,15 @@ infrastructure and add one module plus its interface and tests.
 
 ### Evaluation intensity (`eval_depth`)
 
-Every task file's ownership-contract block carries `eval_depth: full` (default) or
-`light`. It is orchestrator-set at planning time only — a worker never sets it — and
+Every task file's ownership-contract block carries `eval_depth: light` (default) or
+`full`. It is orchestrator-set at planning time only — a worker never sets it — and
 `light` is never a skip: it shortens the evaluator's rubric to a requirements walk +
 targeted tests + write-fence check, while still ending in a real PASS / NEEDS FIXES /
-REJECT verdict. The orchestrator assigns `light` only by explicit decision, with a
-stated reason recorded in the task file or the goal's Discovery Summary;
-`goal-criteria` flags an unexplained `light` and fails a missing field closed to
-`full`.
+REJECT verdict. `full` is required (reason stated in the task file) for contract/
+scaffold tasks, tasks with interface consumers (mirroring, documenting, or testing
+the output does not count), and tasks writing agents, criteria skills, loop
+drivers/breakers, or shared infrastructure named in the goal; `goal-criteria` flags
+an unexplained `full` and fails a missing field closed to `full`.
 
 Maintainers periodically compare the verdicts recorded in each goal's
 `orchestration-log.md` against what actually happened afterward, then tune the
@@ -399,6 +459,7 @@ routing and the evaluation criteria stay calibrated over time.
 
 ---
 
+<!-- IF research -->
 ## Research Flow
 
 For domain topics an external research agent must investigate without codebase access.
@@ -418,17 +479,19 @@ Phase 4: Low-Level Tasks          → _goals/[goal-name]/ structure
 The output of Phase 4 (`_goals/[goal-name]/`) enters the `feature` skill at Phase 3 (goal evaluation) — it must PASS the evaluator before Phase 4 execution begins.
 
 ---
+<!-- ENDIF research -->
 
 ## QA Evaluation (Optional Behavioral Gate)
 
 User-facing QA is a lightweight, optional gate run with the `qa-evaluator` subagent after a feature
 is implemented. It covers **all user-facing surfaces**:
 
-<!-- BOOTSTRAP: list this project's user-facing surfaces and the evidence each produces,
+<!-- BOOTSTRAP[qa-surfaces]: list this project's user-facing surfaces and the evidence each produces,
      e.g. CLIs (invocation, stdout/stderr, exit codes), API endpoints (status codes per
      route via a smoke-testing skill), web UI (screenshots/console/network via a visual
-     QA skill), library entry points. -->
+     QA skill), library entry points.
 - {{QA_SURFACES}}
+-->
 
 ```mermaid
 flowchart TD
@@ -477,6 +540,7 @@ Every subagent invocation requires a complete context package:
 ├─────────────────────────────────────────────────────────────────┤
 │  SECTION 4: CONSTRAINTS                                         │
 │  "## Write fence" (the task's writes list)                      │
+│  "## Model" (requested ID · tier · rotation)                    │
 │  "## Rules" or "## Critical Requirements"                       │
 │  - Must do X (e.g. reuse shared core modules)                   │
 │  - Must NOT do Y (e.g. re-implement auth, hit live services)    │
@@ -489,21 +553,38 @@ Every subagent invocation requires a complete context package:
 
 ### Orchestration log (spawn ledger)
 
-Maintain `_goals/[goal-name]/orchestration-log.md` as an append-only spawn ledger.
-The log header carries a running `est_tokens` total (sum of per-spawn estimates).
+`_goals/[goal-name]/orchestration-log.md` is an append-only spawn ledger written ONLY
+through the emitted tool `_kit/log-spawn.sh` (`pwsh _kit/log-spawn.ps1` on Windows —
+same flags, byte-identical output). The orchestrator runs it inline (one-line output;
+exempt from the `terminal` spawn rule). The header's running io_est_tokens /
+work_est_tokens totals are "see latest entry" — the script never rewrites a line.
+Every entry references artifact files rather than inlining them:
 
-For each subagent spawn:
+- `_goals/<goal>/spawns/NN-context.md` — the full context package as sent (NN = next
+  free two-digit number, chosen by the orchestrator). This is the verbatim record.
+- `_goals/<goal>/spawns/NN-report.md` — the subagent's report, verbatim, never polished.
+  Agents end with a `### Footprint` block (`files_read: N (~C chars)` / `commands_run: N`).
 
-- **Before launch:** timestamp, agent, model (rotation/fallback), routing reason, task
-  `writes` fence, expected outputs, and `context_chars` (character length of the
-  context package prompt).
-- **After return:** outcome line with `report_chars` (character length of the completion
-  report) and `est_tokens` = (`context_chars` + `report_chars`) / 4, labeled estimate
-  — proxy fields only; no harness in this kit exposes true token counts.
+Three subcommands (`--help` lists every flag):
 
-Ladder transitions, guard trips, and phase skips (e.g. Phase 6/7 declined via
-`goal.md`'s `phases:` block) are logged as separate entries. Append-only — rejections
-and respawns are new entries, never in-place edits.
+- **Before launch** — `spawn --goal G --agent A --phase "P" --model-requested M --context _goals/G/spawns/NN-context.md [--writes …] [--why …] [--expect …]`
+  appends `### <ts> — SPAWN A (P) [#NN]` plus bullet lines for agent · model requested,
+  why, writes claim, expected output, and `context: <path> · context_chars: <N>` (N =
+  measured file bytes).
+- **After return** — `outcome --goal G --spawn NN --report _goals/G/spawns/NN-report.md --verdict "V" --model-reported "M" [--note …] [--work-chars C]`
+  appends `- OUTCOME [#NN]: V · model reported: M · report: <path> · report_chars: <R> · io_est_tokens: <T> · work_read_chars: <C|n/a> · work_est_tokens: <W|n/a> · running io: <X> · running work: <Y>`
+  where `io_est_tokens` T = (`context_chars` + `report_chars`) / 4 — orchestrator I/O
+  proxy (chars/4), not the subagent's spend — and `work_est_tokens` W comes from the
+  Footprint `files_read` line (W = C/4; `n/a` if missing/malformed — flag to the
+  evaluator; `--work-chars C` overrides). `running io` / `running work` are the previous
+  totals plus T / W (`running io` falls back to pre-v0.26 `running total`; W=`n/a` adds 0).
+- **Everything else** — `note --goal G --text "…"` appends `### <ts> — …` for phase
+  completions, ladder transitions (with the rung name), guard trips, and skips (e.g.
+  Phase 6/7 declined via `goal.md`'s `phases:` block).
+
+Exit codes: 0 ok · 2 usage error · 3 ledger integrity (duplicate SPAWN/OUTCOME `[#NN]`,
+outcome without its SPAWN) · 4 missing goal directory or artifact file. Rejections and
+respawns are new entries with new NNs, never in-place edits.
 
 ---
 
@@ -511,8 +592,10 @@ and respawns are new entries, never in-place edits.
 
 ### Continuation ladder (Phase 4 task execution)
 
-When Task Execution (Phase 4) exhausts its 3 implement→evaluate fix cycles, the
-orchestrator runs this ladder before terminal human escalation. Apply in this order:
+When Task Execution (Phase 4) exhausts its 3 implement→evaluate fix cycles, read
+`goal.md`'s `phases.ladder`. `escalate` (default, or key absent): escalate to the user
+with the continuation ladder offered as option 1. `auto`: run this ladder before
+terminal human escalation. Apply in this order:
 
 1. **Bypass check (every verdict, every cycle).** A verdict tagged with a bypass failure
    class (`destructive`, `security`, `infra`) stops all retrying immediately — including
@@ -551,8 +634,8 @@ orchestrator runs this ladder before terminal human escalation. Apply in this or
 - A **repeated failure signature** stops the ladder immediately.
 - Every rung transition is an orchestration-log entry recording agent, model, rung, and
   trigger.
-- token/cost budgets are NOT a guard in this kit — no harness exposes token counts
-  to markdown policy.
+- Token/cost budgets are not a guard in interactive mode (no harness exposes true usage to the
+  orchestrator); the headless loop records real usage per iteration via `LOOP_USAGE_FORMAT` — gating on it is a future knob, not this ladder's.
 
 **Attempt accounting:** The diagnosis-driven implementation attempt costs 1 of the 3.
 Each rung-6 subtask implement→evaluate cycle costs 1 of the 3. Before splitting, the
@@ -575,7 +658,7 @@ backstop.
 | Phase | Max Cycles | On Exhaust |
 |-------|------------|------------|
 | Goal Evaluation (Phase 3) | 3 revise→re-evaluate | Escalate to user |
-| Task Execution (Phase 4) | 3 implement→evaluate per task | Continuation ladder (rungs 5→4→6), then escalate to user |
+| Task Execution (Phase 4) | 3 implement→evaluate per task | phases.ladder=auto: continuation ladder (rungs 5→4→6) then escalate; escalate (default): escalate to user, ladder offered |
 | Final Audit (Phase 5) | 3 fix→re-audit | Escalate to user |
 | Align Docs (Phase 6) | 3 per doc + 3 for plan and final doc audit | Escalate to user |
 | Pull Request (Phase 7) | n/a — gated on explicit user approval | User edits or declines the draft |
@@ -584,7 +667,7 @@ backstop.
 ### Mandatory Re-Evaluate Invariants
 
 - **Phase 3**: Goal evaluation loop ONLY exits to Phase 4 via a PASS verdict. Revisions without re-evaluate are forbidden.
-- **Phase 4**: A task is ONLY marked complete after the evaluator returns PASS. Fixes without re-evaluate are forbidden.
+- **Phase 4**: A task is ONLY marked complete after the evaluator returns PASS or PASS (with notes) (`PASS (with notes)` counts as PASS). Fixes without re-evaluate are forbidden.
   Fix cycles rotate models — cycle 2 uses a different model family, cycle 3 the frontier tier (see the model map) — and every spawn is recorded in the goal's append-only orchestration log.
 - **Phase 5**: Audit loop ONLY exits to Quality Checks via an APPROVED verdict. Remediations without re-audit are forbidden.
 - **Phase 6**: A doc is ONLY complete after the evaluator returns PASS; the doc set ONLY ships after the final doc audit returns APPROVED. `_research/`, `_goals/`, and code are never touched.
@@ -612,10 +695,8 @@ criterion **verbatim** in the **Issue** line.
 
 ---
 
+<!-- IF loop -->
 ## Autonomous Loop (Optional)
-
-<!-- BOOTSTRAP: include this section only if the project opted into the autonomous
-     loop; otherwise delete it and the loop rows in File Locations. -->
 
 The `auto-loop` skill runs the orchestration flow unattended, **one feature per
 iteration**, pulling work from a backlog instead of Phase 1 user alignment. Each
@@ -627,7 +708,11 @@ in-flight claims, increments `attempts` at claim time, and integrates via the
 single-writer integrator; dispatched slots never re-select stories, never increment
 `attempts`, and never print the completion sentinel — that sentinel belongs to
 **manual** runs only. Concurrency: `LOOP_SLOTS` > 1 is honored iff `LOOP_WORKTREE=1`
-(default 2, clamped [1,3]).
+(default 2, clamped [1,3]). Usage capture: `LOOP_USAGE_FORMAT` (`auto`|`claude`|`codex`|
+`cursor`|`none`; `auto` = basename of `LOOP_CLI`'s first word) and optional `LOOP_USAGE_LOG`. When a
+format is active the driver prints `usage: input=<n> output=<n> cache_read=<n|n/a>
+cache_write=<n|n/a> cost_usd=<x|n/a> format=<f>` after each slot's `tail -n 25` block
+(silent when unset and `auto` resolves to none).
 
 **Manual-mode view** (human-invoked or non-dispatched `auto-loop`):
 
@@ -682,11 +767,14 @@ drifting run early. Headless entry point: `_loop/loop.sh [max-iterations]` (bash
 `pwsh _loop/loop.ps1 [MaxIterations]` (PowerShell 7+).
 
 ---
+<!-- ENDIF loop -->
 
 ## Quick Reference
 
 ### File Locations
 
+<!-- IF research -->
+<!-- IF loop -->
 ```
 {{IDE_DIR}}/
 ├── agents/
@@ -718,30 +806,145 @@ drifting run early. Headless entry point: `_loop/loop.sh [max-iterations]` (bash
 └── ORCHESTRATION.md   # This file
 
 _goals/backlog.md               # Story backlog for the autonomous loop (if enabled)
-_goals/<goal>/orchestration-log.md  # Append-only spawn ledger per goal
+_goals/<goal>/orchestration-log.md  # Append-only spawn ledger per goal (written by _kit/log-spawn.*)
+_goals/<goal>/spawns/NN-context.md  # Context package sent to spawn #NN (verbatim)
+_goals/<goal>/spawns/NN-report.md   # Report returned by spawn #NN (verbatim)
 _goals/breaker-state.json       # Model circuit breaker state (runtime, gitignored)
+_kit/{log-spawn.sh,log-spawn.ps1}  # Single-copy tools: orchestration-log writer twins
 _loop/{loop.sh,loop.ps1,breaker.sh,breaker.ps1,PROMPT.md}  # Headless loop driver (if enabled)
 ```
-<!-- BOOTSTRAP: add the project's domain and supporting skills to this tree. -->
+<!-- ENDIF loop -->
+<!-- IF !loop -->
+```
+{{IDE_DIR}}/
+├── agents/
+│   ├── evaluator.md     # Skeptical code/goal/task reviewer
+│   ├── qa-evaluator.md              # Skeptical user-facing QA reviewer
+│   ├── implementer.md  # Focused implementer
+│   ├── test-writer.md           # Test creator (external services mocked)
+│   ├── terminal.md              # Bash/PowerShell runner — returns only the asked-for result
+│   └── diagnostician.md         # Diagnosis-only (post-cycle-3, no code writes)
+│
+├── skills/
+│   ├── feature/       # Feature coordination
+│   │   ├── SKILL.md
+│   │   ├── reference/continuation-ladder.md
+│   │   └── templates/{goal.md,task.md}
+│   │
+│   ├── research/ # Research → Plan
+│   │   ├── SKILL.md
+│   │   └── templates/{research-prompt.md,research-report.md}
+│   │
+│   ├── goal-criteria/SKILL.md         # Goal evaluation criteria
+│   ├── task-criteria/SKILL.md         # Task evaluation criteria
+│   ├── qa-criteria/SKILL.md           # User-facing QA evaluation criteria
+│   ├── test-ladder/SKILL.md    # Rungs 1–2 mid-cycle, rung 3 at cycle end
+│   ├── align-docs/SKILL.md            # Phase 6: evaluator-gated doc sync
+│   └── ship-pr/SKILL.md       # Phase 7: approval-gated PR creation
+│
+└── ORCHESTRATION.md   # This file
+
+_goals/<goal>/orchestration-log.md  # Append-only spawn ledger per goal (written by _kit/log-spawn.*)
+_goals/<goal>/spawns/NN-context.md  # Context package sent to spawn #NN (verbatim)
+_goals/<goal>/spawns/NN-report.md   # Report returned by spawn #NN (verbatim)
+_kit/{log-spawn.sh,log-spawn.ps1}  # Single-copy tools: orchestration-log writer twins
+```
+<!-- ENDIF !loop -->
+<!-- ENDIF research -->
+<!-- IF !research -->
+<!-- IF loop -->
+```
+{{IDE_DIR}}/
+├── agents/
+│   ├── evaluator.md     # Skeptical code/goal/task reviewer
+│   ├── qa-evaluator.md              # Skeptical user-facing QA reviewer
+│   ├── implementer.md  # Focused implementer
+│   ├── test-writer.md           # Test creator (external services mocked)
+│   ├── terminal.md              # Bash/PowerShell runner — returns only the asked-for result
+│   └── diagnostician.md         # Diagnosis-only (post-cycle-3, no code writes)
+│
+├── skills/
+│   ├── feature/       # Feature coordination
+│   │   ├── SKILL.md
+│   │   ├── reference/continuation-ladder.md
+│   │   └── templates/{goal.md,task.md}
+│   │
+│   ├── goal-criteria/SKILL.md         # Goal evaluation criteria
+│   ├── task-criteria/SKILL.md         # Task evaluation criteria
+│   ├── qa-criteria/SKILL.md           # User-facing QA evaluation criteria
+│   ├── test-ladder/SKILL.md    # Rungs 1–2 mid-cycle, rung 3 at cycle end
+│   ├── align-docs/SKILL.md            # Phase 6: evaluator-gated doc sync
+│   ├── ship-pr/SKILL.md       # Phase 7: approval-gated PR creation
+│   └── auto-loop/SKILL.md             # One autonomous iteration (if loop enabled)
+│
+└── ORCHESTRATION.md   # This file
+
+_goals/backlog.md               # Story backlog for the autonomous loop (if enabled)
+_goals/<goal>/orchestration-log.md  # Append-only spawn ledger per goal (written by _kit/log-spawn.*)
+_goals/<goal>/spawns/NN-context.md  # Context package sent to spawn #NN (verbatim)
+_goals/<goal>/spawns/NN-report.md   # Report returned by spawn #NN (verbatim)
+_goals/breaker-state.json       # Model circuit breaker state (runtime, gitignored)
+_kit/{log-spawn.sh,log-spawn.ps1}  # Single-copy tools: orchestration-log writer twins
+_loop/{loop.sh,loop.ps1,breaker.sh,breaker.ps1,PROMPT.md}  # Headless loop driver (if enabled)
+```
+<!-- ENDIF loop -->
+<!-- IF !loop -->
+```
+{{IDE_DIR}}/
+├── agents/
+│   ├── evaluator.md     # Skeptical code/goal/task reviewer
+│   ├── qa-evaluator.md              # Skeptical user-facing QA reviewer
+│   ├── implementer.md  # Focused implementer
+│   ├── test-writer.md           # Test creator (external services mocked)
+│   ├── terminal.md              # Bash/PowerShell runner — returns only the asked-for result
+│   └── diagnostician.md         # Diagnosis-only (post-cycle-3, no code writes)
+│
+├── skills/
+│   ├── feature/       # Feature coordination
+│   │   ├── SKILL.md
+│   │   ├── reference/continuation-ladder.md
+│   │   └── templates/{goal.md,task.md}
+│   │
+│   ├── goal-criteria/SKILL.md         # Goal evaluation criteria
+│   ├── task-criteria/SKILL.md         # Task evaluation criteria
+│   ├── qa-criteria/SKILL.md           # User-facing QA evaluation criteria
+│   ├── test-ladder/SKILL.md    # Rungs 1–2 mid-cycle, rung 3 at cycle end
+│   ├── align-docs/SKILL.md            # Phase 6: evaluator-gated doc sync
+│   └── ship-pr/SKILL.md       # Phase 7: approval-gated PR creation
+│
+└── ORCHESTRATION.md   # This file
+
+_goals/<goal>/orchestration-log.md  # Append-only spawn ledger per goal (written by _kit/log-spawn.*)
+_goals/<goal>/spawns/NN-context.md  # Context package sent to spawn #NN (verbatim)
+_goals/<goal>/spawns/NN-report.md   # Report returned by spawn #NN (verbatim)
+_kit/{log-spawn.sh,log-spawn.ps1}  # Single-copy tools: orchestration-log writer twins
+```
+<!-- ENDIF !loop -->
+<!-- ENDIF !research -->
+<!-- BOOTSTRAP[skills-tree]: add the project's domain and supporting skills to this tree. -->
 
 ### Critical Reference Files
 
 | File | Purpose | When to Include |
 |------|---------|-----------------|
-<!-- BOOTSTRAP: one row per canonical reference the orchestrator must route into
+<!-- BOOTSTRAP[critical-reference-rows]: one row per canonical reference the orchestrator must route into
      subagent context packages — domain skills, ground-truth docs, per-directory
      AGENTS.md/CLAUDE.md files, supporting skill SKILL.md files. -->
 
 ### Quality Checks
 
-<!-- BOOTSTRAP: table of the project's cycle-end quality commands. Only list commands
+<!-- BOOTSTRAP[quality-check-commands]: table of the project's cycle-end quality commands. Only list commands
      for tools that are actually configured. -->
 
 | Step | Command |
 |------|---------|
 | Tests (rung 3 — full suites, cycle end only) | {{FULL_TEST_COMMAND}} |
+<!-- IF lint -->
 | Lint | {{LINT_COMMAND}} |
+<!-- ENDIF lint -->
+<!-- IF typecheck -->
 | Type check | {{TYPECHECK_COMMAND}} |
+<!-- ENDIF typecheck -->
 
 Don't invent commands for tools that aren't configured. Tests must mock all external
 service/network access. Do not run rung 3 during Phase 4 tasks or TDD loops — except
@@ -763,8 +966,19 @@ session.
 {{FULL_TEST_COMMAND}}         # rung 3 — cycle end only
 ```
 
+**Orchestration log** (orchestrator runs these inline; `pwsh _kit/log-spawn.ps1` on Windows):
+```bash
+_kit/log-spawn.sh spawn --goal my-goal --agent implementer --phase "Phase 4 task 02" \
+  --model-requested <model-id> --context _goals/my-goal/spawns/03-context.md \
+  --writes "src/foo.ts" --why "task 02" --expect "completion report"
+_kit/log-spawn.sh outcome --goal my-goal --spawn 03 --report _goals/my-goal/spawns/03-report.md \
+  --verdict "PASS" --model-reported "<model-id as self-reported>"
+_kit/log-spawn.sh note --goal my-goal --text "Phase 4 complete"
+```
+
 ### Invoking Skills
 
+<!-- IF research -->
 ```
 /feature            - Start a new feature implementation (Phases 1–7)
 /research           - Research → Plan workflow for a domain topic
@@ -772,6 +986,15 @@ session.
 /ship-pr    - Phase 7 standalone: draft + create the PR/MR on the project's forge, or hand over
 /test-ladder - Test-rung rules (also routed into every impl/test task)
 ```
+<!-- ENDIF research -->
+<!-- IF !research -->
+```
+/feature            - Start a new feature implementation (Phases 1–7)
+/align-docs         - Phase 6 standalone: sync docs to shipped code
+/ship-pr    - Phase 7 standalone: draft + create the PR/MR on the project's forge, or hand over
+/test-ladder - Test-rung rules (also routed into every impl/test task)
+```
+<!-- ENDIF !research -->
 
 The criteria skills (`goal-criteria`, `task-criteria`, `qa-criteria`) are reference checklists used by the
 evaluator subagents — they are not invoked directly.
@@ -785,7 +1008,7 @@ evaluator subagents — they are not invoked directly.
 | `implementer` | Must complete ALL | Checklist-driven execution | Skipping requirements |
 | `test-writer` | 100% coverage required | Outcome-verifying tests | Functions without tests, live external-service calls |
 
-<!-- BOOTSTRAP: auto-fail triggers should name project-specific sins, e.g.
+<!-- BOOTSTRAP[auto-fail-triggers]: auto-fail triggers should name project-specific sins, e.g.
      "re-implemented core auth/transport, swallowed 401/403, ignored pagination,
      secrets in code, weak tests" / "raw tracebacks, wrong exit code, malformed JSON,
      defined route 404/5xx, unauthenticated data access, success-without-effect". -->
@@ -846,7 +1069,7 @@ See ### Forge adapter (Phase 7 delivery).
 2. **Subagents execute with fresh context** - No fatigue, no bias
 3. **Evaluation is always separate** - Pessimistic evaluators review all work (code AND behavior)
 4. **Re-evaluate is mandatory** - Fixes/revisions MUST be re-verified by an evaluator subagent
-5. **Retries have limits (3 cycles)** - Phase 4 task execution continues through the continuation ladder (rungs 5→4→6) before escalation; other phases escalate after 3 cycles
+5. **Retries have limits (3 cycles)** - Phase 4 task execution then reads `phases.ladder`: `auto` continues through the continuation ladder (rungs 5→4→6) before escalation; `escalate` (default) escalates with the ladder offered; other phases escalate after 3 cycles
 6. **Escalation is explicit** - User gets clear options and required decisions
 7. **The Iron Law is enforced** - Tests define behavior, implementation must conform
 8. **Shared core is reused** - New modules build on shared infrastructure; never re-implement auth/transport/plumbing

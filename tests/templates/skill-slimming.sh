@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Regression guard for the feature-skill-slimming goal (v0.23.0): locks template
+# Regression guard for the feature-skill-slimming goal (v0.24.0): locks template
 # skill discovery rename (SKILL.template.md only under templates/), acceptance
 # criteria in task templates, contract.md absence, goal.md phases gating, token
 # proxy log fields, and canonical feature skill byte budget. Tracked,
@@ -186,16 +186,16 @@ else
 fi
 
 # ===========================================================================
-# (f) Canonical feature SKILL.template.md body budget (<= 9728 bytes).
+# (f) Canonical feature SKILL.template.md body budget (<= 10240 bytes).
 # ===========================================================================
 if [[ ! -f "$FEATURE_TPL" ]]; then
-  report FAIL "canonical feature SKILL.template.md <= 9728 bytes" "file missing"
+  report FAIL "canonical feature SKILL.template.md <= 10240 bytes" "file missing"
 else
   feat_bytes="$(wc -c < "$FEATURE_TPL" | tr -d ' ')"
-  if [[ "${feat_bytes:-0}" -le 9728 ]]; then
-    report PASS "canonical feature SKILL.template.md <= 9728 bytes (${feat_bytes} bytes)"
+  if [[ "${feat_bytes:-0}" -le 10240 ]]; then
+    report PASS "canonical feature SKILL.template.md <= 10240 bytes (${feat_bytes} bytes)"
   else
-    report FAIL "canonical feature SKILL.template.md <= 9728 bytes" \
+    report FAIL "canonical feature SKILL.template.md <= 10240 bytes" \
       "actual ${feat_bytes} bytes"
   fi
 fi

@@ -62,6 +62,10 @@ dies at the shebang under WSL/git-bash). When `LOOP_WORKTREE=1`, worktree remova
 waits for the slot's child process to exit before `git worktree remove`; on
 failure it falls back to `git worktree remove --force` plus `git worktree prune`.
 
+`LOOP_USAGE_FORMAT` (`auto` default | `claude` | `codex` | `cursor` | `none`) selects how
+the driver captures per-iteration CLI usage (`auto` resolves from the basename of `LOOP_CLI`'s first word).
+`LOOP_USAGE_LOG`, when set, appends each `usage:` line to that path.
+
 ## Model circuit breaker
 
 `_loop/breaker.sh` / `_loop/breaker.ps1` (sourced by the drivers) guard iterations
@@ -158,9 +162,11 @@ Follow the `feature` skill's Phases 2–6 with two substitutions: **the story's
 acceptance criteria replace Phase 1 alignment** (there is no user to ask), and
 **Phase 7 (`pull_request`) is deferred to the end of the whole run** — the loop
 never pushes during per-story iterations. If the story is too ambiguous to derive a goal from,
-treat that as a blocking issue (step 4). If the derived goal's tasks need to write
-outside the story's declared `writes:` set, that is also a blocking issue (step
-4) — escalate it; never silently widen scope past what was declared.
+treat that as a blocking issue (step 4). When creating `goal.md`, record `phases:`
+values with `ladder: auto` (alongside `align_docs` and `pull_request`). If the derived
+goal's tasks need to write outside the story's declared `writes:` set, that is also
+a blocking issue (step 4) — escalate it; never silently widen scope past what was
+declared.
 
 All invariants hold unchanged: implementer/test-writer execute, `evaluator` verifies every
 task and the final audit, fixes are always re-evaluated, 3 evaluation cycles max per task,
@@ -179,6 +185,10 @@ backlog frontmatter and run configuration only (same naming as `goal.md`'s `phas
   the PR/MR on the project's forge, or hand over. Control this with loop-level
   `pull_request` in run configuration (`pull_request: false` skips the ship step
   with a logged skip, never silent); default remains opt-in as today.
+- **`ladder`** (per story, fixed `auto`): loop-created goals always set
+  `ladder: auto` in `goal.md`'s `phases:` block so cycle-3 exhaustion runs the
+  continuation ladder unattended; the drivers' attempt cap and circuit breakers remain
+  the outer backstop. Interactive `/feature` goals default to `escalate` instead.
 
 ## 3. Gate, commit, record
 
@@ -224,6 +234,12 @@ If evaluation cycles exhaust or the story is blocked:
   the driver applies the transition and appends your entry itself.
 - End the iteration normally — manual mode's next iteration picks the next
   story; driver-dispatched mode simply reports via the `ITERATION:` line below.
+
+## What the driver prints
+
+After each reaped slot's `tail -n 25` output, the driver prints a `usage:` line when a
+usage format is active (`usage: input=<n> output=<n> cache_read=<n|n/a>
+cache_write=<n|n/a> cost_usd=<x|n/a> format=<f>`, or `usage: unavailable (<reason>)`).
 
 ## Output contract (the loop driver parses this)
 

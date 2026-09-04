@@ -61,7 +61,7 @@ this to the whole suite.
 
 ### Convention map
 
-<!-- BOOTSTRAP: fill with this project's changed-path → test-file conventions, e.g.
+<!-- BOOTSTRAP[path-test-conventions]: fill with this project's changed-path → test-file conventions, e.g.
 | Changed path | First impacted tests |
 |--------------|----------------------|
 | src/<module>/ | tests/test_<module>*.py |
@@ -81,7 +81,7 @@ rung 2 is empty (brand-new module), treat it as a no-op and say so.
 {{FULL_TEST_COMMAND}}
 ```
 
-<!-- BOOTSTRAP: list every stack's full-suite command, plus lint commands that run only
+<!-- BOOTSTRAP[full-suite-commands]: list every stack's full-suite command, plus lint commands that run only
      at cycle end (e.g. frontend lint only if frontend changed). -->
 
 Forbidden until rung 3: any bare full-suite invocation or pattern-less test run.
