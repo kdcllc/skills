@@ -1,0 +1,59 @@
+name: Validate
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  SKILLS_REF: git+https://github.com/agentskills/agentskills#subdirectory=skills-ref
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Repo layout, frontmatter, and marketplaces
+        run: bash scripts/validate-skills.sh
+
+      - name: Count skills
+        id: skills
+        run: |
+          shopt -s nullglob
+          dirs=(skills/*/)
+          echo "count=${#dirs[@]}" >> "$GITHUB_OUTPUT"
+
+      - uses: astral-sh/setup-uv@v10
+        if: steps.skills.outputs.count != '0'
+
+      - name: Agent Skills spec (skills-ref)
+        if: steps.skills.outputs.count != '0'
+        run: |
+          for dir in skills/*/; do
+            uvx --from "$SKILLS_REF" skills-ref validate "${dir%/}"
+          done
+
+      - uses: actions/setup-node@v7
+        if: steps.skills.outputs.count != '0'
+        with:
+          node-version: 24
+
+      - name: Skills CLI discovery
+        if: steps.skills.outputs.count != '0'
+        env:
+          DISABLE_TELEMETRY: "1"
+        run: |
+          output="$(npx -y skills add . --list 2>&1)"
+          echo "$output"
+          for dir in skills/*/; do
+            name="$(basename "$dir")"
+            if ! grep -qF -- "$name" <<<"$output"; then
+              echo "::error::Skills CLI did not discover ${name}"
+              exit 1
+            fi
+          done

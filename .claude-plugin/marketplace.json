@@ -1,0 +1,26 @@
+{
+  "name": "kdcllc",
+  "owner": {
+    "name": "kdcllc",
+    "email": "info@kingdavidconsulting.com"
+  },
+  "metadata": {
+    "description": "Agent skills by King David Consulting LLC"
+  },
+  "plugins": [
+    {
+      "name": "kdcllc-skills",
+      "description": "All kdcllc agent skills",
+      "source": "./",
+      "strict": false,
+      "author": {
+        "name": "kdcllc",
+        "email": "info@kingdavidconsulting.com"
+      },
+      "homepage": "https://github.com/kdcllc/skills",
+      "repository": "https://github.com/kdcllc/skills",
+      "license": "MIT",
+      "keywords": ["agent-skills", "skills"]
+    }
+  ]
+}

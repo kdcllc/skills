@@ -1,0 +1,14 @@
+{
+  "name": "kdcllc-skills",
+  "displayName": "kdcllc skills",
+  "description": "All kdcllc agent skills",
+  "author": {
+    "name": "kdcllc",
+    "email": "info@kingdavidconsulting.com"
+  },
+  "publisher": "King David Consulting LLC",
+  "homepage": "https://github.com/kdcllc/skills",
+  "repository": "https://github.com/kdcllc/skills",
+  "license": "MIT",
+  "keywords": ["agent-skills", "skills"]
+}

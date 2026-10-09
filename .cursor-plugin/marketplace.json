@@ -1,0 +1,17 @@
+{
+  "name": "kdcllc",
+  "owner": {
+    "name": "kdcllc",
+    "email": "info@kingdavidconsulting.com"
+  },
+  "metadata": {
+    "description": "Agent skills by King David Consulting LLC"
+  },
+  "plugins": [
+    {
+      "name": "kdcllc-skills",
+      "source": "./",
+      "description": "All kdcllc agent skills"
+    }
+  ]
+}
