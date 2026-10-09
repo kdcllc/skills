@@ -1,0 +1,282 @@
+# Reusable Terraform runner: fmt -> init -> validate -> plan -> apply/destroy.
+#
+# terraform fmt -check is a HARD failure — unformatted Terraform never reaches plan.
+#
+# Destroy is offered on every caller's dropdown and is gated by the confirm_destroy
+# checkbox: picking "destroy" alone is not enough, and the run fails before checkout
+# or Azure login if the box is not ticked.
+#
+# Actions here run on Node 24 and need Actions Runner >= 2.327.1. GitHub-hosted runners
+# have it; a self-hosted runner older than that fails to start the actions outright.
+name: Terraform Deploy Base Module
+
+on:
+  workflow_call:
+    inputs:
+      working_directory:
+        description: 'Domain stack path, e.g. resources/networking'
+        required: true
+        type: string
+      tfvars_file:
+        description: 'TFVars file relative to working_directory, e.g. envs/dev.tfvars'
+        required: true
+        type: string
+      terraform_action:
+        description: 'plan | apply | destroy'
+        required: true
+        type: string
+      environment:
+        description: 'Environment name (dev, prod, …) — used in the state key and summary'
+        required: true
+        type: string
+      backend_state_key:
+        description: 'State blob key, tfstate.{resource}.{domain}.{environment}; empty = offline validate'
+        required: false
+        type: string
+        default: ''
+      confirm_destroy:
+        description: 'Must be true when terraform_action is destroy.'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  id-token: write
+  contents: read
+
+env:
+  TF_VERSION: '1.15.8'
+  TF_IN_AUTOMATION: 'true'
+  TF_INPUT: 'false'
+  ARM_USE_OIDC: true
+  ARM_SUBSCRIPTION_ID: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+  ARM_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+  ARM_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+  # Configure these as repository or environment variables (not hardcoded in workflows):
+  # TFSTATE_RESOURCE_GROUP, TFSTATE_STORAGE_ACCOUNT, TFSTATE_CONTAINER (default: tfstate)
+
+jobs:
+  terraform:
+    name: 'Terraform ${{ inputs.terraform_action }}'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ${{ inputs.working_directory }}
+
+    outputs:
+      has_changes: ${{ steps.plan.outputs.has_changes }}
+      exit_code: ${{ steps.plan.outputs.exit_code }}
+
+    steps:
+      # Runs before checkout and before Azure login, so an accidental dropdown pick
+      # costs a couple of seconds and never reaches a credential. github.workspace
+      # overrides the job's working-directory default, which does not exist yet.
+      - name: Confirm Destroy
+        if: inputs.terraform_action == 'destroy'
+        working-directory: ${{ github.workspace }}
+        run: |
+          if [ "${{ inputs.confirm_destroy }}" != "true" ]; then
+            echo "::error::destroy requested without confirmation. Re-run and tick 'confirm_destroy'."
+            {
+              echo "## ⛔ Destroy blocked"
+              echo ""
+              echo "Destroy was requested for \`${{ inputs.working_directory }}\` (\`${{ inputs.environment }}\`)"
+              echo "but the **confirm_destroy** checkbox was not ticked. Nothing was planned or changed."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 1
+          fi
+          {
+            echo "## ⚠️ Destroy confirmed"
+            echo ""
+            echo "| Field | Value |"
+            echo "|---|---|"
+            echo "| Stack | \`${{ inputs.working_directory }}\` |"
+            echo "| Environment | \`${{ inputs.environment }}\` |"
+            echo "| Requested by | @${{ github.actor }} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Checkout Repository
+        uses: actions/checkout@v7
+        with:
+          # Module sources are frozen to relative paths (../../modules/<name>), so init
+          # never fetches over git and the job never pushes. Leaving the token in the
+          # local git config would be a credential no step here needs. Set this back to
+          # true only if a stack adopts a private git module source.
+          persist-credentials: false
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@v4
+        with:
+          terraform_version: ${{ env.TF_VERSION }}
+          terraform_wrapper: false
+
+      - name: Azure Login
+        uses: azure/login@v3
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Validate Inputs
+        run: |
+          echo "🔍 Validating inputs..."
+          echo "Working Directory: ${{ inputs.working_directory }}"
+          echo "TFVars File: ${{ inputs.tfvars_file }}"
+          echo "Terraform Action: ${{ inputs.terraform_action }}"
+
+          case "${{ inputs.terraform_action }}" in
+            plan|apply|destroy) ;;
+            *)
+              echo "::error::terraform_action must be plan, apply or destroy (got '${{ inputs.terraform_action }}')"
+              exit 1
+              ;;
+          esac
+
+          # Path is relative to the working directory set above
+          if [ ! -f "${{ inputs.tfvars_file }}" ]; then
+            echo "❌ TFVars file does not exist: ${{ inputs.tfvars_file }}"
+            exit 1
+          fi
+
+          echo "✅ All inputs validated successfully"
+
+      # Hard failure by design. Run `terraform fmt -recursive` locally and commit.
+      - name: Terraform Format Check
+        run: |
+          echo "🎨 Checking Terraform formatting..."
+          if ! terraform fmt -check -recursive; then
+            echo "::error::terraform fmt -check failed. Run 'terraform fmt -recursive' and commit the result."
+            exit 1
+          fi
+
+      - name: Terraform Init
+        run: |
+          echo "🏗️ Initializing Terraform..."
+
+          if [ -n "${{ inputs.backend_state_key }}" ]; then
+            echo "📝 Building backend configuration from repository variables and inputs"
+            RESOURCE_GROUP="${{ vars.TFSTATE_RESOURCE_GROUP }}"
+            STORAGE_ACCOUNT="${{ vars.TFSTATE_STORAGE_ACCOUNT }}"
+            CONTAINER="${{ vars.TFSTATE_CONTAINER }}"
+            if [ -z "${CONTAINER}" ]; then
+              CONTAINER="tfstate"
+            fi
+            STATE_KEY="${{ inputs.backend_state_key }}"
+
+            if [ -z "${RESOURCE_GROUP}" ] || [ -z "${STORAGE_ACCOUNT}" ]; then
+              echo "❌ TFSTATE_RESOURCE_GROUP and TFSTATE_STORAGE_ACCOUNT must be set as repository variables"
+              exit 1
+            fi
+
+            echo "Backend configuration:"
+            echo "  Resource Group: ${RESOURCE_GROUP}"
+            echo "  Storage Account: ${STORAGE_ACCOUNT}"
+            echo "  Container: ${CONTAINER}"
+            echo "  State Key: ${STATE_KEY}"
+            echo "  Auth: OIDC + Entra ID (use_oidc, use_azuread_auth)"
+
+            terraform init \
+              -backend-config="resource_group_name=${RESOURCE_GROUP}" \
+              -backend-config="storage_account_name=${STORAGE_ACCOUNT}" \
+              -backend-config="container_name=${CONTAINER}" \
+              -backend-config="key=${STATE_KEY}" \
+              -backend-config="use_oidc=true" \
+              -backend-config="use_azuread_auth=true"
+          else
+            echo "📝 Initializing without backend configuration (offline validate)"
+            terraform init -backend=false
+          fi
+
+      - name: Terraform Validate
+        run: |
+          echo "✅ Validating Terraform configuration..."
+          terraform validate
+
+      - name: Terraform Plan
+        id: plan
+        run: |
+          echo "📋 Creating Terraform plan..."
+
+          set +e
+          if [ "${{ inputs.terraform_action }}" = "destroy" ]; then
+            terraform plan -destroy -detailed-exitcode -var-file="${{ inputs.tfvars_file }}" -out=tfplan
+          else
+            terraform plan -detailed-exitcode -var-file="${{ inputs.tfvars_file }}" -out=tfplan
+          fi
+          code=$?
+          set -e
+
+          echo "exit_code=${code}" >> "$GITHUB_OUTPUT"
+          case "${code}" in
+            0) echo "has_changes=false" >> "$GITHUB_OUTPUT"; echo "✅ Plan created — no changes" ;;
+            2) echo "has_changes=true"  >> "$GITHUB_OUTPUT"; echo "✅ Plan created — changes pending" ;;
+            *) echo "::error::terraform plan failed"; exit 1 ;;
+          esac
+
+      - name: Terraform Show Plan
+        run: |
+          echo "📊 Displaying Terraform plan..."
+          terraform show -no-color tfplan | tee tfplan.txt
+
+      # Applies the plan file created above — never a fresh plan, so what was shown
+      # in the log is what runs. A destroy plan applied is the teardown.
+      - name: Terraform Apply
+        if: inputs.terraform_action == 'apply' && steps.plan.outputs.has_changes == 'true'
+        run: |
+          echo "🚀 Applying Terraform changes..."
+          terraform apply -auto-approve tfplan
+
+      - name: Terraform Destroy
+        if: inputs.terraform_action == 'destroy' && steps.plan.outputs.has_changes == 'true'
+        run: |
+          echo "🗑️ Destroying Terraform resources from the confirmed destroy plan..."
+          terraform apply -auto-approve tfplan
+
+      - name: Terraform Output
+        if: inputs.terraform_action == 'apply'
+        run: |
+          echo "📤 Displaying Terraform outputs..."
+          terraform output
+
+      - name: Upload Plan Artifact
+        if: inputs.terraform_action == 'plan'
+        uses: actions/upload-artifact@v7
+        with:
+          name: terraform-plan-${{ github.run_number }}
+          path: ${{ inputs.working_directory }}/tfplan
+          # Default is 'warn' — a plan that produced no file would upload nothing and
+          # still go green. Fail instead.
+          if-no-files-found: error
+          # A plan file can carry values read out of state. Keep retention short.
+          retention-days: 5
+          # v7 can upload a lone file unzipped via archive:false, but that ignores
+          # `name` and names the artifact after the file — every stack's plan would
+          # land as "tfplan". Keep the archive so the name stays identifying.
+
+      - name: Job Summary
+        if: always()
+        run: |
+          {
+            echo "## Terraform Deployment Summary"
+            echo ""
+            echo "| Parameter | Value |"
+            echo "|-----------|-------|"
+            echo "| Working Directory | \`${{ inputs.working_directory }}\` |"
+            echo "| TFVars File | \`${{ inputs.tfvars_file }}\` |"
+            echo "| Environment | \`${{ inputs.environment }}\` |"
+            echo "| Action | \`${{ inputs.terraform_action }}\` |"
+            echo "| Plan Exit Code | \`${{ steps.plan.outputs.exit_code }}\` |"
+            echo ""
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          case "${{ steps.plan.outputs.exit_code }}" in
+            "0")
+              echo "✅ **Result**: No changes detected — nothing to ${{ inputs.terraform_action }}" >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            "2")
+              echo "📝 **Result**: Changes detected" >> "$GITHUB_STEP_SUMMARY"
+              ;;
+            *)
+              echo "❌ **Result**: Plan failed or was skipped" >> "$GITHUB_STEP_SUMMARY"
+              ;;
+          esac

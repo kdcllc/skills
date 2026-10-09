@@ -1,0 +1,102 @@
+# Terraform CI for one domain stack: validate -> plan -> apply, plus a gated destroy.
+#
+# terraform fmt -check is a HARD failure in the validate stage — unformatted Terraform
+# never reaches plan.
+#
+# Destroy is gated by CONFIRM_DESTROY: the job refuses to run unless the pipeline was
+# started with CONFIRM_DESTROY set to the literal string DESTROY.
+stages:
+  - validate
+  - plan
+  - apply
+  - destroy
+
+variables:
+  TF_IN_AUTOMATION: "true"
+  TF_INPUT: "false"
+  # Stack root: resources/<domain>/ — one domain per stack, one pipeline per domain.
+  # The .tf is written once; TFVARS_FILE selects the environment.
+  TF_ROOT: "resources/container-apps"
+  # Per-environment tfvars, relative to TF_ROOT: envs/<env>.tfvars
+  # Optional region segment in the filename: envs/<env>.<region>.tfvars
+  TFVARS_FILE: "envs/dev.tfvars"
+  TF_ENVIRONMENT: "dev"
+  # Destroy confirmation. Set to the literal string DESTROY when running the pipeline.
+  CONFIRM_DESTROY: ""
+  # Backend (set as CI/CD variables — never hardcode account names or keys):
+  # TFSTATE_RESOURCE_GROUP, TFSTATE_STORAGE_ACCOUNT, TFSTATE_CONTAINER, TFSTATE_KEY
+  # State key shape: tfstate.{resource}.{domain}.{environment}
+
+.default_terraform:
+  image: hashicorp/terraform:1.15.8
+  before_script:
+    - cd "$TF_ROOT"
+    - terraform init
+      -backend-config="resource_group_name=${TFSTATE_RESOURCE_GROUP}"
+      -backend-config="storage_account_name=${TFSTATE_STORAGE_ACCOUNT}"
+      -backend-config="container_name=${TFSTATE_CONTAINER}"
+      -backend-config="key=${TFSTATE_KEY}"
+      -backend-config="use_oidc=true"
+      -backend-config="use_azuread_auth=true"
+
+# Hard failure by design. Run `terraform fmt -recursive` locally and commit.
+terraform_validate:
+  extends: .default_terraform
+  stage: validate
+  script:
+    - terraform fmt -check -recursive
+    - terraform validate
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH
+
+terraform_plan:
+  extends: .default_terraform
+  stage: plan
+  script:
+    - terraform plan -var-file="${TFVARS_FILE}" -out=tfplan
+    - terraform show -no-color tfplan > tfplan.txt
+  artifacts:
+    paths:
+      - $TF_ROOT/tfplan
+      - $TF_ROOT/tfplan.txt
+    expire_in: 1 week
+  rules:
+    - if: $CI_PIPELINE_SOURCE == "merge_request_event"
+    - if: $CI_COMMIT_BRANCH == "main"
+
+terraform_apply:
+  extends: .default_terraform
+  stage: apply
+  script:
+    - terraform apply -auto-approve tfplan
+  dependencies:
+    - terraform_plan
+  environment:
+    name: $TF_ENVIRONMENT
+  when: manual
+  allow_failure: false
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+
+# Refuses to run unless CONFIRM_DESTROY was set to DESTROY on the pipeline. Plans with
+# -destroy and applies that saved plan, so the log shows exactly what was torn down.
+terraform_destroy:
+  extends: .default_terraform
+  stage: destroy
+  script:
+    - |
+      if [ "${CONFIRM_DESTROY}" != "DESTROY" ]; then
+        echo "⛔ Destroy blocked: re-run this pipeline with CONFIRM_DESTROY=DESTROY."
+        exit 1
+      fi
+    - terraform plan -destroy -var-file="${TFVARS_FILE}" -out=tfdestroyplan
+    - terraform show -no-color tfdestroyplan
+    - terraform apply -auto-approve tfdestroyplan
+  environment:
+    name: $TF_ENVIRONMENT
+    action: stop
+  when: manual
+  allow_failure: false
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"

@@ -61,19 +61,45 @@ Open **Customize** in the sidebar, choose **From GitHub Repository**, paste `htt
 
 | Skill | Category | Use when | Install |
 | --- | --- | --- | --- |
-| _No skills yet. See [CONTRIBUTING.md](CONTRIBUTING.md) to add or migrate one._ | | | |
+| [terraform-azure](skills/terraform-azure/SKILL.md) | Azure Terraform | Operator menu for a consumer Azure Terraform repo: new module, domain stack, pipeline, remote-state bootstrap, Azure OIDC, or module upgrade. Azure CLI only; stops at `terraform plan`. | `npx skills add kdcllc/skills --skill terraform-azure` |
+| [terraform-azure-modules](skills/terraform-azure-modules/SKILL.md) | Azure Terraform | Create or update one reusable module under `modules/<name>/` with `providers.tf` and `organization_name` naming. | `npx skills add kdcllc/skills --skill terraform-azure-modules` |
+| [terraform-azure-pipelines](skills/terraform-azure-pipelines/SKILL.md) | Azure Terraform | Copy GitHub Actions, Azure DevOps, or GitLab templates that run fmt, validate, and plan with OIDC; apply and a gated destroy are opt-in. | `npx skills add kdcllc/skills --skill terraform-azure-pipelines` |
+| [terraform-azure-upgrade](skills/terraform-azure-upgrade/SKILL.md) | Azure Terraform | Inventory existing modules, bump to bounded azurerm 5.x pins, apply the current HashiCorp schema, and stop at `validate`. | `npx skills add kdcllc/skills --skill terraform-azure-upgrade` |
+| [skill-versioning](skills/skill-versioning/SKILL.md) | Skill authoring | Keep each skill in a multi-skill repo on its own version and changelog: record changes under Unreleased, pick the bump, and tag `<name>/vX.Y.Z` releases. | `npx skills add kdcllc/skills --skill skill-versioning` |
+
+The four Azure Terraform skills link to each other, so install them together:
+
+```bash
+npx skills add kdcllc/skills --skill terraform-azure terraform-azure-modules terraform-azure-pipelines terraform-azure-upgrade
+```
+
+In Claude Code or Copilot CLI, `/plugin install kdcllc-azure@kdcllc` installs just these four. Operator guides ship inside the skill: [using-the-pack.md](skills/terraform-azure/references/using-the-pack.md) and [deep-dive.md](skills/terraform-azure/references/deep-dive.md).
+
+## Versions
+
+Each skill is versioned on its own. Its version is `metadata.version` in its `SKILL.md`, its history is the `CHANGELOG.md` next to it, and each release is a git tag named `<skill>/vX.Y.Z` with a matching [GitHub release](https://github.com/kdcllc/skills/releases). To pin a skill to a release:
+
+```bash
+npx skills add kdcllc/skills#terraform-azure/v1.0.0 --skill terraform-azure
+```
+
+The ref goes after `#`. A tag pins the whole repository at that commit, so run one `npx skills add` per skill when you pin. `npx skills update` re-downloads from the pinned ref, so pinned installs stay on their tag until you re-add with a newer one.
 
 ## Repository layout
 
 ```text
 skills/<name>/                     # one folder per skill
-  SKILL.md                         # required: frontmatter + instructions
+  SKILL.md                         # required: frontmatter (incl. metadata.version) + instructions
+  CHANGELOG.md                     # required: per-skill release history
   scripts/  references/  assets/   # optional, loaded on demand
 .claude-plugin/marketplace.json    # Claude Code, Copilot CLI, Codex
 .cursor-plugin/                    # Cursor marketplace + plugin manifest
-templates/SKILL.md.tmpl            # starter used by scripts/new-skill.sh
+skills.sh.json                     # skill groupings on the skills.sh repo page
+templates/                         # SKILL.md and CHANGELOG.md starters used by scripts/new-skill.sh
 scripts/new-skill.sh               # scaffold a new skill
-scripts/validate-skills.sh         # repo and frontmatter checks (also run in CI)
+scripts/validate-skills.sh         # repo, frontmatter, and version checks (also run in CI)
+scripts/checks/                    # skill-specific content guards, run by validate-skills.sh
+scripts/release-skill.sh           # release one skill: bump, commit, tag <skill>/vX.Y.Z
 ```
 
 ## Validate
@@ -84,7 +110,7 @@ npx skills add . --list
 claude plugin validate .
 ```
 
-CI runs the same checks plus the reference [`skills-ref`](https://github.com/agentskills/agentskills/tree/main/skills-ref) validator on every push and pull request.
+`validate-skills.sh` also runs every guard in `scripts/checks/`. CI runs the same checks plus the reference [`skills-ref`](https://github.com/agentskills/agentskills/tree/main/skills-ref) validator on every push and pull request.
 
 ## Contributing
 

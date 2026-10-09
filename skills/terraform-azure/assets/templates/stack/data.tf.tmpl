@@ -1,0 +1,61 @@
+# Stack: resources/<domain>/data.tf
+#
+# Cross-domain reads. This is the ONLY way one stack sees another stack's
+# resources. Forbidden alternatives: terraform_remote_state, cross-stack module
+# outputs, and upstream IDs hardcoded into tfvars.
+#
+# Names are reconstructed from the same variables this stack already declares,
+# using the canonical pattern:
+#   {abbr}-${var.organization_name}-${var.resource}-${var.environment}
+# Because var.resource (the workload) is identical in every domain stack, no
+# extra inputs are needed and nothing has to be passed between stacks.
+#
+# Resource group layout (stack-decision.md: resource_group_layout):
+#   per-type (default) — each domain owns its own RG, named with that domain's
+#                        rg_segment. Upstream resources therefore live in the
+#                        UPSTREAM domain's RG: use local.upstream_rg below.
+#   single             — one RG for the workload, owned by the tier-1
+#                        resource-group stack. Uncomment the
+#                        azurerm_resource_group data block and use
+#                        data.azurerm_resource_group.this.name instead.
+#
+# Only read from a LOWER dependency tier. Delete the rows and blocks this
+# domain does not consume. A stack with no upstream domain has no data.tf.
+
+locals {
+  # per-type layout: upstream domain -> the resource group that domain owns
+  # (rg_segment from the domain catalog). Delete rows you do not read. Keys are
+  # domain folder names and are quoted — hyphens are not bare HCL identifiers.
+  upstream_rg = {
+    "networking"    = "rg-${var.organization_name}-${var.resource}-net-${var.environment}"
+    "identity"      = "rg-${var.organization_name}-${var.resource}-id-${var.environment}"
+    "observability" = "rg-${var.organization_name}-${var.resource}-obs-${var.environment}"
+  }
+}
+
+# single layout only — tier 1 resource-group stack
+# data "azurerm_resource_group" "this" {
+#   name = "rg-${var.organization_name}-${var.resource}-${var.environment}"
+# }
+
+# Tier 2 — observability stack
+# data "azurerm_log_analytics_workspace" "this" {
+#   name                = "log-${var.organization_name}-${var.resource}-${var.environment}"
+#   resource_group_name = local.upstream_rg["observability"] # single: data.azurerm_resource_group.this.name
+# }
+
+# Tier 2 — networking stack
+# data "azurerm_virtual_network" "this" {
+#   name                = "vnet-${var.organization_name}-${var.resource}-${var.environment}"
+#   resource_group_name = local.upstream_rg["networking"] # single: data.azurerm_resource_group.this.name
+# }
+
+# Tier 2 — identity stack
+# data "azurerm_user_assigned_identity" "this" {
+#   name                = "id-${var.organization_name}-${var.resource}-${var.environment}"
+#   resource_group_name = local.upstream_rg["identity"] # single: data.azurerm_resource_group.this.name
+# }
+
+# If azurerm publishes no data source for a resource type you need, do NOT add
+# terraform_remote_state. Move the dependent resources into the stack that owns
+# that resource instead.

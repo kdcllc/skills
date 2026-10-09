@@ -21,6 +21,26 @@
       "repository": "https://github.com/kdcllc/skills",
       "license": "MIT",
       "keywords": ["agent-skills", "skills"]
+    },
+    {
+      "name": "kdcllc-azure",
+      "description": "Azure Terraform modules, domain stacks, CI pipelines, and azurerm upgrades",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/terraform-azure",
+        "./skills/terraform-azure-modules",
+        "./skills/terraform-azure-pipelines",
+        "./skills/terraform-azure-upgrade"
+      ],
+      "author": {
+        "name": "kdcllc",
+        "email": "info@kingdavidconsulting.com"
+      },
+      "homepage": "https://github.com/kdcllc/skills",
+      "repository": "https://github.com/kdcllc/skills",
+      "license": "MIT",
+      "keywords": ["agent-skills", "skills", "azure", "terraform"]
     }
   ]
 }

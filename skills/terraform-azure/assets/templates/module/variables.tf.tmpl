@@ -1,0 +1,32 @@
+variable "organization_name" {
+  description = "The organization/project/company identifier used in resource naming"
+  type        = string
+}
+
+variable "resource" {
+  description = "The logical resource name segment used in naming"
+  type        = string
+}
+
+variable "environment" {
+  description = "The environment for which the resource is being created (e.g., dev, test, prod)"
+  type        = string
+}
+
+variable "name_segment" {
+  description = "Resource-group module only: rg_segment of the owning domain in the per-type layout (e.g. kv). Leave empty for the single layout. Delete this variable in other module types."
+  type        = string
+  default     = ""
+}
+
+variable "location" {
+  description = "The Azure region where the resource will be created"
+  type        = string
+  default     = "eastus"
+}
+
+variable "tags" {
+  description = "A map of tags to assign to the resource"
+  type        = map(string)
+  default     = {}
+}

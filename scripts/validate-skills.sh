@@ -2,12 +2,14 @@
 set -euo pipefail
 
 # Usage: scripts/validate-skills.sh [repo-root]
-# Checks repo layout, SKILL.md frontmatter, the README catalog, and the
-# Claude Code / Cursor marketplace manifests. Requires bash and jq.
+# Checks repo layout, SKILL.md frontmatter, per-skill versions and changelogs,
+# the README catalog, and the Claude Code / Cursor marketplace manifests, then
+# runs every skill-specific guard in scripts/checks/. Requires bash and jq.
 
 ROOT="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 
 NAME_PATTERN='^[a-z0-9]+(-[a-z0-9]+)*$'
+SEMVER_PATTERN='^[0-9]+\.[0-9]+\.[0-9]+$'
 MAX_NAME_LENGTH=64
 MAX_DESCRIPTION_LENGTH=1024
 MAX_SKILL_LINES=500
@@ -84,6 +86,33 @@ frontmatter_value() {
   ' <<<"$1"
 }
 
+# Prints a scalar nested one level under metadata: (for example metadata.version).
+metadata_value() {
+  awk -v key="$2" '
+    /^metadata:/ { in_meta = 1; next }
+    in_meta && /^[^ \t]/ { exit }
+    in_meta && $1 == key ":" {
+      val = $0
+      sub(/^[ \t]+[^:]+:[ \t]*/, "", val)
+      sub(/[ \t]+$/, "", val)
+      print val
+      exit
+    }
+  ' <<<"$1"
+}
+
+# Prints the first released version heading (## [X.Y.Z]) in a changelog.
+latest_changelog_version() {
+  awk '
+    /^## \[[0-9]+\.[0-9]+\.[0-9]+\]/ {
+      v = $2
+      gsub(/[][]/, "", v)
+      print v
+      exit
+    }
+  ' "$1"
+}
+
 unquote() {
   local value="$1"
   if [[ "$value" =~ ^\"(.*)\"$ || "$value" =~ ^\'(.*)\'$ ]]; then
@@ -136,7 +165,7 @@ check_repo_layout() {
 
 check_skill() {
   local dir="$1"
-  local dir_name rel skill_md fm key name description license allowed_tools line_count
+  local dir_name rel skill_md fm key name description license allowed_tools line_count version changelog latest
 
   dir_name="$(basename "$dir")"
   rel="skills/${dir_name}"
@@ -195,6 +224,26 @@ check_skill() {
   line_count="$(wc -l <"$skill_md" | tr -d ' ')"
   if (( line_count >= MAX_SKILL_LINES )); then
     error "${rel}/SKILL.md: ${line_count} lines (keep it under ${MAX_SKILL_LINES}; move detail into references/)"
+  fi
+
+  version="$(unquote "$(metadata_value "$fm" version)")"
+  if [[ -z "$version" ]]; then
+    error "${rel}/SKILL.md: missing metadata.version"
+  elif [[ ! "$version" =~ $SEMVER_PATTERN ]]; then
+    error "${rel}/SKILL.md: metadata.version '${version}' must be MAJOR.MINOR.PATCH"
+  fi
+
+  changelog="${dir}/CHANGELOG.md"
+  if [[ ! -f "$changelog" ]]; then
+    error "${rel}/: missing CHANGELOG.md"
+  else
+    grep -qE '^## \[Unreleased\]' "$changelog" || error "${rel}/CHANGELOG.md: missing '## [Unreleased]' section"
+    latest="$(latest_changelog_version "$changelog")"
+    if [[ -z "$latest" ]]; then
+      error "${rel}/CHANGELOG.md: no released '## [X.Y.Z]' entry"
+    elif [[ -n "$version" && "$latest" != "$version" ]]; then
+      error "${rel}: metadata.version is ${version} but the latest CHANGELOG.md entry is ${latest}"
+    fi
   fi
 
   if [[ ! -f "${ROOT}/README.md" ]] || ! grep -qF "skills/${dir_name}/" "${ROOT}/README.md"; then
@@ -346,6 +395,14 @@ for dir in "${skill_dirs[@]}"; do
   check_skill "${dir%/}"
 done
 
+shopt -s nullglob
+check_scripts=("${ROOT}"/scripts/checks/*.sh)
+shopt -u nullglob
+
+for check in "${check_scripts[@]}"; do
+  bash "$check" "$ROOT" || error "${check#"${ROOT}/"} failed"
+done
+
 if (( errors > 0 )); then
   echo "validation failed: ${errors} error(s)" >&2
   exit 1
@@ -354,5 +411,5 @@ fi
 if (( ${#skill_dirs[@]} == 0 )); then
   echo "ok: no skills yet; repo layout and marketplace manifests are valid"
 else
-  echo "ok: ${#skill_dirs[@]} skill(s) validated"
+  echo "ok: ${#skill_dirs[@]} skill(s) validated, ${#check_scripts[@]} skill check(s) passed"
 fi

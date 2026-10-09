@@ -1,0 +1,57 @@
+# Default shape for a domain stack workflow. One file per domain:
+#   .github/workflows/terraform-networking.yaml
+#   .github/workflows/terraform-key-vaults.yaml
+#   .github/workflows/terraform-container-apps.yaml   ... calling the shared
+#   .github/workflows/tf-deploy-base.yaml
+#
+# Copy this file per domain and change only the three marked lines plus the name
+# and the trigger paths. Every one of these workflows offers plan / apply / destroy;
+# destroy additionally requires the confirm_destroy checkbox, which the base workflow
+# checks before checkout. Pull requests always plan and can never apply or destroy.
+name: Terraform Networking
+
+on:
+  pull_request:
+    paths:
+      - 'resources/networking/**'          # <- domain
+      - '.github/workflows/tf-deploy-base.yaml'
+  workflow_dispatch:
+    inputs:
+      terraform_action:
+        description: 'Terraform action'
+        required: true
+        type: choice
+        options:
+          - plan
+          - apply
+          - destroy
+        default: plan
+      confirm_destroy:
+        description: '⚠️ DESTROY: tick to confirm teardown of this stack (required when action = destroy)'
+        required: false
+        type: boolean
+        default: false
+      environment:
+        description: 'Environment'
+        required: true
+        type: choice
+        options:
+          - dev
+          - prod
+        default: dev
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  terraform:
+    uses: ./.github/workflows/tf-deploy-base.yaml
+    with:
+      working_directory: resources/networking                                   # <- domain
+      tfvars_file: envs/${{ inputs.environment || 'dev' }}.tfvars
+      terraform_action: ${{ inputs.terraform_action || 'plan' }}
+      environment: ${{ inputs.environment || 'dev' }}
+      backend_state_key: tfstate.webapp.networking.${{ inputs.environment || 'dev' }}  # <- resource.domain
+      confirm_destroy: ${{ inputs.confirm_destroy || false }}
+    secrets: inherit

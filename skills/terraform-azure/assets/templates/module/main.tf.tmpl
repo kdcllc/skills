@@ -1,0 +1,8 @@
+# Resource-group module. `name_segment` is empty in the single-RG layout and the
+# domain's rg_segment (kv, st, aca, ...) in the per-type layout, so one module
+# serves both: rg-{organization_name}-{resource}[-{name_segment}]-{environment}.
+resource "azurerm_resource_group" "this" {
+  name     = join("-", compact(["rg", var.organization_name, var.resource, var.name_segment, var.environment]))
+  location = var.location
+  tags     = var.tags
+}

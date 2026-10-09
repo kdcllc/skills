@@ -1,0 +1,81 @@
+# Generic caller: pick any domain stack at dispatch time.
+# Prefer one terraform-<domain>.yaml per stack (see examples/terraform-domain.yaml);
+# keep this one for ad-hoc runs against a stack that has no dedicated workflow yet.
+#
+# The `inputs` context is populated for both workflow_call and workflow_dispatch,
+# so every value below reads from `inputs` — never `github.event.inputs`, which
+# hands back the string "false" for an unticked checkbox.
+name: Terraform Stack
+
+on:
+  workflow_call:
+    inputs:
+      working_directory:
+        required: true
+        type: string
+      tfvars_file:
+        required: true
+        type: string
+      terraform_action:
+        required: true
+        type: string
+      environment:
+        required: true
+        type: string
+      backend_state_key:
+        required: false
+        type: string
+        default: ''
+      confirm_destroy:
+        required: false
+        type: boolean
+        default: false
+  workflow_dispatch:
+    inputs:
+      working_directory:
+        description: 'Domain stack path (e.g. resources/networking)'
+        required: true
+        type: string
+      tfvars_file:
+        description: 'TFVars file relative to working directory (e.g. envs/dev.tfvars)'
+        required: true
+        type: string
+        default: envs/dev.tfvars
+      terraform_action:
+        description: 'Terraform action'
+        required: true
+        type: choice
+        options:
+          - plan
+          - apply
+          - destroy
+        default: plan
+      confirm_destroy:
+        description: '⚠️ DESTROY: tick to confirm teardown (required when action = destroy)'
+        required: false
+        type: boolean
+        default: false
+      environment:
+        description: 'Environment name (dev, prod, …)'
+        required: true
+        type: string
+      backend_state_key:
+        description: 'State blob key, tfstate.{resource}.{domain}.{environment} (e.g. tfstate.webapp.networking.dev); optional'
+        required: false
+        type: string
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  terraform:
+    uses: ./.github/workflows/tf-deploy-base.yaml
+    with:
+      working_directory: ${{ inputs.working_directory }}
+      tfvars_file: ${{ inputs.tfvars_file }}
+      terraform_action: ${{ inputs.terraform_action }}
+      environment: ${{ inputs.environment }}
+      backend_state_key: ${{ inputs.backend_state_key }}
+      confirm_destroy: ${{ inputs.confirm_destroy }}
+    secrets: inherit

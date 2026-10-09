@@ -1,0 +1,21 @@
+{
+  "$schema": "https://skills.sh/schemas/skills.sh.schema.json",
+  "notGrouped": "bottom",
+  "groupings": [
+    {
+      "title": "Azure Terraform",
+      "description": "Azure Terraform modules, one-stack-per-domain environments, CI pipelines, and azurerm 5.x upgrades. Azure CLI only; stops at plan.",
+      "skills": [
+        "terraform-azure",
+        "terraform-azure-modules",
+        "terraform-azure-pipelines",
+        "terraform-azure-upgrade"
+      ]
+    },
+    {
+      "title": "Skill authoring",
+      "description": "Tools for maintaining multi-skill repositories: per-skill versions, changelogs, and releases.",
+      "skills": ["skill-versioning"]
+    }
+  ]
+}

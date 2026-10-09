@@ -1,0 +1,51 @@
+# Dev environment pipeline — extends shared template (Terraform 1.15.8).
+# ONE PIPELINE PER DOMAIN STACK. Each domain has its own working directory and
+# its own state key, so domains cannot share a run. Queue lower tiers first
+# (resource-group, then tier 2, …) — a data block fails until its upstream
+# domain has been applied.
+# Fill in service connection and state storage parameters at queue time (no hardcoded account names).
+# terraformAction defaults to plan. Selecting destroy also requires ticking confirmDestroy.
+trigger: none
+
+parameters:
+# Workload segment used in resource names, identical across this workload's domain stacks.
+- name: resource
+  type: string
+
+# Domain-catalog row this stack owns, e.g. networking, key-vaults, container-registry.
+- name: domain
+  type: string
+
+# resources/<domain>
+- name: workingDirectory
+  type: string
+
+- name: environment
+  type: string
+  default: dev
+
+- name: terraformAction
+  type: string
+  displayName: 'Terraform action'
+  default: plan
+  values:
+    - plan
+    - apply
+    - destroy
+
+- name: confirmDestroy
+  type: boolean
+  displayName: '⚠️ DESTROY: confirm teardown of this stack'
+  default: false
+
+extends:
+  template: /pipelines/azure_dev_ops/shared/azure-pipelines.yaml
+  parameters:
+    backendAzureRmResourceGroupName: # Resource group where the storage account is located
+    backendAzureRmKey: 'tfstate.${{ parameters.resource }}.${{ parameters.domain }}.${{ parameters.environment }}'
+    backendAzureRmStorageAccountName: # Storage account name
+    backendServiceArm: # Service connection name
+    workingDirectory: ${{ parameters.workingDirectory }}
+    tfvarsFile: 'envs/${{ parameters.environment }}.tfvars'
+    terraformAction: ${{ parameters.terraformAction }}
+    confirmDestroy: ${{ parameters.confirmDestroy }}

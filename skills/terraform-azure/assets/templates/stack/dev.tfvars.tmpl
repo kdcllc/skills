@@ -1,0 +1,17 @@
+# Stack: resources/<domain>/envs/dev.tfvars
+#
+# One tfvars file per environment, all in the stack's single envs/ folder.
+# The .tf files one level up are written once and shared by every environment.
+# Run from resources/<domain>/:  terraform plan -var-file=envs/dev.tfvars
+#
+# `resource` is the WORKLOAD and must be identical in every domain stack for
+# this workload — that is what lets other stacks derive these names in data.tf.
+
+organization_name = "acme"
+resource          = "webapp"
+environment       = "dev"
+location          = "eastus"
+
+tags = {
+  managed_by = "terraform"
+}

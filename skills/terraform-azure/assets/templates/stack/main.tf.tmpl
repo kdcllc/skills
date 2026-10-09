@@ -1,0 +1,50 @@
+# Stack: resources/<domain>/main.tf
+#
+# ONE DOMAIN PER STACK. Every module block below must belong to the same
+# domain-catalog row. If a resource belongs to another domain it goes in that
+# domain's stack and is read here through data.tf — never added to this file.
+#
+# Resource group layout (stack-decision.md: resource_group_layout):
+#   per-type (default) — this stack OWNS its resource group. Keep the
+#                        `resource_group` module and set name_segment to this
+#                        domain's rg_segment from the catalog.
+#   single             — the tier-1 resource-group stack owns the RG. Delete
+#                        the `resource_group` module, uncomment the
+#                        azurerm_resource_group data block in data.tf, and use
+#                        data.azurerm_resource_group.this.name below.
+#
+# Example below is the `networking` domain (rg_segment = net). Replace with the
+# modules for the domain this stack owns.
+
+module "resource_group" {
+  source = "../../modules/resource_group"
+
+  organization_name = var.organization_name
+  resource          = var.resource
+  environment       = var.environment
+  location          = var.location
+  name_segment      = "net" # rg_segment for this domain (per-type layout)
+  tags              = var.tags
+}
+
+module "virtual_network" {
+  source = "../../modules/virtual_network"
+
+  organization_name   = var.organization_name
+  resource            = var.resource
+  environment         = var.environment
+  location            = var.location
+  resource_group_name = module.resource_group.resource_group.name
+  tags                = var.tags
+}
+
+module "subnet" {
+  source = "../../modules/subnet"
+
+  organization_name    = var.organization_name
+  resource             = var.resource
+  environment          = var.environment
+  resource_group_name  = module.resource_group.resource_group.name
+  virtual_network_name = module.virtual_network.name
+  tags                 = var.tags
+}

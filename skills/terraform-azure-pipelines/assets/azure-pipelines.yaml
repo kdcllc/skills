@@ -1,0 +1,142 @@
+# Shared Terraform pipeline: fmt → init → validate → plan → apply/destroy.
+# Production: add an environment approval gate (or manual validation) before the Apply step.
+# Backend auth: service connection (OIDC/workload identity) plus Entra backend flags at init.
+#
+# terraform fmt -check is a HARD failure — unformatted Terraform never reaches plan.
+#
+# terraformAction is plan | apply | destroy, defaulting to plan. Destroy is gated by the
+# confirmDestroy checkbox: picking destroy alone fails the run before Terraform installs.
+parameters:
+- name: backendServiceArm
+  type: string
+  displayName: 'Azure DevOps Service connections to Azure Cloud, this account should be set to contributor'
+
+- name: backendAzureRmKey
+  type: string
+  displayName: 'AzureRmKey: state blob key, tfstate.{resource}.{domain}.{environment} i.e. tfstate.webapp.networking.qa'
+
+- name: backendAzureRmResourceGroupName
+  type: string
+  displayName: 'Resource group'
+
+- name: backendAzureRmStorageAccountName
+  type: string
+  displayName: 'Azure Blob Storage Name'
+
+- name: backendAzureRmContainerName
+  type: string
+  displayName: 'AzureRmContainerName: Azure Blob Storage Container Name i.e. tfstate'
+  default: 'tfstate'
+
+- name: workingDirectory
+  type: string
+  displayName: 'Working Directory: one domain stack, i.e. resources/networking'
+  default: '.'
+
+- name: tfvarsFile
+  type: string
+  displayName: 'Terraform Variables File, relative to working directory i.e. envs/dev.tfvars'
+  default: 'envs/dev.tfvars'
+
+- name: terraformAction
+  type: string
+  displayName: 'Terraform action'
+  default: plan
+  values:
+    - plan
+    - apply
+    - destroy
+
+- name: confirmDestroy
+  type: boolean
+  displayName: '⚠️ DESTROY: confirm teardown (required when action = destroy)'
+  default: false
+
+stages:
+- stage: TerraformPipeline
+  displayName: 'Terraform ${{ parameters.terraformAction }}'
+  jobs:
+  - job: TerraformJob
+    displayName: Deploy Infrastructure With Terraform
+    pool:
+      vmImage: 'ubuntu-latest'
+    steps:
+
+    # Destroy confirmation, before anything else runs.
+    - ${{ if and(eq(parameters.terraformAction, 'destroy'), not(parameters.confirmDestroy)) }}:
+      - script: |
+          echo "##vso[task.logissue type=error]destroy requested without confirmDestroy. Re-queue with the confirm checkbox ticked."
+          exit 1
+        displayName: 'Destroy not confirmed — blocked'
+
+    - ${{ if and(eq(parameters.terraformAction, 'destroy'), parameters.confirmDestroy) }}:
+      - script: |
+          echo "⚠️ Destroy confirmed for ${{ parameters.workingDirectory }} (state ${{ parameters.backendAzureRmKey }})."
+        displayName: 'Destroy confirmed'
+
+    - task: TerraformInstaller@1
+      displayName: 'Install Terraform'
+      inputs:
+        terraformVersion: '1.15.8'
+
+    # Hard failure by design. Run `terraform fmt -recursive` locally and commit.
+    - script: |
+        set -e
+        if ! terraform fmt -check -recursive; then
+          echo "##vso[task.logissue type=error]terraform fmt -check failed. Run 'terraform fmt -recursive' and commit the result."
+          exit 1
+        fi
+      workingDirectory: ${{ parameters.workingDirectory }}
+      displayName: 'Terraform Format Check'
+
+    - task: TerraformTaskV4@4
+      displayName: 'Terraform Init'
+      inputs:
+        command: 'init'
+        provider: 'azurerm'
+        backendServiceArm: ${{ parameters.backendServiceArm }}
+        backendAzureRmResourceGroupName: ${{ parameters.backendAzureRmResourceGroupName }}
+        backendAzureRmStorageAccountName: ${{ parameters.backendAzureRmStorageAccountName }}
+        backendAzureRmContainerName: ${{ parameters.backendAzureRmContainerName }}
+        backendAzureRmKey: ${{ parameters.backendAzureRmKey }}
+        workingDirectory: ${{ parameters.workingDirectory }}
+        # Entra ID backend auth (no storage account keys); service connection supplies OIDC.
+        commandOptions: '-backend-config=use_oidc=true -backend-config=use_azuread_auth=true'
+
+
+    - task: TerraformTaskV4@4
+      displayName: 'Terraform Validate'
+      inputs:
+        command: 'validate'
+        environmentServiceNameAzureRM: ${{ parameters.backendServiceArm }}
+        workingDirectory: ${{ parameters.workingDirectory }}
+
+
+    # A destroy run plans with -destroy, and the plan is saved so the execute step
+    # applies this exact file rather than re-planning.
+    - task: TerraformTaskV4@4
+      name: terraformPlan
+      displayName: 'Create Terraform ${{ parameters.terraformAction }} Plan'
+      inputs:
+        provider: 'azurerm'
+        command: 'plan'
+        environmentServiceNameAzureRM: ${{ parameters.backendServiceArm }}
+        workingDirectory: ${{ parameters.workingDirectory }}
+        ${{ if eq(parameters.terraformAction, 'destroy') }}:
+          commandOptions: '-destroy -var-file=${{ parameters.tfvarsFile }} -out=tfplan'
+        ${{ else }}:
+          commandOptions: '-var-file=${{ parameters.tfvarsFile }} -out=tfplan'
+
+    # Applies the saved plan — a destroy plan applied is the teardown, so the command
+    # stays 'apply' for both actions and no -var-file is passed (Terraform rejects it
+    # alongside a plan file). Production should require an approval gate on this stage.
+    - ${{ if ne(parameters.terraformAction, 'plan') }}:
+      - task: TerraformTaskV4@4
+        name: terraformExecute
+        displayName: 'Terraform ${{ parameters.terraformAction }} (saved plan)'
+        inputs:
+          provider: 'azurerm'
+          command: 'apply'
+          environmentServiceNameAzureRM: ${{ parameters.backendServiceArm }}
+          workingDirectory: ${{ parameters.workingDirectory }}
+          commandOptions: 'tfplan'
