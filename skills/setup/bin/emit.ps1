@@ -808,6 +808,7 @@ function Test-KitOwned([string]$p) {
   if ($p -like '.claude/agents/*' -or $p -like '.cursor/agents/*' -or $p -like '.github/agents/*' -or $p -like '.codex/agents/*') { return $true }
   if ($p -eq '.cursor/rules/orchestration.mdc') { return $true }
   if ($p -like '_loop/*' -or $p -like '_kit/*') { return $true }
+  if ($p -ceq '_memory/README.md') { return $true }
   if ($p -eq 'ORCHESTRATION.md') { return $true }
   if ($p -eq '.claude/ORCHESTRATION.md' -or $p -eq '.cursor/ORCHESTRATION.md') { return $true }
   if ($p -eq '.claude/skills/setup-models.map.md' -or $p -eq '.cursor/skills/setup-models.map.md') { return $true }
@@ -1187,12 +1188,17 @@ function Emit-SingleCopy {
       }
     }
   }
-  foreach ($f in @('log-spawn.sh', 'log-spawn.ps1')) {
+  foreach ($f in @('log-spawn.sh', 'log-spawn.ps1', 'memory.sh', 'memory.ps1')) {
     $src = "$($script:Tpl)/tools/$f"
     if ([System.IO.File]::Exists($src)) {
       Resolve-Template $src "tools/$f"
       Put-Emit "_kit/$f" $script:Resolved
     }
+  }
+  $memReadme = "$($script:Tpl)/memory/README.md"
+  if ([System.IO.File]::Exists($memReadme)) {
+    Resolve-Template $memReadme 'memory/README.md'
+    Put-Emit '_memory/README.md' $script:Resolved
   }
 }
 
@@ -1415,7 +1421,10 @@ function Set-PlannedGitLines {
   $script:GaLines = [System.Collections.Generic.List[string]]::new()
   $script:GiLines = [System.Collections.Generic.List[string]]::new()
   $script:GaLines.Add('_goals/*/orchestration-log.md merge=union')
+  $script:GaLines.Add('_memory/** text eol=lf')
   $script:GiLines.Add('_kit/')
+  $script:GiLines.Add('_memory/.index/')
+  $script:GiLines.Add('_memory/raw/')
   if ($script:Flags['loop'] -eq $true) {
     $script:GaLines.Add('_goals/LEARNINGS.md merge=union')
     $script:GaLines.Add('_goals/ESCALATIONS.md merge=union')

@@ -29,3 +29,4 @@ The copilot-instructions pointer content is embedded in `bin/emit.sh` /
 Loop-enabled installs emit `_loop/loop.ps1` and `_loop/breaker.ps1` (and the
 bash twins). `_goals/backlog.md` (create if missing; never overwrite).
 Always emits `_kit/log-spawn.sh` and `_kit/log-spawn.ps1` (single-copy).
+Always emits `_kit/memory.sh`, `_kit/memory.ps1`, and `_memory/README.md` (single-copy), appends `_memory/.index/` and `_memory/raw/` to `.gitignore`, and appends `_memory/** text eol=lf` to `.gitattributes`; `_memory/records/` and `_memory/quarantine/` stay tracked.

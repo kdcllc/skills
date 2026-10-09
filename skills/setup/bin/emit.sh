@@ -675,6 +675,7 @@ is_kit_owned() {
     .claude/agents/*|.cursor/agents/*|.github/agents/*|.codex/agents/*) return 0 ;;
     .cursor/rules/orchestration.mdc) return 0 ;;
     _loop/*|_kit/*) return 0 ;;
+    _memory/README.md) return 0 ;;
     ORCHESTRATION.md) return 0 ;;
     .claude/ORCHESTRATION.md|.cursor/ORCHESTRATION.md) return 0 ;;
     .claude/skills/setup-models.map.md|.cursor/skills/setup-models.map.md) return 0 ;;
@@ -1085,13 +1086,18 @@ emit_single_copy() {
       fi
     done
   fi
-  for f in log-spawn.sh log-spawn.ps1; do
+  for f in log-spawn.sh log-spawn.ps1 memory.sh memory.ps1; do
     if [ -f "$TPL/tools/$f" ]; then
       resolve_template "$TPL/tools/$f" "tools/$f"
       content="$RESOLVED"
       put_emit "_kit/$f" "$content"
     fi
   done
+  if [ -f "$TPL/memory/README.md" ]; then
+    resolve_template "$TPL/memory/README.md" "memory/README.md"
+    content="$RESOLVED"
+    put_emit "_memory/README.md" "$content"
+  fi
 }
 
 SEED_CONTENT=""
@@ -1284,8 +1290,8 @@ append_line_once_bytes() { # current-or-empty line → stdout ending with NL
 }
 
 planned_git_lines() {
-  GA_LINES=('_goals/*/orchestration-log.md merge=union')
-  GI_LINES=('_kit/')
+  GA_LINES=('_goals/*/orchestration-log.md merge=union' '_memory/** text eol=lf')
+  GI_LINES=('_kit/' '_memory/.index/' '_memory/raw/')
   if [ "${FLAGS[loop]}" = true ]; then
     GA_LINES+=('_goals/LEARNINGS.md merge=union' '_goals/ESCALATIONS.md merge=union' '*.sh text eol=lf' '*.ps1 text eol=lf')
     GI_LINES+=('_goals/breaker-state.json')

@@ -310,7 +310,36 @@ case_j_executables() {
   local root
   root="$(mktemp_root)"
   run_emit_sh "$root" --kit "$KIT" --answers "$FIXTURE" >/dev/null 2>&1 || return 1
-  [[ -x "$root/_kit/log-spawn.sh" && -x "$root/_loop/loop.sh" && -x "$root/_loop/breaker.sh" ]]
+  [[ -x "$root/_kit/log-spawn.sh" && -x "$root/_kit/memory.sh" && -x "$root/_loop/loop.sh" && -x "$root/_loop/breaker.sh" ]]
+}
+
+case_n_memory_emit_paths() {
+  local root gi ga
+  root="$(mktemp_root)"
+  run_emit_sh "$root" --kit "$KIT" --answers "$FIXTURE" >/dev/null 2>&1 || return 1
+  run_emit_sh "$root" --kit "$KIT" --answers "$FIXTURE" >/dev/null 2>&1 || return 1
+  [[ -f "$root/_kit/memory.ps1" && -f "$root/_memory/README.md" ]] || return 1
+  gi="$(grep -cxF '_memory/.index/' "$root/.gitignore" || true)"
+  gr="$(grep -cxF '_memory/raw/' "$root/.gitignore" || true)"
+  [[ "$gi" -eq 1 && "$gr" -eq 1 ]] || return 1
+  grep -qxF '_memory/' "$root/.gitignore" && return 1
+  ga="$(grep -cxF '_memory/** text eol=lf' "$root/.gitattributes" || true)"
+  [[ "$ga" -eq 1 ]]
+}
+
+case_o_memory_readme_prune() {
+  local kit root user before after
+  kit="$(mktemp_root)"; root="$(mktemp_root)"
+  copy_kit "$kit"
+  rm -f "$kit/templates/memory/README.md"
+  run_emit_sh "$root" --kit "$KIT" --answers "$FIXTURE" >/dev/null 2>&1 || return 1
+  mkdir -p "$root/_memory/records/2026/10"
+  user="$root/_memory/records/2026/10/20261009T120000Z-user0001.md"
+  printf -- '---\nid: 20261009T120000Z-user0001\nkind: fact\ntitle: "u"\ndate: 2026-10-09\nsource: ""\ncommit: none\nharness: ""\ntags: []\nsupersedes: []\nsha256: aa\n---\nuser\n' > "$user"
+  before="$(sha256sum "$user" | awk '{print $1}')"
+  run_emit_sh "$root" --kit "$kit" --upgrade >/dev/null 2>&1 || return 1
+  after="$(sha256sum "$user" | awk '{print $1}')"
+  [[ ! -f "$root/_memory/README.md" && -f "$user" && "$before" == "$after" ]]
 }
 
 case_k_parse_twins() {
@@ -426,9 +455,21 @@ else
 fi
 
 if case_j_executables; then
-  report PASS "(j) _kit/log-spawn.sh, _loop/{loop,breaker}.sh are executable"
+  report PASS "(j) _kit/log-spawn.sh, memory.sh, _loop/{loop,breaker}.sh are executable"
 else
-  report FAIL "(j) _kit/log-spawn.sh, _loop/{loop,breaker}.sh are executable"
+  report FAIL "(j) _kit/log-spawn.sh, memory.sh, _loop/{loop,breaker}.sh are executable"
+fi
+
+if case_n_memory_emit_paths; then
+  report PASS "(n) memory.ps1 + _memory/README.md; gitignore/gitattributes lines"
+else
+  report FAIL "(n) memory.ps1 + _memory/README.md; gitignore/gitattributes lines"
+fi
+
+if case_o_memory_readme_prune; then
+  report PASS "(o) kit README removed → _memory/README.md pruned; user record kept"
+else
+  report FAIL "(o) kit README removed → _memory/README.md pruned; user record kept"
 fi
 
 if case_k_parse_twins; then

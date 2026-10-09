@@ -5,6 +5,26 @@ Kit version lives in `skills/setup/VERSION` and is written into each install's
 Versions without an entry (v0.14.0–v0.17.0 and earlier than v0.12.0) predate this
 changelog; their history lives in git and the research/design docs under `docs/`.
 
+## v0.30.0 — Memory store (core)
+
+- **`_memory/` layout** — git-tracked `records/YYYY/MM/<id>.md` (immutable, one record
+  per file) and `quarantine/`; derived `.index/` and reserved `raw/` are gitignored.
+- **`_kit/memory.*` twins** — single-copy `memory.sh` / `memory.ps1` with `add`,
+  `index`, `search`, and `show` subcommands.
+- **Search** — keyword `grep` engine by default; `--engine fts` re-ranks the same
+  candidate set by bm25 when SQLite FTS5 is available (auto-detected by `index`).
+- **Admission screen** — instruction-like content routes to `quarantine/` (exit 5).
+- **Emitter wiring** — emits `_memory/README.md`; appends `_memory/.index/` and
+  `_memory/raw/` to `.gitignore` and `_memory/** text eol=lf` to `.gitattributes`.
+- **Harness matrix** — documents that Claude Code reads `AGENTS.md` only when no
+  `CLAUDE.md` exists; adds a dated native-memory/transcripts/hooks addendum.
+- **Next releases** — B: read protocol and wiring; C: redaction and transcript capture;
+  D: back-fill.
+
+- **Upgrading** — Re-emit with `--upgrade` (or a full `/setup` re-run). New paths
+  (`_kit/memory.*`, `_memory/README.md`, gitignore/gitattributes lines) appear on upgrade;
+  existing installs keep prior behavior until re-emit.
+
 ## v0.29.0 — Model currency (Oct 2026)
 
 - **Fast tier** — optional `models.<harness>.fast` in the answers file; `terminal` pins

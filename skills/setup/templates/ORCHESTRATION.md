@@ -821,6 +821,9 @@ _goals/<goal>/spawns/NN-context.md  # Context package sent to spawn #NN (verbati
 _goals/<goal>/spawns/NN-report.md   # Report returned by spawn #NN (verbatim)
 _goals/breaker-state.json       # Model circuit breaker state (runtime, gitignored)
 _kit/{log-spawn.sh,log-spawn.ps1}  # Single-copy tools: orchestration-log writer twins
+_kit/{memory.sh,memory.ps1}  # Single-copy tools: memory store (add / index / search / show)
+_memory/records/ · _memory/quarantine/  # Tracked memory records (immutable, one per file) — see _memory/README.md
+_memory/.index/ · _memory/raw/  # Derived index / reserved transcripts (gitignored)
 _loop/{loop.sh,loop.ps1,breaker.sh,breaker.ps1,PROMPT.md}  # Headless loop driver (if enabled)
 ```
 <!-- ENDIF loop -->
@@ -858,6 +861,9 @@ _goals/<goal>/orchestration-log.md  # Append-only spawn ledger per goal (written
 _goals/<goal>/spawns/NN-context.md  # Context package sent to spawn #NN (verbatim)
 _goals/<goal>/spawns/NN-report.md   # Report returned by spawn #NN (verbatim)
 _kit/{log-spawn.sh,log-spawn.ps1}  # Single-copy tools: orchestration-log writer twins
+_kit/{memory.sh,memory.ps1}  # Single-copy tools: memory store (add / index / search / show)
+_memory/records/ · _memory/quarantine/  # Tracked memory records (immutable, one per file) — see _memory/README.md
+_memory/.index/ · _memory/raw/  # Derived index / reserved transcripts (gitignored)
 ```
 <!-- ENDIF !loop -->
 <!-- ENDIF research -->
@@ -895,6 +901,9 @@ _goals/<goal>/spawns/NN-context.md  # Context package sent to spawn #NN (verbati
 _goals/<goal>/spawns/NN-report.md   # Report returned by spawn #NN (verbatim)
 _goals/breaker-state.json       # Model circuit breaker state (runtime, gitignored)
 _kit/{log-spawn.sh,log-spawn.ps1}  # Single-copy tools: orchestration-log writer twins
+_kit/{memory.sh,memory.ps1}  # Single-copy tools: memory store (add / index / search / show)
+_memory/records/ · _memory/quarantine/  # Tracked memory records (immutable, one per file) — see _memory/README.md
+_memory/.index/ · _memory/raw/  # Derived index / reserved transcripts (gitignored)
 _loop/{loop.sh,loop.ps1,breaker.sh,breaker.ps1,PROMPT.md}  # Headless loop driver (if enabled)
 ```
 <!-- ENDIF loop -->
@@ -928,6 +937,9 @@ _goals/<goal>/orchestration-log.md  # Append-only spawn ledger per goal (written
 _goals/<goal>/spawns/NN-context.md  # Context package sent to spawn #NN (verbatim)
 _goals/<goal>/spawns/NN-report.md   # Report returned by spawn #NN (verbatim)
 _kit/{log-spawn.sh,log-spawn.ps1}  # Single-copy tools: orchestration-log writer twins
+_kit/{memory.sh,memory.ps1}  # Single-copy tools: memory store (add / index / search / show)
+_memory/records/ · _memory/quarantine/  # Tracked memory records (immutable, one per file) — see _memory/README.md
+_memory/.index/ · _memory/raw/  # Derived index / reserved transcripts (gitignored)
 ```
 <!-- ENDIF !loop -->
 <!-- ENDIF !research -->
@@ -984,6 +996,13 @@ _kit/log-spawn.sh spawn --goal my-goal --agent implementer --phase "Phase 4 task
 _kit/log-spawn.sh outcome --goal my-goal --spawn 03 --report _goals/my-goal/spawns/03-report.md \
   --verdict "PASS" --model-reported "<model-id as self-reported>"
 _kit/log-spawn.sh note --goal my-goal --text "Phase 4 complete"
+```
+
+**Memory store** (`pwsh _kit/memory.ps1 …` on Windows — same flags):
+```bash
+_kit/memory.sh add --kind decision --title "Example" --body /tmp/body.md --harness claude
+_kit/memory.sh search orchestration --limit 5
+_kit/memory.sh show 20261009T120000Z-a1b2c3d4
 ```
 
 ### Invoking Skills

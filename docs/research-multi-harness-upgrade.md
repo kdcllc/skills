@@ -34,6 +34,12 @@ source, unverified · 💬 = blog/secondary, unverified.
 > guard, `model_check`, and setup pin-verification shipped in kit v0.29.0; the
 > external-CLI arbiter adapter, native `.codex/agents/*.toml` agents, post-merge
 > integration rung, and native review gates are out of scope for v0.29.0.
+>
+> **See also**: [research-agent-memory-store.md](research-agent-memory-store.md)
+> (2026-10-08) — persistent cross-harness memory store: git-tracked `_memory/` with one
+> immutable record per file, `_kit/memory.*` twins, keyword + optional FTS5 search,
+> orchestrator-only reads under a DATA fence. Corrects the Claude Code AGENTS.md fact
+> (read only when no CLAUDE.md exists). Release A shipped in v0.30.0; B–D pending.
 
 ---
 

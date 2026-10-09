@@ -2,7 +2,7 @@
 
 [![skills.sh installs](https://skills.sh/b/kdcllc/skills)](https://skills.sh/kdcllc/skills)
 
-> Kit version: **0.29.0** (`skills/setup/VERSION`) · Version history: [CHANGELOG.md](CHANGELOG.md)
+> Kit version: **0.30.0** (`skills/setup/VERSION`) · Version history: [CHANGELOG.md](CHANGELOG.md)
 
 A portable orchestrator/worker/evaluator multi-agent system for AI coding harnesses —
 **Claude Code, Cursor, GitHub Copilot (VS Code), and OpenAI Codex** — packaged as one
@@ -177,6 +177,8 @@ for flags and exit codes.
 | `skills/ship-pr` | Phase 7: approval-gated forge delivery (GitHub / Azure DevOps / GitLab / hand-over) |
 | `skills/auto-loop` + `_loop/` + `_goals/backlog.md` | Autonomous loop with structural guards (optional) |
 | `_kit/log-spawn.sh` + `_kit/log-spawn.ps1` | Single-copy orchestration-log writer twins (`spawn` / `outcome` / `note`) |
+| `_kit/memory.sh` + `_kit/memory.ps1` | Single-copy memory-store twins (`add` / `index` / `search` / `show`) |
+| `_memory/` | Tracked immutable records (`records/`, `quarantine/`); gitignored derived `.index/` and reserved `raw/` |
 | `ORCHESTRATION.md` | The architecture doc, filled in for the project |
 | `orchestration-kit.manifest.json` | Kit version + file hashes + embedded `answers`, enabling clean upgrades |
 
