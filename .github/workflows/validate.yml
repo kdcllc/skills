@@ -28,7 +28,7 @@ jobs:
           dirs=(skills/*/)
           echo "count=${#dirs[@]}" >> "$GITHUB_OUTPUT"
 
-      - uses: astral-sh/setup-uv@v10
+      - uses: astral-sh/setup-uv@v10.3.0
         if: steps.skills.outputs.count != '0'
 
       - name: Agent Skills spec (skills-ref)
