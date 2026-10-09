@@ -88,8 +88,8 @@ run_suite() {
   out="$("$@" outcome --goal demo --spawn 01 --report _goals/demo/spawns/01-report.md \
         --verdict PASS --model-reported X 2>/dev/null)"; rc=$?
   if [[ $rc -eq 0 && "$(printf '%s\n' "$out" | wc -l | tr -d ' ')" == 1 ]] \
-     && grep -qF -- '- OUTCOME [#01]: PASS · model reported: X · report: _goals/demo/spawns/01-report.md · report_chars: 40 · io_est_tokens: 35 · work_read_chars: n/a · work_est_tokens: n/a · running io: 35 · running work: 0' "$log"; then
-    report PASS "[$label] (b) outcome #01 → report_chars: 40 · io_est_tokens: 35 (floor 141/4) · running io: 35"
+     && grep -qF -- '- OUTCOME [#01]: PASS · model reported: X · model_check: unverified · report: _goals/demo/spawns/01-report.md · report_chars: 40 · io_est_tokens: 35 · work_read_chars: n/a · work_est_tokens: n/a · running io: 35 · running work: 0' "$log"; then
+    report PASS "[$label] (b) outcome #01 → model_check: unverified · report_chars: 40 · io_est_tokens: 35 · running io: 35"
   else
     report FAIL "[$label] (b) outcome #01" "rc=$rc out='$out'"
   fi
@@ -337,6 +337,97 @@ if command -v pwsh >/dev/null 2>&1; then
   fi
 else
   report SKIP "pwsh twin parity" "pwsh not on PATH"
+fi
+
+# ---------------------------------------------------------------------------
+# model_check — match / MISMATCH / unverified / openai family (bash + pwsh twin)
+# ---------------------------------------------------------------------------
+run_model_check_case() { # <label> <runner...>
+  local label="$1"; shift
+  local fx log out rc err spawn_line
+  fx="$(mktemp -d)"
+  mkdir -p "$fx/_goals/demo/spawns"
+  head -c 20 /dev/zero | tr '\0' 'a' > "$fx/_goals/demo/spawns/05-context.md"
+  head -c 10 /dev/zero | tr '\0' 'b' > "$fx/_goals/demo/spawns/05-report.md"
+  log="$fx/_goals/demo/orchestration-log.md"
+  cd "$fx" || return 1
+
+  # match (openai: gpt-… requested, o3 reported)
+  "$@" spawn --goal demo --agent implementer --phase P4 --model-requested gpt-4.1-mini \
+       --context _goals/demo/spawns/05-context.md >/dev/null 2>&1
+  out="$("$@" outcome --goal demo --spawn 05 --report _goals/demo/spawns/05-report.md \
+        --verdict PASS --model-reported o3 2>/dev/null)"; rc=$?
+  if [[ $rc -eq 0 && "$out" == *'model_check: match'* ]]; then
+    report PASS "[$label] model_check match (gpt-4.1-mini vs o3, exit 0)"
+  else
+    report FAIL "[$label] model_check match" "rc=$rc out='$out'"
+  fi
+
+  # MISMATCH + stderr warning, exit 0
+  fx="$(mktemp -d)"
+  mkdir -p "$fx/_goals/demo/spawns"
+  head -c 20 /dev/zero | tr '\0' 'a' > "$fx/_goals/demo/spawns/06-context.md"
+  head -c 10 /dev/zero | tr '\0' 'b' > "$fx/_goals/demo/spawns/06-report.md"
+  log="$fx/_goals/demo/orchestration-log.md"
+  cd "$fx" || return 1
+  "$@" spawn --goal demo --agent implementer --phase P4 --model-requested claude-sonnet-5-5 \
+       --context _goals/demo/spawns/06-context.md >/dev/null 2>&1
+  err="$("$@" outcome --goal demo --spawn 06 --report _goals/demo/spawns/06-report.md \
+        --verdict PASS --model-reported gpt-4.1 2>&1 >/dev/null)"; rc=$?
+  if [[ $rc -eq 0 && "$err" == *'log-spawn: MODEL-FAMILY-MISMATCH requested=claude-sonnet-5-5 reported=gpt-4.1'* ]] \
+     && grep -qF 'model_check: MISMATCH' "$log"; then
+    report PASS "[$label] model_check MISMATCH → stderr warning, exit 0"
+  else
+    report FAIL "[$label] model_check MISMATCH" "rc=$rc err='$err'"
+  fi
+
+  # blank requested id → unverified
+  fx="$(mktemp -d)"
+  mkdir -p "$fx/_goals/demo/spawns"
+  head -c 20 /dev/zero | tr '\0' 'a' > "$fx/_goals/demo/spawns/07-context.md"
+  head -c 10 /dev/zero | tr '\0' 'b' > "$fx/_goals/demo/spawns/07-report.md"
+  log="$fx/_goals/demo/orchestration-log.md"
+  cd "$fx" || return 1
+  "$@" spawn --goal demo --agent implementer --phase P4 --model-requested " " \
+       --context _goals/demo/spawns/07-context.md >/dev/null 2>&1
+  out="$("$@" outcome --goal demo --spawn 07 --report _goals/demo/spawns/07-report.md \
+        --verdict PASS --model-reported X 2>/dev/null)"; rc=$?
+  if [[ $rc -eq 0 && "$out" == *'model_check: unverified'* ]]; then
+    report PASS "[$label] blank model-requested → model_check: unverified, exit 0"
+  else
+    report FAIL "[$label] blank model-requested" "rc=$rc out='$out'"
+  fi
+
+  # missing model requested bullet → unverified
+  fx="$(mktemp -d)"
+  mkdir -p "$fx/_goals/demo/spawns"
+  head -c 20 /dev/zero | tr '\0' 'a' > "$fx/_goals/demo/spawns/08-context.md"
+  head -c 10 /dev/zero | tr '\0' 'b' > "$fx/_goals/demo/spawns/08-report.md"
+  log="$fx/_goals/demo/orchestration-log.md"
+  printf '%s\n' \
+    '# Orchestration Log — demo' '' \
+    'Append-only spawn ledger. Running io_est_tokens (orchestrator I/O proxy, chars/4) and work_est_tokens (subagent self-reported footprint /4): see latest entry.' \
+    '' '---' '' \
+    '### 2026-09-01T12:00-04:00 — SPAWN implementer (P4) [#08]' \
+    '- agent: implementer' \
+    '- context: _goals/demo/spawns/08-context.md · context_chars: 20' \
+    > "$log"
+  cd "$fx" || return 1
+  out="$("$@" outcome --goal demo --spawn 08 --report _goals/demo/spawns/08-report.md \
+        --verdict PASS --model-reported X 2>/dev/null)"; rc=$?
+  if [[ $rc -eq 0 && "$out" == *'model_check: unverified'* ]]; then
+    report PASS "[$label] missing model requested bullet → model_check: unverified, exit 0"
+  else
+    report FAIL "[$label] missing model requested bullet" "rc=$rc out='$out'"
+  fi
+  cd "$REPO_ROOT" || return 1
+}
+
+run_model_check_case bash bash "$BIN"
+if command -v pwsh >/dev/null 2>&1; then
+  run_model_check_case pwsh pwsh -NoProfile -File "$CANON_PS1"
+else
+  report SKIP "pwsh model_check twin" "pwsh not on PATH"
 fi
 
 # ---------------------------------------------------------------------------

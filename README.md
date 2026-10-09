@@ -2,7 +2,7 @@
 
 [![skills.sh installs](https://skills.sh/b/kdcllc/skills)](https://skills.sh/kdcllc/skills)
 
-> Kit version: **0.28.0** (`skills/setup/VERSION`) · Version history: [CHANGELOG.md](CHANGELOG.md)
+> Kit version: **0.29.0** (`skills/setup/VERSION`) · Version history: [CHANGELOG.md](CHANGELOG.md)
 
 A portable orchestrator/worker/evaluator multi-agent system for AI coding harnesses —
 **Claude Code, Cursor, GitHub Copilot (VS Code), and OpenAI Codex** — packaged as one
@@ -35,14 +35,15 @@ Optional: start an unattended run (sandboxed!) with `_loop/loop.sh 10` or
   escalates with the continuation ladder offered (`phases.ladder: escalate`, default);
   the autonomous loop sets `ladder: auto`. No phase advances without an evaluator
   verdict; fixes are always re-evaluated (3-cycle limits, explicit escalation).
-- **Six subagents with tiered model pinning**: `evaluator`, `qa-evaluator`, and
-  `diagnostician` on the frontier tier (effort high), `implementer`, `test-writer`, and
-  `terminal` on the light tier (effort medium) — every spawn passes its model explicitly
-  and agents self-report in the first line of each report (`**Model (self-reported)**: ...`).
-  `terminal` runs Bash or PowerShell and returns only the result the caller asked for, so
-  the raw stream stays out of the frontier session. Model IDs are configuration
-  (`models.map.md`), with per-tier fallback chains, a never-fall-up rule, and a
-  cost-ceiling policy.
+- **Six subagents with tiered model pinning**: `evaluator` and `qa-evaluator` on the
+  frontier tier (effort high), `diagnostician` on the frontier tier (effort `xhigh`),
+  `implementer` and `test-writer` on the light tier (effort medium), and `terminal` on
+  the fast tier (effort low — when an install omits `fast`, terminal falls back to the
+  light model) — every spawn passes its model explicitly and agents self-report in the
+  first line of each report (`**Model (self-reported)**: ...`). `terminal` runs Bash or
+  PowerShell and returns only the result the caller asked for, so the raw stream stays
+  out of the frontier session. Model IDs are configuration (`models.map.md`), with
+  per-tier fallback chains, a never-fall-up rule, and a cost-ceiling policy.
 - **Hardened evaluation** (patterns adopted from studying
   [bradygaster/squad](https://github.com/bradygaster/squad)): existence checks with a
   ✅/⚠️/❌/🔍 confidence ladder and anti-fabrication rules, a required devil's-advocate
@@ -205,11 +206,13 @@ are documented in [docs/guide/contributing.md](docs/guide/contributing.md).
 
 ## Model tiers
 
-Evaluators and the orchestrating session run a frontier model; implementer and test-writer
-run a light model. `models.map.md` is the single place model IDs live per install —
-including fallback chains (never fall back *up* a tier), the fix-cycle rotation table,
-and the cost-ceiling policy. The research behind the split — including the Copilot
-cost-ceiling and Cursor silent-fallback caveats — is in
+Three tiers — frontier, light, and fast — pin orchestrator/evaluators/diagnostician,
+implementer/test-writer, and terminal respectively (installs without a `fast` pin run
+terminal on light). `models.map.md` is the single place model IDs live per install —
+including fallback chains (never fall back *up* a tier, with a fast→light carve-out
+because light is terminal's baseline when `fast` is omitted), the fix-cycle rotation
+table, and the cost-ceiling policy. The research behind the split — including the
+Copilot cost-ceiling and Cursor silent-fallback caveats — is in
 `docs/research-multi-harness-upgrade.md`. Re-run `/setup` when providers rotate model
 names.
 

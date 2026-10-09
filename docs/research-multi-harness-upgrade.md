@@ -25,6 +25,15 @@ source, unverified · 💬 = blog/secondary, unverified.
 > default-branch resolution, plus verification of the v0.20.0 install-feedback claims
 > (single-family model rotation, path-scoped rules vs subagents). Implementation
 > pending.
+>
+> **See also**: [research-model-currency-2026-10.md](research-model-currency-2026-10.md)
+> (2026-10-08) — model-currency audit of every model-map slot (Opus 5.5 frontier on
+> Claude Code and Cursor, Haiku 5.5 fast tier), Cursor bracket-param effort syntax,
+> Claude Code's lack of cross-provider models, and Apr–Oct 2026 harness-native
+> orchestration features. Fast tier, same-family arbiter warnings, loop usage-credit
+> guard, `model_check`, and setup pin-verification shipped in kit v0.29.0; the
+> external-CLI arbiter adapter, native `.codex/agents/*.toml` agents, post-merge
+> integration rung, and native review gates are out of scope for v0.29.0.
 
 ---
 

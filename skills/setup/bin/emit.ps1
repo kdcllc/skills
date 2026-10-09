@@ -26,8 +26,16 @@
 #                 class-a BOOTSTRAP id missing from answers.bootstrap (empty string
 #                 counts as answered; kit-* never listed). Exit 3 if any line, else 0.
 #
+#   Optional answers fields (schema 1): models.<h>.fast (string, fast-tier ID;
+#   defaults to light), models.<h>.arbiter_same_family (boolean, acknowledges a
+#   same-family rung-5 arbiter when frontier_alt_family equals frontier). Arbiter
+#   reuse warnings (stderr `emit: warning: …`, counted in warnings W, exit unchanged)
+#   when frontier_alt_family equals frontier without the flag, or equals alt_family
+#   (≠ frontier) regardless of the flag.
+#
 #   Exit codes: 0 ok · 2 usage / answers file unreadable · 3 answers
-#   invalid or unanswered ids under --check-answers · 4 upgrade blocked by
+#   invalid, unanswered ids under --check-answers, loop_chain usage-credit denylist
+#   entry, or models.<h>.fast / arbiter_same_family wrong JSON type · 4 upgrade blocked by
 #   user-modified files (listed on stderr; --force overrides) · 5 verify failed ·
 #   6 template syntax error. Errors: one stderr line each, prefixed `emit: `.
 #   --help prints usage to stderr and exits 2.
@@ -889,7 +897,19 @@ function Get-SettingsJsonMin {
 # --- emit set ---
 $script:Emit = New-Object 'System.Collections.Hashtable' ([StringComparer]::Ordinal)
 $script:Warnings = 0
+$script:WarnLines = [System.Collections.Generic.List[string]]::new()
 function Bump-Warn { $script:Warnings++ }
+function Add-WarnLine([string]$msg) {
+  $script:WarnLines.Add($msg)
+  Bump-Warn
+}
+function Write-BufferedWarnLines {
+  if ($script:WarnLines.Count -eq 0) { return }
+  $arr = $script:WarnLines.ToArray()
+  [Array]::Sort($arr, $script:Ord)
+  foreach ($line in $arr) { [Console]::Error.Write("emit: $line`n") }
+  $script:WarnLines.Clear()
+}
 $script:DryActions = [System.Collections.Generic.List[string]]::new()
 function Add-DryAction([string]$a, [string]$p) { $script:DryActions.Add("$a $p") }
 
@@ -935,6 +955,68 @@ function Get-ModelField([string]$h, [string]$f) {
   return (Strip-AllNl (ConvertTo-JqRaw $v))
 }
 
+# Usage-credit loop-chain entries (exact + claude-fable prefix); sole pinned literal set.
+$script:LoopChainUsageCreditDenylist = @('best', 'fable', 'claude-fable*')
+
+function Test-LoopChainEntryBillsUsageCredits([string]$entry) {
+  foreach ($pat in $script:LoopChainUsageCreditDenylist) {
+    if ($entry -clike $pat) { return $true }
+  }
+  return $false
+}
+
+function Get-ModelFast([string]$h) {
+  $v = Get-ModelField $h 'fast'
+  if (-not [string]::IsNullOrEmpty($v)) { return $v }
+  return (Get-ModelField $h 'light')
+}
+
+function Test-ModelsFieldPresent([string]$h, [string]$f) {
+  if ($null -eq $script:Answers -or -not $script:Answers.ContainsKey('models')) { return $false }
+  $m = $script:Answers['models']
+  if (-not (Test-IsJsonObject $m) -or -not $m.ContainsKey($h)) { return $false }
+  $mh = $m[$h]
+  return ((Test-IsJsonObject $mh) -and $mh.ContainsKey($f))
+}
+
+function Validate-ModelsContract([string]$h) {
+  if (Test-ModelsFieldPresent $h 'fast') {
+    $mh = $script:Answers['models'][$h]
+    if ($mh['fast'] -isnot [string]) { Add-Problem "models.$h.fast must be a string" }
+  }
+  if (Test-ModelsFieldPresent $h 'arbiter_same_family') {
+    $mh = $script:Answers['models'][$h]
+    if ($mh['arbiter_same_family'] -isnot [bool]) { Add-Problem "models.$h.arbiter_same_family must be a boolean" }
+  }
+  $lc = Get-ModelField $h 'loop_chain'
+  if ([string]::IsNullOrEmpty($lc)) { return }
+  foreach ($entry in $lc.Split(',')) {
+    if (Test-LoopChainEntryBillsUsageCredits $entry) {
+      Add-Problem "models.$h.loop_chain entry '$entry' can bill usage credits in headless runs"
+    }
+  }
+}
+
+function Warn-ModelsArbiter([string]$h) {
+  $fam = Get-ModelField $h 'frontier_alt_family'
+  if ([string]::IsNullOrEmpty($fam)) { return }
+  $frontier = Get-ModelField $h 'frontier'
+  $alt = Get-ModelField $h 'alt_family'
+  if ($fam -ceq $frontier) {
+    $flag = $false
+    if (Test-ModelsFieldPresent $h 'arbiter_same_family') {
+      $flag = ($script:Answers['models'][$h]['arbiter_same_family'] -eq $true)
+    }
+    if (-not $flag) {
+      Add-WarnLine "warning: models.$h.frontier_alt_family equals frontier; set arbiter_same_family: true to accept a same-family arbiter"
+    }
+    return
+  }
+  if (($fam -cne $frontier) -and ($fam -ceq $alt)) {
+    Add-WarnLine "warning: models.$h.frontier_alt_family equals alt_family; the rung-5 arbiter must not reuse the fix-cycle-2 model"
+  }
+}
+
 function Load-GlobalTokens {
   $script:Tokens = New-Object 'System.Collections.Hashtable' ([StringComparer]::Ordinal)
   $pn = ''
@@ -960,6 +1042,8 @@ function Load-GlobalTokens {
     if (-not [string]::IsNullOrEmpty($v)) { $script:Tokens["${pre}_MODEL_FRONTIER"] = $v }
     $v = Get-ModelField $h 'light'
     if (-not [string]::IsNullOrEmpty($v)) { $script:Tokens["${pre}_MODEL_LIGHT"] = $v }
+    $v = Get-ModelFast $h
+    if (-not [string]::IsNullOrEmpty($v)) { $script:Tokens["${pre}_MODEL_FAST"] = $v }
   }
   $script:Tokens['LOOP_MODEL_CHAIN'] = (Get-ModelField $script:Primary 'loop_chain')
 }
@@ -974,6 +1058,8 @@ function Set-HarnessTokens([string]$h) {
   if (-not [string]::IsNullOrEmpty($v)) { $script:Tokens['MODEL_ALT_FAMILY'] = $v } else { $script:Tokens.Remove('MODEL_ALT_FAMILY') }
   $v = Get-ModelField $h 'frontier_alt_family'
   if (-not [string]::IsNullOrEmpty($v)) { $script:Tokens['MODEL_FRONTIER_ALT_FAMILY'] = $v } else { $script:Tokens.Remove('MODEL_FRONTIER_ALT_FAMILY') }
+  $v = Get-ModelFast $h
+  if (-not [string]::IsNullOrEmpty($v)) { $script:Tokens['MODEL_FAST'] = $v } else { $script:Tokens.Remove('MODEL_FAST') }
 }
 
 function Resolve-Template([string]$src, [string]$rel) {
@@ -1029,6 +1115,10 @@ function Emit-Agents([string]$h) {
       'codex' {
         Put-Emit ".codex/agents/${role}.md" (Strip-AllNl (Strip-Frontmatter $content))
         if ($role -in @('evaluator', 'qa-evaluator', 'diagnostician')) { $mid = [string]$script:Tokens['MODEL_FRONTIER'] }
+        elseif ($role -eq 'terminal') {
+          if ($script:Tokens.ContainsKey('MODEL_FAST')) { $mid = [string]$script:Tokens['MODEL_FAST'] }
+          else { $mid = [string]$script:Tokens['MODEL_LIGHT'] }
+        }
         else { $mid = [string]$script:Tokens['MODEL_LIGHT'] }
         Put-Emit ".codex/agents/${role}.toml" (Strip-AllNl (Get-CodexRoleToml $mid))
       }
@@ -1213,6 +1303,7 @@ function Validate-AnswersSchema {
       $ok = $true
     }
     if (-not $ok) { Add-Problem "models entry missing for harness '$h'" }
+    else { Validate-ModelsContract $h }
   }
   foreach ($f in @('research', 'loop', 'greenfield', 'lint', 'typecheck', 'models_pinned')) {
     $has = $false
@@ -1786,10 +1877,12 @@ function Invoke-VerifyAll {
   }
   if ($script:VerifyErrs.Count -gt 0) {
     $full = [System.Collections.Generic.List[string]]::new()
+    foreach ($w in $script:WarnLines) { $full.Add("emit: $w") }
     foreach ($m in $script:VerifyErrs) { $full.Add("emit: $m") }
     $arr = $full.ToArray()
     [Array]::Sort($arr, $script:Ord)
     foreach ($line in $arr) { [Console]::Error.Write($line + "`n") }
+    $script:WarnLines.Clear()
     return 1
   }
   return $rc
@@ -1806,6 +1899,7 @@ function Write-DryActions {
 }
 
 function Write-Summary {
+  Write-BufferedWarnLines
   $line = "emit: written $($script:WrittenN) · unchanged $($script:UnchangedM) · pruned $($script:PrunedP) · seeds-kept $($script:SeedsKept) · warnings $($script:Warnings) · manifest orchestration-kit.manifest.json · kit $($script:Version)"
   [Console]::Out.Write($line + "`n")
 }
@@ -1845,10 +1939,12 @@ function Invoke-RunEmit {
     }
   }
   Flush-Problems
+  foreach ($h in $script:Harnesses) { Warn-ModelsArbiter $h }
   Load-BootstrapMap
   Compute-MissingBootstrap
 
   if ($script:CheckAnswers) {
+    Write-BufferedWarnLines
     $rc = 0
     foreach ($id in $script:MissingBootstrap) {
       [Console]::Out.Write("$id`t$($script:BootstrapIdPath[$id])`n")
@@ -1875,16 +1971,18 @@ function Invoke-RunEmit {
   Plan-PointersAndGit
 
   if ($script:BlockedPaths.Count -gt 0) {
-    if ($script:DryRun) { Write-DryActions; exit 4 }
-    $blocked = [System.Collections.Generic.List[string]]::new()
-    foreach ($bp in $script:BlockedPaths) { $blocked.Add("emit: blocked $bp") }
-    $barr = $blocked.ToArray()
-    [Array]::Sort($barr, $script:Ord)
-    foreach ($line in $barr) { [Console]::Error.Write($line + "`n") }
+    if ($script:DryRun) { Write-BufferedWarnLines; Write-DryActions; exit 4 }
+    $full = [System.Collections.Generic.List[string]]::new()
+    foreach ($w in $script:WarnLines) { $full.Add("emit: $w") }
+    foreach ($bp in $script:BlockedPaths) { $full.Add("emit: blocked $bp") }
+    $arr = $full.ToArray()
+    [Array]::Sort($arr, $script:Ord)
+    foreach ($line in $arr) { [Console]::Error.Write($line + "`n") }
+    $script:WarnLines.Clear()
     exit 4
   }
 
-  if ($script:DryRun) { Write-DryActions; exit 0 }
+  if ($script:DryRun) { Write-BufferedWarnLines; Write-DryActions; exit 0 }
 
   Write-EmitFiles
   $script:SeedsKept = 0

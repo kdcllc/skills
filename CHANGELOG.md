@@ -5,6 +5,38 @@ Kit version lives in `skills/setup/VERSION` and is written into each install's
 Versions without an entry (v0.14.0–v0.17.0 and earlier than v0.12.0) predate this
 changelog; their history lives in git and the research/design docs under `docs/`.
 
+## v0.29.0 — Model currency (Oct 2026)
+
+- **Fast tier** — optional `models.<harness>.fast` in the answers file; `terminal` pins
+  to it (defaults to `light` when omitted so existing installs keep prior pins).
+- **Same-family arbiter warning** — emit warns when `frontier_alt_family` equals
+  `frontier` without `arbiter_same_family: true`, or equals `alt_family` (≠ `frontier`)
+  regardless of the flag; the model map labels rung-5 same-family arbiters explicitly.
+- **Loop usage-credit guard** — `best`, `fable`, or `claude-fable*` in any `loop_chain`
+  exit 3 at emit time.
+- **`model_check` in log-spawn** — `_kit/log-spawn.* outcome` writes
+  `model_check: match|MISMATCH|unverified` and warns on MISMATCH; scoped one-time
+  re-spawn for evaluator-class verdicts only (orchestration template).
+- **Setup verification guidance** — `/setup` Step 3 documents live model-list checks,
+  Cursor silent fallback, and minimum Claude Code versions for pinned IDs.
+- **Per-role effort** — diagnostician `xhigh`, terminal `low` in agent templates and the
+  model map effort paragraph.
+- **Dogfood pin refresh** — self-install fixture and emitted instance move to Oct 2026
+  Anthropic 5.5 full IDs and Cursor picker-verified slugs; stale Grok/GPT arbitration
+  pins removed.
+- **Research** — decisions and live-check notes in
+  [docs/research-model-currency-2026-10.md](docs/research-model-currency-2026-10.md).
+
+- **Upgrading** — Re-emit with `--upgrade` (or a full `/setup` re-run). (a) When emit
+  warns that `frontier_alt_family` equals `frontier`, set `arbiter_same_family: true` if
+  a same-family rung-5 arbiter is intentional, or pick a different-family frontier
+  arbiter. (b) When `frontier_alt_family` equals `alt_family`, `arbiter_same_family`
+  does **not** silence the warning — point `frontier_alt_family` at a frontier model (a
+  different-family one, or `frontier` itself with `arbiter_same_family: true`). Remove
+  `best`/`fable`/`claude-fable*` from any `loop_chain` (emit now exits 3). For Claude
+  Code pins to Opus/Sonnet/Haiku 5.5, upgrade the CLI to at least v2.1.280 / v2.1.284 /
+  v2.1.293 respectively.
+
 ## v0.28.0 — Signal-driven skill suggestions
 
 - **Step 2b for every project** — After Step 2 inspect, interactive `/setup` runs

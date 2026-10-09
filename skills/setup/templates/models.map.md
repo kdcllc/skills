@@ -18,7 +18,8 @@ defined; re-run `/setup` (or edit here and re-emit) when providers rotate model 
 | Tier | Roles | Rationale |
 |------|-------|-----------|
 | `frontier` | orchestrator (main session), `evaluator`, `qa-evaluator`, `diagnostician` | Delegation and evaluation have a capability floor — don't cheap out on the roles that decide and verify; continuation-ladder diagnosis needs frontier-tier reasoning |
-| `light` | `implementer`, `test-writer`, `terminal` | Checklist-driven execution and compact command running retain most quality at a fraction of the cost when the plan and the verification are strong |
+| `light` | `implementer`, `test-writer` | Checklist-driven execution retains most quality at a fraction of the cost when the plan and the verification are strong |
+| `fast` | `terminal` | Single-command execution and result extraction need no deep reasoning — the cheapest, quickest tier fits |
 
 ## Resolved models
 
@@ -28,12 +29,14 @@ defined; re-run `/setup` (or edit here and re-emit) when providers rotate model 
 |------|-------------|--------|
 | `frontier` | {{CLAUDE_MODEL_FRONTIER}} | {{CURSOR_MODEL_FRONTIER}} |
 | `light` | {{CLAUDE_MODEL_LIGHT}} | {{CURSOR_MODEL_LIGHT}} |
+| `fast` | {{CLAUDE_MODEL_FAST}} | {{CURSOR_MODEL_FAST}} |
 <!-- ENDIF want_cursor -->
 <!-- IF !want_cursor -->
 | Tier | Claude Code |
 |------|-------------|
 | `frontier` | {{CLAUDE_MODEL_FRONTIER}} |
 | `light` | {{CLAUDE_MODEL_LIGHT}} |
+| `fast` | {{CLAUDE_MODEL_FAST}} |
 <!-- ENDIF !want_cursor -->
 <!-- ENDIF want_claude -->
 <!-- IF !want_claude -->
@@ -41,25 +44,31 @@ defined; re-run `/setup` (or edit here and re-emit) when providers rotate model 
 |------|--------|
 | `frontier` | {{CURSOR_MODEL_FRONTIER}} |
 | `light` | {{CURSOR_MODEL_LIGHT}} |
+| `fast` | {{CURSOR_MODEL_FAST}} |
 <!-- ENDIF !want_claude -->
 <!-- IF want_copilot -->
 
-- Copilot (VS Code): frontier `{{COPILOT_MODEL_FRONTIER}}`, light `{{COPILOT_MODEL_LIGHT}}`
+- Copilot (VS Code): frontier `{{COPILOT_MODEL_FRONTIER}}`, light `{{COPILOT_MODEL_LIGHT}}`, fast `{{COPILOT_MODEL_FAST}}`
 <!-- ENDIF want_copilot -->
 <!-- IF want_codex -->
 
-- Codex: frontier `{{CODEX_MODEL_FRONTIER}}`, light `{{CODEX_MODEL_LIGHT}}`
+- Codex: frontier `{{CODEX_MODEL_FRONTIER}}`, light `{{CODEX_MODEL_LIGHT}}`, fast `{{CODEX_MODEL_FAST}}`
 <!-- ENDIF want_codex -->
 
+An install that omits `fast` runs `terminal` on the light model (the `fast` row then
+repeats the light ID).
+
 <!-- BOOTSTRAP[models-map-effort]: fill per targeted harness; drop Copilot/Codex sentences when those harnesses are absent; Cursor effort encoding per live docs.
-Reasoning-effort pins (where the harness supports them): evaluators `high`, workers `medium`
-— Claude Code `effort:` frontmatter, Codex `default_subagent_reasoning_effort`; Copilot
-has no effort key (drop it). Cursor's effort encoding is not stable enough to hardcode
-here: Cursor's docs currently describe two coexisting forms — `…[effort=high]`-style
-bracket params appended to the model ID, and slug-suffix effort variants on the model
-name itself (shaped like `…-thinking-high`) that surface in some model lists. Neither
-form has superseded the other — check the live Cursor docs/model list at emit time and
-use whichever form they document that day.
+Reasoning-effort pins (where the harness supports them): evaluators (`evaluator`,
+`qa-evaluator`) `high`, `diagnostician` `xhigh`, `implementer`/`test-writer` `medium`,
+`terminal` `low` — Claude Code `effort:` frontmatter, Codex
+`default_subagent_reasoning_effort`; Copilot has no effort key (drop it). Cursor has
+two coexisting forms: bracket params appended to the model ID
+(`<model-id>[effort=high]`) are the documented frontmatter form, while slug-suffix
+effort variants on the model name itself (`…-high`) appear in pickers and CLI
+listings. Use the form verified for the account at emit time. Never quote the YAML
+`model:` value — a quoted or unresolvable value silently falls back to the parent
+model.
 -->
 
 ## Fallback chains
@@ -70,12 +79,15 @@ use whichever form they document that day.
 |------|------------------------------|
 | `frontier` | {{MODEL_FRONTIER}} → <same-family previous version> → <strongest standard model> → (omit pin — harness default) |
 | `light` | {{MODEL_LIGHT}} → <alternate light model> → (omit pin — harness default) |
+| `fast` | {{MODEL_FAST}} → {{MODEL_LIGHT}} → (omit pin — harness default) |
 -->
 
 Rules (adapted from bradygaster/squad's model selector):
 
 - **Never fall back UP a tier** — a light role must never silently land on a frontier
   model, and a frontier role never degrades below the standard rung of its chain.
+  One carve-out: fast → light is allowed, because light is `terminal`'s baseline tier
+  (installs without `fast` run it there).
 - Fallbacks are silent to the user but **logged in the orchestration log**.
 - Max 3 fallback attempts, then omit the model pin and take the harness default.
 - Apply at most **one** complexity adjustment per spawn — no cascading bumps.
@@ -128,12 +140,24 @@ When fix cycles 1–3 exhaust, the continuation ladder (see ORCHESTRATION.md) ap
 <!-- BOOTSTRAP[frontier-alt-family]: resolve {{MODEL_FRONTIER_ALT_FAMILY}} to a frontier-tier model from a
      different provider family than {{MODEL_FRONTIER}} — same pattern as
      {{MODEL_ALT_FAMILY}} at light tier, but never reuse {{MODEL_ALT_FAMILY}} for
-     arbitration (light tier ≠ frontier tier).
+     arbitration (light tier ≠ frontier tier; emit warns on that reuse, when it
+     differs from {{MODEL_FRONTIER}}, even with `arbiter_same_family: true`). When
+     no different-family frontier model is reachable on the harness, it may equal {{MODEL_FRONTIER}} only with
+     `arbiter_same_family: true` (emit otherwise warns); then label the rung-5 row
+     "same-family arbiter (reduced independence)".
 | Ladder step | Model pin |
 |-------------|-----------|
 | Diagnosis-driven implementation attempt (rung 4) | `{{MODEL_FRONTIER}}` |
 | Evaluator arbitration mode (rung 5) | `{{MODEL_FRONTIER_ALT_FAMILY}}` — a different model **family** from the primary evaluator at frontier tier (analytical diversity at the capability floor) |
 -->
+
+**Same-family arbiter.** When no different-family frontier model is reachable on a
+harness, `frontier_alt_family` may equal `frontier` with `arbiter_same_family: true`
+in the answers file (emit otherwise warns); the rung-5 row is then labelled
+"same-family arbiter (reduced independence)" and the arbiter's verdict header says
+`same-family arbiter`. Reusing the fix-cycle-2 alternate (`alt_family`) for
+arbitration stays forbidden — when `frontier_alt_family` equals `alt_family` (and
+differs from `frontier`), emit warns even with the flag.
 <!-- IF want_copilot -->
 
 **Copilot fit:** frontier = session tier, so diagnostician and arbiter pins respect the
@@ -152,6 +176,15 @@ cost ceiling; Copilot has no effort key (drop it).
 - **Claude Code env overrides**: `CLAUDE_CODE_SUBAGENT_MODEL` and
   `CLAUDE_CODE_EFFORT_LEVEL` override frontmatter; org `availableModels` allowlists can
   cause pins to be ignored.
+- **Claude Code is single-provider**: it runs Anthropic models only —
+  `ANTHROPIC_BASE_URL` changes the endpoint, not the model family — so a
+  different-family arbiter is unreachable natively (see **Same-family arbiter**).
+- **Claude Code aliases resolve per provider**: an alias such as `opus` maps to a
+  different model on Microsoft Foundry, Bedrock, or Google Cloud than on the Anthropic
+  API — prefer full IDs, and record the minimum Claude Code version each pin needs.
+- **Claude Code usage-credit aliases**: headless loop runs must never resolve to
+  `best`/`fable` (they bill usage credits without asking); emit rejects them in a loop
+  chain.
 - **Codex project config**: model pins are committable in `.codex/config.toml`, but
   `model_provider`/`model_providers`/`profile(s)` are ignored at project level.
 -->

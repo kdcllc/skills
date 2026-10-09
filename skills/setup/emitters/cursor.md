@@ -8,8 +8,13 @@ or not `.claude/` exists.
 
 > **Schema check first**: before emitting, check https://cursor.com/docs/subagents
 > for the current agent-frontmatter key set AND the live Cursor model list.
-> Unknown or stale model IDs are substituted silently by Cursor — no error
-> surfaces, so a typo'd or rotated-out ID fails quietly downstream.
+> Use bracket params (`<model-id>[effort=high,context=300k]`) — the documented
+> frontmatter form; suffix slugs (`…-high`-shaped IDs) still appear in pickers
+> and listings. Values are emitted **unquoted** — quoting the YAML value triggers
+> silent fallback to the parent model. If `agent models` prints no models, use
+> the IDE's Settings → Models / subagent model picker. Unknown or stale model IDs
+> are substituted silently by Cursor — no error surfaces, so a typo'd or
+> rotated-out ID fails quietly downstream.
 
 The `.mdc` pointer (`alwaysApply: true`) content is embedded in `bin/emit.sh` /
 `emit.ps1`. Must be `.mdc`; plain `.md` is silently ignored.
@@ -20,8 +25,9 @@ Nesting: main→L1→L2 since Cursor 2.5 — the orchestrator prompt should tell
 agents to spawn. Cloud Agents support only main→L1.
 
 `diagnostician` pins the frontier Cursor model (same tier as `evaluator`).
-`terminal` pins light; Cursor drops `tools:` unless the live schema documents
-an equivalent — the Bash/shell + Read guard lives in `terminal.md` prose.
+`terminal` pins fast (light when no fast tier); Cursor drops `tools:` unless the live
+schema documents an equivalent — the Bash/shell + Read guard lives in `terminal.md`
+prose.
 Skills have no model key — strip `model:`/`effort:`; keep
 `disable-model-invocation`.
 

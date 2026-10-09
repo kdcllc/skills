@@ -17,7 +17,12 @@ strips frontmatter keys).
 
 Model values: Claude aliases (`opus`, `sonnet`, `haiku`, `fable`) or full IDs
 are both valid; `inherit` is the frontmatter default if a tier is deliberately
-unpinned.
+unpinned. `fable` is never valid in a loop chain — emit exits 3. Claude Code
+runs **Anthropic models only** — a cross-family arbiter is unreachable
+natively; use the same-family arbiter flag when the arbiter ID equals
+frontier. Prefer full IDs; aliases resolve per provider (see the model-config
+docs). Record the minimum Claude Code version for each pinned model (check
+`claude --version` against the docs' per-model floor).
 
 Pin nesting explicitly — the default flipped twice in July 2026. Merge
 `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=3` into `.claude/settings.json` (merge,

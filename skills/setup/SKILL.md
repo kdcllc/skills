@@ -1,6 +1,6 @@
 ---
 name: setup
-description: Install the orchestrator/worker/evaluator multi-agent system into the current project, compiled for its AI coding harness(es) — Claude Code, Cursor, GitHub Copilot (VS Code), and/or OpenAI Codex. Generates the six subagents (evaluator, qa-evaluator, implementer, test-writer, terminal, diagnostician) with tiered model pins — terminal is light-tier: it runs any Bash or PowerShell command and returns only the result the caller asked for — plus the orchestrator skills (feature, research), the criteria skills, an optional autonomous feature loop, and a project-specific ORCHESTRATION.md. On empty or near-empty (greenfield) directories it first asks whether to scaffold a project tree and creates nothing until the user confirms. After inspect, suggests skills.sh skills from inspection signals. Run once per project; re-run to upgrade or re-target.
+description: Install the orchestrator/worker/evaluator multi-agent system into the current project, compiled for its AI coding harness(es) — Claude Code, Cursor, GitHub Copilot (VS Code), and/or OpenAI Codex. Generates the six subagents (evaluator, qa-evaluator, implementer, test-writer, terminal, diagnostician) with tiered model pins — terminal is fast-tier (light when an install omits `fast`): it runs any Bash or PowerShell command and returns only the result the caller asked for — plus the orchestrator skills (feature, research), the criteria skills, an optional autonomous feature loop, and a project-specific ORCHESTRATION.md. On empty or near-empty (greenfield) directories it first asks whether to scaffold a project tree and creates nothing until the user confirms. After inspect, suggests skills.sh skills from inspection signals. Run once per project; re-run to upgrade or re-target.
 ---
 
 # Setup (Orchestration Kit Compiler)
@@ -205,9 +205,27 @@ Ask (multiple-choice where possible) only what you could not infer:
 
 1. **Project name** as it should appear in docs (propose one).
 2. **Execution layer order** — confirm your inferred chain.
-3. **Model tiers** — for each target harness: pick CURRENT frontier and light
-   model IDs (check the harness's live model list; IDs rotate). Offer
-   "inherit/unpinned" as an option (`flags.models_pinned` false).
+3. **Model tiers** — for each target harness: pick CURRENT **frontier**, **light**,
+   and optional **fast** model IDs, plus **alt-family** (fix-cycle rotation) and
+   **frontier-alt-family** (post-cycle-3 arbiter). Verify **every** ID against a
+   live source; record the verification date and source in the
+   `models-map-live-check` bootstrap text. Offer "inherit/unpinned" as an option
+   (`flags.models_pinned` false). Live sources by harness:
+   - **Cursor** — `agent models` (alias `cursor-agent models`); if it prints no
+     models, use the IDE's **Settings → Models** / subagent model picker and say so
+     in the live-check text.
+   - **Claude Code** — the model-configuration docs' alias table plus
+     `claude --version` checked against the minimum Claude Code version each pinned
+     model needs.
+   - **Copilot** — the model picker.
+   - **Codex** — the model picker / config docs.
+   When no different-family frontier model is reachable on a harness, set
+   `frontier_alt_family` to the frontier ID and `arbiter_same_family: true`, write
+   **same-family arbiter (reduced independence)** into the `frontier-alt-family`
+   bootstrap answer, and tell the user the arbiter is same-family. Claude Code is
+   always in this case (Anthropic models only). Never set `frontier_alt_family`
+   equal to `alt_family` (the emitter warns). Never put `best` or `fable` in a
+   loop chain (emit exits 3).
 4. **QA gate surfaces** — which user-facing surfaces qa-evaluator covers; any existing
    evidence-producing skills (API smoke, visual QA)?
 5. **Research workflow** — wanted? Record `flags.research`.
@@ -238,9 +256,10 @@ Write `orchestration-kit.answers.json` at the repo root (`schema: 1`). Id table:
              "lint": true, "typecheck": false, "models_pinned": true },
   "forge": { "kind": "github", "host": "" },
   "tokens": { "PROJECT_NAME": "…", "STACK_SUMMARY": "…", "EXECUTION_LAYERS": "…" },
-  "models": { "claude-code": { "frontier": "opus", "light": "sonnet",
+  "models": { "claude-code": { "frontier": "opus", "light": "sonnet", "fast": "haiku",
                                "alt_family": "…", "frontier_alt_family": "…",
-                               "loop_chain": "sonnet" } },
+                               "loop_chain": "sonnet",
+                               "arbiter_same_family": false } },
   "bootstrap": { "<id>": "verbatim replacement text", "other-id": "…" }
 }
 ```
@@ -268,6 +287,10 @@ bash $SETUP/bin/emit.sh --answers orchestration-kit.answers.json --check-answers
 Ask the user about each listed id, fill `bootstrap`, and repeat `--check-answers`
 until exit 0.
 
+Optional per harness: `"fast"` (fast-tier model ID; defaults to `"light"`) and
+`"arbiter_same_family": true` when `frontier_alt_family` equals `frontier` (same-family
+rung-5 arbiter — the emitter warns if the IDs match without this flag).
+
 ### Placeholder reference
 
 | Token | Meaning |
@@ -276,7 +299,8 @@ until exit 0.
 | `{{STACK_SUMMARY}}` | 2–5 sentence stack note |
 | `{{IDE_DIR}}` | derived — do not set. Config dir of the harness **being emitted**, resolved per emitter (`.claude`, `.cursor`, `.github`, `.codex`); single-copy shared artifacts (`_loop/*`) resolve it to the **primary** harness's dir |
 | `{{MODEL_FRONTIER}}` / `{{MODEL_LIGHT}}` | derived — do not set. Tier → model ID for the primary harness (from the model map) |
-| `{{CLAUDE_MODEL_*}}`, `{{CURSOR_MODEL_*}}`, `{{COPILOT_MODEL_*}}`, `{{CODEX_MODEL_*}}` | derived — do not set. Per-harness tier IDs (model map only) |
+| `{{MODEL_FAST}}` | derived — do not set. Fast-tier model ID for the primary harness; defaults to the light ID |
+| `{{CLAUDE_MODEL_*}}`, `{{CURSOR_MODEL_*}}`, `{{COPILOT_MODEL_*}}`, `{{CODEX_MODEL_*}}` | derived — do not set. Per-harness tier IDs (model map only); includes `*_MODEL_FAST` |
 | `{{MODEL_ALT_FAMILY}}` | derived — do not set. Different-family model at light-comparable tier, used by fix-cycle rotation (model map) |
 | `{{MODEL_FRONTIER_ALT_FAMILY}}` | derived — do not set. Different-family model at frontier tier, used by evaluator arbitration mode after cycle 3 (model map) |
 | `{{LOOP_MODEL_CHAIN}}` | derived — do not set. Comma-separated loop fallback chain, first = preferred (from the model map's "Loop fallback chain" row); empty ⇒ the breaker still tracks state but never passes a model flag |
@@ -340,3 +364,7 @@ keep a stale value unmentioned.
 
 Paths listed in `seedFiles` are outside the overwrite flow: create a seed if it is
 missing, otherwise leave it exactly as it is.
+
+From v0.29.0, emit warns for a reused or unacknowledged same-family arbiter (fix:
+set `arbiter_same_family: true` or pick a different arbiter) and exits 3 for
+`best`/`fable` in a loop chain (fix: replace the entry).

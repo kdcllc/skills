@@ -23,8 +23,11 @@
 #   log-spawn.sh outcome --goal <name> --spawn <NN> --report <path> --verdict <text>
 #                        --model-reported <text> [--note <text>] [--work-chars <C>]
 #     Appends:
-#       - OUTCOME [#NN]: <verdict> · model reported: <text> · report: <path> · report_chars: <R> · io_est_tokens: <T> · work_read_chars: <C|n/a> · work_est_tokens: <W|n/a> · running io: <X> · running work: <Y>
+#       - OUTCOME [#NN]: <verdict> · model reported: <text> · model_check: <match|MISMATCH|unverified> · report: <path> · report_chars: <R> · io_est_tokens: <T> · work_read_chars: <C|n/a> · work_est_tokens: <W|n/a> · running io: <X> · running work: <Y>
 #         <note>                (only with --note; indented two spaces)
+#     model_check compares model families (case-insensitive, first match wins) for the
+#     SPAWN block's `model requested:` id and --model-reported; on MISMATCH one stderr
+#     line `log-spawn: MODEL-FAMILY-MISMATCH requested=<id> reported=<text>` (exit 0).
 #     R = byte length of the report file; T = floor((context_chars of SPAWN #NN + R) / 4);
 #     C/W parsed from report line `files_read: <N> (~<C> chars)` (digit-only C) or
 #     overridden by --work-chars (digits only, else exit 2); W = floor(C/4) or n/a;
@@ -45,8 +48,9 @@
 #   already present; outcome whose SPAWN #NN is missing or already has an OUTCOME) ·
 #   4 missing goal directory or context/report file.
 #   Check order is fixed: flags/basename (2) → paths (4) → integrity (3).
-#   Errors: one line on stderr prefixed `log-spawn:`. Success: exactly one stdout line
-#   (the appended heading or outcome line).
+#   Errors: one line on stderr prefixed `log-spawn:` (plus optional MODEL-FAMILY-MISMATCH
+#   warning on outcome MISMATCH). Success: exactly one stdout line (the appended heading
+#   or outcome line).
 #
 #   Portability freeze (both twins): timestamp = local time, minutes precision, colon in
 #   the offset (`2026-09-03T16:59-04:00`); byte counts are FILE BYTES; io_est_tokens is
@@ -63,6 +67,7 @@ usage() {
 usage: log-spawn.sh <spawn|outcome|note> [--root <path>] <flags>
   spawn   --goal G --agent A --phase P --model-requested M --context _goals/G/spawns/NN-context.md [--writes T] [--why T] [--expect T]
   outcome --goal G --spawn NN --report _goals/G/spawns/NN-report.md --verdict V --model-reported M [--note T] [--work-chars C]
+          (OUTCOME adds model_check: match|MISMATCH|unverified; MISMATCH → stderr warning, exit 0)
   note    --goal G --text T
 exit: 0 ok · 2 usage · 3 ledger integrity · 4 missing goal dir / file
 EOF
@@ -122,6 +127,49 @@ parse_work_chars() { # <report-path> → 0 ok (sets work_c) · 1 n/a
     fi
   done < "$path"
   return 1
+}
+
+model_family() { # <model-id> → family on stdout; 1 if none
+  local lc
+  [ -n "$1" ] || return 1
+  lc="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+  if printf '%s' "$lc" | grep -qE 'claude|opus|sonnet|haiku|fable'; then
+    printf 'anthropic'; return 0
+  fi
+  if printf '%s' "$lc" | grep -qE 'gpt|codex|(^|[^a-z0-9])o[0-9]'; then
+    printf 'openai'; return 0
+  fi
+  if printf '%s' "$lc" | grep -qE 'grok'; then
+    printf 'xai'; return 0
+  fi
+  if printf '%s' "$lc" | grep -qE 'gemini'; then
+    printf 'google'; return 0
+  fi
+  if printf '%s' "$lc" | grep -qE 'composer'; then
+    printf 'cursor'; return 0
+  fi
+  if printf '%s' "$lc" | grep -qE 'muse'; then
+    printf 'meta'; return 0
+  fi
+  return 1
+}
+
+derive_model_check() { # <requested-id> <reported-text>
+  local fam_req fam_rep
+  fam_req="$(model_family "$1")" || { printf 'unverified'; return; }
+  fam_rep="$(model_family "$2")" || { printf 'unverified'; return; }
+  if [ "$fam_req" = "$fam_rep" ]; then
+    printf 'match'
+  else
+    printf 'MISMATCH'
+  fi
+}
+
+spawn_model_requested() { # <log> <nn> → id on stdout
+  local log="$1" nn="$2" block line
+  block="$(grep -A5 "^### .* — SPAWN .* \[#$nn\]\$" "$log")"
+  line="$(printf '%s\n' "$block" | grep -m1 'model requested:')" || return 1
+  printf '%s' "$line" | sed -n 's/.*model requested: \([^·]*\).*/\1/p' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//'
 }
 
 [ $# -eq 0 ] && { usage; exit 2; }
@@ -218,6 +266,12 @@ $heading
     fi
     ctx_chars="$(grep -A5 "^### .* — SPAWN .* \[#$nn\]\$" "$log" | grep -m1 -o 'context_chars: [0-9]*' | sed 's/context_chars: //')"
     [ -n "$ctx_chars" ] || die 3 "SPAWN [#$nn] has no context_chars line"
+    model_req="$(spawn_model_requested "$log" "$nn" || true)"
+    if [ -n "$model_req" ]; then
+      model_check="$(derive_model_check "$model_req" "$model_reported")"
+    else
+      model_check="unverified"
+    fi
     rep_chars="$(file_bytes "$rep_path")"
     io_est=$(( (ctx_chars + rep_chars) / 4 ))
     prev_io="$(prev_running_io "$log")"
@@ -240,7 +294,7 @@ $heading
       work_est_disp="n/a"
       running_work="$prev_work"
     fi
-    line="- OUTCOME [#$nn]: $verdict · model reported: $model_reported · report: $report · report_chars: $rep_chars · io_est_tokens: $io_est · work_read_chars: $work_read_disp · work_est_tokens: $work_est_disp · running io: $running_io · running work: $running_work"
+    line="- OUTCOME [#$nn]: $verdict · model reported: $model_reported · model_check: $model_check · report: $report · report_chars: $rep_chars · io_est_tokens: $io_est · work_read_chars: $work_read_disp · work_est_tokens: $work_est_disp · running io: $running_io · running work: $running_work"
     if [ -n "$note" ]; then
       append "$log" "$line
   $note
@@ -248,6 +302,9 @@ $heading
     else
       append "$log" "$line
 "
+    fi
+    if [ "$model_check" = MISMATCH ]; then
+      printf 'log-spawn: MODEL-FAMILY-MISMATCH requested=%s reported=%s\n' "$model_req" "$model_reported" >&2
     fi
     printf '%s\n' "$line"
     ;;

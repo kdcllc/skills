@@ -46,7 +46,7 @@ Orchestrator-invoked only — the evaluator does not self-trigger this mode ([`a
 
 **Trigger** — unanimous same-item failure across fix cycles 1–3: every evaluator flagged the same required-fix item and it still fails after three implement→evaluate cycles.
 
-**Model** — `{{MODEL_FRONTIER_ALT_FAMILY}}` (frontier tier, different family from the primary evaluator). Per the kit's Cursor silent-fallback caveat, the arbiter states in its verdict which model actually produced it ([`agents/evaluator.md`](../../skills/setup/templates/agents/evaluator.md) § Arbitration mode).
+**Model** — `{{MODEL_FRONTIER_ALT_FAMILY}}` (frontier tier, different family from the primary evaluator when reachable). As of v0.29.0, when no different-family frontier model is reachable on the harness, setup may pin the same family with `arbiter_same_family: true` in the answers file (emit otherwise warns); the model map then labels the rung-5 row [`same-family arbiter (reduced independence)`](../../skills/setup/templates/models.map.md) and the arbiter's verdict header states `same-family arbiter`. Per the kit's Cursor silent-fallback caveat, the arbiter states in its verdict which model actually produced it ([`agents/evaluator.md`](../../skills/setup/templates/agents/evaluator.md) § Arbitration mode).
 
 **Scope** — evaluates the **criteria**, never the code. Reads no diffs and scores no implementation. Execute-before-score does not apply; arbiter evidence is acceptance-criterion citation only.
 
@@ -265,10 +265,13 @@ Each goal maintains `_goals/[goal-name]/orchestration-log.md` ([`feature/SKILL.t
 
 **Entry-before-launch** (`spawn`) — records timestamp, agent, **model requested** (and rotation/fallback), why this agent was routed, the task's `writes` claim (allowed-paths fence), expected outputs, and `context_chars` measured from the context file. The heading carries `[#NN]`.
 
-**Outcome-after** (`outcome`) — appends `- OUTCOME [#NN]: <verdict> · model reported: <…> · report: <path> · report_chars: <R> · io_est_tokens: <T> · work_read_chars: <C|n/a> · work_est_tokens: <W|n/a> · running io: <X> · running work: <Y>`. `[#NN]` links each OUTCOME to its SPAWN; the script refuses an outcome without a matching SPAWN or a second outcome for the same NN (exit 3).
+**Outcome-after** (`outcome`) — appends `- OUTCOME [#NN]: <verdict> · model reported: <…> · model_check: <match|MISMATCH|unverified> · report: <path> · report_chars: <R> · io_est_tokens: <T> · work_read_chars: <C|n/a> · work_est_tokens: <W|n/a> · running io: <X> · running work: <Y>`. `[#NN]` links each OUTCOME to its SPAWN; the script refuses an outcome without a matching SPAWN or a second outcome for the same NN (exit 3).
+
+As of v0.29.0, `model_check` compares provider **families** (not exact IDs) for the SPAWN `model requested:` id and `--model-reported`: `match` (both known, same family), `MISMATCH` (both known, different — one stderr line `log-spawn: MODEL-FAMILY-MISMATCH requested=<id> reported=<text>`, exit 0), or `unverified` (either side unknown/`inherit`/empty). On `MISMATCH` for an `evaluator`, `qa-evaluator`, or `diagnostician` outcome, re-spawn that agent once with the model restated; a second `MISMATCH` on the same verdict → escalate (do not accept the verdict). Worker spawns (`implementer`, `test-writer`, `terminal`): log and continue. `unverified`: logged only.
 
 | Field | Meaning |
 |-------|---------|
+| `model_check` | Family comparison for SPAWN `model requested:` vs `--model-reported`: `match` / `MISMATCH` / `unverified`; on `MISMATCH` the script prints one stderr warning and still exits 0 — orchestrator policy above |
 | `io_est_tokens` T | (`context_chars` + `report_chars`) / 4 — **orchestrator I/O proxy** (chars/4), not the subagent's spend |
 | `work_read_chars` / `work_est_tokens` W | Parsed from the Footprint `files_read: N (~C chars)` line (W = C/4); **`n/a`** when the line is absent or malformed — a report-format defect for the evaluator, not a ledger error. Optional `--work-chars C` overrides parsing |
 | `running io` / `running work` | Previous totals plus T / W (`running io` falls back to pre-v0.26 `running total` when no `running io` exists; W=`n/a` adds 0) |

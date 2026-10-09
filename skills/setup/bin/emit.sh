@@ -23,8 +23,16 @@
 #                 class-a BOOTSTRAP id missing from answers.bootstrap (empty string
 #                 counts as answered; kit-* never listed). Exit 3 if any line, else 0.
 #
+#   Optional answers fields (schema 1): models.<h>.fast (string, fast-tier ID;
+#   defaults to light), models.<h>.arbiter_same_family (boolean, acknowledges a
+#   same-family rung-5 arbiter when frontier_alt_family equals frontier). Arbiter
+#   reuse warnings (stderr `emit: warning: …`, counted in warnings W, exit unchanged)
+#   when frontier_alt_family equals frontier without the flag, or equals alt_family
+#   (≠ frontier) regardless of the flag.
+#
 #   Exit codes: 0 ok · 2 usage / jq missing / answers file unreadable · 3 answers
-#   invalid or unanswered ids under --check-answers · 4 upgrade blocked by
+#   invalid, unanswered ids under --check-answers, loop_chain usage-credit denylist
+#   entry, or models.<h>.fast / arbiter_same_family wrong JSON type · 4 upgrade blocked by
 #   user-modified files (listed on stderr; --force overrides) · 5 verify failed ·
 #   6 template syntax error. Errors: one stderr line each, prefixed `emit: `.
 #   --help prints usage to stderr and exits 2.
@@ -776,7 +784,15 @@ settings_json_min() {
 # ---------------------------------------------------------------------------
 declare -A EMIT=()
 WARNINGS=0
+WARN_LINES=()
 bump_warn() { WARNINGS=$((WARNINGS + 1)); }
+record_warn_line() { WARN_LINES+=("$1"); bump_warn; }
+flush_warn_lines() {
+  if [ ${#WARN_LINES[@]} -gt 0 ]; then
+    printf 'emit: %s\n' "${WARN_LINES[@]}" | LC_ALL=C sort >&2
+    WARN_LINES=()
+  fi
+}
 
 DRY_ACTIONS=()
 dry_action() { DRY_ACTIONS+=("$1 $2"); }
@@ -807,6 +823,76 @@ jq_model() { # harness field
   jq -r --arg h "$1" --arg f "$2" '.models[$h][$f] // empty' <<<"$ANSWERS"
 }
 
+# Usage-credit loop-chain denylist (sole pinned literal set; glob patterns, ordinal match).
+LOOP_CHAIN_USAGE_CREDIT_DENYLIST=(best fable 'claude-fable*')
+
+loop_chain_entry_bills_usage_credits() {
+  local entry="$1" pat
+  for pat in "${LOOP_CHAIN_USAGE_CREDIT_DENYLIST[@]}"; do
+    [[ "$entry" == $pat ]] && return 0
+  done
+  return 1
+}
+
+resolve_model_fast() { # harness → stdout: fast ID or empty if unset
+  local h="$1" v
+  v="$(jq_model "$h" fast)"
+  if [ -n "$v" ]; then
+    printf '%s' "$v"
+    return 0
+  fi
+  v="$(jq_model "$h" light)"
+  if [ -n "$v" ]; then
+    printf '%s' "$v"
+  fi
+}
+
+validate_models_contract() {
+  local h="$1" lc entry rest
+  if jq -e --arg h "$h" '.models[$h] | has("fast")' <<<"$ANSWERS" >/dev/null; then
+    if ! jq -e --arg h "$h" '.models[$h].fast | type == "string"' <<<"$ANSWERS" >/dev/null; then
+      add_problem "models.$h.fast must be a string"
+    fi
+  fi
+  if jq -e --arg h "$h" '.models[$h] | has("arbiter_same_family")' <<<"$ANSWERS" >/dev/null; then
+    if ! jq -e --arg h "$h" '.models[$h].arbiter_same_family | type == "boolean"' <<<"$ANSWERS" >/dev/null; then
+      add_problem "models.$h.arbiter_same_family must be a boolean"
+    fi
+  fi
+  lc="$(jq_model "$h" loop_chain)"
+  [ -z "$lc" ] && return 0
+  rest="$lc"
+  while [ -n "$rest" ]; do
+    if [[ "$rest" == *','* ]]; then
+      entry="${rest%%,*}"
+      rest="${rest#*,}"
+    else
+      entry="$rest"
+      rest=""
+    fi
+    if loop_chain_entry_bills_usage_credits "$entry"; then
+      add_problem "models.$h.loop_chain entry '$entry' can bill usage credits in headless runs"
+    fi
+  done
+}
+
+warn_models_arbiter() {
+  local h="$1" frontier alt fam
+  fam="$(jq_model "$h" frontier_alt_family)"
+  [ -z "$fam" ] && return 0
+  frontier="$(jq_model "$h" frontier)"
+  alt="$(jq_model "$h" alt_family)"
+  if [ "$fam" = "$frontier" ]; then
+    if ! jq -e --arg h "$h" '.models[$h].arbiter_same_family == true' <<<"$ANSWERS" >/dev/null; then
+      record_warn_line "warning: models.$h.frontier_alt_family equals frontier; set arbiter_same_family: true to accept a same-family arbiter"
+    fi
+    return 0
+  fi
+  if [ "$fam" != "$frontier" ] && [ "$fam" = "$alt" ]; then
+    record_warn_line "warning: models.$h.frontier_alt_family equals alt_family; the rung-5 arbiter must not reuse the fix-cycle-2 model"
+  fi
+}
+
 load_global_tokens() {
   TOKENS=()
   local k v pn
@@ -828,6 +914,7 @@ load_global_tokens() {
     pre="$(harness_prefix "$h")"
     v="$(jq_model "$h" frontier)"; [ -n "$v" ] && TOKENS["${pre}_MODEL_FRONTIER"]="$v"
     v="$(jq_model "$h" light)";    [ -n "$v" ] && TOKENS["${pre}_MODEL_LIGHT"]="$v"
+    v="$(resolve_model_fast "$h")"; [ -n "$v" ] && TOKENS["${pre}_MODEL_FAST"]="$v"
   done
   v="$(jq_model "$PRIMARY" loop_chain)"
   TOKENS[LOOP_MODEL_CHAIN]="$v"
@@ -840,6 +927,7 @@ set_harness_tokens() { # harness
   v="$(jq_model "$h" light)";     [ -n "$v" ] && TOKENS[MODEL_LIGHT]="$v" || unset 'TOKENS[MODEL_LIGHT]'
   v="$(jq_model "$h" alt_family)"; [ -n "$v" ] && TOKENS[MODEL_ALT_FAMILY]="$v" || unset 'TOKENS[MODEL_ALT_FAMILY]'
   v="$(jq_model "$h" frontier_alt_family)"; [ -n "$v" ] && TOKENS[MODEL_FRONTIER_ALT_FAMILY]="$v" || unset 'TOKENS[MODEL_FRONTIER_ALT_FAMILY]'
+  v="$(resolve_model_fast "$h")"; [ -n "$v" ] && TOKENS[MODEL_FAST]="$v" || unset 'TOKENS[MODEL_FAST]'
 }
 
 resolve_template() { # abs-src rel → sets RESOLVED (IF → BOOTSTRAP → tokens)
@@ -909,6 +997,7 @@ emit_agents() { # harness
         local mid
         case "$role" in
           evaluator|qa-evaluator|diagnostician) mid="${TOKENS[MODEL_FRONTIER]}" ;;
+          terminal) mid="${TOKENS[MODEL_FAST]:-${TOKENS[MODEL_LIGHT]:-}}" ;;
           *) mid="${TOKENS[MODEL_LIGHT]}" ;;
         esac
         put_emit ".codex/agents/${role}.toml" "$(codex_role_toml "$mid")"
@@ -1067,6 +1156,8 @@ validate_answers_schema() {
   for h in "${HARNESSES[@]+"${HARNESSES[@]}"}"; do
     if ! jq -e --arg h "$h" '.models[$h] | type == "object"' <<<"$ANSWERS" >/dev/null; then
       add_problem "models entry missing for harness '$h'"
+    else
+      validate_models_contract "$h"
     fi
   done
   local f
@@ -1748,13 +1839,23 @@ verify_all() {
     fi
   fi
   if [ ${#VERIFY_ERRS[@]} -gt 0 ]; then
-    printf 'emit: %s\n' "${VERIFY_ERRS[@]}" | LC_ALL=C sort >&2
+    local combined=()
+    local w
+    for w in "${WARN_LINES[@]+"${WARN_LINES[@]}"}"; do
+      combined+=("$w")
+    done
+    for w in "${VERIFY_ERRS[@]+"${VERIFY_ERRS[@]}"}"; do
+      combined+=("$w")
+    done
+    printf 'emit: %s\n' "${combined[@]}" | LC_ALL=C sort >&2
+    WARN_LINES=()
     return 1
   fi
   return $rc
 }
 
 print_summary() {
+  flush_warn_lines
   printf 'emit: written %s · unchanged %s · pruned %s · seeds-kept %s · warnings %s · manifest orchestration-kit.manifest.json · kit %s\n' \
     "$WRITTEN_N" "$UNCHANGED_M" "$PRUNED_P" "$SEEDS_KEPT" "$WARNINGS" "$VERSION"
 }
@@ -1792,10 +1893,14 @@ run_emit() {
   fi
 
   flush_problems
+  for h in "${HARNESSES[@]+"${HARNESSES[@]}"}"; do
+    warn_models_arbiter "$h"
+  done
   load_bootstrap_map
   compute_missing_bootstrap
 
   if [ "$CHECK_ANSWERS" -eq 1 ]; then
+    flush_warn_lines
     rc=0
     for id in "${MISSING_BOOTSTRAP[@]+"${MISSING_BOOTSTRAP[@]}"}"; do
       [ -z "$id" ] && continue
@@ -1824,14 +1929,26 @@ run_emit() {
 
   if [ ${#BLOCKED_PATHS[@]} -gt 0 ]; then
     if [ "$DRY_RUN" -eq 1 ]; then
+      flush_warn_lines
       printf '%s\n' "${DRY_ACTIONS[@]}" | LC_ALL=C sort
       exit 4
     fi
-    printf 'emit: blocked %s\n' "${BLOCKED_PATHS[@]}" | LC_ALL=C sort >&2
+    local combined=() w p
+    for w in "${WARN_LINES[@]+"${WARN_LINES[@]}"}"; do
+      combined+=("$w")
+    done
+    for p in "${BLOCKED_PATHS[@]}"; do
+      combined+=("blocked $p")
+    done
+    if [ ${#combined[@]} -gt 0 ]; then
+      printf 'emit: %s\n' "${combined[@]}" | LC_ALL=C sort >&2
+      WARN_LINES=()
+    fi
     exit 4
   fi
 
   if [ "$DRY_RUN" -eq 1 ]; then
+    flush_warn_lines
     printf '%s\n' "${DRY_ACTIONS[@]}" | LC_ALL=C sort
     exit 0
   fi

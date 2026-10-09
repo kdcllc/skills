@@ -24,8 +24,11 @@
 #   log-spawn.ps1 outcome --goal <name> --spawn <NN> --report <path> --verdict <text>
 #                         --model-reported <text> [--note <text>] [--work-chars <C>]
 #     Appends:
-#       - OUTCOME [#NN]: <verdict> · model reported: <text> · report: <path> · report_chars: <R> · io_est_tokens: <T> · work_read_chars: <C|n/a> · work_est_tokens: <W|n/a> · running io: <X> · running work: <Y>
+#       - OUTCOME [#NN]: <verdict> · model reported: <text> · model_check: <match|MISMATCH|unverified> · report: <path> · report_chars: <R> · io_est_tokens: <T> · work_read_chars: <C|n/a> · work_est_tokens: <W|n/a> · running io: <X> · running work: <Y>
 #         <note>                (only with --note; indented two spaces)
+#     model_check compares model families (case-insensitive, first match wins) for the
+#     SPAWN block's `model requested:` id and --model-reported; on MISMATCH one stderr
+#     line `log-spawn: MODEL-FAMILY-MISMATCH requested=<id> reported=<text>` (exit 0).
 #     R = byte length of the report file; T = floor((context_chars of SPAWN #NN + R) / 4);
 #     C/W parsed from report line `files_read: <N> (~<C> chars)` (digit-only C) or
 #     overridden by --work-chars (digits only, else exit 2); W = floor(C/4) or n/a;
@@ -46,8 +49,9 @@
 #   already present; outcome whose SPAWN #NN is missing or already has an OUTCOME) ·
 #   4 missing goal directory or context/report file.
 #   Check order is fixed: flags/basename (2) → paths (4) → integrity (3).
-#   Errors: one line on stderr prefixed `log-spawn:`. Success: exactly one stdout line
-#   (the appended heading or outcome line).
+#   Errors: one line on stderr prefixed `log-spawn:` (plus optional MODEL-FAMILY-MISMATCH
+#   warning on outcome MISMATCH). Success: exactly one stdout line (the appended heading
+#   or outcome line).
 #
 #   Portability freeze (both twins): timestamp = local time, minutes precision, colon in
 #   the offset (`2026-09-03T16:59-04:00`); byte counts are FILE BYTES
@@ -70,6 +74,7 @@ function Show-Usage {
     'usage: log-spawn.ps1 <spawn|outcome|note> [--root <path>] <flags>',
     '  spawn   --goal G --agent A --phase P --model-requested M --context _goals/G/spawns/NN-context.md [--writes T] [--why T] [--expect T]',
     '  outcome --goal G --spawn NN --report _goals/G/spawns/NN-report.md --verdict V --model-reported M [--note T] [--work-chars C]',
+    '          (OUTCOME adds model_check: match|MISMATCH|unverified; MISMATCH → stderr warning, exit 0)',
     '  note    --goal G --text T',
     'exit: 0 ok · 2 usage · 3 ledger integrity · 4 missing goal dir / file'
   )
@@ -133,6 +138,26 @@ function Get-ParsedWorkChars([string]$ReportPath) {
     if ($line -match $FootprintRe) { return [int64]$Matches[1] }
   }
   return $null
+}
+
+function Get-ModelFamily([string]$Id) {
+  if ([string]::IsNullOrEmpty($Id)) { return $null }
+  $lc = $Id.ToLowerInvariant()
+  if ($lc -match 'claude|opus|sonnet|haiku|fable') { return 'anthropic' }
+  if ($lc -match 'gpt|codex|(^|[^a-z0-9])o[0-9]') { return 'openai' }
+  if ($lc -match 'grok') { return 'xai' }
+  if ($lc -match 'gemini') { return 'google' }
+  if ($lc -match 'composer') { return 'cursor' }
+  if ($lc -match 'muse') { return 'meta' }
+  return $null
+}
+
+function Get-ModelCheck([string]$Requested, [string]$Reported) {
+  $famReq = Get-ModelFamily $Requested
+  $famRep = Get-ModelFamily $Reported
+  if ($null -eq $famReq -or $null -eq $famRep) { return 'unverified' }
+  if ($famReq -eq $famRep) { return 'match' }
+  return 'MISMATCH'
 }
 
 if ($args.Count -eq 0) { Show-Usage; exit 2 }
@@ -226,6 +251,18 @@ switch ($sub) {
       if ($lines[$k] -match 'context_chars: ([0-9]+)') { $ctxChars = [int64]$Matches[1]; break }
     }
     if ($null -eq $ctxChars) { Fail 3 "SPAWN [#$nn] has no context_chars line" }
+    $modelReq = $null
+    for ($k = $spawnIdx; $k -le [Math]::Min($spawnIdx + 5, $lines.Count - 1); $k++) {
+      if ($lines[$k] -match 'model requested: ([^·]+)') {
+        $modelReq = $Matches[1].Trim()
+        break
+      }
+    }
+    if ([string]::IsNullOrWhiteSpace($modelReq)) {
+      $modelCheck = 'unverified'
+    } else {
+      $modelCheck = Get-ModelCheck $modelReq $opt.'model-reported'
+    }
     $repChars = [int64](Get-FileBytes $repPath)
     $ioEst = [int64][math]::Floor(($ctxChars + $repChars) / 4)
     $prevIo = Get-PrevRunningIo $lines
@@ -250,8 +287,11 @@ switch ($sub) {
         $runningWork = $prevWork
       }
     }
-    $line = "- OUTCOME [#$nn]: $($opt.verdict) · model reported: $($opt.'model-reported') · report: $report · report_chars: $repChars · io_est_tokens: $ioEst · work_read_chars: $workReadDisp · work_est_tokens: $workEstDisp · running io: $runningIo · running work: $runningWork"
+    $line = "- OUTCOME [#$nn]: $($opt.verdict) · model reported: $($opt.'model-reported') · model_check: $modelCheck · report: $report · report_chars: $repChars · io_est_tokens: $ioEst · work_read_chars: $workReadDisp · work_est_tokens: $workEstDisp · running io: $runningIo · running work: $runningWork"
     if ($opt.note) { Append-Text $log "$line`n  $($opt.note)`n" } else { Append-Text $log "$line`n" }
+    if ($modelCheck -eq 'MISMATCH') {
+      [Console]::Error.Write("log-spawn: MODEL-FAMILY-MISMATCH requested=$modelReq reported=$($opt.'model-reported')`n")
+    }
     Emit $line
   }
   'note' {

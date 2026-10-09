@@ -186,11 +186,12 @@ term="$TEMPLATES/agents/terminal.md"
 if [[ -s "$term" ]]; then
   term_fm="$(frontmatter "$term")"
   if grep -qxF 'name: terminal' <<<"$term_fm" \
-     && grep -qF '{{MODEL_LIGHT}}' <<<"$term_fm" \
+     && grep -qF '{{MODEL_FAST}}' <<<"$term_fm" \
+     && grep -qF 'effort: low' <<<"$term_fm" \
      && grep -qF 'tools: Bash, Read' <<<"$term_fm"; then
-    report PASS "terminal.md frontmatter: name: terminal, {{MODEL_LIGHT}}, tools: Bash, Read"
+    report PASS "terminal.md frontmatter: name: terminal, {{MODEL_FAST}}, effort: low, tools: Bash, Read"
   else
-    report FAIL "terminal.md frontmatter: name: terminal, {{MODEL_LIGHT}}, tools: Bash, Read"
+    report FAIL "terminal.md frontmatter: name: terminal, {{MODEL_FAST}}, effort: low, tools: Bash, Read"
   fi
 
   if grep -qiF 'No Edit/Write tools' "$term" \
@@ -206,13 +207,13 @@ else
 fi
 
 # ===========================================================================
-# 9. models.map.md light-tier Roles cell includes terminal.
+# 9. models.map.md fast-tier Roles cell includes terminal.
 # ===========================================================================
 mm="$TEMPLATES/models.map.md"
-if grep -qE '\| *`light`.*`terminal`' "$mm"; then
-  report PASS "models.map.md light-tier Roles cell includes terminal"
+if grep -qiE '\| *`fast`.*`terminal`' "$mm"; then
+  report PASS "models.map.md fast-tier Roles cell includes terminal"
 else
-  report FAIL "models.map.md light-tier Roles cell includes terminal"
+  report FAIL "models.map.md fast-tier Roles cell includes terminal"
 fi
 
 # ===========================================================================

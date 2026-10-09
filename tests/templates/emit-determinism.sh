@@ -288,7 +288,7 @@ case_i_cursor_isolation_and_variants() {
   ans="$(mktemp_file)"
   cc_ans="$(mktemp_root)"
   jq '.harnesses=["copilot","codex"] | .primary="copilot"
-    | .models["copilot"]={"frontier":"gpt-4.1","light":"gpt-4.1-mini","alt_family":"gpt-4.1","frontier_alt_family":"gpt-4.1","loop_chain":"gpt-4.1-mini"}
+    | .models["copilot"]={"frontier":"gpt-4.1","light":"gpt-4.1-mini","alt_family":"gpt-4.1","frontier_alt_family":"gpt-4.1","loop_chain":"gpt-4.1-mini","arbiter_same_family":true}
     | .models["codex"]={"frontier":"o3","light":"o4-mini","alt_family":"o3","frontier_alt_family":"o4-mini","loop_chain":"o4-mini"}' \
     "$FIXTURE" > "$ans"
   run_emit_sh "$cc_ans" --kit "$KIT" --answers "$ans" >/dev/null 2>&1 || return 1

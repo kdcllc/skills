@@ -52,7 +52,10 @@ After any install path, open a session inside your project. The setup skill live
 
    Requires `jq` for the Bash twin; use `emit.ps1` when jq is missing. If
    `orchestration-kit.manifest.json` already exists, run with `--dry-run` first. Exit
-   code 4 lists user-modified files — confirm with `--force`.
+   code 4 lists user-modified files — confirm with `--force`. The answers file may set
+   optional per-harness `fast` (fast-tier model ID; defaults to `light`) and
+   `arbiter_same_family`; emit may print same-family arbiter warnings (still exit 0) and
+   exits 3 when `best`, `fable`, or `claude-fable*` appears in a `loop_chain`.
 6. **Report** — read the summary line (`emit: written N · unchanged M · pruned P · seeds-kept S · warnings W · manifest orchestration-kit.manifest.json · kit <VERSION>`), delete the answers file (the manifest holds `answers`), and start with `/feature`.
 
 ```mermaid
@@ -157,7 +160,7 @@ Every install also gets the single-copy `_kit/` tools — `_kit/log-spawn.sh` an
 
 `/setup` writes `orchestration-kit.manifest.json` at the project root. The manifest records:
 
-- **`kitVersion`** — contents of [`skills/setup/VERSION`](../../skills/setup/VERSION) at emit time (currently `0.28.0`)
+- **`kitVersion`** — contents of [`skills/setup/VERSION`](../../skills/setup/VERSION) at emit time (currently `0.29.0`)
 - **`answers`** — snapshot of the answers file used at emit (enables `--upgrade` without re-interviewing)
 - **`files`** — map of every emitted path to its SHA-256 hash
 - **`seedFiles`** — paths that are seeds, not managed content (today `_goals/backlog.md`)
@@ -191,4 +194,4 @@ With `/setup` complete, your project has agents, skills, an architecture doc, an
 - [`skills/setup/emitters/copilot.md`](../../skills/setup/emitters/copilot.md) — Copilot VS Code caveats
 - [`skills/setup/emitters/codex.md`](../../skills/setup/emitters/codex.md) — Codex caveats
 - `orchestration-kit.manifest.json` — example manifest shape (`kitVersion`, `files`, `seedFiles`)
-- [`skills/setup/VERSION`](../../skills/setup/VERSION) — kit version anchor (`0.28.0`)
+- [`skills/setup/VERSION`](../../skills/setup/VERSION) — kit version anchor (`0.29.0`)

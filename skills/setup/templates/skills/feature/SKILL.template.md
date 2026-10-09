@@ -17,9 +17,8 @@ to `implementer`/`test-writer`; verification to `evaluator`. Read
 - Max 3 evaluation cycles per phase/task; on Phase 4 cycle-3 exhaustion, read
   `phases.ladder` (`escalate` default or key absent → escalate with "Run the
   continuation ladder" as option 1; `auto` → continuation ladder). Other phases escalate.
-- Every spawn passes its model explicitly (the model map's resolved ID for the agent's
-  tier); the log records requested vs self-reported. `inherit` only for a tier the
-  install left unpinned.
+- Every spawn passes its model explicitly; the log records requested vs reported.
+  `inherit` only when a tier is unpinned.
 - Transient subagent-launch failure: retry the same subagent up to 3 times (backoff
   2s/4s/8s). Never substitute a different agent type.
 
@@ -155,9 +154,10 @@ artifact. Skip on the default branch (say so), if the user declines, or on
 `_kit/log-spawn.sh spawn --goal [goal] --agent [agent] --phase "…" --model-requested [id] --context [that file] [--writes --why --expect]`
 (measures `context_chars`). **After** return: save the verbatim report to
 `spawns/NN-report.md`, then `_kit/log-spawn.sh outcome --goal [goal] --spawn NN --report [that file] --verdict "…" --model-reported "…"`
-(appends `report_chars`, `io_est_tokens` — orchestrator I/O proxy, chars/4 — and
-`work_est_tokens` from the agent's `### Footprint` (`n/a` = block missing: flag it to
-the evaluator), plus both running totals). Phase completions, ladder transitions (with
+(appends `model_check`, `report_chars`, `io_est_tokens`, `work_est_tokens`; `n/a` → flag to
+evaluator — ORCHESTRATION.md). Verdict roles (`evaluator`,
+`qa-evaluator`, `diagnostician`): re-spawn once on `MISMATCH`; second → escalate. Workers:
+log+continue. `unverified`: log only. Phase completions, ladder transitions (with
 the **rung name**), guard trips, skips: `_kit/log-spawn.sh note --goal [goal] --text "…"`.
 No placeholder lines ("TBD"). Append-only — rejections and respawns are new entries.
 
@@ -183,7 +183,7 @@ CURRENT_DATETIME: [literal ISO timestamp — never guess dates]
 [the task's `writes` list — the ONLY paths this subagent may create or modify]
 
 ## Model
-requested: [resolved ID from the model map for this agent's tier] · tier: [light|frontier] · rotation: [cycle N or n/a]
+requested: [resolved ID from the model map for this agent's tier] · tier: [fast|light|frontier] · rotation: [cycle N or n/a]
 
 ## Rules
 [must-do / must-not-do constraints for this task]

@@ -185,8 +185,8 @@ ON subagent invocation failure:
 | `qa-evaluator` | Skeptical, user-perspective | Behavioral QA of user-facing surfaces | frontier, effort high |
 | `implementer` | Focused, checklist-driven | Implementation + fixes | light, effort medium |
 | `test-writer` | Coverage-obsessed | Test creation, all external services mocked | light, effort medium |
-| `terminal` | Compact command runner | Any Bash or PowerShell command — returns only the result the caller asked for | light, effort medium |
-| `diagnostician` | Analytical, diagnosis-only | Root-cause analysis after fix-cycle exhaustion — no code writes | frontier |
+| `terminal` | Compact command runner | Any Bash or PowerShell command — returns only the result the caller asked for | fast, effort low |
+| `diagnostician` | Analytical, diagnosis-only | Root-cause analysis after fix-cycle exhaustion — no code writes | frontier, effort xhigh |
 <!-- ENDIF models_pinned -->
 <!-- IF !models_pinned -->
 | Subagent | Behavioral Style | Use Case |
@@ -208,11 +208,13 @@ only that result, so the raw stream never lands in the caller. Rung 3 is always 
 `terminal` spawn.
 
 <!-- IF models_pinned -->
-**Model tiers:** The orchestrator (main session) and both evaluators run the **frontier**
-tier — delegation and evaluating have a capability floor. The light-tier agents — the
-two workers **plus** `terminal` — run the **light** tier — checklist-driven execution
-and compact command running keep quality when the plan and verification are strong, at
-a fraction of the output-token cost. Model IDs are configuration, not constants: the
+**Model tiers:** Three tiers — **fast**, **light**, and **frontier**. The orchestrator
+(main session), both evaluators, and `diagnostician` run **frontier** — delegation,
+evaluating, and diagnosis have a capability floor. `implementer` and `test-writer` run
+**light** — checklist-driven execution at a fraction of frontier output-token cost.
+`terminal` runs **fast** when the install pins a fast-tier model; when `fast` is absent
+from the answers file, setup emits the **light** model there (unchanged from installs
+that never defined `fast`). Model IDs are configuration, not constants: the
 resolved per-harness model ID for each tier lives in exactly one place, the model map,
 and is pinned into each agent's config from there — on harnesses with a skills tree
 (Claude Code, Cursor) the map is also copied to `{{IDE_DIR}}/skills/setup-models.map.md`
@@ -572,12 +574,20 @@ Three subcommands (`--help` lists every flag):
   why, writes claim, expected output, and `context: <path> · context_chars: <N>` (N =
   measured file bytes).
 - **After return** — `outcome --goal G --spawn NN --report _goals/G/spawns/NN-report.md --verdict "V" --model-reported "M" [--note …] [--work-chars C]`
-  appends `- OUTCOME [#NN]: V · model reported: M · report: <path> · report_chars: <R> · io_est_tokens: <T> · work_read_chars: <C|n/a> · work_est_tokens: <W|n/a> · running io: <X> · running work: <Y>`
-  where `io_est_tokens` T = (`context_chars` + `report_chars`) / 4 — orchestrator I/O
-  proxy (chars/4), not the subagent's spend — and `work_est_tokens` W comes from the
-  Footprint `files_read` line (W = C/4; `n/a` if missing/malformed — flag to the
-  evaluator; `--work-chars C` overrides). `running io` / `running work` are the previous
-  totals plus T / W (`running io` falls back to pre-v0.26 `running total`; W=`n/a` adds 0).
+  appends `- OUTCOME [#NN]: V · model reported: M · model_check: <match|MISMATCH|unverified> · report: <path> · report_chars: <R> · io_est_tokens: <T> · work_read_chars: <C|n/a> · work_est_tokens: <W|n/a> · running io: <X> · running work: <Y>`
+  where `model_check` compares provider **families** (not exact IDs) for the SPAWN
+  `model requested:` id and `--model-reported`: `match` (both known, same family),
+  `MISMATCH` (both known, different — one stderr warning, exit still 0), or
+  `unverified` (either side unknown/`inherit`/empty). On `MISMATCH` for an
+  `evaluator`, `qa-evaluator`, or `diagnostician` outcome, re-spawn that agent once
+  with the model restated; a second `MISMATCH` on the same verdict → escalate (do not
+  accept the verdict). Worker spawns (`implementer`, `test-writer`, `terminal`):
+  log and continue. `unverified`: logged only. `io_est_tokens` T =
+  (`context_chars` + `report_chars`) / 4 — orchestrator I/O proxy (chars/4), not the
+  subagent's spend — and `work_est_tokens` W comes from the Footprint `files_read`
+  line (W = C/4; `n/a` if missing/malformed — flag to the evaluator; `--work-chars C`
+  overrides). `running io` / `running work` are the previous totals plus T / W
+  (`running io` falls back to pre-v0.26 `running total`; W=`n/a` adds 0).
 - **Everything else** — `note --goal G --text "…"` appends `### <ts> — …` for phase
   completions, ladder transitions (with the rung name), guard trips, and skips (e.g.
   Phase 6/7 declined via `goal.md`'s `phases:` block).

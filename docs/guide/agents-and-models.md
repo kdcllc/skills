@@ -1,8 +1,8 @@
-**Who this is for / What you'll learn:** Kit **users** and **contributors** who need to understand the six subagents, which model tier each role runs on, and how `models.map.md` governs IDs, fallbacks, and fix-cycle rotation. You will learn each agent's role, write boundaries, and prohibitions; why evaluators run frontier models while workers run light ones; the diagnostician's role in the post-exhaustion continuation ladder; the structure and rules of the model map; and harness caveats that affect tiering. For what evaluators enforce (verdict vocabulary, confidence ladder, contracts), see [evaluation-system.md](evaluation-system.md). For where each agent appears in the `/feature` phases, see [feature-workflow.md](feature-workflow.md).
+**Who this is for / What you'll learn:** Kit **users** and **contributors** who need to understand the six subagents, which model tier each role runs on, and how `models.map.md` governs IDs, fallbacks, and fix-cycle rotation. You will learn each agent's role, write boundaries, and prohibitions; why evaluators and the diagnostician run frontier models, workers run light models, and `terminal` runs the fast tier; the diagnostician's role in the post-exhaustion continuation ladder; the structure and rules of the model map; and harness caveats that affect tiering. For what evaluators enforce (verdict vocabulary, confidence ladder, contracts), see [evaluation-system.md](evaluation-system.md). For where each agent appears in the `/feature` phases, see [feature-workflow.md](feature-workflow.md).
 
 # Agents and Model Configuration
 
-The kit separates **coordination and verification** (frontier tier) from **execution** (light tier). One orchestrating main session prepares context, makes decisions, and spawns subagents — it never implements tasks itself. Every spawn passes its model explicitly (the model map's resolved ID for the agent's tier); each agent report starts with **`**Model (self-reported)**: ...`**. Six specialized subagents handle implementation, testing, command execution, evaluation, and post-exhaustion diagnosis. Model IDs, fallback chains, and fix-cycle rotation are configured in a single template file that `/setup` resolves per harness.
+The kit uses **three model tiers**: **coordination and verification** on the **frontier** tier, **checklist-driven execution** on the **light** tier, and **single-command runs** on the **fast** tier (`terminal`). One orchestrating main session prepares context, makes decisions, and spawns subagents — it never implements tasks itself. Every spawn passes its model explicitly (the model map's resolved ID for the agent's tier); each agent report starts with **`**Model (self-reported)**: ...`**. Six specialized subagents handle implementation, testing, command execution, evaluation, and post-exhaustion diagnosis. Model IDs, fallback chains, and fix-cycle rotation are configured in a single template file that `/setup` resolves per harness.
 
 ## The six subagents at a glance
 
@@ -12,7 +12,7 @@ The kit separates **coordination and verification** (frontier tier) from **execu
 | `qa-evaluator` | `frontier` | Nothing | Fix anything; extrapolate untested behavior |
 | `implementer` | `light` (`{{MODEL_LIGHT}}`) | Only paths in the task's `writes` set | Edit out-of-fence files; run rung-3 full suites |
 | `test-writer` | `light` | Only test files in task `writes` | Hit live external services; edit source to make tests pass |
-| `terminal` | `light` | Shell side effects only (no Edit/Write tools) | Dump raw command streams into the caller session |
+| `terminal` | `fast` (`{{MODEL_FAST}}`; falls back to light when an install omits `fast`) | Shell side effects only (no Edit/Write tools) | Dump raw command streams into the caller session |
 | `diagnostician` | `frontier` (`{{MODEL_FRONTIER}}`) | Nothing — diagnosis-only report | Edit files or write product code; re-litigate whether the acceptance criteria are sound (rung-5 arbitration's job) |
 
 The sections below quote or paraphrase the canonical agent templates under [`skills/setup/templates/agents/`](../../skills/setup/templates/agents/). Capabilities not confirmed there are omitted.
@@ -104,7 +104,7 @@ For noisy commands, spawn `terminal` where the harness allows (not Copilot).
 
 **Role:** Command runner. Spawn with a Bash or PowerShell command and the result you need back (exit code, last N lines, a match, pass/fail, a path). Executes that command and returns **only** that result.
 
-**Tier:** `light` — frontmatter `model: {{MODEL_LIGHT}}`, effort `medium`. Tools: Bash/shell and Read only — no Edit/Write.
+**Tier:** `fast` — frontmatter `model: {{MODEL_FAST}}`, effort `low`. When an install omits a `fast` pin, emit runs `terminal` on the light model. Tools: Bash/shell and Read only — no Edit/Write.
 
 **What it may write:** No files via Edit/Write tools. The shell command itself may create or change files if the caller asked — the terminal still runs it exactly.
 
@@ -114,7 +114,7 @@ For noisy commands, spawn `terminal` where the harness allows (not Copilot).
 - Use Edit/Write tools or add "helpful" extra commands beyond what the prompt lists.
 - Diagnose failures, suggest fixes, or interpret output — the caller Reads a log slice if it needs more.
 
-The terminal is the **shell-output shield**: noisy test runs, builds, and git operations stay in a light-tier subagent so raw streams do not flood the frontier orchestrating session.
+The terminal is the **shell-output shield**: noisy test runs, builds, and git operations stay in a fast-tier subagent so raw streams do not flood the frontier orchestrating session.
 
 ## Diagnostician
 
@@ -122,7 +122,7 @@ The terminal is the **shell-output shield**: noisy test runs, builds, and git op
 
 **Inputs:** The task file (including its `## Acceptance Criteria` section), all three fix-cycle histories (implementer reports + evaluator verdicts), and pointers to the current code.
 
-**Tier:** `frontier` — frontmatter `model: {{MODEL_FRONTIER}}`, effort `high`. Tools: Bash, Read, Grep, Glob — no Edit/Write.
+**Tier:** `frontier` — frontmatter `model: {{MODEL_FRONTIER}}`, effort `xhigh`. Tools: Bash, Read, Grep, Glob — no Edit/Write.
 
 **Execute before you diagnose:** Run the task's targeted verification command(s) yourself to observe the failure — reading prior reports or the diff alone is not enough.
 
@@ -141,14 +141,14 @@ You supply the report — the orchestrator routes (signature match → rung 6 or
 
 ## Roster diagram
 
-The orchestrating session runs on the frontier tier. It dispatches light-tier workers for execution and frontier-tier evaluators for verification. The terminal agent isolates command output. A frontier-tier diagnostician is spawned for post-exhaustion diagnosis.
+The orchestrating session runs on the frontier tier. It dispatches light-tier workers for execution, a fast-tier terminal for isolated command output, and frontier-tier evaluators for verification. A frontier-tier diagnostician is spawned for post-exhaustion diagnosis.
 
 ```mermaid
 flowchart TD
     Orch["Orchestrating session\n(frontier tier)"]
     Impl["implementer\n(light tier)"]
     TW["test-writer\n(light tier)"]
-    Term["terminal\n(light tier)\nshell-output shield"]
+    Term["terminal\n(fast tier)\nshell-output shield"]
     Eval["evaluator\n(frontier tier)"]
     QA["qa-evaluator\n(frontier tier)"]
     Diag["diagnostician\n(frontier tier)\ndiagnosis-only"]
@@ -171,16 +171,17 @@ Workers never advance a phase on their own — evaluators gate progression. See 
 
 ## Why frontier vs light
 
-Evaluators, the diagnostician, and the orchestrating session run **frontier** models; `implementer`, `test-writer`, and `terminal` run **light** models. The split follows a simple cost–quality tradeoff:
+Evaluators, the diagnostician, and the orchestrating session run **frontier** models; `implementer` and `test-writer` run **light** models; `terminal` runs the **fast** tier (or light when an install omits `fast`). The split follows a simple cost–quality tradeoff:
 
 | Tier | Roles | Rationale |
 |------|-------|-----------|
 | `frontier` | Orchestrator (main session), `evaluator`, `qa-evaluator`, `diagnostician` | Delegation and evaluation have a capability floor — don't cheap out on the roles that decide and verify; continuation-ladder diagnosis needs frontier-tier reasoning |
-| `light` | `implementer`, `test-writer`, `terminal` | Checklist-driven execution and compact command running retain most quality at a fraction of the cost when the plan and the verification are strong |
+| `light` | `implementer`, `test-writer` | Checklist-driven execution retains most quality at a fraction of the cost when the plan and the verification are strong |
+| `fast` | `terminal` | Single-command execution and result extraction need no deep reasoning — the cheapest, quickest tier fits |
 
 **Verification quality is where frontier spend pays off.** Implementation is cheaper-tier work that evaluators re-check before anything advances. A light-tier implementer following the task file (including its Acceptance Criteria) and strong evaluation is cheaper than running everything on frontier — without sacrificing gate quality at the roles that matter.
 
-Reasoning-effort pins (where the harness supports them): evaluators and the diagnostician `high`, workers `medium`.
+Reasoning-effort pins (where the harness supports them): `evaluator` and `qa-evaluator` `high`, `diagnostician` `xhigh`, `implementer` and `test-writer` `medium`, `terminal` `low`.
 
 ## `models.map.md` anatomy
 
@@ -190,8 +191,8 @@ Reasoning-effort pins (where the harness supports them): evaluators and the diag
 
 The map has two related tables:
 
-1. **Tier assignments** — maps each role to `frontier` or `light` (see previous section).
-2. **Resolved models** — one row per tier, one column per harness, cells filled with placeholder tokens such as `{{MODEL_FRONTIER}}`, `{{MODEL_LIGHT}}`, `{{CURSOR_MODEL_FRONTIER}}`, `{{COPILOT_MODEL_LIGHT}}`, etc. During `/setup`, these tokens are replaced with harness-specific IDs from the live model list.
+1. **Tier assignments** — maps each role to `frontier`, `light`, or `fast` (see previous section).
+2. **Resolved models** — one row per tier, one column per harness, cells filled with placeholder tokens such as `{{MODEL_FRONTIER}}`, `{{MODEL_LIGHT}}`, `{{MODEL_FAST}}`, `{{CURSOR_MODEL_FRONTIER}}`, `{{CURSOR_MODEL_FAST}}`, etc. During `/setup`, these tokens are replaced with harness-specific IDs from the live model list.
 
 Describe the **structure** (tier rows, per-harness columns, placeholder tokens) — not any concrete ID as permanent truth. If you see an illustrative resolved value in a local install, treat it as a snapshot, not a recommendation.
 
@@ -203,6 +204,7 @@ Each tier has a ordered chain — **first available wins**:
 |------|------------------------------|
 | `frontier` | `{{MODEL_FRONTIER}}` → same-family previous version → strongest standard model → (omit pin — harness default) |
 | `light` | `{{MODEL_LIGHT}}` → alternate light model → (omit pin — harness default) |
+| `fast` | `{{MODEL_FAST}}` → `{{MODEL_LIGHT}}` → (omit pin — harness default) |
 
 Additional rules from the map:
 
@@ -220,7 +222,7 @@ The autonomous loop has its own light-tier chain resolving `{{LOOP_MODEL_CHAIN}}
 
 ### Never fall back UP a tier
 
-A **light** role must never silently land on a **frontier** model. A **frontier** role never degrades below the standard rung of its chain. This is the **never fall back UP** rule — it prevents cost surprises (light work on frontier models) and quality surprises (frontier verification on downgraded models).
+A **light** role must never silently land on a **frontier** model. A **frontier** role never degrades below the standard rung of its chain. This is the **never fall back UP** rule — it prevents cost surprises (light work on frontier models) and quality surprises (frontier verification on downgraded models). One carve-out: **fast → light** is allowed, because light is `terminal`'s baseline tier when an install omits `fast`.
 
 ### Fix-cycle rotation
 
@@ -241,9 +243,11 @@ When fix cycles 1–3 exhaust, the continuation ladder applies these pins:
 | Ladder step | Model pin |
 |-------------|-----------|
 | Diagnosis-driven implementation attempt (rung 4) | `{{MODEL_FRONTIER}}` |
-| Evaluator arbitration mode (rung 5) | `{{MODEL_FRONTIER_ALT_FAMILY}}` — a different model **family** from the primary evaluator at frontier tier |
+| Evaluator arbitration mode (rung 5) | `{{MODEL_FRONTIER_ALT_FAMILY}}` — a different model **family** from the primary evaluator at frontier tier (or same-family when flagged — see below) |
 
 `{{MODEL_ALT_FAMILY}}` (light tier) is never reused for arbitration.
+
+**Same-family arbiter (as of v0.29.0).** When no different-family frontier model is reachable on a harness, answers may set `frontier_alt_family` equal to `frontier` with `arbiter_same_family: true`; emit otherwise prints a warning (counted in emit warnings, stderr, exit 0). The rung-5 row is then labelled **same-family arbiter (reduced independence)** in the model map, and the arbiter's verdict header states `same-family arbiter`. Reusing the fix-cycle-2 alternate (`alt_family`) for arbitration stays forbidden — when `frontier_alt_family` equals `alt_family` (and differs from `frontier`), emit warns even with the flag. When all three IDs are equal and the flag is set, emit is silent.
 
 ### Cost-ceiling policy
 
@@ -255,7 +259,7 @@ Three outcomes when a model choice conflicts with a plan or admin ceiling:
 
 ## Harness caveats
 
-These caveats shape tiering and emitter behavior. They are drawn from [`models.map.md`](../../skills/setup/templates/models.map.md) and [`harness-matrix.md`](../../skills/setup/reference/harness-matrix.md) only.
+These caveats shape tiering and emitter behavior. They are drawn from [`models.map.md`](../../skills/setup/templates/models.map.md), [`harness-matrix.md`](../../skills/setup/reference/harness-matrix.md), and the emitter caveats in [`emitters/cursor.md`](../../skills/setup/emitters/cursor.md) and [`emitters/claude-code.md`](../../skills/setup/emitters/claude-code.md); the `model_check` note follows [`templates/tools/log-spawn.sh`](../../skills/setup/templates/tools/log-spawn.sh).
 
 ### Copilot cost ceiling
 
@@ -265,9 +269,9 @@ Practical implication: on Copilot, your orchestrating session is the frontier an
 
 ### Cursor silent fallback
 
-Under team-admin or plan restrictions, or when a resolved model ID is unknown or stale (rotated-out or misspelled name), Cursor **substitutes a compatible model without erroring**. A typo'd or stale ID in the map fails quietly downstream instead of at resolution time.
+Under team-admin or plan restrictions, or when a resolved model ID is unknown or stale (rotated-out or misspelled name), Cursor **substitutes a compatible model without erroring** (unresolved subagent models may fall back to the parent's model). A typo'd or stale ID in the map fails quietly downstream instead of at resolution time. Bracket params (`<model-id>[effort=high]`) are the documented frontmatter form; slug-suffix effort variants appear in pickers and listings — use the form verified for the account at emit time. YAML `model:` values are emitted **unquoted**; quoting can trigger silent fallback to the parent model. When `agent models` prints no models, use the IDE's Settings → Models / subagent model picker.
 
-Evaluators should state their expected model in the prompt and report **which model actually produced the verdict** so silent substitution is visible in the audit trail.
+Evaluators should state their expected model in the prompt and report **which model actually produced the verdict** so silent substitution is visible in the audit trail. As of v0.29.0, orchestration-log OUTCOME lines include **`model_check: match|MISMATCH|unverified`** after `model reported:` — family-level comparison that surfaces substitution even when the harness stays silent (`MISMATCH` also prints a stderr warning; exit 0). See [evaluation-system.md](evaluation-system.md) for the re-spawn policy on verification agents.
 
 ### Cursor live model list (emit-time check)
 
@@ -277,7 +281,7 @@ This obligation applies at `/setup` emit time; it is not tied to a specific kit 
 
 ### Other harness notes (brief)
 
-- **Claude Code:** `CLAUDE_CODE_SUBAGENT_MODEL` and `CLAUDE_CODE_EFFORT_LEVEL` env vars override frontmatter; org `availableModels` allowlists can cause pins to be ignored.
+- **Claude Code:** `CLAUDE_CODE_SUBAGENT_MODEL` and `CLAUDE_CODE_EFFORT_LEVEL` env vars override frontmatter; org `availableModels` allowlists can cause pins to be ignored. Claude Code runs **Anthropic models only** — a cross-family arbiter is unreachable natively (use `arbiter_same_family: true` when the arbiter ID equals frontier). Aliases such as `opus` resolve per provider — prefer full IDs and record the minimum Claude Code version each pin needs. Headless loop chains must not include `best`, `fable`, or `claude-fable*` — emit exits 3 when they appear (usage-credit billing).
 - **Codex:** Model pins are committable in `.codex/config.toml`, but `model_provider` / `model_providers` / `profile(s)` are ignored at project level.
 
 For the full capability comparison, see [`harness-matrix.md`](../../skills/setup/reference/harness-matrix.md).
@@ -301,7 +305,7 @@ Phase-by-phase spawn timing, contracts, and escalation: [feature-workflow.md](fe
 2. Verify IDs against each harness's **live model list** — especially Cursor.
 3. Re-run `/setup` to re-emit agents, skills, and loop drivers with updated pins.
 
-Never copy model IDs from kit documentation without checking — IDs rotate frequently. Placeholder tokens (`{{MODEL_FRONTIER}}`, `{{MODEL_FRONTIER_ALT_FAMILY}}`, `{{MODEL_LIGHT}}`, `{{MODEL_ALT_FAMILY}}`, per-harness variants) describe the map's structure; concrete IDs are install-specific configuration.
+Never copy model IDs from kit documentation without checking — IDs rotate frequently. Placeholder tokens (`{{MODEL_FRONTIER}}`, `{{MODEL_FRONTIER_ALT_FAMILY}}`, `{{MODEL_LIGHT}}`, `{{MODEL_FAST}}`, `{{MODEL_ALT_FAMILY}}`, per-harness `*_MODEL_*` variants including `*_MODEL_FAST`) describe the map's structure; concrete IDs are install-specific configuration. Optional answers field `models.<harness>.fast` sets the fast-tier ID (defaults to light when omitted).
 
 ## Sources
 
@@ -313,4 +317,8 @@ Never copy model IDs from kit documentation without checking — IDs rotate freq
 - [`skills/setup/templates/agents/diagnostician.md`](../../skills/setup/templates/agents/diagnostician.md) — diagnostician role, report format, routing
 - [`skills/setup/templates/models.map.md`](../../skills/setup/templates/models.map.md) — tier assignments, resolved models table, fallback chains, never-fall-up, fix-cycle rotation, cost ceiling, harness caveats
 - [`skills/setup/reference/harness-matrix.md`](../../skills/setup/reference/harness-matrix.md) — per-harness capabilities, Copilot ceiling, Cursor silent fallback, live model list
-- [`README.md`](../../README.md) — Model tiers section (frontier/light split, map as single source, re-run `/setup` on rotation)
+- [`skills/setup/emitters/cursor.md`](../../skills/setup/emitters/cursor.md) — Cursor emitter caveats (`agent models` fallback, unquoted `model:` values, bracket params)
+- [`skills/setup/emitters/claude-code.md`](../../skills/setup/emitters/claude-code.md) — Claude Code single provider, `fable` in loop chain exits 3, minimum CLI version per pin
+- [`skills/setup/templates/tools/log-spawn.sh`](../../skills/setup/templates/tools/log-spawn.sh) — orchestration-log OUTCOME `model_check` field
+- [`skills/setup/SKILL.md`](../../skills/setup/SKILL.md) — placeholder table `{{MODEL_FAST}}` / `*_MODEL_FAST`, answers field `models.<harness>.fast`
+- [`README.md`](../../README.md) — Model tiers section (three tiers — frontier, light, fast; map as single source, re-run `/setup` on rotation)

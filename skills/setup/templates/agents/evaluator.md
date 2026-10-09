@@ -174,7 +174,9 @@ implement→evaluate cycles).
 
 **Model** — `{{MODEL_FRONTIER_ALT_FAMILY}}`. Per the kit's Cursor silent-fallback
 caveat, the arbiter states in its verdict which model actually produced it (the harness
-may silently substitute a fallback).
+may silently substitute a fallback). When the model map marks the arbiter as
+same-family, the verdict header states `same-family arbiter` so the audit trail shows
+the reduced independence.
 
 **Inputs** — The task file (including its `## Acceptance Criteria` section), the three
 fix-cycle evaluator verdicts, and the three implementer reports.
