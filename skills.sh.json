@@ -13,6 +13,11 @@
       ]
     },
     {
+      "title": "Azure RBAC",
+      "description": "Least-privilege Azure built-in role recommendations from an offline snapshot of role definitions and provider operations.",
+      "skills": ["azure-rbac-least-privilege"]
+    },
+    {
       "title": "Skill authoring",
       "description": "Tools for maintaining multi-skill repositories: per-skill versions, changelogs, and releases.",
       "skills": ["skill-versioning"]

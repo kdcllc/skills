@@ -51,14 +51,15 @@ The `kdcllc-skills` plugin in [.claude-plugin/marketplace.json](.claude-plugin/m
 ```json
 {
   "name": "kdcllc-azure",
-  "description": "Azure Terraform modules, domain stacks, CI pipelines, and azurerm upgrades",
+  "description": "Azure Terraform modules, domain stacks, CI pipelines, and azurerm upgrades, plus least-privilege RBAC role matching",
   "source": "./",
   "strict": false,
   "skills": [
     "./skills/terraform-azure",
     "./skills/terraform-azure-modules",
     "./skills/terraform-azure-pipelines",
-    "./skills/terraform-azure-upgrade"
+    "./skills/terraform-azure-upgrade",
+    "./skills/azure-rbac-least-privilege"
   ]
 }
 ```

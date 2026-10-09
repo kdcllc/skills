@@ -1,0 +1,41 @@
+{
+  "skill_name": "azure-rbac-least-privilege",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Find the smallest built-in role that grants Microsoft.Support/services/read. Explain why your top choice is least privilege.",
+      "expected_output": "Includes Support Request Contributor in candidate set and ranks by smallest footprint first.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Find built-in roles that cover both Microsoft.Web/sites/read and Microsoft.Web/sites/write.",
+      "expected_output": "Returns only roles that satisfy both permissions; read-only roles are excluded.",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Find the smallest built-in role for Microsoft.Storage/storageAccounts/blobServices/containers/blobs/read and prefer non-privileged choices.",
+      "expected_output": "Returns data-reader-capable candidates and keeps privileged roles behind non-privileged roles.",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "Find built-in roles that allow Microsoft.Authorization/roleAssignments/write and call out risk.",
+      "expected_output": "Flags matching roles as privileged and warns about role assignment capability.",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "Find roles for Microsoft.Example/doesNotExist/read.",
+      "expected_output": "Returns no matches and recommends considering a custom role.",
+      "files": []
+    },
+    {
+      "id": 6,
+      "prompt": "Explain whether this skill can determine role scope fit, deny assignments, and PIM settings when ranking roles.",
+      "expected_output": "Clearly states those checks are out of scope and keeps recommendation bounded to snapshot role matching.",
+      "files": []
+    }
+  ]
+}

@@ -24,14 +24,15 @@
     },
     {
       "name": "kdcllc-azure",
-      "description": "Azure Terraform modules, domain stacks, CI pipelines, and azurerm upgrades",
+      "description": "Azure Terraform modules, domain stacks, CI pipelines, and azurerm upgrades, plus least-privilege RBAC role matching",
       "source": "./",
       "strict": false,
       "skills": [
         "./skills/terraform-azure",
         "./skills/terraform-azure-modules",
         "./skills/terraform-azure-pipelines",
-        "./skills/terraform-azure-upgrade"
+        "./skills/terraform-azure-upgrade",
+        "./skills/azure-rbac-least-privilege"
       ],
       "author": {
         "name": "kdcllc",
@@ -40,7 +41,7 @@
       "homepage": "https://github.com/kdcllc/skills",
       "repository": "https://github.com/kdcllc/skills",
       "license": "MIT",
-      "keywords": ["agent-skills", "skills", "azure", "terraform"]
+      "keywords": ["agent-skills", "skills", "azure", "terraform", "rbac"]
     }
   ]
 }

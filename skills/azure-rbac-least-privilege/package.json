@@ -1,0 +1,21 @@
+{
+  "name": "azure-rbac-least-privilege",
+  "private": true,
+  "description": "Offline least-privilege Azure RBAC built-in role matching.",
+  "main": "scripts/lib/rbac.js",
+  "bin": {
+    "azure-rbac-least-privilege": "scripts/match-roles.js"
+  },
+  "exports": {
+    ".": "./scripts/lib/rbac.js",
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "extend-data": "node scripts/extend-roles-data.js",
+    "match": "node scripts/match-roles.js",
+    "validate": "node scripts/validate.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}

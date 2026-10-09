@@ -65,6 +65,7 @@ Open **Customize** in the sidebar, choose **From GitHub Repository**, paste `htt
 | [terraform-azure-modules](skills/terraform-azure-modules/SKILL.md) | Azure Terraform | Create or update one reusable module under `modules/<name>/` with `providers.tf` and `organization_name` naming. | `npx skills add kdcllc/skills --skill terraform-azure-modules` |
 | [terraform-azure-pipelines](skills/terraform-azure-pipelines/SKILL.md) | Azure Terraform | Copy GitHub Actions, Azure DevOps, or GitLab templates that run fmt, validate, and plan with OIDC; apply and a gated destroy are opt-in. | `npx skills add kdcllc/skills --skill terraform-azure-pipelines` |
 | [terraform-azure-upgrade](skills/terraform-azure-upgrade/SKILL.md) | Azure Terraform | Inventory existing modules, bump to bounded azurerm 5.x pins, apply the current HashiCorp schema, and stop at `validate`. | `npx skills add kdcllc/skills --skill terraform-azure-upgrade` |
+| [azure-rbac-least-privilege](skills/azure-rbac-least-privilege/SKILL.md) | Azure RBAC | Rank the smallest built-in Azure roles that grant a set of operations, from an offline snapshot; flags roles that can assign roles. | `npx skills add kdcllc/skills --skill azure-rbac-least-privilege` |
 | [skill-versioning](skills/skill-versioning/SKILL.md) | Skill authoring | Keep each skill in a multi-skill repo on its own version and changelog: record changes under Unreleased, pick the bump, and tag `<name>/vX.Y.Z` releases. | `npx skills add kdcllc/skills --skill skill-versioning` |
 
 The four Azure Terraform skills link to each other, so install them together:
@@ -73,7 +74,7 @@ The four Azure Terraform skills link to each other, so install them together:
 npx skills add kdcllc/skills --skill terraform-azure terraform-azure-modules terraform-azure-pipelines terraform-azure-upgrade
 ```
 
-In Claude Code or Copilot CLI, `/plugin install kdcllc-azure@kdcllc` installs just these four. Operator guides ship inside the skill: [using-the-pack.md](skills/terraform-azure/references/using-the-pack.md) and [deep-dive.md](skills/terraform-azure/references/deep-dive.md).
+In Claude Code or Copilot CLI, `/plugin install kdcllc-azure@kdcllc` installs these four plus `azure-rbac-least-privilege`. Operator guides ship inside the skill: [using-the-pack.md](skills/terraform-azure/references/using-the-pack.md) and [deep-dive.md](skills/terraform-azure/references/deep-dive.md).
 
 ## Versions
 
