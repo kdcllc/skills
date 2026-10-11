@@ -18,6 +18,11 @@
       "skills": ["azure-rbac-least-privilege"]
     },
     {
+      "title": "Bible study",
+      "description": "Original-language Bible word studies with free web tools: NT Greek through the Septuagint to OT Hebrew.",
+      "skills": ["greek-to-hebrew"]
+    },
+    {
       "title": "Skill authoring",
       "description": "Tools for maintaining multi-skill repositories: per-skill versions, changelogs, and releases.",
       "skills": ["skill-versioning"]
