@@ -5,6 +5,16 @@ Kit version lives in `skills/setup/VERSION` and is written into each install's
 Versions without an entry (v0.14.0–v0.17.0 and earlier than v0.12.0) predate this
 changelog; their history lives in git and the research/design docs under `docs/`.
 
+## Unreleased
+
+- **Memory `source` labels** — `_memory/README.md` now says to use a repo-relative path
+  only for git-tracked files. Gitignored origins get a label instead:
+  `goal <name> (<file>)`, `goals ledger (<file>)`, `research <name> (<file>)`, or
+  `<harness>-session <short id>`. The rule applies to new records; existing records are
+  immutable and keep their source (the id's 8-hex suffix hashes the body only, so a
+  re-add with a relabeled source and the same body is reported as a duplicate).
+- **Upgrading** — re-run `/setup` (or `emit.sh --upgrade`) to refresh `_memory/README.md`.
+
 ## v0.30.0 — Memory store (core)
 
 - **`_memory/` layout** — git-tracked `records/YYYY/MM/<id>.md` (immutable, one record
