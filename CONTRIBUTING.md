@@ -44,6 +44,23 @@ Read [AGENTS.md](AGENTS.md) first. It has the layout and frontmatter rules that 
 9. After it merges, tag the first release with `bash scripts/release-skill.sh <name> 1.0.0`.
 10. In the old repo, replace the README with a pointer to the new location, for example `npx skills add kdcllc/skills --skill <name>`, then archive the repo on GitHub.
 
+## Working on agent-kit (dogfood)
+
+This repo dogfoods the [agent-kit](skills/agent-kit/README.md) skill: feature work on any skill here can run through `/feature` and the evaluator gates. After cloning, emit the local instance:
+
+```bash
+bash scripts/agent-kit/self-install.sh
+# or: pwsh -NoProfile -File scripts/agent-kit/self-install.ps1
+```
+
+It copies `skills/agent-kit/` into `.claude/skills/` and `.cursor/skills/`, then emits agents, skills, `ORCHESTRATION.md`, `_kit/`, and `_loop/` from [tests/agent-kit/fixtures/self-answers.json](tests/agent-kit/fixtures/self-answers.json). Everything it writes is gitignored; `scripts/validate-skills.sh` only rejects agent skill folders that contain tracked files. Re-run it after editing anything under `skills/agent-kit/templates/` or `skills/agent-kit/bin/`, and never edit the emitted copies. `_memory/` is the exception: its records are tracked and immutable.
+
+Kit-specific maintainer material lives outside the skill folder so it never ships: the developer guide and research studies in [docs/agent-kit/](docs/agent-kit/guide/README.md) (start with [contributing.md](docs/agent-kit/guide/contributing.md)), and the test suites in [tests/agent-kit/](tests/agent-kit/). `scripts/checks/agent-kit.sh` runs the fast instance-free checks inside the validator; run the full suite before opening a pull request that touches `skills/agent-kit/`:
+
+```bash
+bash tests/agent-kit/run-all.sh
+```
+
 ## Domain bundles (Claude Code, Copilot CLI, Codex)
 
 The `kdcllc-skills` plugin in [.claude-plugin/marketplace.json](.claude-plugin/marketplace.json) has no `skills` list, so it loads every folder under `skills/`. Smaller bundles are extra entries that list skills explicitly. Paths must start with `./`, and plugin names must not start with `claude-`, `anthropic-`, or `cc-plugin-`. The existing `kdcllc-azure` bundle looks like this:

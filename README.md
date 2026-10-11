@@ -67,6 +67,7 @@ Open **Customize** in the sidebar, choose **From GitHub Repository**, paste `htt
 | [terraform-azure-upgrade](skills/terraform-azure-upgrade/SKILL.md) | Azure Terraform | Inventory existing modules, bump to bounded azurerm 5.x pins, apply the current HashiCorp schema, and stop at `validate`. | `npx skills add kdcllc/skills --skill terraform-azure-upgrade` |
 | [azure-rbac-least-privilege](skills/azure-rbac-least-privilege/SKILL.md) | Azure RBAC | Rank the smallest built-in Azure roles that grant a set of operations, from an offline snapshot; flags roles that can assign roles. | `npx skills add kdcllc/skills --skill azure-rbac-least-privilege` |
 | [greek-to-hebrew](skills/greek-to-hebrew/SKILL.md) | Bible study | Trace a New Testament Greek word through the Septuagint to the Old Testament Hebrew behind it, with free web tools, a first-mention study, and a confidence level. Licensed CC BY-SA 4.0. | `npx skills add kdcllc/skills --skill greek-to-hebrew` |
+| [agent-kit](skills/agent-kit/SKILL.md) | Agent orchestration | Install the orchestrator/worker/evaluator multi-agent system (six subagents, `/feature` and `/research` workflows, evaluator gates, optional autonomous loop) compiled for Claude Code, Cursor, GitHub Copilot, and Codex. Run `/agent-kit` once per project; re-run to upgrade. | `npx skills add kdcllc/skills --skill agent-kit` |
 | [skill-versioning](skills/skill-versioning/SKILL.md) | Skill authoring | Keep each skill in a multi-skill repo on its own version and changelog: record changes under Unreleased, pick the bump, and tag `<name>/vX.Y.Z` releases. | `npx skills add kdcllc/skills --skill skill-versioning` |
 
 The four Azure Terraform skills link to each other, so install them together:
@@ -76,6 +77,8 @@ npx skills add kdcllc/skills --skill terraform-azure terraform-azure-modules ter
 ```
 
 In Claude Code or Copilot CLI, `/plugin install kdcllc-azure@kdcllc` installs these four plus `azure-rbac-least-privilege`. Operator guides ship inside the skill: [using-the-pack.md](skills/terraform-azure/references/using-the-pack.md) and [deep-dive.md](skills/terraform-azure/references/deep-dive.md).
+
+`agent-kit` (the AI Orchestration Kit, formerly the private `setup` skill) has its own [README](skills/agent-kit/README.md) and a developer guide under [docs/agent-kit/guide/](docs/agent-kit/guide/README.md). Upgrading from `setup`? Follow the 1.0.0 upgrade notes in its [CHANGELOG](skills/agent-kit/CHANGELOG.md).
 
 ## Versions
 
@@ -102,6 +105,10 @@ scripts/new-skill.sh               # scaffold a new skill
 scripts/validate-skills.sh         # repo, frontmatter, and version checks (also run in CI)
 scripts/checks/                    # skill-specific content guards, run by validate-skills.sh
 scripts/release-skill.sh           # release one skill: bump, commit, tag <skill>/vX.Y.Z
+scripts/agent-kit/                 # agent-kit dogfood installer (self-install.sh / .ps1)
+docs/agent-kit/                    # agent-kit developer guide and research studies (not shipped)
+tests/agent-kit/                   # agent-kit test suites; run-all.sh runs everything
+_memory/                           # agent-kit memory store for this repo (immutable records)
 ```
 
 ## Validate

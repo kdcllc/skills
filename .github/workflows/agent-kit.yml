@@ -1,0 +1,39 @@
+name: agent-kit
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'skills/agent-kit/**'
+      - 'tests/agent-kit/**'
+      - 'scripts/agent-kit/**'
+      - 'scripts/checks/agent-kit.sh'
+      - 'docs/agent-kit/**'
+      - '.github/workflows/agent-kit.yml'
+  pull_request:
+    paths:
+      - 'skills/agent-kit/**'
+      - 'tests/agent-kit/**'
+      - 'scripts/agent-kit/**'
+      - 'scripts/checks/agent-kit.sh'
+      - 'docs/agent-kit/**'
+      - '.github/workflows/agent-kit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  suite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Git identity for harness temp repos
+        run: |
+          git config --global user.email "ci@users.noreply.github.com"
+          git config --global user.name "agent-kit ci"
+
+      # jq and pwsh ship on ubuntu-latest; pwsh enables the twin-parity cases.
+      - name: Full agent-kit suite
+        run: bash tests/agent-kit/run-all.sh
