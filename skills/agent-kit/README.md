@@ -70,6 +70,7 @@ Optional: start an unattended run (sandboxed!) with `_loop/loop.sh 10` or
   interview, one answers file and one script command compile canonical templates into
   every targeted harness — same inputs yield byte-identical output; upgrades re-emit
   from manifest-embedded `answers`.
+- A **git-tracked memory store** (`_memory/` + `_kit/memory.sh` / `_kit/memory.ps1`): orchestrator recall before planning, archive at goal close, searchable immutable records, DATA fence for workers, loop integrator proposals — as of v1.0.0. See [memory.md](https://github.com/kdcllc/skills/blob/master/docs/agent-kit/guide/memory.md).
 
 ## Documentation
 
@@ -85,6 +86,7 @@ Developer guide: [docs/agent-kit/guide/README.md](https://github.com/kdcllc/skil
 | [agents-and-models.md](https://github.com/kdcllc/skills/blob/master/docs/agent-kit/guide/agents-and-models.md) | Six subagent roles and boundaries, model tiers, `models.map.md` anatomy, fallback chains, harness caveats |
 | [evaluation-system.md](https://github.com/kdcllc/skills/blob/master/docs/agent-kit/guide/evaluation-system.md) | Verdict vocabulary, confidence ladder, anti-fabrication, devil's advocate, acceptance criteria validation, `eval_depth`, test ladder, orchestration log audit trail |
 | [contributing.md](https://github.com/kdcllc/skills/blob/master/docs/agent-kit/guide/contributing.md) | Repo anatomy (canonical vs instance vs generated), self-install dogfood loop, templates/emitters, harness matrix, version + manifest + upgrades, test harness |
+| [memory.md](https://github.com/kdcllc/skills/blob/master/docs/agent-kit/guide/memory.md) | `_memory/` store, recall and archive per workflow, search CLI, prior-knowledge fence, loop proposals and integrator step 3b, harness pointers |
 
 ## What's in this folder
 
@@ -162,7 +164,7 @@ exit codes.
 | `agents/evaluator`, `agents/qa-evaluator` | Skeptical reviewers — frontier tier, existence checks + confidence ladder |
 | `agents/diagnostician` | Root-cause analysis after fix-cycle exhaustion — frontier tier, no code writes |
 | `agents/implementer`, `agents/test-writer` | Workers — light tier, ladder rungs 1–2 only |
-| `skills/feature` | Seven-phase workflow + goal/task templates + orchestration log |
+| `skills/feature` | Seven-phase workflow + goal/task templates + orchestration log + memory protocol reference |
 | `skills/research` | Research → Plan workflow (optional) |
 | `skills/{goal,task,qa}-criteria` | Evaluation checklists (goal evaluation includes devil's advocate) |
 | `skills/test-ladder` | New → impacted tests mid-cycle; full suites only at cycle end |

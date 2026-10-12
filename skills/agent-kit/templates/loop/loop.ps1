@@ -378,6 +378,7 @@ for ($i = 0; $i -lt $EffectiveSlots; $i++) {
         Outbox       = ''
         OutFile      = ''
         HeadBefore   = ''
+        MemoryAside  = ''
     }
 }
 
@@ -437,6 +438,229 @@ function Integrate-Slot {
     if ($rc -ne 0) {
         [Console]::Error.WriteLine("!!! git branch -d failed for '$Branch' — aborting")
         exit $rc
+    }
+}
+
+# Clear-LoopMemoryAsideAll -- remove per-slot memory proposal copy-aside dirs
+# (under Get-TempPath). Called from the main loop's finally so CB0 (exit 4)
+# and failed ff-only integration (exit 5) never leak when step 3b is skipped.
+function Clear-LoopMemoryAsideAll {
+    for ($s = 0; $s -lt $EffectiveSlots; $s++) {
+        Clear-LoopMemoryAsideSlot -Slot $s
+    }
+}
+
+function Clear-LoopMemoryAsideSlot {
+    param([Parameter(Mandatory)] [int]$Slot)
+    $dir = $slots[$Slot].MemoryAside
+    if (-not [string]::IsNullOrEmpty($dir)) {
+        Remove-Item -LiteralPath $dir -Recurse -Force -ErrorAction SilentlyContinue
+        $slots[$Slot].MemoryAside = ''
+    }
+}
+
+# Split-LoopMemoryProposalFile -- native proposal parser (twin of loop.sh awk + tail).
+function Split-LoopMemoryProposalFile {
+    param([Parameter(Mandatory)] [string]$Path)
+
+    $bytes = [System.IO.File]::ReadAllBytes($Path)
+    # Header keys are case-sensitive and ordinal (twin of the awk `seen` array).
+    $seenKeys = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    $kind = ''; $title = ''; $tags = ''; $source = ''; $harness = ''
+    $bodyStart = -1
+    $pos = 0
+    $n = $bytes.Length
+
+    # awk record semantics: a final LF does not start another (empty) record, and a
+    # final line without LF is still a record -- so loop only while bytes remain.
+    while ($pos -lt $n) {
+        $lineStart = $pos
+        while ($pos -lt $n -and $bytes[$pos] -ne 0x0A) { $pos++ }
+        $lineEnd = $pos
+        $contentEnd = $lineEnd
+        if ($contentEnd -gt $lineStart -and $bytes[$contentEnd - 1] -eq 0x0D) { $contentEnd-- }
+        $lineStr = if ($contentEnd -gt $lineStart) {
+            [System.Text.Encoding]::UTF8.GetString($bytes, $lineStart, $contentEnd - $lineStart)
+        } else { '' }
+
+        if ($lineStr -eq '---') {
+            if ($lineEnd -lt $n -and $bytes[$lineEnd] -eq 0x0A) {
+                $bodyStart = $lineEnd + 1
+            } else {
+                $bodyStart = $lineEnd
+            }
+            break
+        }
+
+        if ($lineStr -eq '') {
+            return [PSCustomObject]@{ Ok = $false; Reason = 'blank header line' }
+        }
+        $colon = $lineStr.IndexOf(': ', [StringComparison]::Ordinal)
+        if ($colon -lt 0) {
+            return [PSCustomObject]@{ Ok = $false; Reason = 'header line without colon-space' }
+        }
+        $key = $lineStr.Substring(0, $colon)
+        $val = $lineStr.Substring($colon + 2)
+        if ($seenKeys.Contains($key)) {
+            return [PSCustomObject]@{ Ok = $false; Reason = 'duplicate header key' }
+        }
+        [void]$seenKeys.Add($key)
+        switch -CaseSensitive ($key) {
+            'kind' { $kind = $val }
+            'title' { $title = $val }
+            'tags' { $tags = $val }
+            'source' { $source = $val }
+            'harness' { $harness = $val }
+            default { return [PSCustomObject]@{ Ok = $false; Reason = 'unknown key' } }
+        }
+
+        if ($lineEnd -lt $n -and $bytes[$lineEnd] -eq 0x0A) {
+            $pos = $lineEnd + 1
+        } else {
+            break
+        }
+    }
+
+    if ($bodyStart -lt 0) {
+        return [PSCustomObject]@{ Ok = $false; Reason = 'no separator line' }
+    }
+    if ([string]::IsNullOrEmpty($kind) -or [string]::IsNullOrEmpty($title)) {
+        return [PSCustomObject]@{ Ok = $false; Reason = 'missing kind or title' }
+    }
+
+    $bodyLen = $n - $bodyStart
+    if ($bodyLen -lt 0) { $bodyLen = 0 }
+    $bodyBytes = New-Object byte[] $bodyLen
+    if ($bodyLen -gt 0) {
+        [Array]::Copy($bytes, $bodyStart, $bodyBytes, 0, $bodyLen)
+    }
+
+    return [PSCustomObject]@{
+        Ok = $true
+        Kind = $kind
+        Title = $title
+        Tags = $tags
+        Source = $source
+        Harness = $harness
+        BodyBytes = $bodyBytes
+    }
+}
+
+# Invoke-LoopIntegrateMemoryProposals -- integrator step 3b (twin of loop.sh).
+function Invoke-LoopIntegrateMemoryProposals {
+    param(
+        [Parameter(Mandatory)] [int]$Slot,
+        [Parameter(Mandatory)] [string]$Story,
+        [Parameter(Mandatory)] [string]$AsideDir
+    )
+    $memoryPs1 = Join-Path (Get-Location).Path '_kit/memory.ps1'
+    $proposalFiles = @(Get-ChildItem -LiteralPath $AsideDir -Filter '*.md' -File -ErrorAction SilentlyContinue)
+    if ($proposalFiles.Count -eq 0) { return }
+
+    if (-not (Test-Path -LiteralPath $memoryPs1 -PathType Leaf)) {
+        [Console]::Error.WriteLine('!!! memory proposals skipped: _kit/memory.sh not found')
+        return
+    }
+
+    $nameList = @($proposalFiles | ForEach-Object { $_.Name })
+    [Array]::Sort($nameList, [StringComparer]::Ordinal)
+    $byName = @{}
+    foreach ($pf in $proposalFiles) { $byName[$pf.Name] = $pf }
+    $sorted = foreach ($nm in $nameList) { $byName[$nm] }
+
+    $commitPaths = @()
+
+    foreach ($prop in $sorted) {
+        $name = [System.IO.Path]::GetFileNameWithoutExtension($prop.Name)
+        $parsed = Split-LoopMemoryProposalFile -Path $prop.FullName
+        if (-not $parsed.Ok) {
+            $reason = if ($parsed.Reason) { $parsed.Reason } else { 'malformed proposal' }
+            [Console]::Error.WriteLine("!!! memory proposal $name skipped: $reason")
+            continue
+        }
+
+        $bodyTmp = $null
+        try {
+            $bodyTmp = [System.IO.Path]::GetTempFileName()
+            [System.IO.File]::WriteAllBytes($bodyTmp, $parsed.BodyBytes)
+        } catch {
+            if ($bodyTmp) { Remove-Item -LiteralPath $bodyTmp -Force -ErrorAction SilentlyContinue }
+            [Console]::Error.WriteLine('!!! memory proposals skipped: mktemp failed')
+            break   # stop further proposals; still commit records already added
+        }
+
+        $rootPath = (Get-Location).Path
+        $psi = [System.Diagnostics.ProcessStartInfo]::new('pwsh')
+        $psi.UseShellExecute = $false
+        $psi.RedirectStandardOutput = $true
+        $psi.RedirectStandardError = $true
+        [void]$psi.ArgumentList.Add('-NoProfile')
+        [void]$psi.ArgumentList.Add('-File')
+        [void]$psi.ArgumentList.Add($memoryPs1)
+        [void]$psi.ArgumentList.Add('add')
+        [void]$psi.ArgumentList.Add('--root')
+        [void]$psi.ArgumentList.Add($rootPath)
+        [void]$psi.ArgumentList.Add('--kind')
+        [void]$psi.ArgumentList.Add($parsed.Kind)
+        [void]$psi.ArgumentList.Add('--title')
+        [void]$psi.ArgumentList.Add($parsed.Title)
+        [void]$psi.ArgumentList.Add('--body')
+        [void]$psi.ArgumentList.Add($bodyTmp)
+        if (-not [string]::IsNullOrEmpty($parsed.Tags)) {
+            [void]$psi.ArgumentList.Add('--tags'); [void]$psi.ArgumentList.Add($parsed.Tags)
+        }
+        if (-not [string]::IsNullOrEmpty($parsed.Source)) {
+            [void]$psi.ArgumentList.Add('--source'); [void]$psi.ArgumentList.Add($parsed.Source)
+        }
+        if (-not [string]::IsNullOrEmpty($parsed.Harness)) {
+            [void]$psi.ArgumentList.Add('--harness'); [void]$psi.ArgumentList.Add($parsed.Harness)
+        }
+        $proc = [System.Diagnostics.Process]::Start($psi)
+        $stdoutTask = $proc.StandardOutput.ReadToEndAsync()
+        $stderrTask = $proc.StandardError.ReadToEndAsync()
+        $proc.WaitForExit()
+        $stdoutText = $stdoutTask.GetAwaiter().GetResult()
+        $stderrText = $stderrTask.GetAwaiter().GetResult()
+        if ($null -eq $stdoutText) { $addOut = '' } else { $addOut = $stdoutText.TrimEnd("`r", "`n") }
+        $addErr = $null
+        if ($stderrText) {
+            $nlIdx = $stderrText.IndexOf("`n")
+            if ($nlIdx -ge 0) {
+                $addErr = $stderrText.Substring(0, $nlIdx)
+            } else {
+                $addErr = $stderrText
+            }
+            if ($null -ne $addErr) { $addErr = $addErr.TrimEnd("`r") }
+        }
+        Remove-Item -LiteralPath $bodyTmp -Force -ErrorAction SilentlyContinue
+
+        $exitCode = if ($null -ne $proc) { $proc.ExitCode } else { -1 }
+        if ($exitCode -eq 0) {
+            Write-Output $addOut
+            if ($addOut -match '^memory: (added|quarantined) \S+ (\S+)$') {
+                $commitPaths += $Matches[2]
+            }
+        } elseif ($exitCode -eq 5) {
+            [Console]::Error.WriteLine("!!! memory proposal $name quarantined: $addOut")
+            if ($addOut -match '^memory: quarantined \S+ (\S+)$') {
+                $commitPaths += $Matches[1]
+            }
+        } else {
+            $errLine = if ($addErr) { $addErr } else { 'unknown error' }
+            [Console]::Error.WriteLine("!!! memory proposal $name rejected (exit ${exitCode}): $errLine")
+        }
+    }
+
+    if ($commitPaths.Count -eq 0) { return }
+
+    & git add -- @commitPaths
+    if ($LASTEXITCODE -ne 0) {
+        [Console]::Error.WriteLine("!!! memory records left uncommitted: git add failed (exit $LASTEXITCODE)")
+        return
+    }
+    & git commit -q -m "chore(memory): $Story records" -- @commitPaths
+    if ($LASTEXITCODE -ne 0) {
+        [Console]::Error.WriteLine("!!! memory records left uncommitted: git commit failed (exit $LASTEXITCODE)")
     }
 }
 
@@ -528,7 +752,9 @@ $ProtectedPaths = @(
     '{{IDE_DIR}}/agents/',
     '{{IDE_DIR}}/skills/',
     'orchestration-kit.manifest.json',
-    '.gitattributes'
+    '.gitattributes',
+    '_memory/records/',
+    '_memory/quarantine/'
 )
 
 # --- Hotspot set (§6.3 :700-724 + addendum 1c): per-FILE serialization --
@@ -1362,6 +1588,42 @@ function Invoke-LoopReapSlot {
         $dispatchedPrompt = Get-Content -Raw -LiteralPath $dispatchPromptSrc
         if ($null -eq $dispatchedPrompt) { $dispatchedPrompt = '' }
     }
+    # Copy-aside for integrator step 3b: direct children of <outbox>/memory/
+    # only, into a per-slot temp dir under Get-TempPath (outbox pattern).
+    $memorySrcDir = Join-Path $outboxDir 'memory'
+    if (Test-Path -LiteralPath $memorySrcDir -PathType Container) {
+        $memProps = @(Get-ChildItem -LiteralPath $memorySrcDir -Filter '*.md' -File -ErrorAction SilentlyContinue)
+        if ($memProps.Count -gt 0) {
+            # Failure strings are shared verbatim with loop.sh:
+            # `copy-aside failed: mktemp failed` (dir create) / `copy-aside failed: cp failed`.
+            $asideDir = ''
+            $asideOk = $true
+            try {
+                $asideDir = Join-Path ([System.IO.Path]::GetTempPath()) ('loop-memory-aside-' + [System.Guid]::NewGuid().ToString('N'))
+                New-Item -ItemType Directory -Path $asideDir -Force -ErrorAction Stop | Out-Null
+            } catch {
+                [Console]::Error.WriteLine('!!! memory proposal copy-aside failed: mktemp failed')
+                $asideOk = $false
+                $asideDir = ''
+            }
+            if ($asideOk) {
+                $slots[$Slot].MemoryAside = $asideDir
+                foreach ($mp in $memProps) {
+                    try {
+                        Copy-Item -LiteralPath $mp.FullName -Destination (Join-Path $asideDir $mp.Name) -ErrorAction Stop
+                    } catch {
+                        [Console]::Error.WriteLine('!!! memory proposal copy-aside failed: cp failed')
+                        $asideOk = $false
+                        break
+                    }
+                }
+                if (-not $asideOk) {
+                    Remove-Item -LiteralPath $asideDir -Recurse -Force -ErrorAction SilentlyContinue
+                    $slots[$Slot].MemoryAside = ''
+                }
+            }
+        }
+    }
     Remove-Item -LiteralPath $outboxDir -Recurse -Force -ErrorAction SilentlyContinue
 
     # --- Integrator step 4: memory size gates, driver-side, AFTER appends
@@ -1498,6 +1760,7 @@ function Invoke-LoopReapSlot {
     # violation) vs normal integration -- flag=1 only; flag=0 has no
     # worktree/branch to act on (main tree already carries whatever the
     # slot committed, today's unchanged behavior).
+    $slotDidIntegrate = $false
     if ($Worktree -eq 1) {
         # dirty_paths capture (D4/STORY-012): the porcelain text itself, not
         # just the boolean it also feeds -- flattened to one line for the
@@ -1574,8 +1837,23 @@ function Invoke-LoopReapSlot {
             $script:retainedBranches += $branch
         } else {
             Integrate-Slot -Tree $tree -Branch $branch
+            $slotDidIntegrate = $true
         }
     }
+
+    # --- Integrator step 3b: memory proposals from the copy-aside dir. Runs at
+    # the END of reap, after CB0 (CB0 exits first — never reached there) and
+    # disposal. Gate: no ITERATION-mismatch, no subset violation, and at
+    # LOOP_WORKTREE=1 the branch was integrated (not quarantined). Any verdict
+    # qualifies, including failed. Never changes exit code, backlog, or breaker.
+    $runMemory3b = $false
+    if (-not $mismatch -and $subsetBad.Count -eq 0) {
+        if ($Worktree -eq 0 -or $slotDidIntegrate) { $runMemory3b = $true }
+    }
+    if ($runMemory3b -and -not [string]::IsNullOrEmpty($slots[$Slot].MemoryAside)) {
+        Invoke-LoopIntegrateMemoryProposals -Slot $Slot -Story $story -AsideDir $slots[$Slot].MemoryAside
+    }
+    Clear-LoopMemoryAsideSlot -Slot $Slot
 }
 
 # Test-LoopAllRetired -- $true iff every slot 0..EffectiveSlots-1 is
@@ -1774,4 +2052,5 @@ try {
     Invoke-LoopAggregateExit -Context 'bottom'
 } finally {
     Write-RetainedSummary
+    Clear-LoopMemoryAsideAll
 }

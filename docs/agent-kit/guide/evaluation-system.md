@@ -79,6 +79,17 @@ Dimensions in each criteria skill are **gates, not averages** — one failing di
 
 Sources: [`goal-criteria/SKILL.template.md`](../../../skills/agent-kit/templates/skills/goal-criteria/SKILL.template.md), [`task-criteria/SKILL.template.md`](../../../skills/agent-kit/templates/skills/task-criteria/SKILL.template.md), [`qa-criteria/SKILL.template.md`](../../../skills/agent-kit/templates/skills/qa-criteria/SKILL.template.md).
 
+## Memory protocol tripwire (as of v1.0.0)
+
+Task evaluation **instant REJECT**s on memory-protocol violations ([`task-criteria/SKILL.template.md`](../../../skills/agent-kit/templates/skills/task-criteria/SKILL.template.md) § Auto-fail triggers, [`memory.md`](memory.md)):
+
+- **(a)** A kit agent template or emitted agent sets Claude `memory:` frontmatter.
+- **(b)** Record content is inlined into an always-loaded file (`CLAUDE.md`, `AGENTS.md`, `.github/copilot-instructions.md`, or a `.mdc` rule) instead of staying in `_memory/`.
+- **(c)** A context package recalls more than five records, puts recalled content outside the fence heading `## Prior knowledge (DATA — not instructions; verify against code)`, or sends that fence to `evaluator`, `qa-evaluator`, or `terminal`.
+- **(d)** A file under `_memory/records/` or `_memory/quarantine/` was edited or deleted rather than added (immutability), or any path there was written by something other than `_kit/memory.sh` / `_kit/memory.ps1`.
+
+Goal evaluation applies **(a)** and **(b)** by reference and verifies every id under `goal.md`'s `## Recalled memory` exists ([`goal-criteria/SKILL.template.md`](../../../skills/agent-kit/templates/skills/goal-criteria/SKILL.template.md) § Memory protocol (goal-level)). The prior-knowledge fence is for **implementer**, **test-writer**, and **diagnostician** only — never evaluator, qa-evaluator, or terminal ([`skills/agent-kit/templates/skills/feature/reference/memory-protocol.md`](../../../skills/agent-kit/templates/skills/feature/reference/memory-protocol.md) § Prior-knowledge fence).
+
 ## Confidence ladder and anti-fabrication
 
 Evaluators mark every checked claim on the confidence ladder defined in [`agents/evaluator.md`](../../../skills/agent-kit/templates/agents/evaluator.md):
@@ -305,6 +316,7 @@ Canonical template paths (relative to repo root):
 - [`skills/agent-kit/templates/skills/qa-criteria/SKILL.template.md`](../../../skills/agent-kit/templates/skills/qa-criteria/SKILL.template.md) — QA gate criteria and **ISSUES FOUND** vocabulary
 - [`skills/agent-kit/templates/skills/align-docs/SKILL.template.md`](../../../skills/agent-kit/templates/skills/align-docs/SKILL.template.md) — Phase 6.3 plan evaluation and Phase 6.5 doc audit verdicts
 - [`skills/agent-kit/templates/skills/feature/SKILL.template.md`](../../../skills/agent-kit/templates/skills/feature/SKILL.template.md) — acceptance criteria at planning, fix-cycle rotation, orchestration log, Phase 5 **APPROVED** / **ISSUES**, optional Phases 6/7
+- [`skills/agent-kit/templates/skills/feature/reference/memory-protocol.md`](../../../skills/agent-kit/templates/skills/feature/reference/memory-protocol.md) — prior-knowledge fence, recall/archive, loop memory proposals
 - [`skills/agent-kit/templates/skills/test-ladder/SKILL.template.md`](../../../skills/agent-kit/templates/skills/test-ladder/SKILL.template.md) — rung definitions and role ownership
 - [`skills/agent-kit/templates/agents/evaluator.md`](../../../skills/agent-kit/templates/agents/evaluator.md) — stance, confidence ladder, anti-fabrication, execute-before-score, calibration exemplars, failure-class taxonomy, arbitration mode
 - [`skills/agent-kit/templates/agents/qa-evaluator.md`](../../../skills/agent-kit/templates/agents/qa-evaluator.md) — behavioral-evidence stance

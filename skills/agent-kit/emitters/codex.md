@@ -7,6 +7,7 @@ Target: `AGENTS.md` + `.codex/`. No agent markdown format — roles live in
 frontmatter, **32 KiB combined cap**, read once per session). The `[agents.*]`
 tables and the AGENTS.md pointer are embedded in `bin/emit.sh` / `emit.ps1`.
 Append the pointer to `AGENTS.md` (create if missing; keep ≤ 32 KiB).
+Appends a separate `## Memory` block (marker `<!-- orchestration-kit:memory-pointer -->`) after the orchestration pointer when absent.
 
 ## Harness specifics
 

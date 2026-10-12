@@ -4,6 +4,7 @@ Translation rules live in `bin/emit.sh` / `emit.ps1`; this file is caveats only.
 
 Target: `.claude/` — canonical format. The `CLAUDE.md` pointer and
 `.claude/settings.json` merge content is embedded in `bin/emit.sh` / `emit.ps1`.
+Appends a separate `## Memory` block (marker `<!-- orchestration-kit:memory-pointer -->`) after the orchestration pointer when absent.
 
 ## Harness specifics
 

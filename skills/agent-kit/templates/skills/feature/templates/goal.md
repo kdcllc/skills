@@ -9,6 +9,10 @@
 [Condensed record of the alignment questions and the user's answers. The goal evaluator
 checks tasks against this — every answered decision must be reflected in a task.]
 
+## Recalled memory
+
+[Record ids picked at recall, or `none`.]
+
 ## Success Criteria
 
 - [ ] [Observable, verifiable outcome — behavior, not activity]

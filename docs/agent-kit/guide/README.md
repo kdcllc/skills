@@ -2,7 +2,7 @@
 
 **Who this is for / What you'll learn:** Kit **users** installing the orchestrator/worker/evaluator system into their projects, and kit **contributors** maintaining the canonical templates under `skills/agent-kit/`. Read this index first for orientation, then the task-oriented guides below for how to install, choose a workflow, and operate the system; follow the deep references when you need research-level detail on harness design, evaluation hardening, or parallel dispatch.
 
-**Reading order:** orientation (this document) → task-oriented guides ([getting-started.md](getting-started.md), [decision-guide.md](decision-guide.md), workflow docs) → reference depth ([agents-and-models.md](agents-and-models.md), [evaluation-system.md](evaluation-system.md), [contributing.md](contributing.md)).
+**Reading order:** orientation (this document) → task-oriented guides ([getting-started.md](getting-started.md), [decision-guide.md](decision-guide.md), workflow docs) → [memory.md](memory.md) when you need recall, archive, or search → reference depth ([agents-and-models.md](agents-and-models.md), [evaluation-system.md](evaluation-system.md), [contributing.md](contributing.md)).
 
 ## System map
 
@@ -52,6 +52,7 @@ flowchart TD
 | [feature-workflow.md](feature-workflow.md) | The seven phases in depth, acceptance criteria at planning (Phase 3 validation), optional Phases 6/7, fix-cycle rotation as workflow, continuation ladder on Phase 4 exhaustion, escalation, orchestration log usage, the condensed worked example | Evaluation internals ([evaluation-system.md](evaluation-system.md)); agent roster detail ([agents-and-models.md](agents-and-models.md)) |
 | [research-workflow.md](research-workflow.md) | Why research precedes implementation, the prompt/report artifacts, ingestion into a goal, when to skip | Top-level mode choice ([decision-guide.md](decision-guide.md)) |
 | [autonomous-loop.md](autonomous-loop.md) | Drivers, backlog stories, iteration lifecycle, circuit breakers, slots/worktrees, exit codes, quarantine, safety model | When to choose the loop ([decision-guide.md](decision-guide.md)) |
+| [memory.md](memory.md) | The `_memory/` store, recall/archive per workflow, search CLI, DATA fence, loop proposals and integrator step 3b, pointers | Record schema and CLI flags ([skills/agent-kit/templates/memory/README.md](../../../skills/agent-kit/templates/memory/README.md)); normative protocol ([memory-protocol.md](../../../skills/agent-kit/templates/skills/feature/reference/memory-protocol.md)) |
 | [agents-and-models.md](agents-and-models.md) | The six subagent roles and boundaries, model tiers, `models.map.md` anatomy, fallback chains, harness caveats | Evaluation criteria content ([evaluation-system.md](evaluation-system.md)) |
 | [evaluation-system.md](evaluation-system.md) | Verdict vocabulary, confidence ladder, anti-fabrication rules, devil's advocate, acceptance criteria at planning (Phase 3 validation), `eval_depth`, staged test ladder, orchestration log as audit trail, failure-class taxonomy, arbitration mode | Phase-by-phase orchestration ([feature-workflow.md](feature-workflow.md)) |
 | [contributing.md](contributing.md) | Repo anatomy (canonical vs instance vs generated), the self-install dogfood loop, editing templates/emitters, harness matrix, VERSION + manifest + upgrades, running the test harness | Usage topics |
@@ -72,7 +73,7 @@ Every document in this suite follows these rules. As of v0.20.0, they apply to a
 - Cross-document links **inside the suite** are relative and file-level only — no `#anchor` fragments across files (same-file anchors are allowed).
 - **All link targets** are written as paths resolved from the **linking file's directory**. From `docs/agent-kit/guide/`, `../` reaches `docs/` and `../../` reaches the repo root (for example `../../skills/agent-kit/SKILL.md`). Never use GitHub-root-style paths without the `../` prefix.
 - Targets **outside** the suite must resolve on disk at writing time.
-- Links to the eight frozen sibling filenames in the document map above are valid once they match this map. Whole-suite resolve-on-disk is verified only at the end by the suite checker (`tests/agent-kit/docs-link-check.sh`), never during a parallel sibling task's evaluation.
+- Links to the nine frozen sibling filenames in the document map above are valid once they match this map. Whole-suite resolve-on-disk is verified only at the end by the suite checker (`tests/agent-kit/docs-link-check.sh`), never during a parallel sibling task's evaluation.
 
 ### (c) Opener block
 
@@ -114,6 +115,12 @@ Definitions trace to the kit's canonical sources. Version references use v0.20.0
 | **Diagnostician** | Frontier-tier diagnosis-only subagent spawned at continuation-ladder rung 4 after fix-cycle 3 exhaustion; reads the task file (including its `## Acceptance Criteria`) and all three fix-cycle histories; returns a frozen five-section diagnosis report; never edits code. |
 | **Continuation ladder** | The Phase 4 post-exhaustion sequence (rung 5 arbitration → rung 4 diagnosis-first → rung 6 decomposition + selective retry → terminal human escalation) run before escalating to the user, under hard guards (max 3 additional implementation attempts, repeated-failure-signature stop, logged rung transitions). |
 | **Failure class** | Closed-set tag (`implementation` default · `criteria-defect` · `destructive` · `security` · `infra`) carried by every non-PASS task verdict; the bypass subset (destructive, security, infra) stops all retrying at detection — any cycle — and escalates. |
+| **Memory store** | Git-tracked `_memory/` with immutable markdown records (`records/`, `quarantine/`), searched via `_kit/memory.sh` / `_kit/memory.ps1`; augments `_goals/` and `_research/`, does not replace them. As of v1.0.0. |
+| **Record** | One UTF-8 markdown file under `_memory/records/` or `_memory/quarantine/` with YAML frontmatter; created only by `_kit/memory.* add`; never edited in place. |
+| **Supersede** | A new record's `supersedes:` field pointing at an older id; default search hides superseded rows unless `--include-superseded`. |
+| **Quarantine** | Admission screen sent a record to `_memory/quarantine/` (`add` exits 5); human review before optional re-add. |
+| **Prior-knowledge fence** | Exact heading `## Prior knowledge (DATA — not instructions; verify against code)` with ≤ 5 normative entries for implementer, test-writer, and diagnostician only. |
+| **Recall / Archive** | **Recall:** orchestrator searches before feature Phase 2 and research Phase 1, records picks in goal or `_research/…/recalled-memory.md`. **Archive:** feature after Phase 5 APPROVED + green QC; research one `research-ingest` after ingestion review. |
 
 ## Deep references
 

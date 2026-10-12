@@ -370,6 +370,9 @@ slot_writes=()
 slot_outbox=()
 slot_outfile=()
 slot_headbefore=()
+# Copy-aside for <outbox>/memory/*.md between outbox removal and integrator
+# step 3b (driver-owned temp under $TMPDIR; cleared at 3b end or EXIT trap).
+slot_memory_aside=()
 
 for ((SLOT = 0; SLOT < EFFECTIVE_SLOTS; SLOT++)); do
   slot_pid[SLOT]=0
@@ -386,6 +389,7 @@ for ((SLOT = 0; SLOT < EFFECTIVE_SLOTS; SLOT++)); do
   slot_outbox[SLOT]=""
   slot_outfile[SLOT]=""
   slot_headbefore[SLOT]=""
+  slot_memory_aside[SLOT]=""
 done
 
 # _loop_integrate_slot <tree> <branch> -- interim integration (flag=1 only).
@@ -425,6 +429,205 @@ _loop_integrate_slot() {
   git branch -d "$branch"
 }
 
+# _loop_memory_aside_cleanup_all -- remove per-slot memory proposal copy-aside
+# dirs (mktemp under $TMPDIR). Called from the EXIT trap so CB0 (exit 4) and
+# failed ff-only integration (exit 5) never leak when step 3b is not reached.
+_loop_memory_aside_cleanup_all() {
+  local s
+  for ((s = 0; s < EFFECTIVE_SLOTS; s++)); do
+    if [[ -n "${slot_memory_aside[s]:-}" ]]; then
+      rm -rf "${slot_memory_aside[s]}"
+      slot_memory_aside[s]=""
+    fi
+  done
+}
+
+# _loop_memory_aside_cleanup_slot <slot> -- remove one slot's copy-aside dir.
+_loop_memory_aside_cleanup_slot() {
+  local s="$1"
+  if [[ -n "${slot_memory_aside[s]:-}" ]]; then
+    rm -rf "${slot_memory_aside[s]}"
+    slot_memory_aside[s]=""
+  fi
+}
+
+# _loop_integrate_memory_proposals <slot> <story-id> <aside-dir>
+# Integrator step 3b body: parse proposals, call _kit/memory.sh add, path-limited
+# commit. Must not trip set -e; never changes run exit code or backlog state.
+_loop_integrate_memory_proposals() {
+  local s="$1" story="$2" aside_dir="$3"
+  local memory_sh="$PWD/_kit/memory.sh"
+  local sorted_list f base name
+  local -a commit_paths=()
+  local proposal_count=0
+
+  shopt -s nullglob
+  for f in "$aside_dir"/*.md; do
+    proposal_count=$((proposal_count + 1))
+  done
+  shopt -u nullglob
+  if (( proposal_count == 0 )); then
+    return 0
+  fi
+
+  if [[ ! -f "$memory_sh" ]]; then
+    echo "!!! memory proposals skipped: _kit/memory.sh not found" >&2
+    return 0
+  fi
+
+  sorted_list="$(mktemp)" || {
+    echo "!!! memory proposals skipped: mktemp failed" >&2
+    return 0
+  }
+  shopt -s nullglob
+  for f in "$aside_dir"/*.md; do
+    [[ -f "$f" ]] || continue
+    base="$(basename "$f")"
+    printf '%s\t%s\n' "$base" "$f"
+  done | LC_ALL=C sort -t $'\t' -k1,1 > "$sorted_list"
+  shopt -u nullglob
+
+  while IFS=$'\t' read -r base fpath || [[ -n "$base" ]]; do
+    [[ -n "$base" ]] || continue
+    [[ -f "$fpath" ]] || continue
+    name="${base%.md}"
+    local body_tmp meta_err meta_file
+    # mktemp failure mid-pass: stop further proposals (break), but still reach the
+    # commit step below for records already added.
+    body_tmp="$(mktemp)" || {
+      echo "!!! memory proposals skipped: mktemp failed" >&2
+      break
+    }
+    meta_err="$(mktemp)" || {
+      echo "!!! memory proposals skipped: mktemp failed" >&2
+      rm -f "$body_tmp"
+      break
+    }
+    meta_file="$(mktemp)" || {
+      echo "!!! memory proposals skipped: mktemp failed" >&2
+      rm -f "$body_tmp" "$meta_err"
+      break
+    }
+    local kind="" title="" tags="" source="" harness="" sep_line="" parse_ok=0
+    set +e
+    LC_ALL=C awk -v metafile="$meta_file" '
+      BEGIN { sep=0; delete seen; k=""; t=""; tg=""; so=""; ha=""; sep_line=0 }
+      function die(msg) { print msg > "/dev/stderr"; exit 1 }
+      {
+        line=$0
+        sub(/\r$/, "", line)
+        if (sep) { next }
+        if (line == "---") { sep=1; sep_line=NR; next }
+        if (line == "") { die("blank header line") }
+        p=index(line, ": ")
+        if (p == 0) { die("header line without colon-space") }
+        key=substr(line, 1, p - 1)
+        val=substr(line, p + 2)
+        if (key in seen) { die("duplicate header key") }
+        seen[key]=1
+        if (key == "kind") k=val
+        else if (key == "title") t=val
+        else if (key == "tags") tg=val
+        else if (key == "source") so=val
+        else if (key == "harness") ha=val
+        else { die("unknown key") }
+      }
+      END {
+        if (!sep) { die("no separator line") }
+        if (k == "" || t == "") { die("missing kind or title") }
+        print sep_line > metafile
+        print k >> metafile
+        print t >> metafile
+        print tg >> metafile
+        print so >> metafile
+        print ha >> metafile
+      }
+    ' "$fpath" 2>"$meta_err"
+    parse_ok=$?
+    set -e
+    if (( parse_ok != 0 )); then
+      local reason
+      reason="$(head -1 "$meta_err" 2>/dev/null || true)"
+      [[ -z "$reason" ]] && reason="malformed proposal"
+      echo "!!! memory proposal $name skipped: $reason" >&2
+      rm -f "$body_tmp" "$meta_err" "$meta_file"
+      continue
+    fi
+    rm -f "$meta_err"
+    {
+      IFS= read -r sep_line || sep_line=""
+      IFS= read -r kind || kind=""
+      IFS= read -r title || title=""
+      IFS= read -r tags || tags=""
+      IFS= read -r source || source=""
+      IFS= read -r harness || harness=""
+    } < "$meta_file"
+    rm -f "$meta_file"
+    if [[ "$sep_line" =~ ^[0-9]+$ ]] && (( sep_line > 0 )); then
+      tail -n +$((sep_line + 1)) "$fpath" > "$body_tmp" 2>/dev/null || : > "$body_tmp"
+    else
+      : > "$body_tmp"
+    fi
+
+    local -a add_args=(add --root "$PWD" --kind "$kind" --title "$title" --body "$body_tmp")
+    [[ -n "$tags" ]] && add_args+=(--tags "$tags")
+    [[ -n "$source" ]] && add_args+=(--source "$source")
+    [[ -n "$harness" ]] && add_args+=(--harness "$harness")
+
+    local add_out add_err add_status first_err rel
+    add_err="$(mktemp)" || {
+      echo "!!! memory proposals skipped: mktemp failed" >&2
+      rm -f "$body_tmp"
+      break
+    }
+    set +e
+    add_out="$("$memory_sh" "${add_args[@]}" </dev/null 2>"$add_err")"
+    add_status=$?
+    set -e
+    first_err="$(head -1 "$add_err" 2>/dev/null || true)"
+    first_err="${first_err%$'\r'}"
+    rm -f "$body_tmp" "$add_err"
+
+    if (( add_status == 0 )); then
+      printf '%s\n' "$add_out"
+      set -- $add_out
+      if [[ "${2:-}" == "added" || "${2:-}" == "quarantined" ]]; then
+        rel="${4:-}"
+        [[ -n "$rel" ]] && commit_paths+=("$rel")
+      fi
+    elif (( add_status == 5 )); then
+      echo "!!! memory proposal $name quarantined: $add_out" >&2
+      set -- $add_out
+      if [[ "${2:-}" == "quarantined" ]]; then
+        rel="${4:-}"
+        [[ -n "$rel" ]] && commit_paths+=("$rel")
+      fi
+    else
+      echo "!!! memory proposal $name rejected (exit $add_status): ${first_err:-unknown error}" >&2
+    fi
+  done < "$sorted_list"
+  rm -f "$sorted_list"
+
+  if (( ${#commit_paths[@]} == 0 )); then
+    return 0
+  fi
+
+  set +e
+  git add -- "${commit_paths[@]}"
+  local add_rc=$?
+  if (( add_rc != 0 )); then
+    echo "!!! memory records left uncommitted: git add failed (exit $add_rc)" >&2
+    set -e
+    return 0
+  fi
+  git commit -q -m "chore(memory): $story records" -- "${commit_paths[@]}"
+  local commit_rc=$?
+  set -e
+  if (( commit_rc != 0 )); then
+    echo "!!! memory records left uncommitted: git commit failed (exit $commit_rc)" >&2
+  fi
+}
+
 active_slots=0
 dispatched=0            # total dispatches across ALL slots this run -- counts
                          # against MAX_ITER (010 semantics preserved).
@@ -452,7 +655,11 @@ _loop_report_retained() {
     echo "=== retained branches from quarantined slots (NOT integrated): ${retained_branches[*]} ==="
   fi
 }
-trap _loop_report_retained EXIT
+_loop_driver_exit_hook() {
+  _loop_report_retained
+  _loop_memory_aside_cleanup_all
+}
+trap _loop_driver_exit_hook EXIT
 
 # =============================================================================
 # STORY-011: driver-owned story selection, writes:-glob admission, in-memory
@@ -473,6 +680,8 @@ PROTECTED_PATHS=(
   "{{IDE_DIR}}/skills/"
   "orchestration-kit.manifest.json"
   ".gitattributes"
+  "_memory/records/"
+  "_memory/quarantine/"
 )
 
 # --- Hotspot set (§6.3 :700-724 + addendum 1c): per-FILE serialization --
@@ -1219,6 +1428,32 @@ _loop_reap_slot() {
   if [[ -f "$outbox_dir/dispatch-prompt.md" ]]; then
     dispatched_prompt="$(cat "$outbox_dir/dispatch-prompt.md")"
   fi
+  # Copy-aside for integrator step 3b: direct children of <outbox>/memory/
+  # only, into a per-slot mktemp dir (same pattern as the outbox itself).
+  shopt -s nullglob
+  local _mem_props=( "$outbox_dir"/memory/*.md )
+  shopt -u nullglob
+  if (( ${#_mem_props[@]} > 0 )); then
+    local _aside _mp _aside_ok=1
+    _aside="$(mktemp -d "${TMPDIR:-/tmp}/loop-memory-aside.XXXXXX")" || _aside=""
+    if [[ -z "$_aside" ]]; then
+      echo "!!! memory proposal copy-aside failed: mktemp failed" >&2
+    else
+      slot_memory_aside[s]="$_aside"
+      for _mp in "${_mem_props[@]}"; do
+        [[ -f "$_mp" ]] || continue
+        if ! cp "$_mp" "${_aside}/$(basename "$_mp")"; then
+          echo "!!! memory proposal copy-aside failed: cp failed" >&2
+          _aside_ok=0
+          break
+        fi
+      done
+      if (( _aside_ok == 0 )); then
+        rm -rf "$_aside"
+        slot_memory_aside[s]=""
+      fi
+    fi
+  fi
   rm -rf "$outbox_dir"
 
   # --- Integrator step 4: memory size gates, driver-side, AFTER appends
@@ -1332,6 +1567,7 @@ _loop_reap_slot() {
   # violation) vs normal integration -- flag=1 only; flag=0 has no
   # worktree/branch to act on (main tree already carries whatever the slot
   # committed, today's unchanged behavior).
+  local slot_did_integrate=0
   if (( WORKTREE == 1 )); then
     # dirty_paths capture (D4/STORY-012): the porcelain text itself, not just
     # the boolean it also feeds -- flattened to one line for the quarantine
@@ -1389,8 +1625,25 @@ _loop_reap_slot() {
       retained_branches+=("$branch")
     else
       _loop_integrate_slot "$tree" "$branch"
+      slot_did_integrate=1
     fi
   fi
+
+  # --- Integrator step 3b: memory proposals from the copy-aside dir. Runs at
+  # the END of reap, after CB0 (CB0 exits first — never reached there) and
+  # disposal. Gate: no ITERATION-mismatch, no subset violation, and at
+  # LOOP_WORKTREE=1 the branch was integrated (not quarantined). Any verdict
+  # qualifies, including failed. Never changes exit code, backlog, or breaker.
+  local run_memory_3b=0
+  if (( mismatch == 0 )) && [[ -z "$subset_bad" ]]; then
+    if (( WORKTREE == 0 )) || (( slot_did_integrate == 1 )); then
+      run_memory_3b=1
+    fi
+  fi
+  if (( run_memory_3b == 1 )) && [[ -n "${slot_memory_aside[s]:-}" ]]; then
+    _loop_integrate_memory_proposals "$s" "$story" "${slot_memory_aside[s]}"
+  fi
+  _loop_memory_aside_cleanup_slot "$s"
 }
 
 # _loop_all_retired -- exit 0 (true) iff every slot 0..EFFECTIVE_SLOTS-1 is

@@ -186,16 +186,17 @@ else
 fi
 
 # ===========================================================================
-# (f) Canonical feature SKILL.template.md body budget (<= 10240 bytes).
+# (f) Canonical feature SKILL.template.md body budget (<= 11264 bytes).
+# Release B memory recall/archive steps.
 # ===========================================================================
 if [[ ! -f "$FEATURE_TPL" ]]; then
-  report FAIL "canonical feature SKILL.template.md <= 10240 bytes" "file missing"
+  report FAIL "canonical feature SKILL.template.md <= 11264 bytes" "file missing"
 else
   feat_bytes="$(wc -c < "$FEATURE_TPL" | tr -d ' ')"
-  if [[ "${feat_bytes:-0}" -le 10240 ]]; then
-    report PASS "canonical feature SKILL.template.md <= 10240 bytes (${feat_bytes} bytes)"
+  if [[ "${feat_bytes:-0}" -le 11264 ]]; then
+    report PASS "canonical feature SKILL.template.md <= 11264 bytes (${feat_bytes} bytes)"
   else
-    report FAIL "canonical feature SKILL.template.md <= 10240 bytes" \
+    report FAIL "canonical feature SKILL.template.md <= 11264 bytes" \
       "actual ${feat_bytes} bytes"
   fi
 fi

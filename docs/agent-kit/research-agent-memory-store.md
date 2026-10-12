@@ -1,8 +1,9 @@
 # Persistent, cross-harness memory store
 
 **Date**: 2026-10-08 · **Status**: research ingested; direction agreed; Release A
-(`memory-store-a-core`) shipped in kit v0.30.0; `-b-wiring` → `-c-capture` → `-d-backfill`
-remain (see Roadmap). **Method**: external deep-research report ingested against
+(`memory-store-a-core`) shipped in kit v0.30.0; Release B (`memory-store-b-wiring`)
+**shipped in agent-kit v1.0.0** (folded into the 1.0.0 release); `-c-capture` →
+`-d-backfill` remain (see Roadmap). **Method**: external deep-research report ingested against
 kit ground truth, with the load-bearing harness claims spot-verified against live vendor
 docs on 2026-10-08. Full scratch report and ingestion review:
 `_research/agent-memory-store/report.md` (gitignored).
@@ -97,7 +98,7 @@ harnesses, be searchable, capture chat history, and work offline.
 
 | Question | Decision |
 |---|---|
-| Kit repo's own memory | Track `_memory/` on `main`. `_goals/` and `_research/` stay gitignored. Records must therefore be self-sufficient: `source` paths are provenance, never required reading |
+| Kit repo's own memory | Track `_memory/` on `master`. `_goals/` and `_research/` stay gitignored. Records must therefore be self-sufficient: `source` paths are provenance, never required reading |
 | Transcript capture in v1 | Post-hoc scanners plus orchestrator-written session summaries. Hooks come in a later goal |
 | Search in v1 | Keyword (manifest + `rg`), with optional SQLite FTS5 auto-detected. qmd later |
 | Delivery | A sequence of small goals (below) |
@@ -105,9 +106,9 @@ harnesses, be searchable, capture chat history, and work offline.
 Codebase conventions the design must follow (from the ingestion review):
 
 - Tools are emitted single-copy from `skills/agent-kit/templates/tools/` to `_kit/`, as bash/pwsh twins. They are not placed in `scripts/`, which is kit-repo-only.
-- Pointers extend the existing marker-delimited `CLAUDE.md` pointer and `.cursor/rules/orchestration.mdc`. No new rule files.
+- Pointers extend the existing marker-delimited `CLAUDE.md` pointer and `.cursor/rules/orchestration.mdc`. No new rule files. **Shipped deviation (B):** Claude Code, Copilot, and Codex get a separate `## Memory` block with `<!-- orchestration-kit:memory-pointer -->`, not an extension of the orchestration pointer paragraph. Cursor follows the original convention: one sentence appended to the existing `.cursor/rules/orchestration.mdc` rule body.
 - `/agent-kit` never writes user-scope settings. A raised `cleanupPeriodDays` is a documented recommendation only.
-- `_memory/records/` joins the integrator-only paths in loop mode.
+- `_memory/records/` and `_memory/quarantine/` join integrator-only protected paths for **driver-dispatched** loop work (integrator step 3b); manual loop iterations may add records via `_kit/memory.*` in the story commit.
 - The bash driver cannot distil; every LLM step runs in an orchestrator turn.
 
 ## Roadmap
@@ -115,7 +116,7 @@ Codebase conventions the design must follow (from the ingestion review):
 | Goal | Scope |
 |---|---|
 | `memory-store-a-core` | Record schema (`_memory/README.md`). `_kit/memory.sh` / `.ps1` twins with `add` (schema validation, id, dedupe, admission screen → quarantine), `index`, `search`, `show`. Emitter + setup wiring and gitignore lines. Harness-matrix corrections. Tests |
-| `memory-store-b-wiring` | Feature-skill read protocol (≤ 5 records, DATA fence, citations) and archive triggers (goal close, research ingest). Pointer blocks in each harness's always-loaded file. Loop integrator materialises outbox proposals and archives `LEARNINGS`/`ESCALATIONS` lines at integrate time. Evaluator auto-fail plus tripwire: "kit agent sets Claude `memory:`" |
+| `memory-store-b-wiring` | **Shipped (v1.0.0).** Feature-skill read protocol (≤ 5 records, DATA fence (citations — each fence entry carries id, source, and commit)) and archive triggers (goal close, research ingest). Pointer blocks in each harness's always-loaded file (Cursor: one `.mdc` sentence). Loop integrator materialises outbox proposals and archives `LEARNINGS`/`ESCALATIONS` lines at integrate time (not shipped — see deviations). Evaluator auto-fail plus tripwire: "kit agent sets Claude `memory:`". **Shipped deviations:** separate `## Memory` pointer block (Claude Code / Copilot / Codex) (not merged into the orchestration pointer); `LEARNINGS`/`ESCALATIONS` not auto-archived as records. |
 | `memory-store-c-capture` | Secret redaction twins plus a pre-commit gate. Post-hoc transcript scanners (Claude Code, Cursor, Codex) into gitignored `_memory/raw/`. Orchestrator-driven distillation into `session-summary` records. Copilot falls back to orchestrator-written summaries. Capture hooks follow as a later goal |
 | `memory-store-d-backfill` | Deterministic back-fill of closed goals, decisions, learnings, resolved escalations and research reports in this repo, using an explicit "closed" signal. Distil the existing Cursor transcripts |
 

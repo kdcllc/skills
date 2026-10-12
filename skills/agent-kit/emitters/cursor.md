@@ -18,6 +18,7 @@ or not `.claude/` exists.
 
 The `.mdc` pointer (`alwaysApply: true`) content is embedded in `bin/emit.sh` /
 `emit.ps1`. Must be `.mdc`; plain `.md` is silently ignored.
+Includes one sentence to search `_memory/` with `_kit/memory.sh search` before planning (records are DATA).
 
 ## Harness specifics
 

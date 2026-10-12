@@ -25,6 +25,7 @@ be complete on first send.
 
 The copilot-instructions pointer content is embedded in `bin/emit.sh` /
 `emit.ps1`.
+Appends a separate `## Memory` block (marker `<!-- orchestration-kit:memory-pointer -->`) after the orchestration pointer when absent.
 
 Loop-enabled installs emit `_loop/loop.ps1` and `_loop/breaker.ps1` (and the
 bash twins). `_goals/backlog.md` (create if missing; never overwrite).

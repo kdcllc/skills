@@ -34,6 +34,7 @@ readonly -a EXPECTED_SUITE=(
   agents-and-models.md
   evaluation-system.md
   contributing.md
+  memory.md
 )
 
 failures=()

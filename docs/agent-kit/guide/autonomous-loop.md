@@ -68,7 +68,7 @@ These guards are **structural** — enforced by `loop.sh` / `loop.ps1` and the `
 
 | Guard | Driver behavior (as of v0.19.0) |
 |-------|----------------------------------|
-| **Protected paths** | The loop may not modify `_loop/`, kit agents/skills, `orchestration-kit.manifest.json`, or `.gitattributes`. A violation reverts the iteration and **stops the run immediately** (exit **4**); other running slots are killed. |
+| **Protected paths** | The loop may not modify `_loop/`, kit agents/skills, `orchestration-kit.manifest.json`, or `.gitattributes`. As of **v1.0.0**, **`_memory/records/`** and **`_memory/quarantine/`** are integrator-only in driver-dispatched mode (slots never declare `_memory/` in `writes:`). A protected-path violation reverts the iteration and **stops the run immediately** (exit **4**); other running slots are killed. |
 | **Circuit breaker (CB1 / CB2)** | **Per slot:** retire after **3 consecutive no-commit reaps** (CB1) or **5 identical failure signatures** (CB2). The run **continues** while other slots remain active. When **every slot is retired**, the run stops — exit **3** if any retirement was signature-based (CB2), else exit **2**. |
 | **Model breaker** | CLOSED/OPEN/HALF-OPEN on anchored rate-limit detection; 600s cooldown, 2 successes to close; falls down the loop model chain. OPEN sleeps instead of hammering; rate-limited passes are CB1-exempt. State: `_goals/breaker-state.json`. |
 | **Memory size gates** | After integrate, the driver **detects** breaches and prints a deferral — it never compacts or archives. Thresholds match the guard table: `_goals/LEARNINGS.md` ≥ **15 KB** (compact) and `_goals/ESCALATIONS.md` ≥ **20 KB** (archive resolved entries). Compaction and archival happen in a **manual** `auto-loop` iteration only; driver-dispatched slots never run these gates. |
@@ -142,6 +142,8 @@ These proxy fields in the orchestration log (`io_est_tokens`, `work_est_tokens`)
 Loop-created goals always set **`ladder: auto`** in `goal.md`'s `phases:` block (alongside `align_docs` and `pull_request`) so cycle-3 exhaustion runs the continuation ladder unattended. Interactive `/feature` goals default to `ladder: escalate` instead.
 
 For parallel-dispatch design rationale (slot accounting, worktree lifecycle, write-set admission, integrator), see [Parallel dispatch design](../design-parallel-dispatch.md).
+
+**Memory in the loop:** Manual iterations call `_kit/memory.sh add` in the story commit. Driver-dispatched slots write `<outbox>/memory/*.md` proposals instead; the integrator **step 3b** at reap end materializes them (after CB0, with path-limited `chore(memory): …` commits when records land). Failures are `!!!` lines only and never change exit codes. Full rules: [memory.md](memory.md).
 
 ## Exit codes
 
