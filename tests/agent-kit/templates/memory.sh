@@ -285,6 +285,668 @@ fts_expected_order() { # <fts.db> <match-expr> <candidate-ids-file> <tmpdir> —
   LC_ALL=C sort -r "$cands" | grep -vxF -f "$tmp/fts.ranked" || true
 }
 
+sqlite_fts5_available() {
+  command -v sqlite3 >/dev/null 2>&1 || return 1
+  sqlite3 :memory: "CREATE VIRTUAL TABLE t USING fts5(x);" >/dev/null 2>&1
+}
+
+MEMORY_SUITES="${MEMORY_SUITES:-bash,pwsh,parity}"
+suite_token_in_suites() { # <token> <suites-csv>
+  local want="$1" rest="$2" part
+  while [[ -n "$rest" ]]; do
+    part="${rest%%,*}"
+    if [[ "$part" = "$rest" ]]; then rest=""; else rest="${rest#*,}"; fi
+    part="${part#"${part%%[![:space:]]*}"}"
+    part="${part%"${part##*[![:space:]]}"}"
+    [[ "$part" = "$want" ]] && return 0
+  done
+  return 1
+}
+suite_selected() { # <bash|pwsh|parity>
+  suite_token_in_suites "$1" "$MEMORY_SUITES"
+}
+followup_pwsh_runnable() {
+  suite_selected pwsh && command -v pwsh >/dev/null 2>&1
+}
+
+validate_memory_suites() {
+  local part rest="$MEMORY_SUITES"
+  [[ -n "$rest" ]] || { report FAIL "MEMORY_SUITES empty"; finish; }
+  while [[ -n "$rest" ]]; do
+    part="${rest%%,*}"
+    if [[ "$part" = "$rest" ]]; then rest=""; else rest="${rest#*,}"; fi
+    part="${part#"${part%%[![:space:]]*}"}"
+    part="${part%"${part##*[![:space:]]}"}"
+    case "$part" in bash|pwsh|parity) ;; *)
+      report FAIL "MEMORY_SUITES unknown value: $part"
+      finish
+      ;;
+    esac
+  done
+}
+
+run_memory_followup_cases() {
+  local F="" sf=0 B="" Rp="" Rb=""
+  mktemp_dir F
+  mktemp_dir B
+  ok(){ :; }
+  ko(){ sf=1; printf '  followup detail: %s\n' "$*" >&2; }
+  followup_report() {
+    local cid="$1" title="$2"
+    if [[ $sf -eq 0 ]]; then report PASS "[followup] ($cid) $title"
+    else report FAIL "[followup] ($cid) $title"; fi
+    sf=0
+  }
+  followup_assert_clean() { # <where> — every ko must be consumed by a followup_report; a flag still set here would be a silent false PASS
+    if [[ $sf -ne 0 ]]; then
+      report FAIL "[followup] unreported failure flag leaked before: $1"
+      sf=0
+    fi
+  }
+  followup_skip_twin() {
+    local twin="$1" cid="$2" title="$3"
+    if ! suite_selected "$twin"; then
+      report SKIP "[followup] ($cid) $title" "not in MEMORY_SUITES"
+      return 0
+    fi
+    if [[ "$twin" = pwsh ]] && ! command -v pwsh >/dev/null 2>&1; then
+      report SKIP "[followup] ($cid) $title" "pwsh not on PATH"
+      return 0
+    fi
+    return 1
+  }
+  followup_mkstore() { # <root>
+    local root="$1"
+    mkdir -p "$root"
+    printf 'alpha body text\n' > "$F/b.md"
+    guard_args add --kind fact --title regular --body "$F/b.md" --root "$root"
+    MEMORY_NOW=20261011T120000Z bash "$MEMORY_SH" add --kind fact --title regular --body "$F/b.md" --root "$root" >/dev/null 2>&1
+  }
+  followup_reg_roots() { # <rp> <rb>
+    ROOT_REG+=("$1" "$2")
+  }
+  followup_norm() { # <in> <out> — collapse volatile add ids for compare
+    sed -E 's/[0-9]{8}T[0-9]{6}Z-3bdc24fe/<REG>/g' "$1" > "$2"
+  }
+  followup_compare() { # <case-id> <title> <builder-name> <subcmd...>
+    local cid="$1" title="$2" builder="$3"
+    shift 3
+    if followup_skip_twin bash "$cid" "$title"; then return 0; fi
+    mktemp_dir Rp
+    mktemp_dir Rb
+    followup_reg_roots "$Rp" "$Rb"
+    local root_p="$Rp" root_b="$Rb"
+    "$builder" "$Rp"
+    "$builder" "$Rb"
+    if [[ "$builder" = b_backslash_root ]]; then
+      root_p="$Rp/back\\slash"
+      root_b="$Rb/back\\slash"
+    fi
+    local rcp=0 rcb=0
+    if followup_pwsh_runnable; then
+      guard_args "$@" --root "$root_p"
+      pwsh -NoProfile -NonInteractive -File "$MEMORY_PS1" "$@" --root "$root_p" >"$B/out_p" 2>"$B/err_p"
+      rcp=$?
+    else
+      : > "$B/out_p"; : > "$B/err_p"
+      report SKIP "[followup] ($cid) pwsh parity half" "not in MEMORY_SUITES or pwsh not on PATH"
+    fi
+    guard_args "$@" --root "$root_b"
+    MEMORY_NOW=20261011T120001Z bash "$MEMORY_SH" "$@" --root "$root_b" >"$B/out_b" 2>"$B/err_b"
+    rcb=$?
+    followup_norm "$B/out_p" "$B/out_pn"
+    followup_norm "$B/out_b" "$B/out_bn"
+    followup_norm "$B/err_p" "$B/err_pn"
+    followup_norm "$B/err_b" "$B/err_bn"
+    if followup_pwsh_runnable; then
+      if [[ "$rcp" != "$rcb" ]] || ! cmp -s "$B/out_pn" "$B/out_bn" || ! cmp -s "$B/err_pn" "$B/err_bn"; then
+        ko "$builder $* rc pwsh=$rcp bash=$rcb"
+        diff -u "$B/out_pn" "$B/out_bn" | head -8 >&2 || true
+      fi
+    fi
+    followup_absolute "$cid" "$root_b" "$rcb" "$(cat "$B/out_b")" "$(cat "$B/err_b")" "$@"
+    followup_report "$cid" "$title"
+  }
+  followup_index_n() { # <stdout> → record count from index line (fts: yes|no — the count is FTS5-independent)
+    sed -n 's/^memory: indexed \([0-9][0-9]*\) records · fts: \(yes\|no\)$/\1/p' <<<"$1"
+  }
+  followup_absolute() { # <case-id> <bash-root> <rc> <out> <err> <subcmd...>
+    local cid="$1" root="$2" rcb="$3" out="$4" err="$5"
+    shift 5
+    local sub=("$@") cmd="${sub[0]:-}"
+    case "$cid" in
+      limit-overflow-rc) return 0 ;;
+    esac
+    [[ "$rcb" = 0 ]] && ok "$cid rc 0" || ko "$cid rc" "got $rcb"
+    case "$cid" in
+      sym-*-trap|      byte-newline-term|search-fm-tab-title)
+        if [[ -z "$out" && "$(printf '%s' "$err" | tr -d '\n')" = "memory: 0 results" ]]; then
+          ok "$cid zero-result stderr"
+        elif [[ -z "$err" ]]; then
+          ok "$cid empty stderr"
+        else
+          ko "$cid stderr" "[$err]"
+        fi
+        ;;
+      search-chmod-unreadable)
+        [[ -z "$err" ]] && ok "$cid empty stderr" || ko "$cid stderr" "[$err]"
+        [[ "$(wc -l <<<"$out" | tr -d ' ')" = 1 ]] && ok "$cid one search row" || ko "$cid row count" "[$out]"
+        grep -qi zeta <<<"$out" && ok "$cid zeta hit" || ko "$cid zeta missing" "[$out]"
+        ;;
+      *)
+        [[ -z "$err" ]] && ok "$cid empty stderr" || ko "$cid stderr" "[$err]"
+        ;;
+    esac
+    case "$cid" in
+      sym-leaf-index)
+        [[ "$(followup_index_n "$out")" = 2 ]] && ok "leaf indexed 2" || ko "leaf index count" "[$out]" ;;
+      sym-symlink-*-index)
+        [[ "$(followup_index_n "$out")" = 1 ]] && ok "$cid indexed 1" || ko "$cid index count" "[$out]" ;;
+      sym-sibling-index)
+        [[ "$(followup_index_n "$out")" = 2 ]] && ok "$cid indexed 2 sibling years" || ko "$cid index count" "[$out]" ;;
+      sym-bad-index|sym-mm-loop-index|sym-ancestor-index|sym-trailing-index|sym-alias-index)
+        [[ "$(followup_index_n "$out")" = 1 ]] && ok "$cid indexed 1 bad/loop fixture" || ko "$cid index count" "[$out]" ;;
+      sym-leaf-search)
+        grep -q '20261011T120001Z-bbbbbbbb' <<<"$out" && ok "leaf symlink id in search" || ko "leaf search" "[$out]" ;;
+      sym-stale-search)
+        grep -q 'aftertouch' <<<"$out" && ok "stale aftertouch title" || ko "stale search" "[$out]" ;;
+      sym-sibling-search)
+        grep -c '20261011T120000Z-3bdc24fe' <<<"$out" | grep -qx 2 && ok "sibling duplicate regular row" \
+          || ko "sibling search rows" "[$out]" ;;
+      sym-*-search)
+        grep -q '20261011T120000Z-3bdc24fe' <<<"$out" && ok "$cid search regular id" || ko "$cid search regular" "[$out]" ;;
+      sym-*-trap)
+        ! grep -qE 'trap0001|77777777|eeeeeeee|88888888|99999999' <<<"$out" && ok "$cid trap hidden" \
+          || ko "$cid trap leaked" "[$out]" ;;
+      sym-quarantine-index)
+        [[ "$(followup_index_n "$out")" = 1 ]] && ok "$cid indexed 1" || ko "$cid index count" "[$out]" ;;
+      byte-newline-term)
+        [[ -z "$out" ]] && ok "newline term empty stdout" || ko "newline search stdout" "[$out]" ;;
+      harden-numeric-idx)
+        local row sb
+        row="$(grep $'^1e3\t' "$root/_memory/.index/manifest.tsv" 2>/dev/null || true)"
+        sb="$(printf '%s' "$row" | cut -f8)"
+        [[ -n "$row" && -z "$sb" ]] && ok "1e3 superseded_by empty" || ko "1e3 superseded" "row=[$row]" ;;
+      harden-numeric-search)
+        grep -q '^1e3' <<<"$out" && ok "grep lists 1e3" || ko "1e3 missing from search" "[$out]" ;;
+      harden-fts-ids)
+        [[ "$(sed -n 1p <<<"$out" | cut -f1)" = 1000 ]] && ok "fts order 1000 before 1e3" || ko "fts id order" "[$out]" ;;
+      harden-fts-tag-n)
+        [[ "$(sed -n 1p <<<"$out" | cut -f1)" = 20261011T150000Z-aabbcc01 ]] && ok "fts ranks -n tag row first" \
+          || ko "fts -n tag order" "[$out]" ;;
+      byte-backslash-idx|byte-backslash-bash-idx)
+        [[ "$(followup_index_n "$out")" = 1 ]] && ok "backslash bash indexed 1" || ko "backslash index" "[$out]" ;;
+      byte-backslash-search|byte-backslash-bash-search)
+        # search rows are id, kind, date, score, title, path — the body ("omega") is never printed
+        local srow
+        srow="$(sed -n 1p <<<"$out")"
+        { [[ "$(wc -l <<<"$out" | tr -d ' ')" = 1 ]] \
+          && [[ "$(cut -f1 <<<"$srow")" = 20261011T170000Z-cc2d573a ]] \
+          && [[ "$(cut -f5 <<<"$srow")" = Backslash ]] \
+          && [[ "$(cut -f6 <<<"$srow")" = _memory/records/2026/10/20261011T170000Z-cc2d573a.md ]]; } \
+          && ok "backslash search row" || ko "backslash search row" "[$out]" ;;
+    esac
+  }
+  followup_add_both() { # <case-id> <title> <builder> <body-md>
+    local cid="$1" title="$2" builder="$3" body="$4"
+    if followup_skip_twin bash "$cid" "$title"; then return 0; fi
+    mktemp_dir Rp
+    mktemp_dir Rb
+    followup_reg_roots "$Rp" "$Rb"
+    "$builder" "$Rp"
+    "$builder" "$Rb"
+    local rc_p=0 rc_b=0
+    if followup_pwsh_runnable; then
+      guard_args add --kind fact --title adddedupe --body "$body" --root "$Rp"
+      pwsh -NoProfile -NonInteractive -File "$MEMORY_PS1" add --kind fact --title adddedupe --body "$body" --root "$Rp" >"$B/out_p" 2>"$B/err_p"
+      rc_p=$?
+      { [ "$rc_p" = 0 ] && [ -z "$(cat "$B/err_p")" ] && grep -q 'memory: added' "$B/out_p"; } \
+        && ok "$cid pwsh add" || ko "$cid pwsh add" "rc=$rc_p err=[$(cat "$B/err_p")] out=[$(cat "$B/out_p")]"
+    else
+      report SKIP "[followup] ($cid) pwsh add half" "not in MEMORY_SUITES or pwsh not on PATH"
+    fi
+    guard_args add --kind fact --title adddedupe --body "$body" --root "$Rb"
+    followup_run_bash "$Rb" add --kind fact --title adddedupe --body "$body" >"$B/out_b" 2>"$B/err_b"
+    rc_b=$?
+    { [ "$rc_b" = 0 ] && [ -z "$(cat "$B/err_b")" ] && grep -q 'memory: added' "$B/out_b"; } \
+      && ok "$cid bash add" || ko "$cid bash add" "rc=$rc_b err=[$(cat "$B/err_b")]"
+    followup_report "$cid" "$title"
+  }
+  followup_run_bash() { # <root> <subcmd...>
+    local root="$1"
+    shift
+    guard_args "$@" --root "$root"
+    MEMORY_NOW=20261011T120002Z bash "$MEMORY_SH" "$@" --root "$root"
+  }
+  followup_trapmd() { # <records-glob-parent> <dest-file> <id> <title>
+    local reg="$1" dest="$2" id="$3" title="$4"
+    reg="$(ls "$1"/*/*/*.md | head -1)"
+    sed "s/^id: .*/id: $id/; s/^title: .*/title: $title/" "$reg" > "$dest"
+  }
+
+  b_leaf() {
+    local R="$1"
+    followup_mkstore "$R"
+    local d reg
+    d="$(ls -d "$R"/_memory/records/*/*)"
+    reg="$(ls "$d"/*.md | head -1)"
+    sed 's/^id: .*/id: 20261011T120001Z-bbbbbbbb/; s/^title: .*/title: outside/' "$reg" > "$F/outside.md"
+    ln -s "$F/outside.md" "$d/20261011T120001Z-bbbbbbbb.md"
+  }
+  b_symlink_mm() {
+    local R="$1" yyyy mm
+    followup_mkstore "$R"
+    yyyy="$(ls "$R/_memory/records")"
+    mm="$(ls "$R/_memory/records/$yyyy")"
+    mkdir -p "$R/mm-real"
+    mv "$R/_memory/records/$yyyy/$mm" "$R/mm-real/"
+    ln -s "$R/mm-real/$mm" "$R/_memory/records/$yyyy/$mm"
+  }
+  b_symlink_yyyy() {
+    local R="$1" yyyy
+    followup_mkstore "$R"
+    yyyy="$(ls "$R/_memory/records")"
+    mkdir -p "$R/yyyy-real"
+    mv "$R/_memory/records/$yyyy" "$R/yyyy-real/"
+    ln -s "$R/yyyy-real/$yyyy" "$R/_memory/records/$yyyy"
+  }
+  b_symlink_mem() {
+    local R="$1"
+    followup_mkstore "$R"
+    mv "$R/_memory" "$R/mem-real"
+    ln -s "$R/mem-real" "$R/_memory"
+  }
+  b_bad_symlinks() {
+    local R="$1" yyyy mm d
+    followup_mkstore "$R"
+    yyyy="$(ls "$R/_memory/records")"
+    mm="$(ls "$R/_memory/records/$yyyy")"
+    d="$R/_memory/records/$yyyy/$mm"
+    ln -s "$F/nope.md" "$d/20261011T120002Z-cccccccc.md"
+    mkdir -p "$F/adir"
+    ln -s "$F/adir" "$d/20261011T120003Z-dddddddd.md"
+    ln -s "$R/_memory/records/$yyyy" "$R/_memory/records/$yyyy/12"
+    ln -s "$R/_memory/records" "$R/_memory/records/1999"
+    sed 's/^id: .*/id: 20261011T120010Z-trap0001/; s/^title: .*/title: trap/' "$(ls "$d"/*.md | head -1)" > "$R/_memory/records/20261011T120010Z-trap0001.md"
+  }
+  b_mm_to_records() {
+    local R="$1" yyyy
+    followup_mkstore "$R"
+    yyyy="$(ls "$R/_memory/records")"
+    followup_trapmd "$R/_memory/records" "$R/_memory/records/20261011T130000Z-77777777.md" 20261011T130000Z-77777777 trap
+    ln -s .. "$R/_memory/records/$yyyy/12"
+  }
+  b_ancestor_trap() {
+    local R="$1" yyyy mm
+    followup_mkstore "$R"
+    yyyy="$(ls "$R/_memory/records")"
+    mm="$(ls "$R/_memory/records/$yyyy")"
+    followup_trapmd "$R/_memory/records" "$R/_memory/records/$yyyy/20261011T120004Z-eeeeeeee.md" 20261011T120004Z-eeeeeeee trap
+    ln -s "$R/_memory/records/$yyyy" "$R/_memory/records/$yyyy/11"
+  }
+  b_trailing_slash() {
+    local R="$1" yyyy
+    followup_mkstore "$R"
+    yyyy="$(ls "$R/_memory/records")"
+    followup_trapmd "$R/_memory/records" "$R/_memory/records/$yyyy/20261011T130001Z-88888888.md" 20261011T130001Z-88888888 trap
+    ln -s "$R/_memory/records/$yyyy/" "$R/_memory/records/$yyyy/11"
+  }
+  b_alias_memory() {
+    local R="$1" yyyy
+    followup_mkstore "$R"
+    mv "$R/_memory" "$R/real-mem"
+    ln -s "$R/real-mem" "$R/_memory"
+    yyyy="$(ls "$R/real-mem/records")"
+    followup_trapmd "$R/real-mem/records" "$R/real-mem/records/$yyyy/20261011T130002Z-99999999.md" 20261011T130002Z-99999999 trap
+    ln -s "$R/real-mem/records/$yyyy" "$R/_memory/records/$yyyy/09"
+  }
+  b_sibling_year() {
+    local R="$1" yyyy
+    followup_mkstore "$R"
+    yyyy="$(ls "$R/_memory/records")"
+    ln -s "$R/_memory/records/$yyyy" "$R/_memory/records/2025"
+  }
+  b_stale_link() {
+    local R="$1" d reg
+    followup_mkstore "$R"
+    d="$(ls -d "$R"/_memory/records/*/*)"
+    reg="$(ls "$d"/*.md | head -1)"
+    sed 's/^id: .*/id: 20261011T120005Z-ffffffff/; s/^title: .*/title: before/' "$reg" > "$R/tgt.md"
+    ln -s "$R/tgt.md" "$d/20261011T120005Z-ffffffff.md"
+  }
+  b_stale_link_indexed() {
+    local R="$1"
+    b_stale_link "$R"
+    guard_args index --root "$R"
+    bash "$MEMORY_SH" index --root "$R" >/dev/null 2>&1
+    sleep 1
+    sed 's/^title: .*/title: aftertouch/' "$R/tgt.md" > "$B/tgt.new" && mv "$B/tgt.new" "$R/tgt.md"
+  }
+  b_add_broken_leaf() {
+    local R="$1" yyyy mm d
+    followup_mkstore "$R"
+    yyyy="$(ls "$R/_memory/records")"
+    mm="$(ls "$R/_memory/records/$yyyy")"
+    d="$R/_memory/records/$yyyy/$mm"
+    ln -s "$F/nope-add.md" "$d/20261011T120020Z-addbbbb.md"
+  }
+  b_add_leaf_dir() {
+    local R="$1" yyyy mm d
+    followup_mkstore "$R"
+    yyyy="$(ls "$R/_memory/records")"
+    mm="$(ls "$R/_memory/records/$yyyy")"
+    d="$R/_memory/records/$yyyy/$mm"
+    mkdir -p "$F/adir-add"
+    ln -s "$F/adir-add" "$d/20261011T120021Z-addcccc.md"
+  }
+  b_add_records_loop() {
+    local R="$1" yyyy
+    followup_mkstore "$R"
+    yyyy="$(ls "$R/_memory/records")"
+    ln -s "$R/_memory/records/$yyyy" "$R/_memory/records/$yyyy/12"
+  }
+  b_quarantine_broken() {
+    local R="$1"
+    followup_mkstore "$R"
+    mkdir -p "$R/_memory/quarantine"
+    ln -s "$F/nope2.md" "$R/_memory/quarantine/20261011T120006Z-abababab.md"
+  }
+  b_tie_dup_id() {
+    local R="$1" src
+    followup_mkstore "$R"
+    src="$(ls "$R"/_memory/records/*/*/*.md | head -1)"
+    cp "$src" "$F/tie-src.md"
+    rm -rf "$R/_memory/records"
+    mkdir -p "$R/_memory/records/2025/10" "$R/_memory/records/2026/10"
+    sed 's/^id: .*/id: 20261011T120000Z-deadbeef/; s/^tags: .*/tags: [zzz]/' "$F/tie-src.md" > "$R/_memory/records/2025/10/20261011T120000Z-deadbeef.md"
+    sed 's/^id: .*/id: 20261011T120000Z-deadbeef/; s/^tags: .*/tags: [aaa]/' "$F/tie-src.md" > "$R/_memory/records/2026/10/20261011T120000Z-deadbeef.md"
+  }
+  b_numeric_ids() {
+    local R="$1"
+    mkdir -p "$R/_memory/records/2026/10"
+    printf '%s\n' '---' 'id: 1000' 'kind: fact' 'title: "numeric thousand"' 'date: 2026-10-11' 'source: ""' 'commit: none' 'harness: ""' 'tags: [num]' 'supersedes: []' 'sha256: bb' '---' 'thousand body' \
+      > "$R/_memory/records/2026/10/20261011T150001Z-00001000.md"
+    printf '%s\n' '---' 'id: 1e3' 'kind: fact' 'title: "numeric sci"' 'date: 2026-10-11' 'source: ""' 'commit: none' 'harness: ""' 'tags: [sci]' 'supersedes: []' 'sha256: aa' '---' 'sci body' \
+      > "$R/_memory/records/2026/10/20261011T150002Z-000001e3.md"
+    printf '%s\n' '---' 'id: 20261011T140000Z-deadbeee' 'kind: fact' 'title: "supersedes thousand"' 'date: 2026-10-11' 'source: ""' 'commit: none' 'harness: ""' 'tags: []' 'supersedes: [1000]' 'sha256: cc' '---' 'sup body' \
+      > "$R/_memory/records/2026/10/20261011T140000Z-deadbeee.md"
+  }
+  b_fts_tags_n() {
+    local R="$1"
+    mkdir -p "$R/_memory/records/2026/10"
+    printf '%s\n' '---' 'id: 20261011T150000Z-aabbcc01' 'kind: fact' 'title: "tag tie"' 'date: 2026-10-11' 'source: ""' 'commit: none' 'harness: ""' 'tags: -n' 'supersedes: []' 'sha256: aa' '---' 'xyzzy shared body token' \
+      > "$R/_memory/records/2026/10/20261011T150000Z-aabbcc01.md"
+    printf '%s\n' '---' 'id: 20261011T150001Z-aabbcc02' 'kind: fact' 'title: "tag tie"' 'date: 2026-10-11' 'source: ""' 'commit: none' 'harness: ""' 'tags: [zzz]' 'supersedes: []' 'sha256: bb' '---' 'xyzzy shared body token' \
+      > "$R/_memory/records/2026/10/20261011T150001Z-aabbcc02.md"
+  }
+  b_fts_id_join() {
+    local R="$1" pad
+    mkdir -p "$R/_memory/records/2026/10"
+    pad="$(printf 'p%.0s' $(seq 1 400))"
+    printf '%s\n' '---' 'id: 1000' 'kind: fact' 'title: "join thousand"' 'date: 2026-10-11' 'source: ""' 'commit: none' 'harness: ""' 'tags: [join]' 'supersedes: []' 'sha256: bb' '---' \
+      'joinftstok joinftstok joinftstok joinftstok' \
+      > "$R/_memory/records/2026/10/20261011T150001Z-00001000.md"
+    printf '%s\n' '---' 'id: 1e3' 'kind: fact' 'title: "join sci"' 'date: 2026-10-11' 'source: ""' 'commit: none' 'harness: ""' 'tags: [join]' 'supersedes: []' 'sha256: aa' '---' \
+      "joinftstok $pad" \
+      > "$R/_memory/records/2026/10/20261011T150002Z-000001e3.md"
+  }
+  b_newline_term() {
+    local R="$1"
+    followup_mkstore "$R"
+    printf 'emitter\nbreak body\n' > "$F/nl.md"
+    MEMORY_NOW=20261011T160000Z bash "$MEMORY_SH" add --kind fact --title nl --body "$F/nl.md" --root "$R" >/dev/null 2>&1
+  }
+
+  echo "== followup symlinks (pwsh-first fresh fixtures)"
+  for sym in leaf symlink-mm symlink-yyyy symlink-mem; do
+    case "$sym" in
+      leaf) b=b_leaf ;;
+      symlink-mm) b=b_symlink_mm ;;
+      symlink-yyyy) b=b_symlink_yyyy ;;
+      symlink-mem) b=b_symlink_mem ;;
+    esac
+    followup_compare "sym-${sym}-index" "symlink $sym index" "$b" index
+    followup_compare "sym-${sym}-search" "symlink $sym search" "$b" search alpha
+  done
+  for sym in bad mm-loop ancestor trailing alias sibling; do
+    case "$sym" in
+      bad) b=b_bad_symlinks ;;
+      mm-loop) b=b_mm_to_records ;;
+      ancestor) b=b_ancestor_trap ;;
+      trailing) b=b_trailing_slash ;;
+      alias) b=b_alias_memory ;;
+      sibling) b=b_sibling_year ;;
+    esac
+    followup_compare "sym-${sym}-index" "symlink ignore/trap $sym index" "$b" index
+    followup_compare "sym-${sym}-search" "symlink ignore/trap $sym search" "$b" search alpha
+    [[ "$sym" != sibling ]] && followup_compare "sym-${sym}-trap" "symlink trap hidden $sym search trap" "$b" search trap
+  done
+  followup_compare "sym-stale-search" "staleness via symlink target mtime+title" b_stale_link_indexed search aftertouch
+  followup_compare "sym-quarantine-index" "broken quarantine symlink ignored" b_quarantine_broken index
+
+  echo "== followup tie order"
+  followup_compare "tie-dup-id-grep" "duplicate id path tie 2025 first grep" b_tie_dup_id search alpha --engine grep
+  if sqlite_fts5_available; then
+    followup_compare "tie-dup-id-fts" "duplicate id path tie 2025 first fts" b_tie_dup_id search alpha --engine fts
+  else
+    report SKIP "[followup] (tie-dup-id-fts) duplicate id path tie 2025 first fts" "sqlite3 FTS5 unavailable"
+  fi
+  mktemp_dir Rp
+  mktemp_dir Rb
+  followup_reg_roots "$Rp" "$Rb"
+  b_tie_dup_id "$Rp"
+  b_tie_dup_id "$Rb"
+  guard_args search alpha --engine grep --root "$Rb"
+  bash "$MEMORY_SH" search alpha --engine grep --root "$Rb" >"$B/out_b" 2>"$B/err_b"
+  first_b="$(sed -n 1p "$B/out_b" | cut -f6)"
+  [[ "$first_b" == *2025/10/* ]] && ok "tie grep 2025 path first bash" || ko "tie grep order bash" "[$first_b]"
+  if followup_pwsh_runnable; then
+    guard_args search alpha --engine grep --root "$Rp"
+    pwsh -NoProfile -NonInteractive -File "$MEMORY_PS1" search alpha --engine grep --root "$Rp" >"$B/out_p" 2>"$B/err_p"
+    first_p="$(sed -n 1p "$B/out_p" | cut -f6)"
+    [[ "$first_p" == *2025/10/* ]] && ok "tie grep 2025 path first pwsh" || ko "tie grep order pwsh" "[$first_p]"
+    cmp -s "$B/out_p" "$B/out_b" && ok "tie grep pwsh/bash parity" || ko "tie grep parity"
+  else
+    report SKIP "[followup] (tie-dup-id-order-grep) pwsh half" "not in MEMORY_SUITES or pwsh not on PATH"
+  fi
+  followup_report "tie-dup-id-order-grep" "duplicate id tie grep 2025 path first"
+  if sqlite_fts5_available; then
+    mktemp_dir Rp
+    mktemp_dir Rb
+    followup_reg_roots "$Rp" "$Rb"
+    b_tie_dup_id "$Rp"
+    b_tie_dup_id "$Rb"
+    guard_args search alpha --engine fts --root "$Rb"
+    bash "$MEMORY_SH" search alpha --engine fts --root "$Rb" >"$B/out_b" 2>"$B/err_b"
+    first_b="$(sed -n 1p "$B/out_b" | cut -f6)"
+    [[ "$first_b" == *2025/10/* ]] && ok "tie fts 2025 path first bash" || ko "tie fts order bash" "[$first_b]"
+    if followup_pwsh_runnable; then
+      guard_args search alpha --engine fts --root "$Rp"
+      pwsh -NoProfile -NonInteractive -File "$MEMORY_PS1" search alpha --engine fts --root "$Rp" >"$B/out_p" 2>"$B/err_p"
+      first_p="$(sed -n 1p "$B/out_p" | cut -f6)"
+      [[ "$first_p" == *2025/10/* ]] && ok "tie fts 2025 path first pwsh" || ko "tie fts order pwsh" "[$first_p]"
+      cmp -s "$B/out_p" "$B/out_b" && ok "tie fts pwsh/bash parity" || ko "tie fts parity"
+    else
+      report SKIP "[followup] (tie-dup-id-order-fts) pwsh half" "not in MEMORY_SUITES or pwsh not on PATH"
+    fi
+    followup_report "tie-dup-id-order-fts" "duplicate id tie fts 2025 path first"
+  fi
+
+  echo "== followup --limit overflow"
+  followup_compare "limit-overflow-rc" "--limit 20 digits stderr+rc" b_bad_symlinks search x --limit 99999999999999999999
+  mktemp_dir Rp
+  mktemp_dir Rb
+  followup_reg_roots "$Rp" "$Rb"
+  b_bad_symlinks "$Rp"
+  b_bad_symlinks "$Rb"
+  guard_args search x --limit 99999999999999999999 --root "$Rb"
+  bash "$MEMORY_SH" search x --limit 99999999999999999999 --root "$Rb" >"$B/out_b" 2>"$B/err_b"; rcb=$?
+  err_b="$(cat "$B/err_b")"
+  { [ "$rcb" = 2 ] \
+    && [ "$(printf '%s' "$err_b" | tr -d '\n')" = "memory: invalid --limit" ] \
+    && [ "$(wc -l < "$B/err_b" | tr -d ' ')" = 1 ] \
+    && [ -z "$(cat "$B/out_b")" ]; } \
+    && ok "limit overflow bash exact stderr" || ko "limit overflow bash" "rc=$rcb err=[$err_b]"
+  if followup_pwsh_runnable; then
+    guard_args search x --limit 99999999999999999999 --root "$Rp"
+    pwsh -NoProfile -NonInteractive -File "$MEMORY_PS1" search x --limit 99999999999999999999 --root "$Rp" >"$B/out_p" 2>"$B/err_p"; rcp=$?
+    err_p="$(cat "$B/err_p")"
+    { [ "$rcp" = 2 ] \
+      && [ "$(printf '%s' "$err_p" | tr -d '\n')" = "memory: invalid --limit" ] \
+      && [ "$(wc -l < "$B/err_p" | tr -d ' ')" = 1 ] \
+      && [ -z "$(cat "$B/out_p")" ]; } \
+      && ok "limit overflow pwsh exact stderr" || ko "limit overflow pwsh" "rc=$rcp err=[$err_p]"
+  else
+    report SKIP "[followup] (limit-overflow) pwsh half" "not in MEMORY_SUITES or pwsh not on PATH"
+  fi
+  followup_report "limit-overflow" "--limit 20 digits single stderr line exit 2"
+
+  echo "== followup hardening numeric id (index)"
+  followup_compare "harden-numeric-idx" "supersedes [1000] does not supersede 1e3 index" b_numeric_ids index
+  followup_compare "harden-numeric-search" "grep search lists 1e3 active" b_numeric_ids search sci --engine grep
+
+  echo "== followup FTS hardening"
+  if sqlite_fts5_available; then
+    followup_compare "harden-fts-tag-n" "unbracketed tags: -n fts ranking" b_fts_tags_n search n --engine fts
+    mktemp_dir Rp
+    mktemp_dir Rb
+    followup_reg_roots "$Rp" "$Rb"
+    b_fts_id_join "$Rp"
+    b_fts_id_join "$Rb"
+    followup_run_bash "$Rb" index >/dev/null 2>&1
+    if followup_pwsh_runnable; then
+      guard_args index --root "$Rp"
+      pwsh -NoProfile -NonInteractive -File "$MEMORY_PS1" index --root "$Rp" >/dev/null 2>"$B/err_p"
+    fi
+    guard_args search joinftstok --engine fts --root "$Rb"
+    bash "$MEMORY_SH" search joinftstok --engine fts --root "$Rb" >"$B/out_b" 2>"$B/err_b"
+    rcb=$?
+    if followup_pwsh_runnable; then
+      guard_args search joinftstok --engine fts --root "$Rp"
+      pwsh -NoProfile -NonInteractive -File "$MEMORY_PS1" search joinftstok --engine fts --root "$Rp" >"$B/out_p" 2>"$B/err_p"
+      cmp -s "$B/out_p" "$B/out_b" && cmp -s "$B/err_p" "$B/err_b" && ok "fts id join parity" \
+        || ko "fts id join parity" "pwsh/bash differ"
+    else
+      report SKIP "[followup] (harden-fts-ids) pwsh parity half" "not in MEMORY_SUITES or pwsh not on PATH"
+    fi
+    followup_absolute "harden-fts-ids" "$Rb" "$rcb" "$(cat "$B/out_b")" "$(cat "$B/err_b")" search joinftstok --engine fts
+    followup_report "harden-fts-ids" "bm25 join treats 1e3 and 1000 as distinct ids"
+  else
+    report SKIP "[followup] (harden-fts-tag-n) unbracketed tags: -n fts" "sqlite3 FTS5 unavailable"
+    report SKIP "[followup] (harden-fts-ids) bm25 id join 1e3 vs 1000" "sqlite3 FTS5 unavailable"
+  fi
+
+  echo "== followup add dedupe (both twins)"
+  printf 'dedupe broken leaf\n' > "$F/add-broken.md"
+  printf 'dedupe leaf dir\n' > "$F/add-leafdir.md"
+  printf 'dedupe records loop\n' > "$F/add-loop.md"
+  printf 'quarantine dedupe body\n' > "$F/qb.md"
+  followup_add_both "sym-add-broken" "add ignores broken record leaf link" b_add_broken_leaf "$F/add-broken.md"
+  followup_add_both "sym-add-leafdir" "add ignores leaf-to-directory link" b_add_leaf_dir "$F/add-leafdir.md"
+  followup_add_both "sym-add-loop" "add ignores records/ directory loop" b_add_records_loop "$F/add-loop.md"
+  followup_add_both "sym-quar-add" "add dedupe ignores broken quarantine link" b_quarantine_broken "$F/qb.md"
+
+  echo "== followup byte-exact paths and terms"
+  followup_compare "byte-newline-term" "search term with embedded newline" b_newline_term search "$(printf 'emitter\nbreak')"
+  b_backslash_root() {
+    local R="$1" bs
+    bs="$R/back\\slash"
+    mkdir -p "$bs"
+    printf 'backslash root body omega\n' > "$F/bsb.md"
+    guard_args add --kind fact --title Backslash --body "$F/bsb.md" --root "$bs"
+    MEMORY_NOW=20261011T170000Z bash "$MEMORY_SH" add --kind fact --title Backslash --body "$F/bsb.md" --root "$bs" >/dev/null 2>&1
+  }
+  mktemp_dir Rp
+  mktemp_dir Rb
+  followup_reg_roots "$Rp" "$Rb"
+  b_backslash_root "$Rp"
+  b_backslash_root "$Rb"
+  bs_p="$Rp/back\\slash"
+  bs_b="$Rb/back\\slash"
+  guard_args index --root "$bs_b"
+  bash "$MEMORY_SH" index --root "$bs_b" >"$B/out_b" 2>"$B/err_b"
+  rcb=$?
+  err_b="$(cat "$B/err_b")"
+  bash_n="$(followup_index_n "$(cat "$B/out_b")")"
+  cp "$B/out_b" "$B/bs_idx_b.out"
+  # bash halves are their own reported cases (a failure here must never ride on the pwsh parity branch below)
+  followup_absolute "byte-backslash-bash-idx" "$bs_b" "$rcb" "$(cat "$B/out_b")" "$err_b" index
+  followup_report "byte-backslash-bash-idx" "bash index of a --root containing a backslash"
+  guard_args search omega --root "$bs_b"
+  bash "$MEMORY_SH" search omega --root "$bs_b" >"$B/out_b" 2>"$B/err_b"
+  rcb=$?
+  followup_absolute "byte-backslash-bash-search" "$bs_b" "$rcb" "$(cat "$B/out_b")" "$(cat "$B/err_b")" search omega
+  followup_report "byte-backslash-bash-search" "bash search row (id/title/path) of a --root containing a backslash"
+  if followup_pwsh_runnable; then
+    guard_args index --root "$bs_p"
+    pwsh -NoProfile -NonInteractive -File "$MEMORY_PS1" index --root "$bs_p" >"$B/out_p" 2>"$B/err_p"
+    pwsh_n="$(followup_index_n "$(cat "$B/out_p")")"
+    if [[ "$pwsh_n" = 0 && "$bash_n" = 1 ]]; then
+      report SKIP "[followup] (byte-backslash-idx) pwsh twin index parity" "pre-existing pwsh limitation since v0.30.0: --root paths containing backslash index 0 records while bash indexes 1"
+      report SKIP "[followup] (byte-backslash-search) pwsh twin search parity" "pre-existing pwsh limitation since v0.30.0: --root paths containing backslash index 0 records while bash indexes 1"
+    elif [[ "$pwsh_n" != "$bash_n" ]] || ! cmp -s "$B/out_p" "$B/bs_idx_b.out"; then
+      report FAIL "[followup] (byte-backslash-idx) pwsh/bash index mismatch" "bash_n=$bash_n pwsh_n=$pwsh_n"
+    else
+      followup_compare "byte-backslash-idx" "backslash --root index parity" b_backslash_root index
+      followup_compare "byte-backslash-search" "backslash --root search parity" b_backslash_root search omega
+    fi
+  else
+    report SKIP "[followup] (byte-backslash-idx) pwsh twin parity" "not in MEMORY_SUITES or pwsh not on PATH"
+    report SKIP "[followup] (byte-backslash-search) pwsh twin search parity" "not in MEMORY_SUITES or pwsh not on PATH"
+  fi
+
+  echo "== followup search frontmatter parity"
+  b_tab_title_search() {
+    local R="$1" reg
+    followup_mkstore "$R"
+    reg="$(ls "$R"/_memory/records/*/*/*.md | head -1)"
+    sed $'s/^title: .*/title: "foo\tbar"/; s/^tags: .*/tags: [alpha]/' "$reg" > "$F/tabtitle.md"
+    cp "$F/tabtitle.md" "$reg"
+    followup_run_bash "$R" index >/dev/null 2>&1
+  }
+  b_chmod_unreadable_search() {
+    local R="$1" f1
+    mkdir -p "$R"
+    printf 'body one zeta\n' > "$F/z1.md"
+    printf 'body two zeta\n' > "$F/z2.md"
+    MEMORY_NOW=20261011T130200Z bash "$MEMORY_SH" add --root "$R" --kind fact --title 'zeta one' --body "$F/z1.md" --tags z >/dev/null 2>&1
+    MEMORY_NOW=20261011T130201Z bash "$MEMORY_SH" add --root "$R" --kind fact --title 'zeta two' --body "$F/z2.md" --tags z >/dev/null 2>&1
+    followup_run_bash "$R" index >/dev/null 2>&1
+    f1="$(find "$R/_memory/records" -name '*.md' | sort | head -1)"
+    chmod 000 "$f1"
+  }
+  followup_compare "search-fm-tab-title" "TAB in title re-index search bar" b_tab_title_search search bar
+  followup_compare "search-chmod-unreadable" "unreadable record skipped after index" b_chmod_unreadable_search search zeta
+
+  echo "== followup performance (opt-in)"
+  followup_assert_clean "performance section"
+  if [[ "${MEMORY_PERF:-0}" = 1 ]]; then
+    mktemp_dir Rp
+    followup_reg_roots "$Rp" "$Rp"
+    kinds=(fact decision learning pitfall goal-summary research-ingest)
+    words=(emitter determinism memory index orchestration evaluator ladder Loop Twin Parity alpha beta)
+    for i in $(seq 1 200); do
+      k="${kinds[$((i % 6))]}"
+      w1="${words[$((i % 12))]}"
+      w2="${words[$(((i * 7) % 12))]}"
+      printf 'Body %s about %s and %s.\n' "$i" "$w1" "$w2" > "$F/pb.md"
+      MEMORY_NOW="20261011T22$(printf '%04d' "$i")Z" bash "$MEMORY_SH" add --root "$Rp" --kind "$k" \
+        --title "Record $i" --body "$F/pb.md" --tags "t$((i % 5)),shared" >/dev/null 2>&1 || ko "perf add $i"
+    done
+    tm() { local s e; s=$(date +%s.%N); "$@" >/dev/null 2>&1; e=$(date +%s.%N); awk -v s="$s" -v e="$e" 'BEGIN{printf "%.3f", e-s}'; }
+    ti="$(tm bash "$MEMORY_SH" index --root "$Rp")"
+    ts="$(tm bash "$MEMORY_SH" search emitter determinism --root "$Rp")"
+    awk -v a="$ti" -v b="$ts" 'BEGIN{ exit !(a+0 < 1 && b+0 < 1) }' && ok "perf index=$ti search=$ts under 1s" \
+      || ko "perf timing" "index=$ti search=$ts"
+    followup_report "perf-200" "MEMORY_PERF index=${ti}s search=${ts}s under 1s wall clock"
+  else
+    report SKIP "[followup] (perf-200) 200-record timing" "MEMORY_PERF not set"
+  fi
+
+  followup_assert_clean "end of followup cases"
+  rm -rf "$F" "$B" 2>/dev/null || true
+}
+
 run_behavioral_suite() {
   local label="$1"; shift
   local RUN=("$@")
@@ -883,22 +1545,42 @@ if git -C "$NEUTRAL" rev-parse --show-toplevel >/dev/null 2>&1; then
 fi
 cd "$NEUTRAL" || fatal "cannot cd to $NEUTRAL"
 
-run_behavioral_suite bash bash "$MEMORY_SH"
+validate_memory_suites
 
-if command -v pwsh >/dev/null 2>&1; then
-  run_behavioral_suite pwsh pwsh -NoProfile -NonInteractive -File "$MEMORY_PS1"
+if suite_selected bash; then
+  run_behavioral_suite bash bash "$MEMORY_SH"
 else
   for _skip_case in a b c d e f g h i j k l n o p u v; do
-    report SKIP "[pwsh] ($_skip_case) behavioral twin" "pwsh not on PATH"
+    report SKIP "[bash] ($_skip_case) behavioral twin" "not in MEMORY_SUITES"
   done
 fi
 
-if command -v pwsh >/dev/null 2>&1 && command -v sqlite3 >/dev/null 2>&1; then
-  if case_m_twin_parity; then report PASS "(m) twin parity raw stdout/stderr/rc per step + _memory tree diff"
-  else report FAIL "(m) twin parity"; fi
+if suite_selected pwsh; then
+  if command -v pwsh >/dev/null 2>&1; then
+    run_behavioral_suite pwsh pwsh -NoProfile -NonInteractive -File "$MEMORY_PS1"
+  else
+    for _skip_case in a b c d e f g h i j k l n o p u v; do
+      report SKIP "[pwsh] ($_skip_case) behavioral twin" "pwsh not on PATH"
+    done
+  fi
 else
-  report SKIP "(m) twin parity" "pwsh or sqlite3 absent"
+  for _skip_case in a b c d e f g h i j k l n o p u v; do
+    report SKIP "[pwsh] ($_skip_case) behavioral twin" "not in MEMORY_SUITES"
+  done
 fi
+
+if suite_selected parity; then
+  if command -v pwsh >/dev/null 2>&1 && command -v sqlite3 >/dev/null 2>&1; then
+    if case_m_twin_parity; then report PASS "(m) twin parity raw stdout/stderr/rc per step + _memory tree diff"
+    else report FAIL "(m) twin parity"; fi
+  else
+    report SKIP "(m) twin parity" "pwsh or sqlite3 absent"
+  fi
+else
+  report SKIP "(m) twin parity" "not in MEMORY_SUITES"
+fi
+
+run_memory_followup_cases
 
 if [[ "$MEMORY_SH" != "$CANON_MEMORY_SH" ]]; then
   report SKIP "(q)-(t) structural" "MEMORY_SH overridden"

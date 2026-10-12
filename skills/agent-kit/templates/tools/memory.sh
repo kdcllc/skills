@@ -30,7 +30,7 @@ mk_tmp() {
   mktemp "$TMPD/t.XXXXXX"
 }
 
-# Search terms (cmd_search sets; grep_score_record reads).
+# Search terms (cmd_search sets; batch search awk reads).
 TERMS=()
 
 re_match() { # <string> <ere>
@@ -38,6 +38,14 @@ re_match() { # <string> <ere>
     *"$NL"*) return 1 ;;
   esac
   printf '%s\n' "$1" | LC_ALL=C grep -Eq -- "$2"
+}
+
+# LC_ALL=C; equivalent to re_id ERE without forking grep.
+valid_record_id() { # <id>
+  case "$1" in
+    [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]T[0-9][0-9][0-9][0-9][0-9][0-9]Z-[0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f][0-9a-f]) return 0 ;;
+    *) return 1 ;;
+  esac
 }
 
 usage() {
@@ -335,13 +343,13 @@ glob_record_files() { # <store> <out-list-file>
   local store="$1" out="$2" f id
   : > "$out"
   [ -d "$store/records" ] || return 0
-  find "$store/records" -mindepth 3 -maxdepth 3 -type f -name '*.md' 2>/dev/null | while IFS= read -r f; do
+  find -L "$store/records" -mindepth 3 -maxdepth 3 -type f -name '*.md' 2>/dev/null | while IFS= read -r f; do
     case "$f" in
       */records/[0-9][0-9][0-9][0-9]/[0-9][0-9]/*.md) ;;
       *) continue ;;
     esac
     id="${f##*/}"; id="${id%.md}"
-    re_match "$id" "$re_id" || continue
+    valid_record_id "$id" || continue
     printf '%s\n' "$f"
   done >> "$out" || true
 }
@@ -351,9 +359,9 @@ glob_dedupe_files() { # <store> <out-list-file> — records + quarantine
   : > "$out"
   glob_record_files "$store" "$out"
   if [ -d "$store/quarantine" ]; then
-    find "$store/quarantine" -maxdepth 1 -type f -name '*.md' 2>/dev/null | while IFS= read -r f; do
+    find -L "$store/quarantine" -maxdepth 1 -type f -name '*.md' 2>/dev/null | while IFS= read -r f; do
       id="${f##*/}"; id="${id%.md}"
-      re_match "$id" "$re_id" || continue
+      valid_record_id "$id" || continue
       printf '%s\n' "$f"
     done >> "$out" || true
   fi
@@ -395,38 +403,88 @@ sql_escape_sq() { # <string>
   printf '%s' "$1" | sed "s/'/''/g"
 }
 
-build_fts_db() { # <store> <record-list-file>
-  local store="$1" list="$2" db="$store/.index/fts.db" sql f id title tags body
+build_fts_db() { # <store> — MEM_AWK_LISTFILE must be set
+  local store="$1" db="$store/.index/fts.db" sql listfile
+  listfile="${MEM_AWK_LISTFILE:-}"
+  [ -n "$listfile" ] || return 1
   mkdir -p "$store/.index"
   rm -f "$db"
-  if ! fts5_available; then
-    rm -f "$db"
-    return 0
-  fi
   sql="$(mk_tmp)"
   {
     printf "CREATE VIRTUAL TABLE records USING fts5(id UNINDEXED, title, tags, body);\n"
-    while IFS= read -r f; do
-      [ -n "$f" ] || continue
-      read_frontmatter "$f" || continue
-      id="$(sql_escape_sq "$FM_ID")"
-      title="$(sql_escape_sq "$FM_TITLE")"
-      tags="$(sql_escape_sq "$(echo "$FM_TAGS" | sed 's/^\[//;s/\]$//;s/, /,/g')")"
-      MID="$id" MTITLE="$title" MTAGS="$tags" awk '
-        function esc(s) { gsub(/\047/, "\047\047", s); return s }
-        { sub(/\r$/, "") }
-        c < 2 && /^---$/ { c++; next }
-        c >= 2 {
-          if (body == "") body = $0
-          else body = body sprintf("%c", 10) $0
+    awk '
+      function esc(s) { gsub(/\047/, "\047\047", s); return s }
+      function fm_value(line,    p) {
+        p = index(line, ": ")
+        if (p > 0) return substr(line, p + 2)
+        return line
+      }
+      function fm_strip_quotes(val) {
+        if (substr(val, 1, 1) == "\042") val = substr(val, 2)
+        if (length(val) > 0 && substr(val, length(val), 1) == "\042") val = substr(val, 1, length(val) - 1)
+        return val
+      }
+      function tags_sql(raw,    s) {
+        s = raw
+        sub(/^\[/, "", s)
+        sub(/\]$/, "", s)
+        gsub(/, /, ",", s)
+        return esc(s)
+      }
+      function fm_ok(got) {
+        return got["id"] && got["kind"] && got["title"] && got["date"] && got["source"] &&
+          got["commit"] && got["harness"] && got["tags"] && got["supersedes"] && got["sha256"]
+      }
+      function emit_insert(path,    line, key, val, c, closed, got, body, fm_id, fm_title, fm_tags, listfile) {
+        split("", got)
+        c = 0
+        closed = 0
+        body = ""
+        fm_id = ""
+        fm_title = ""
+        fm_tags = ""
+        while ((getline line < path) > 0) {
+          sub(/\r$/, "", line)
+          if (c == 0) {
+            if (line != "---") { close(path); return }
+            c = 1
+            continue
+          }
+          if (c == 1) {
+            if (line == "---") { closed = 1; c = 2; continue }
+            key = line
+            sub(/:.*/, "", key)
+            val = fm_value(line)
+            if (key == "title" || key == "source" || key == "harness") val = fm_strip_quotes(val)
+            if (key == "id") { fm_id = val; got["id"] = 1 }
+            else if (key == "kind") got["kind"] = 1
+            else if (key == "title") { fm_title = val; got["title"] = 1 }
+            else if (key == "date") got["date"] = 1
+            else if (key == "source") got["source"] = 1
+            else if (key == "commit") got["commit"] = 1
+            else if (key == "harness") got["harness"] = 1
+            else if (key == "tags") { fm_tags = val; got["tags"] = 1 }
+            else if (key == "supersedes") got["supersedes"] = 1
+            else if (key == "sha256") got["sha256"] = 1
+            continue
+          }
+          if (body == "") body = line
+          else body = body sprintf("%c", 10) line
         }
-        END {
-          if (body == "") body = ""
-          printf "INSERT INTO records(id, title, tags, body) VALUES('\''%s'\'','\''%s'\'','\''%s'\'','\''%s'\'');\n",
-            ENVIRON["MID"], ENVIRON["MTITLE"], ENVIRON["MTAGS"], esc(body)
+        close(path)
+        if (!closed || !fm_ok(got)) return
+        printf "INSERT INTO records(id, title, tags, body) VALUES('\''%s'\'','\''%s'\'','\''%s'\'','\''%s'\'');\n",
+          esc(fm_id), esc(fm_title), tags_sql(fm_tags), esc(body)
+      }
+      BEGIN {
+        listfile = ENVIRON["MEM_AWK_LISTFILE"]
+        while ((getline path < listfile) > 0) {
+          if (path == "") continue
+          emit_insert(path)
         }
-      ' "$f"
-    done < "$list"
+        close(listfile)
+      }
+    '
   } > "$sql"
   sqlite3 -batch -init /dev/null -noheader "$db" < "$sql" || return 1
   return 0
@@ -460,60 +518,184 @@ run_index() { # <root> <quiet: 0|1>
   stamp="$store/.index/stamp"
   glob_record_files "$store" "$rec_list"
 
-  local sort_in ref_file
+  local sort_in ref_file badfile
   sort_in="$(mk_tmp)"
   ref_file="$(mk_tmp)"
+  badfile="$(mk_tmp)"
   : > "$sort_in"
   : > "$ref_file"
-  n=0
-  while IFS= read -r f; do
-    [ -n "$f" ] || continue
-    read_frontmatter "$f" || {
-      printf 'memory: skipped malformed %s\n' "$(relpath_under_root "$root" "$f")" >&2
-      continue
+  : > "$badfile"
+  export MEM_AWK_ROOT="$root"
+  export MEM_AWK_LISTFILE="$rec_list"
+  export MEM_AWK_SORT_OUT="$sort_in"
+  export MEM_AWK_REF_OUT="$ref_file"
+  export MEM_AWK_BAD_OUT="$badfile"
+  awk '
+    function relpath(r, path,    p) {
+      p = r "/"
+      if (substr(path, 1, length(p)) == p) return substr(path, length(p) + 1)
+      gsub(/\\/, "/", path)
+      return path
     }
-    parse_tags_brackets "$FM_TAGS"
-    local tags_m="$(list_to_comma_nospace "$REC_LIST_ITEMS")"
-    parse_supersedes_brackets "$FM_SUPERSEDES"
-    local sup_m="$(list_to_comma_nospace "$REC_LIST_ITEMS")"
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' \
-      "$FM_ID" "$FM_KIND" "$FM_DATE" "$FM_TITLE" "$tags_m" \
-      "$(relpath_under_root "$root" "$f")" "$sup_m" >> "$sort_in"
-    if [ -n "$sup_m" ]; then
-      local srest="$sup_m" one
-      while [ -n "$srest" ]; do
-        one="${srest%%,*}"
-        if [ "$one" = "$srest" ]; then srest=""; else srest="${srest#*,}"; fi
-        [ -n "$one" ] || continue
-        printf '%s\t%s\n' "$one" "$FM_ID" >> "$ref_file"
-      done
-    fi
-    n=$((n + 1))
-  done < "$rec_list"
+    function fm_value(line,    p) {
+      p = index(line, ": ")
+      if (p > 0) return substr(line, p + 2)
+      return line
+    }
+    function fm_strip_quotes(val) {
+      if (substr(val, 1, 1) == "\042") val = substr(val, 2)
+      if (length(val) > 0 && substr(val, length(val), 1) == "\042") val = substr(val, 1, length(val) - 1)
+      return val
+    }
+    function trim_sp(s) { sub(/^ +/, "", s); sub(/ +$/, "", s); return s }
+    function brackets_csv(raw,    s, n, parts, i, item, out) {
+      s = raw
+      sub(/^\[/, "", s)
+      sub(/\]$/, "", s)
+      if (s == "") return ""
+      n = split(s, parts, ",")
+      out = ""
+      for (i = 1; i <= n; i++) {
+        item = trim_sp(parts[i])
+        if (item == "") continue
+        if (out != "") out = out "," item
+        else out = item
+      }
+      return out
+    }
+    function fm_ok(got) {
+      return got["id"] && got["kind"] && got["title"] && got["date"] && got["source"] &&
+        got["commit"] && got["harness"] && got["tags"] && got["supersedes"] && got["sha256"]
+    }
+    function emit_refs(sup_m, newid,    n, parts, i, ref_out) {
+      ref_out = ENVIRON["MEM_AWK_REF_OUT"]
+      if (sup_m == "") return
+      n = split(sup_m, parts, ",")
+      for (i = 1; i <= n; i++) {
+        if (parts[i] == "") continue
+        printf "%s\t%s\n", parts[i], newid >> ref_out
+      }
+    }
+    function skip_malformed(path,    root, bad_out) {
+      root = ENVIRON["MEM_AWK_ROOT"]
+      bad_out = ENVIRON["MEM_AWK_BAD_OUT"]
+      print relpath(root, path) >> bad_out
+    }
+    function process_file(path,    line, key, val, c, closed, got, tags_m, sup_m, rel, root, sort_out) {
+      split("", got)
+      root = ENVIRON["MEM_AWK_ROOT"]
+      sort_out = ENVIRON["MEM_AWK_SORT_OUT"]
+      c = 0
+      closed = 0
+      fm_id = ""
+      fm_kind = ""
+      fm_date = ""
+      fm_title = ""
+      fm_tags = ""
+      fm_sup = ""
+      while ((getline line < path) > 0) {
+        sub(/\r$/, "", line)
+        if (c == 0) {
+          if (line != "---") { close(path); skip_malformed(path); return 0 }
+          c = 1
+          continue
+        }
+        if (c == 1) {
+          if (line == "---") { closed = 1; break }
+          key = line
+          sub(/:.*/, "", key)
+          val = fm_value(line)
+          if (key == "title" || key == "source" || key == "harness") val = fm_strip_quotes(val)
+          if (key == "id") { fm_id = val; got["id"] = 1 }
+          else if (key == "kind") { fm_kind = val; got["kind"] = 1 }
+          else if (key == "title") { fm_title = val; got["title"] = 1 }
+          else if (key == "date") { fm_date = val; got["date"] = 1 }
+          else if (key == "source") got["source"] = 1
+          else if (key == "commit") got["commit"] = 1
+          else if (key == "harness") got["harness"] = 1
+          else if (key == "tags") { fm_tags = val; got["tags"] = 1 }
+          else if (key == "supersedes") { fm_sup = val; got["supersedes"] = 1 }
+          else if (key == "sha256") got["sha256"] = 1
+          continue
+        }
+      }
+      close(path)
+      if (!closed || !fm_ok(got)) { skip_malformed(path); return 0 }
+      tags_m = brackets_csv(fm_tags)
+      sup_m = brackets_csv(fm_sup)
+      rel = relpath(root, path)
+      printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", fm_id, fm_kind, fm_date, fm_title, tags_m, rel, sup_m >> sort_out
+      emit_refs(sup_m, fm_id)
+      return 1
+    }
+    BEGIN {
+      listfile = ENVIRON["MEM_AWK_LISTFILE"]
+      while ((getline path < listfile) > 0) {
+        if (path == "") continue
+        process_file(path)
+      }
+      close(listfile)
+    }
+  '
+  while IFS= read -r rel; do
+    [ -n "$rel" ] || continue
+    printf 'memory: skipped malformed %s\n' "$rel" >&2
+  done < "$badfile"
+  n="$(wc -l < "$sort_in" | tr -d '[:space:]')"
+  n="${n:-0}"
 
   mkdir -p "$store/.index"
   {
     printf '%s\n' 'id	kind	date	title	tags	path	supersedes	superseded_by'
-    sort -t '	' -k1,1 "$sort_in" | while IFS= read -r line; do
-      local rid="${line%%	*}"
-      local sb=""
-      sb="$(MRID="$rid" awk -F'\t' '$1==ENVIRON["MRID"] {print $2}' "$ref_file" | LC_ALL=C sort | tr '\n' ',' | sed 's/,$//')"
-      printf '%s\t%s\n' "$line" "$sb"
-    done
+    export MEM_AWK_REFFILE="$ref_file"
+    sort -t '	' -k1,1 "$sort_in" | awk -F'\t' '
+      function join_sorted_arr(a, n,    i, j, tmp, out) {
+        for (i = 1; i <= n; i++)
+          for (j = i + 1; j <= n; j++)
+            if (a[i] > a[j]) { tmp = a[i]; a[i] = a[j]; a[j] = tmp }
+        out = ""
+        for (i = 1; i <= n; i++) {
+          if (out != "") out = out "," a[i]
+          else out = a[i]
+        }
+        return out
+      }
+      BEGIN {
+        reffile = ENVIRON["MEM_AWK_REFFILE"]
+        while ((getline < reffile) > 0) {
+          key = $1 ""
+          idx = ++ref_n[key]
+          ref_by[key, idx] = $2 ""
+        }
+        close(reffile)
+      }
+      {
+        rid = $1 ""
+        if (!(rid in ref_n)) {
+          print $0 "\t"
+          next
+        }
+        nn = ref_n[rid]
+        for (i = 1; i <= nn; i++) arr[i] = ref_by[rid, i]
+        print $0 "\t" join_sorted_arr(arr, nn)
+      }
+    '
   } > "$man"
 
   printf '%s\n' "$n" > "$stamp"
 
+  fts_yes=0
   if fts5_available; then
-    if build_fts_db "$store" "$rec_list"; then
-      fts_yes=1
+    fts_yes=1
+    export MEM_AWK_LISTFILE="$rec_list"
+    if build_fts_db "$store"; then
+      :
     else
       rm -f "$store/.index/fts.db"
       fts_yes=0
     fi
   else
     rm -f "$store/.index/fts.db"
-    fts_yes=0
   fi
 
   if [ "$quiet" -eq 0 ]; then
@@ -548,7 +730,7 @@ index_is_stale() { # <root>
   if [ -d "$store/records" ]; then
     local newer_list id
     newer_list="$(mk_tmp)"
-    find "$store/records" -mindepth 3 -maxdepth 3 -type f -name '*.md' -newer "$man" 2>/dev/null > "$newer_list" || true
+    find -L "$store/records" -mindepth 3 -maxdepth 3 -type f -name '*.md' -newer "$man" 2>/dev/null > "$newer_list" || true
     while IFS= read -r f; do
       [ -n "$f" ] || continue
       case "$f" in
@@ -556,57 +738,10 @@ index_is_stale() { # <root>
         *) continue ;;
       esac
       id="${f##*/}"; id="${id%.md}"
-      re_match "$id" "$re_id" && return 0
+      valid_record_id "$id" && return 0
     done < "$newer_list"
   fi
   return 1
-}
-
-grep_score_record() { # <title> <tags-US-separated> <record-path> → score (uses global TERMS)
-  local title="$1" tags="$2" recpath="$3" score=0 term folded_t
-  local title_f tags_f term_f body_hits trest t
-  title_f="$(ascii_fold_line "$title")"
-  for term in "${TERMS[@]}"; do
-    folded_t="$(ascii_fold_line "$term")"
-    term_f="$folded_t"
-    local meta_hit=0
-    case "$title_f" in
-      *"$term_f"*) meta_hit=1 ;;
-    esac
-    if [ "$meta_hit" -eq 0 ]; then
-      trest="$tags"
-      while [ -n "$trest" ]; do
-        t="${trest%%"$US"*}"
-        if [ "$t" = "$trest" ]; then trest=""; else trest="${trest#*"$US"}"; fi
-        [ -n "$t" ] || continue
-        tags_f="$(ascii_fold_line "$t")"
-        case "$tags_f" in
-          *"$term_f"*) meta_hit=1; break ;;
-        esac
-      done
-    fi
-    [ "$meta_hit" -eq 1 ] && score=$((score + 3))
-    export MEMTERM="$term_f"
-    body_hits="$(awk '
-      function foldline(s,    i,ch,out) {
-        out = ""
-        for (i = 1; i <= length(s); i++) {
-          ch = substr(s, i, 1)
-          if (ch >= "A" && ch <= "Z") ch = tolower(ch)
-          out = out ch
-        }
-        return out
-      }
-      { sub(/\r$/, "") }
-      c < 2 && /^---$/ { c++; next }
-      c >= 2 {
-        if (index(foldline($0), ENVIRON["MEMTERM"]) > 0) n++
-      }
-      END { print n + 0 }
-    ' "$recpath")"
-    score=$((score + body_hits))
-  done
-  printf '%s' "$score"
 }
 
 cmd_add() {
@@ -801,6 +936,7 @@ cmd_search() {
   done
 
   re_match "$limit" "$re_limit" || die 2 "invalid --limit"
+  [ "${#limit}" -le 3 ] || die 2 "invalid --limit"
   [ "$limit" -le 100 ] || die 2 "invalid --limit"
 
   case "$engine" in
@@ -832,38 +968,148 @@ cmd_search() {
     [ -f "$store/.index/fts.db" ] || die 4 "fts engine unavailable"
   fi
 
-  local cand="$(mk_tmp)" line rid rkind rdate rtitle rtags rpath rsup rsby score body
-  : > "$cand"
-  tail -n +2 "$man" | while IFS= read -r line; do
-    [ -n "$line" ] || continue
-    rid="${line%%	*}"; rest="${line#*	}"
-    rkind="${rest%%	*}"; rest="${rest#*	}"
-    rdate="${rest%%	*}"; rest="${rest#*	}"
-    rtitle="${rest%%	*}"; rest="${rest#*	}"
-    rtags="${rest%%	*}"; rest="${rest#*	}"
-    rpath="${rest%%	*}"; rest="${rest#*	}"
-    rsup="${rest%%	*}"; rest="${rest#*	}"
-    rsby="$rest"
-
-    if [ "$include_sup" -eq 0 ] && [ -n "$rsby" ]; then
-      continue
-    fi
-    if [ -n "$kind_filter" ]; then
-      local ok=0 k
-      for k in $kind_filter; do
-        [ "$k" = "$rkind" ] && ok=1
-      done
-      [ "$ok" -eq 1 ] || continue
-    fi
-
-    local f="$root/$rpath"
-    read_frontmatter "$f" || continue
-    parse_tags_brackets "$FM_TAGS"
-    local tag_us="$REC_LIST_ITEMS"
-    score="$(grep_score_record "$FM_TITLE" "$tag_us" "$f")"
-    [ "$score" -gt 0 ] || continue
-    printf '%s\t%s\t%s\t%s\t%s\t%s\t%s\n' "$rid" "$rkind" "$rdate" "$score" "$rtitle" "$rpath" "$score"
-  done > "$cand"
+  local cand="$(mk_tmp)" i=0 ti
+  export MEM_NTERMS="${#TERMS[@]}"
+  for ti in "${TERMS[@]}"; do
+    i=$((i + 1))
+    export "MEMTERM_$i=$ti"
+  done
+  export MEM_AWK_ROOT="$root"
+  export MEM_INCLUDE_SUP="$include_sup"
+  export MEM_AWK_KINDS="$kind_filter"
+  tail -n +2 "$man" | awk -F'\t' '
+    function foldline(s,    i, ch, out) {
+      out = ""
+      for (i = 1; i <= length(s); i++) {
+        ch = substr(s, i, 1)
+        if (ch >= "A" && ch <= "Z") ch = tolower(ch)
+        out = out ch
+      }
+      return out
+    }
+    function fm_value(line,    p) {
+      p = index(line, ": ")
+      if (p > 0) return substr(line, p + 2)
+      return line
+    }
+    function fm_strip_quotes(val) {
+      if (substr(val, 1, 1) == "\042") val = substr(val, 2)
+      if (length(val) > 0 && substr(val, length(val), 1) == "\042") val = substr(val, 1, length(val) - 1)
+      return val
+    }
+    function trim_sp(s) { sub(/^ +/, "", s); sub(/ +$/, "", s); return s }
+    function brackets_csv(raw,    s, n, parts, i, item, out) {
+      s = raw
+      sub(/^\[/, "", s)
+      sub(/\]$/, "", s)
+      if (s == "") return ""
+      n = split(s, parts, ",")
+      out = ""
+      for (i = 1; i <= n; i++) {
+        item = trim_sp(parts[i])
+        if (item == "") continue
+        if (out != "") out = out "," item
+        else out = item
+      }
+      return out
+    }
+    function fm_ok(got) {
+      return got["id"] && got["kind"] && got["title"] && got["date"] && got["source"] &&
+        got["commit"] && got["harness"] && got["tags"] && got["supersedes"] && got["sha256"]
+    }
+    function kind_ok(k,    n, i, ka, kinds) {
+      kinds = ENVIRON["MEM_AWK_KINDS"]
+      if (kinds == "") return 1
+      n = split(kinds, ka, " ")
+      for (i = 1; i <= n; i++) if (ka[i] == k) return 1
+      return 0
+    }
+    function meta_hit(title, tags_csv, term_f,    title_f, n, parts, i, tag_f) {
+      title_f = foldline(title)
+      if (index(title_f, term_f) > 0) return 1
+      if (tags_csv == "") return 0
+      n = split(tags_csv, parts, ",")
+      for (i = 1; i <= n; i++) {
+        tag_f = foldline(trim_sp(parts[i]))
+        if (index(tag_f, term_f) > 0) return 1
+      }
+      return 0
+    }
+    function score_file(path,    line, key, val, c, closed, got, fm_title, fm_tags_raw, tags_csv, total, ti, term_f, bh, line_f, fi) {
+      split("", got)
+      c = 0
+      closed = 0
+      fm_title = ""
+      fm_tags_raw = ""
+      for (ti = 1; ti <= nt; ti++) bh[ti] = 0
+      while ((getline line < path) > 0) {
+        sub(/\r$/, "", line)
+        if (c == 0) {
+          if (line != "---") { close(path); return -1 }
+          c = 1
+          continue
+        }
+        if (c == 1) {
+          if (line == "---") { closed = 1; c = 2; continue }
+          key = line
+          sub(/:.*/, "", key)
+          val = fm_value(line)
+          if (key == "title" || key == "source" || key == "harness") val = fm_strip_quotes(val)
+          if (key == "id") got["id"] = 1
+          else if (key == "kind") got["kind"] = 1
+          else if (key == "title") { fm_title = val; got["title"] = 1 }
+          else if (key == "date") got["date"] = 1
+          else if (key == "source") got["source"] = 1
+          else if (key == "commit") got["commit"] = 1
+          else if (key == "harness") got["harness"] = 1
+          else if (key == "tags") { fm_tags_raw = val; got["tags"] = 1 }
+          else if (key == "supersedes") got["supersedes"] = 1
+          else if (key == "sha256") got["sha256"] = 1
+          continue
+        }
+        line_f = foldline(line)
+        for (ti = 1; ti <= nt; ti++) {
+          if (index(line_f, terms[ti]) > 0) bh[ti]++
+        }
+      }
+      close(path)
+      if (c == 0 || !closed || !fm_ok(got)) return -1
+      tags_csv = brackets_csv(fm_tags_raw)
+      total = 0
+      for (ti = 1; ti <= nt; ti++) {
+        term_f = terms[ti]
+        if (meta_hit(fm_title, tags_csv, term_f)) total += 3
+        total += bh[ti]
+      }
+      return total
+    }
+    BEGIN {
+      nt = ENVIRON["MEM_NTERMS"] + 0
+      for (i = 1; i <= nt; i++) {
+        terms[i] = ENVIRON["MEMTERM_" i]
+        terms[i] = foldline(terms[i])
+      }
+    }
+    {
+      rid = $1
+      rkind = $2
+      rdate = $3
+      rtitle = $4
+      rtags = $5
+      rpath = $6
+      rsup = $7
+      rsby = $8
+      for (fi = 9; fi <= NF; fi++) rsby = rsby "\t" $fi
+      include_sup = ENVIRON["MEM_INCLUDE_SUP"] + 0
+      if (include_sup == 0 && rsby != "") next
+      if (!kind_ok(rkind)) next
+      fpath = ENVIRON["MEM_AWK_ROOT"] "/" rpath
+      score = score_file(fpath)
+      if (score < 0) next
+      if (score + 0 <= 0) next
+      printf "%s\t%s\t%s\t%s\t%s\t%s\t%s\n", rid, rkind, rdate, score, rtitle, rpath, score
+    }
+  ' > "$cand"
 
   if [ ! -s "$cand" ]; then
     die 0 "0 results"
@@ -874,15 +1120,9 @@ cmd_search() {
   if [ "$engine" = "grep" ]; then
     sorted="$(mk_tmp)"
     sort -t '	' -k4,4nr -k1,1r "$cand" > "$sorted"
-    head -n "$limit" "$sorted" | while IFS= read -r line; do
-      printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
-        "${line%%	*}" \
-        "$(echo "$line" | cut -f2)" \
-        "$(echo "$line" | cut -f3)" \
-        "$(echo "$line" | cut -f4)" \
-        "$(echo "$line" | cut -f5)" \
-        "$(echo "$line" | cut -f6)"
-    done > "$out"
+    head -n "$limit" "$sorted" | awk -F'\t' 'NF >= 6 {
+      printf "%s\t%s\t%s\t%s\t%s\t%s\n", $1, $2, $3, $4, $5, $6
+    }' > "$out"
   else
     local match_parts="" term esc sql qfile
     for term in "${TERMS[@]}"; do
@@ -900,29 +1140,28 @@ cmd_search() {
       : > "$qfile"
     fi
     ranked="$(mk_tmp)"
-    while IFS= read -r line; do
-      [ -n "$line" ] || continue
-      local cid="${line%%	*}"
-      local bm
-      bm="$(MCID="$cid" awk -F'\t' '$1==ENVIRON["MCID"] {print $2; exit}' "$qfile")"
-      if [ -n "$bm" ]; then
-        printf '%s\t%s\t%s\n' "0" "$bm" "$line"
-      else
-        printf '%s\t%s\t%s\n' "1" "0" "$line"
-      fi
-    done < "$cand" > "$ranked"
+    export MEM_AWK_QFILE="$qfile"
+    awk -F'\t' '
+      BEGIN {
+        qf = ENVIRON["MEM_AWK_QFILE"]
+        while ((getline line < qf) > 0) {
+          split(line, f, "\t")
+          k = f[1] ""
+          if (!(k in bm)) bm[k] = f[2]
+        }
+        close(qf)
+      }
+      {
+        cid = $1 ""
+        if (cid in bm) printf "0\t%s\t%s\n", bm[cid], $0
+        else printf "1\t0\t%s\n", $0
+      }
+    ' "$cand" > "$ranked"
     sorted="$(mk_tmp)"
     sort -t '	' -k1,1n -k2,2g -k3,3r "$ranked" > "$sorted"
-    head -n "$limit" "$sorted" | while IFS= read -r line; do
-      line="${line#*	}"; line="${line#*	}"
-      printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
-        "$(echo "$line" | cut -f1)" \
-        "$(echo "$line" | cut -f2)" \
-        "$(echo "$line" | cut -f3)" \
-        "$(echo "$line" | cut -f4)" \
-        "$(echo "$line" | cut -f5)" \
-        "$(echo "$line" | cut -f6)"
-    done > "$out"
+    head -n "$limit" "$sorted" | awk -F'\t' 'NF >= 8 {
+      printf "%s\t%s\t%s\t%s\t%s\t%s\n", $3, $4, $5, $6, $7, $8
+    }' > "$out"
   fi
 
   if [ ! -s "$out" ]; then

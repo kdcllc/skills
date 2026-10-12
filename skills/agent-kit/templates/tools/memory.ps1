@@ -306,8 +306,10 @@ function Read-Frontmatter([string]$path, [ref]$Fm) {
   $Fm.Value = @{
     id=''; kind=''; title=''; date=''; source=''; commit=''; harness=''; tags=''; supersedes=''; sha256=''
   }
-  if (-not (Test-File $path)) { return $false }
-  $view = ViewBytes ([IO.File]::ReadAllBytes($path))
+  if (-not (Test-IsRegularRecordFile $path)) { return $false }
+  try {
+    $view = ViewBytes ([IO.File]::ReadAllBytes($path))
+  } catch { return $false }
   $lines = Split-Lf $view
   if ($lines.Count -lt 1) { return $false }
   $first = [string]$lines[0]
@@ -345,23 +347,110 @@ function Read-Frontmatter([string]$path, [ref]$Fm) {
   return $true
 }
 
-function Get-DirsMatching([string]$dir, [string]$Ere) {
-  $out = [Collections.Generic.List[string]]::new()
-  if ([IO.Directory]::Exists($dir)) {
-    try {
-      foreach ($d in [IO.Directory]::EnumerateDirectories($dir)) {
-        if (Test-Re ([IO.Path]::GetFileName($d)) $Ere) { [void]$out.Add($d) }
+# Canonical real path of a directory: every symlinked component of the absolute path
+# (ancestors included, not just the last one) is replaced by its target, `.`/`..` are
+# applied physically, and the result has no trailing separator. This is the string
+# equivalent of the (device, inode) identity GNU `find -L` compares for loop detection.
+# Returns $null if the path does not resolve to an existing directory, or if more than
+# 40 links are followed (Linux MAXSYMLINKS) so a link cycle can never hang.
+function Get-CanonicalDir([string]$path) {
+  if ([string]::IsNullOrEmpty($path)) { return $null }
+  try {
+    if (-not [IO.Path]::IsPathRooted($path)) {
+      $path = [IO.Path]::Combine([IO.Directory]::GetCurrentDirectory(), $path)
+    }
+    $root = [IO.Path]::GetPathRoot($path)
+    $seps = [char[]]@([IO.Path]::DirectorySeparatorChar, [IO.Path]::AltDirectorySeparatorChar)
+    $pending = [Collections.Generic.List[string]]::new()
+    $pending.AddRange([string[]]$path.Substring($root.Length).Split($seps, [StringSplitOptions]::RemoveEmptyEntries))
+    $cur = $root
+    $hops = 0
+    $i = 0
+    while ($i -lt $pending.Count) {
+      $comp = $pending[$i]; $i++
+      if ($comp -ceq '.') { continue }
+      if ($comp -ceq '..') {
+        if ($cur.Length -gt $root.Length) { $cur = [IO.Path]::GetDirectoryName($cur) }
+        continue
       }
-    } catch { }
-  }
-  return ,([string[]]$out.ToArray())
+      $cand = [IO.Path]::Combine($cur, $comp)
+      $lt = [IO.DirectoryInfo]::new($cand).LinkTarget
+      if ($null -ne $lt) {
+        $hops++
+        if ($hops -gt 40) { return $null }
+        $rest = $pending.GetRange($i, $pending.Count - $i)
+        $pending.Clear()
+        if ([IO.Path]::IsPathRooted($lt)) {
+          $lr = [IO.Path]::GetPathRoot($lt)
+          $cur = $lr
+          $lt = $lt.Substring($lr.Length)
+        }
+        $pending.AddRange([string[]]$lt.Split($seps, [StringSplitOptions]::RemoveEmptyEntries))
+        $pending.AddRange($rest)
+        $i = 0
+        continue
+      }
+      if (-not [IO.Directory]::Exists($cand)) { return $null }
+      $cur = $cand
+    }
+    if (-not [IO.Directory]::Exists($cur)) { return $null }
+    return $cur
+  } catch { return $null }
+}
+
+function Test-DirLoop([string]$realDir, [string]$listingDirReal, [Collections.Generic.HashSet[string]]$stack) {
+  if ($null -eq $realDir) { return $true }
+  if ($realDir.Equals($listingDirReal, [StringComparison]::Ordinal)) { return $true }
+  return $stack.Contains($realDir)
+}
+
+function Get-ChildEntryNames([string]$dir) {
+  $names = [Collections.Generic.List[string]]::new()
+  if (-not (Test-Path -LiteralPath $dir)) { return ,@() }
+  try {
+    foreach ($ent in [IO.Directory]::EnumerateFileSystemEntries($dir)) {
+      [void]$names.Add([IO.Path]::GetFileName($ent))
+    }
+  } catch { }
+  return ,([string[]]$names.ToArray())
+}
+
+function Test-IsRegularRecordFile([string]$path) {
+  if ([string]::IsNullOrEmpty($path)) { return $false }
+  if (-not (Test-Path -LiteralPath $path)) { return $false }
+  try {
+    $fi = [IO.FileInfo]::new($path)
+    if ($fi.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+      $target = $fi.ResolveLinkTarget($true)
+      if ($null -eq $target -or -not $target.Exists) { return $false }
+      if ($target -is [IO.DirectoryInfo]) { return $false }
+      return -not ($target.Attributes -band [IO.FileAttributes]::Directory)
+    }
+    if (-not $fi.Exists) { return $false }
+    return -not ($fi.Attributes -band [IO.FileAttributes]::Directory)
+  } catch { return $false }
+}
+
+function Get-RecordMtimeUtc([string]$path) {
+  try {
+    $fi = [IO.FileInfo]::new($path)
+    if ($fi.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+      $target = $fi.ResolveLinkTarget($true)
+      if ($null -eq $target -or -not $target.Exists) { return [datetime]::MinValue }
+      if ($target -is [IO.DirectoryInfo]) { return [datetime]::MinValue }
+      return $target.LastWriteTimeUtc
+    }
+    if (-not $fi.Exists) { return [datetime]::MinValue }
+    return $fi.LastWriteTimeUtc
+  } catch { return [datetime]::MinValue }
 }
 
 function Add-IdMdFiles([Collections.Generic.List[string]]$out, [string]$dir) {
-  if (-not [IO.Directory]::Exists($dir)) { return }
+  if (-not (Test-Path -LiteralPath $dir)) { return }
   try {
     foreach ($f in [IO.Directory]::EnumerateFiles($dir, '*.md')) {
       if (-not $f.EndsWith('.md', [StringComparison]::Ordinal)) { continue }
+      if (-not (Test-IsRegularRecordFile $f)) { continue }
       if (Test-Re ([IO.Path]::GetFileNameWithoutExtension($f)) $Script:ReId) { [void]$out.Add($f) }
     }
   } catch { }
@@ -370,8 +459,30 @@ function Add-IdMdFiles([Collections.Generic.List[string]]$out, [string]$dir) {
 function Get-RecordFiles([string]$store) {
   $out = [Collections.Generic.List[string]]::new()
   $rec = Join-Path $store 'records'
-  foreach ($yy in (Get-DirsMatching $rec '^[0-9]{4}$')) {
-    foreach ($mm in (Get-DirsMatching $yy '^[0-9]{2}$')) { Add-IdMdFiles $out $mm }
+  if (-not (Test-Path -LiteralPath $rec)) { return ,@() }
+  $recReal = Get-CanonicalDir $rec
+  if ($null -eq $recReal) { return ,@() }
+  $stack = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+  [void]$stack.Add($recReal)
+  foreach ($yyName in (Get-ChildEntryNames $rec)) {
+    if (-not (Test-Re $yyName '^[0-9]{4}$')) { continue }
+    $yyPath = Join-Path $rec $yyName
+    $yyReal = Get-CanonicalDir $yyPath
+    if ($null -eq $yyReal) { continue }
+    if (Test-DirLoop $yyReal $recReal $stack) { continue }
+    [void]$stack.Add($yyReal)
+    try {
+      foreach ($mmName in (Get-ChildEntryNames $yyPath)) {
+        if (-not (Test-Re $mmName '^[0-9]{2}$')) { continue }
+        $mmPath = Join-Path $yyPath $mmName
+        $mmReal = Get-CanonicalDir $mmPath
+        if ($null -eq $mmReal) { continue }
+        if (Test-DirLoop $mmReal $yyReal $stack) { continue }
+        [void]$stack.Add($mmReal)
+        try { Add-IdMdFiles $out $mmPath }
+        finally { [void]$stack.Remove($mmReal) }
+      }
+    } finally { [void]$stack.Remove($yyReal) }
   }
   return ,([string[]]$out.ToArray())
 }
@@ -637,7 +748,7 @@ function Test-IndexStale([string]$root) {
   if ("$cnt" -ne $stampN) { return $true }
   $manTime = [IO.File]::GetLastWriteTimeUtc($man)
   foreach ($f in (Get-RecordFiles $store)) {
-    if ([IO.File]::GetLastWriteTimeUtc($f) -gt $manTime) { return $true }
+    if ((Get-RecordMtimeUtc $f) -gt $manTime) { return $true }
   }
   return $false
 }
@@ -891,7 +1002,9 @@ function Invoke-Search([string[]]$cmdArgs) {
       $px = $x.Split([char]9); $py = $y.Split([char]9)
       $sc = [int64]$py[3] - [int64]$px[3]
       if ($sc -ne 0) { return [int][math]::Sign($sc) }
-      return [string]::CompareOrdinal($py[0], $px[0])
+      $c = [string]::CompareOrdinal($py[0], $px[0])
+      if ($c -ne 0) { return $c }
+      return [string]::CompareOrdinal($x, $y)
     })
     $take = [Math]::Min($limNum, $arr.Length)
     for ($ti = 0; $ti -lt $take; $ti++) {
@@ -925,9 +1038,9 @@ function Invoke-Search([string[]]$cmdArgs) {
         if ([string]::Equals($qp[0], $cid, [StringComparison]::Ordinal)) { $bm = $qp[1]; break }
       }
       if ($null -ne $bm) {
-        [void]$ranked.Add([pscustomobject]@{ pri=0; bm=[double]::Parse($bm, [cultureinfo]::InvariantCulture); id=$cid; line=$line })
+        [void]$ranked.Add([pscustomobject]@{ pri=0; bmStr=$bm; bm=[double]::Parse($bm, [cultureinfo]::InvariantCulture); line=$line })
       } else {
-        [void]$ranked.Add([pscustomobject]@{ pri=1; bm=0.0; id=$cid; line=$line })
+        [void]$ranked.Add([pscustomobject]@{ pri=1; bmStr='0'; bm=0.0; line=$line })
       }
     }
     $rankArr = $ranked.ToArray()
@@ -936,7 +1049,11 @@ function Invoke-Search([string[]]$cmdArgs) {
       if ($a.pri -ne $b.pri) { return $a.pri - $b.pri }
       if ($a.bm -lt $b.bm) { return -1 }
       if ($a.bm -gt $b.bm) { return 1 }
-      return [string]::CompareOrdinal($b.id, $a.id)
+      $c = [string]::CompareOrdinal(($b.line.Split([char]9)[0]), ($a.line.Split([char]9)[0]))
+      if ($c -ne 0) { return $c }
+      $rowA = "$($a.pri)$($Script:Tab)$($a.bmStr)$($Script:Tab)$($a.line)"
+      $rowB = "$($b.pri)$($Script:Tab)$($b.bmStr)$($Script:Tab)$($b.line)"
+      return [string]::CompareOrdinal($rowA, $rowB)
     })
     $take = [Math]::Min($limNum, $rankArr.Length)
     for ($ti = 0; $ti -lt $take; $ti++) {

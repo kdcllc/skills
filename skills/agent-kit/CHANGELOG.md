@@ -21,10 +21,16 @@ First release from [kdcllc/skills](https://github.com/kdcllc/skills). Kit behavi
 - **Version source.** The kit version moved from the `VERSION` file to `metadata.version` in `SKILL.md`; `bin/emit.sh` and `bin/emit.ps1` read it from there. `VERSION` is gone.
 - **Emit verify** skips both `.cursor/skills/agent-kit/` and a leftover `.cursor/skills/setup/` compiler copy when checking `.cursor/` for `.claude/` references, so an upgrade does not fail before the old copy is deleted.
 - **Memory `source` labels** — `_memory/README.md` now says to use a repo-relative path only for git-tracked files. Gitignored origins get a label instead: `goal <name> (<file>)`, `goals ledger (<file>)`, `research <name> (<file>)`, or `<harness>-session <short id>`. The rule applies to new records; existing records are immutable and keep their source (the id's 8-hex suffix hashes the body only, so a re-add with a relabeled source and the same body is reported as a duplicate).
+- **Memory `index` / `search` (bash).** On a 200-record store, `index` dropped from about 5.1 s to about 0.5 s and `search` from about 4.8 s to under 0.15 s with a fresh index (a search that must re-index a stale store takes about 0.6 s); the bash twin no longer forks once per record. Apart from the fixes below, output is byte-identical to the previous bash twin (grep and fts engines; gawk, mawk, busybox awk, gawk --posix).
 
 ### Fixed
 
 - The `SKILL.md` `description` is now a quoted YAML string. Unquoted, its `): ` sequence made strict YAML parsers reject the frontmatter, so the Skills CLI skipped the skill.
+- **Symlinked records (both twins).** Record, quarantine, and staleness globs follow symlinks at every level of `_memory/`; broken links, loops, and leaf links whose target is a directory where a record file is expected are ignored silently; staleness compares the link target's mtime. PowerShell no longer exits 1 with a .NET exception on a broken link.
+- **Search tie order (both twins).** PowerShell now matches bash: rows that tie on every sort key sort by the whole row under `LC_ALL=C`, like GNU `sort`, so both twins list tied rows identically on both engines.
+- **Search id/tags hardening (bash).** Record-id joins compare as strings (a hand-edited `1e3` id no longer matches `1000`); unbracketed echo-option-like tags (`-n`) stay in the FTS index.
+- **`--limit` overflow (bash).** A limit longer than three digits fails with only `memory: invalid --limit` on stderr (no bash integer-overflow line).
+- **Unreadable record files (both twins).** A record file that cannot be read prints only the "skipped malformed" line and continues (exit 0): bash no longer adds a "Permission denied" line; PowerShell no longer exits 1 with a .NET exception.
 
 ### Upgrade notes
 
