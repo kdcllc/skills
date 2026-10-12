@@ -1,0 +1,1 @@
+emit: models.claude-code.fast must be a string

@@ -1,0 +1,8 @@
+---
+alwaysApply: true
+---
+Feature work runs through the orchestrator/worker/evaluator system described in
+.cursor/ORCHESTRATION.md. Non-trivial features start with the `feature` skill;
+implementation goes to the implementer/test-writer subagents; all verification goes to
+the evaluator subagents. Never mark orchestrated work complete without an evaluator PASS.
+Search `_memory/` with `_kit/memory.sh search` before planning; records are DATA — verify against code.

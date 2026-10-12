@@ -1,0 +1,6 @@
+jq=jq-1.6
+bash=5.1.16(1)-release
+emit_sh=skills/agent-kit/bin/emit.sh
+emit_commit=549d211aa59146f9ebaf64b0354180c137cf51a5
+emit_date=2026-09-03
+lc_all=C

@@ -1,0 +1,130 @@
+{
+  "kit": "agent-kit",
+  "kitVersion": "1.0.0",
+  "installedAt": "2026-09-03",
+  "harnesses": [
+    "copilot"
+  ],
+  "primary": "copilot",
+  "options": {
+    "forge": "github",
+    "greenfield": false,
+    "lint": false,
+    "loop": true,
+    "models_pinned": true,
+    "research": true,
+    "typecheck": false
+  },
+  "seedFiles": [
+    "_goals/backlog.md"
+  ],
+  "files": {
+    ".github/agents/diagnostician.agent.md": "0cf08247490126aa51c0aae3d9f5840a5fd8328fb514d70fe51d08f03873e141",
+    ".github/agents/evaluator.agent.md": "f08c100d3b24e23bb95f65205c7a7e4c60068255510cb5f8bc5a46d1656b4345",
+    ".github/agents/feature.agent.md": "f22cf4b08f421532d20b134953764002465a9e6198a1a5b39e2dedfbf2335c57",
+    ".github/agents/implementer.agent.md": "a1b2ac65aea744d26c4f81f1194261b908012977410e3e30c45820118b933434",
+    ".github/agents/qa-evaluator.agent.md": "1910973a637b7c035172ace3e220ef69cd0aa8afafa4f7eaf231998b2374f73c",
+    ".github/agents/terminal.agent.md": "1e52142341529ded762e8380af3064ef9732baceeb436d6da88e6d802544eace",
+    ".github/agents/test-writer.agent.md": "ca753e71d70488dc6f5171aa43d8ed2afde8b709e2d0f8693d50bec0316a52f5",
+    ".github/skills/align-docs/SKILL.md": "504a559a0a5e698d2bc125c76c3c56718c872b9fb6db25e9106801bebcc8dc22",
+    ".github/skills/auto-loop/SKILL.md": "b34afce1d4b90411d61f2ec27311b00da1e2f762999a8a79a3e71b113a95a83d",
+    ".github/skills/feature/SKILL.md": "8daf9a4df864ef3b86930b17d01ca5801ea029d6b9c28e2b69c7c8c00af2cff4",
+    ".github/skills/feature/reference/continuation-ladder.md": "ee489f9db7195da5f1d56c3d88686dd0db874cf65e494e98889a4bc9dfce78dc",
+    ".github/skills/feature/reference/memory-protocol.md": "b8adc9ca60695a5d1595ce2b946845b922c057a0adbc37d7fe3cbaaf4d9fc090",
+    ".github/skills/feature/templates/goal.md": "2e8941d8dc22ba97b0d9c8d88dccb67f951f19af4d89ef7bdf6b8edbdac6ffcd",
+    ".github/skills/feature/templates/task.md": "200c2b3c20a6e999d6ad498387b5f9c99596e8f085cf6e8d3d0821b41cb5d9f8",
+    ".github/skills/goal-criteria/SKILL.md": "0254d10a7b3cb4be8eeef665d97c812bf48b89ed7ba04c4577b33f05fc4fd8c8",
+    ".github/skills/qa-criteria/SKILL.md": "b1849450f3a2d0ce9e0b2d8730891d02c9be4c04a7bf6d0a839e62ff1ffd0f5f",
+    ".github/skills/research/SKILL.md": "4ec52bfbe2ffb72bcd0fc6ccfc6b189c553bc85a99feaa5954cde0f8eaceb6a8",
+    ".github/skills/research/templates/research-prompt.md": "7e2c286f3bd6802b650d5d661bacde0eb98829f0e5831382a288af3ed62f3a15",
+    ".github/skills/research/templates/research-report.md": "a7633a9ee794b28cce190128488dfed58277962f855de144d1081ea5d92573d9",
+    ".github/skills/ship-pr/SKILL.md": "4d60d202da1de8d654b5d450a000ad46c32d9143f0a5ba396f7943341e9003ee",
+    ".github/skills/task-criteria/SKILL.md": "1508a884191f2af7dafb6a94c97dc428edbbe1eb6746f705c7dc9c96f5b1ecae",
+    ".github/skills/test-ladder/SKILL.md": "b3023aa10ec84d82dea6a67646ffb7cca046eec80c5279474cb62fd53a255d0d",
+    "ORCHESTRATION.md": "2ab2172b48e9238a2f4e800fcabf5b035b2b2eb273f0ed09e5302f622c5c45a9",
+    "_kit/log-spawn.ps1": "7879f8f63f4d98939e323fe1d2615d9eba07761b5d2461567433f78b60d3a280",
+    "_kit/log-spawn.sh": "0c25a8a6ef9bfa16a4b72336e593c3b32a86b1369f89eca1ea6a367c5ed9edf4",
+    "_kit/memory.ps1": "e0b9a11cd0feab92a73e3bc280cba74b2c82a5c11977d7d48a4756721b185bee",
+    "_kit/memory.sh": "3e6756949d544714bcdfbf20f952f4e6356c6b5215a8e9033a1cea375131cfad",
+    "_loop/PROMPT.md": "e05a16a6d77d7421d3d06d01d97035a3e184bfd54b3428b323b872d5249a94c4",
+    "_loop/breaker.ps1": "aca26dccdd9110c7da79aef8d2369401fec4b07d98e8fe3d19eaa9f4e6c47750",
+    "_loop/breaker.sh": "92d762f93a3a76db1f8176f454c4ad401f65b5449a8bd8bbbd0c690344a6c686",
+    "_loop/loop.ps1": "0360d546a8ff87ca87dd9b97f3d8b04741ee62c3fb9690b1d9bd1f1e73d80e40",
+    "_loop/loop.sh": "4ecba4a361d0ba0f1b5304760d9e17cfdd34834330866b2d03bb97f2970812e0",
+    "_memory/README.md": "9c2a0289398c9741a87d67fe5011b747623bcf228de5f78defd26cbd3bb1c62c"
+  },
+  "answers": {
+    "bootstrap": {
+      "auto-fail-sins-evaluator": "- Unresolved '{{...}}' template token, or a leftover bootstrap comment (an HTML\n  comment opening with the word BOOTSTRAP), in any emitted/instance file.\n- A template token used anywhere under skills/agent-kit/templates/ that is not documented\n  in the placeholder table of skills/agent-kit/SKILL.md.\n- Frontmatter `name:` not matching its folder name (skills) or file name (agents).\n- Hardcoded model IDs anywhere outside the model map (canonical:\n  skills/agent-kit/templates/models.map.md; instance: {{IDE_DIR}}/skills/agent-kit-models.map.md).\n- Instance- or session-specific content leaked INTO canonical templates — the\n  canonical kit under skills/agent-kit/ must stay project-agnostic (product isolation).\n- Template ↔ emitter drift — an emitter under skills/agent-kit/emitters/ referencing\n  files, paths, or keys that no longer exist in templates/.",
+      "auto-fail-sins-qa": "- - An emitted file containing a leftover '{{...}}' template token or bootstrap comment.\n- A broken relative link in README.md or ORCHESTRATION.md (root pointer or an emitted\n  architecture doc instance).\n- An emitted (or canonical) loop.sh failing `bash -n`.",
+      "auto-fail-triggers": "",
+      "critical-reference-rows": "",
+      "doc-buckets": "",
+      "domain-skill-rows": "",
+      "execution-layers": "",
+      "fallback-chains": "| Tier | Chain (first available wins) |\n|------|------------------------------|\n| `frontier` | `claude-opus-5-5` → `claude-sonnet-5-5` → (omit pin — harness default) |\n| `light` | `claude-sonnet-5-5` → `claude-haiku-5-5` → (omit pin — harness default) |\n| `fast` | `claude-haiku-5-5` → `claude-sonnet-5-5` → (omit pin — harness default) |\n\nCursor fallback (same policy, Cursor IDs): `claude-opus-5-5-high` → `composer-2.5-fast`\n→ (omit pin); light: `composer-2.5-fast` → (omit pin). Cursor silently substitutes a\ncompatible model under team-admin/plan restrictions, or when the resolved ID is\nunknown/stale (a rotated-out or misspelled model name) — evaluators must report which\nmodel produced the verdict.",
+      "frontier-alt-family": "| Ladder step | Model pin |\n|-------------|-----------|\n| Diagnosis-driven implementation attempt (rung 4) | Claude Code `claude-opus-5-5` / Cursor `claude-opus-5-5-high` |\n| Evaluator arbitration mode (rung 5) | Claude Code `claude-opus-5-5` / Cursor `claude-opus-5-5-high` — same-family arbiter (reduced independence) |",
+      "full-suite-commands": "",
+      "greenfield-practices": "",
+      "layer-skill-map": "",
+      "loop-fallback": "| Chain (first available wins) | Resolves |\n|-------------------------------|----------|\n| `claude-sonnet-5-5` → `claude-haiku-5-5` → (omit pin — harness default) | `claude-sonnet-5-5,claude-haiku-5-5` |\n\nLight-tier by default — the loop's iterations are implementer/test-writer-shaped work,\nsame as the `light` row above. Ends with the same omit-the-pin rule as the tables\nabove: a trip past the last chain entry clears the model pin and the harness default\ntakes over (no hardcoded model IDs outside this file). The resolved chain is one\ncomma-separated string with no spaces around commas — neither driver twin trims chain\nentries. Never use `best` or `fable` in the chain — emit rejects them (usage-credit billing).",
+      "mock-boundary": "",
+      "models-map-caveats": "- **Claude Code env overrides**: `CLAUDE_CODE_SUBAGENT_MODEL` and\n  `CLAUDE_CODE_EFFORT_LEVEL` override frontmatter; org `availableModels` allowlists can\n  cause pins to be ignored.\n- **Claude Code is single-provider (Anthropic only)**: `ANTHROPIC_BASE_URL` changes the\n  endpoint, not the model family — a different-family arbiter is unreachable natively\n  (see **Same-family arbiter** in this file).\n- **Claude Code aliases resolve per provider**: an alias such as `opus` maps to a\n  different model on Microsoft Foundry, Bedrock, or Google Cloud than on the Anthropic\n  API — prefer full IDs. Minimum Claude Code versions for these pins: Opus 5.5 ≥\n  v2.1.280, Sonnet 5.5 ≥ v2.1.284, Haiku 5.5 ≥ v2.1.293.\n- **Claude Code usage-credit aliases**: headless loop runs must never resolve to\n  `best`/`fable` (they bill usage credits without asking); emit rejects them in a loop\n  chain.\n- Model values: Claude aliases or full IDs are both valid; `inherit` is the frontmatter\n  default if a tier is deliberately unpinned.\n- **Cursor silent fallback**: under team-admin/plan restrictions, or when the resolved\n  ID is unknown/stale (a rotated-out or misspelled model name), Cursor substitutes a\n  compatible model without erroring — evaluators should state their expected model in\n  their prompt and report which model produced the verdict.\n- **Cursor Cloud Agents** are main→L1 only; the QA-gate flow still works, but\n  nested L2 worker spawns from an L1 agent are not available in cloud.",
+      "models-map-effort": "Reasoning-effort pins: evaluators (`evaluator`, `qa-evaluator`) `high`,\n`diagnostician` `xhigh`, `implementer`/`test-writer` `medium`, `terminal` `low` — Claude\nCode `effort:` frontmatter. On Cursor, effort for the pinned Claude slugs is carried in\npicker-verified suffix form (`claude-opus-5-5-high`, `claude-sonnet-5-5-xhigh`);\n`composer-2.5-fast` is Composer's speed/price variant (Fast tier), not an effort suffix.\nBracket params appended to the model ID (`<model-id>[effort=high]`) are documented\nfrontmatter but were not verified on this account at emit time. Never quote the YAML\n`model:` value — a quoted or unresolvable value silently falls back to the parent model.",
+      "models-map-fix-cycle": "| Fix cycle | Implementer model |\n|-----------|-------------------|\n| 1 | Claude Code `claude-sonnet-5-5` (normal) / Cursor `composer-2.5-fast` (normal) |\n| 2 | Claude Code `claude-opus-5-5`; Cursor `claude-sonnet-5-5-xhigh` |\n| 3 | Claude Code `claude-opus-5-5` with effort `xhigh`; Cursor `claude-opus-5-5-high` |",
+      "models-map-live-check": "**Live-checked 2026-10-08** (Cursor IDE subagent picker — `agent models` returned no\nmodels for this account — plus Claude Code model configuration docs): the resolved IDs\nin the Resolved models table below were confirmed on that date. `composer-2.5-fast` costs ~6× standard\nComposer 2.5 and is kept until standard Composer 2.5 is confirmed available in the\npicker. Unknown or stale Cursor IDs are substituted silently — no\nerror surfaces — so re-verify against the live list before rotating any pin.",
+      "models-map-title": "# Model Map (resolved — Claude Code + Cursor, self-install instance)",
+      "path-test-conventions": "| Changed path | First impacted files |\n|--------------|----------------------|\n| `skills/agent-kit/templates/agents/*.md` | `skills/agent-kit/emitters/*.md` (mapping tables), `skills/agent-kit/templates/ORCHESTRATION.md` (subagent tables) |\n| `skills/agent-kit/templates/skills/*/` | `skills/agent-kit/emitters/*.md`, `skills/agent-kit/templates/ORCHESTRATION.md` (skills table, file tree) |\n| `skills/agent-kit/templates/loop/*` | `skills/agent-kit/emitters/*.md`, `skills/agent-kit/SKILL.md` (loop extras), `skills/agent-kit/templates/ORCHESTRATION.md` (loop section) |\n| `skills/agent-kit/templates/models.map.md` | every template using model tiers (agents, ORCHESTRATION.md), `skills/agent-kit/SKILL.md` placeholder table |\n| `skills/agent-kit/SKILL.md` (placeholder table) | the whole `skills/agent-kit/templates/` tree (token usage) |\n| `skills/agent-kit/emitters/*.md` | the template files that emitter maps (drift check) |\n| `skills/agent-kit/reference/harness-matrix.md` | `docs/agent-kit/research-multi-harness-upgrade.md`, `skills/agent-kit/emitters/*.md` |",
+      "qa-evaluator-surfaces": "- - **Emitted install artifacts** — the output a /agent-kit run produces in a target\n  project. Evidence: grep output proving zero unresolved tokens/bootstrap comments;\n  frontmatter validation (every `name:` matches its folder/file); `bash -n` output\n  for the emitted loop.sh; link-check output proving relative links in the emitted\n  README/architecture doc resolve.",
+      "qa-surfaces": "- - **Emitted install artifacts** — the output a /agent-kit run produces in a target\n  project. Evidence: grep output proving zero unresolved tokens/bootstrap comments;\n  frontmatter validation (every `name:` matches its folder/file); `bash -n` output\n  for the emitted loop.sh; link-check output proving relative links in the emitted\n  README/architecture doc resolve.",
+      "qa-surfaces-keep": "### Emitted install artifacts (the output of a /agent-kit run in a target project)\n\n- Zero unresolved '{{...}}' template tokens and zero leftover bootstrap comments in\n  every emitted file — demonstrated by grep output over the full emitted tree.\n- Every emitted agent and skill file has valid frontmatter and its `name:` matches its\n  folder name (skills) or file name (agents) — demonstrated by validation output.\n- The emitted `_loop/loop.sh` passes `bash -n` and is executable.\n- Relative links in the emitted README section and architecture doc\n  (ORCHESTRATION.md instance) resolve to real files — demonstrated by link-check\n  output.\n- The emitted model map is the only place model IDs appear; agent frontmatter uses the\n  tiers/aliases it defines.\n- The manifest (`orchestration-kit.manifest.json`) lists every emitted file with a\n  correct sha256.",
+      "quality-check-commands": "",
+      "rendered-siblings": "",
+      "shared-libs": "shared infrastructure: the\n  canonical template source (skills/agent-kit/templates/), the placeholder vocabulary in\n  skills/agent-kit/SKILL.md, and the emitters (skills/agent-kit/emitters/) — build on them.\n  Never re-implement what the shared core provides.",
+      "skills-tree": "",
+      "stack-note": ""
+    },
+    "flags": {
+      "greenfield": false,
+      "lint": false,
+      "loop": true,
+      "models_pinned": true,
+      "research": true,
+      "typecheck": false
+    },
+    "forge": {
+      "host": "",
+      "kind": "github"
+    },
+    "harnesses": [
+      "copilot"
+    ],
+    "models": {
+      "copilot": {
+        "alt_family": "gpt-4.1",
+        "arbiter_same_family": true,
+        "fast": "gpt-4.1-mini",
+        "frontier": "gpt-4.1",
+        "frontier_alt_family": "gpt-4.1",
+        "light": "gpt-4.1-mini",
+        "loop_chain": "gpt-4.1-mini"
+      }
+    },
+    "primary": "copilot",
+    "projectName": "kdcllc skills",
+    "schema": 1,
+    "tokens": {
+      "EVALUATOR_AUTO_FAIL_TRIGGERS": "- Unresolved '{{...}}' template token, or a leftover bootstrap comment (an HTML\n  comment opening with the word BOOTSTRAP), in any emitted/instance file.\n- A template token used anywhere under skills/agent-kit/templates/ that is not documented\n  in the placeholder table of skills/agent-kit/SKILL.md.\n- Frontmatter `name:` not matching its folder name (skills) or file name (agents).\n- Hardcoded model IDs anywhere outside the model map (canonical:\n  skills/agent-kit/templates/models.map.md; instance: {{IDE_DIR}}/skills/agent-kit-models.map.md).\n- Instance- or session-specific content leaked INTO canonical templates — the\n  canonical kit under skills/agent-kit/ must stay project-agnostic (product isolation).\n- Template ↔ emitter drift — an emitter under skills/agent-kit/emitters/ referencing\n  files, paths, or keys that no longer exist in templates/.",
+      "EXECUTION_LAYERS": "skills/<name>/ (published skills; agent-kit: templates/ → bin/ + emitters/ → reference/harness-matrix.md) → scripts/checks/ + tests/ → docs/ + root README.md / skills.sh.json / marketplace manifests",
+      "FULL_TEST_COMMAND": "bash scripts/validate-skills.sh && bash tests/agent-kit/run-all.sh",
+      "GROUND_TRUTH_DOC": "docs/agent-kit/research-multi-harness-upgrade.md",
+      "PROJECT_NAME": "kdcllc skills",
+      "QA_AUTO_FAIL_TRIGGERS": "- An emitted file containing a leftover '{{...}}' template token or bootstrap comment.\n- A broken relative link in README.md or ORCHESTRATION.md (root pointer or an emitted\n  architecture doc instance).\n- An emitted (or canonical) loop.sh failing `bash -n`.",
+      "QA_SURFACES": "- **Emitted install artifacts** — the output a /agent-kit run produces in a target project. Evidence: grep output proving zero unresolved tokens/bootstrap comments; frontmatter validation (every `name:` matches its folder/file); `bash -n` output for the emitted loop.sh; link-check output proving relative links in the emitted README/architecture doc resolve.",
+      "SETUP_COMMANDS": "# none — git clone, then bash scripts/agent-kit/self-install.sh",
+      "STACK_SUMMARY": "A multi-skill Agent Skills pack (kdcllc/skills) distributed through skills.sh, the Claude Code and Cursor plugin marketplaces, and `gh skill`. Every folder under `skills/<name>/` is a published skill (`SKILL.md` + `CHANGELOG.md`, optional `scripts/`, `references/`, `assets/`), versioned on its own via `metadata.version` and released as `<name>/vX.Y.Z` tags. The largest skill is `agent-kit` — the orchestration kit compiler: canonical Claude-format templates under `skills/agent-kit/templates/`, per-harness emitter caveats under `skills/agent-kit/emitters/`, deterministic emitter twins under `skills/agent-kit/bin/`, and a verified harness capability matrix under `skills/agent-kit/reference/`. Maintainer research lives in `docs/agent-kit/`. Executable code is bash + PowerShell twins (emitters, loop drivers, self-install, checks) plus per-skill helper scripts. There is no application runtime — verification is structural: `scripts/validate-skills.sh` (layout, frontmatter, versions, marketplaces, `scripts/checks/*.sh` guards) and the agent-kit suites under `tests/agent-kit/`.",
+      "TARGETED_TEST_COMMAND": "grep -n '{{[A-Z_]*}}\\|BOOTSTRAP:' <changed-file>",
+      "TEST_FRAMEWORKS": "bash (scripts/validate-skills.sh, scripts/checks/*.sh, tests/agent-kit/**/*.sh)"
+    }
+  }
+}
