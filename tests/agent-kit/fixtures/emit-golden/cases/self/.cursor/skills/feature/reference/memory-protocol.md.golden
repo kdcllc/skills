@@ -105,19 +105,29 @@ _kit/memory.sh add --kind <kind> --title "<title>" --body <draft-path> \
 **Source label.** Repo-relative path only when `git ls-files --error-unmatch <path>`
 succeeds; otherwise `goal <name> (goal.md)` (see `_memory/README.md` for other labels).
 
-**Exit codes.** 0 (added or duplicate) → log a spawn note with the tool line. 5
-(quarantined) → tell the user, log a spawn note with the tool line; do not retry
-automatically. 2 or 4 → log and continue.
+**Exit codes.** 0 (added or duplicate) → run `_kit/memory.sh check <path>` on each added
+path; exit 3 → report the failing stdout line to the user and do not commit until fixed;
+then log a spawn note with the tool line. 5 (quarantined) → tell the user, run
+`_kit/memory.sh check <path>` on the **quarantined** path too, log a spawn note with the
+tool line; do not retry automatically. 2 or 4 → log and continue.
 
 Records stay **uncommitted** with the goal's other changes for human review. Corrections
-use a new record with `--supersedes <id>`; never edit an existing record file.
+to an untracked record: `_kit/memory.sh rm <full-id>`, fix the draft, re-`add`. Committed
+records: a new record with `--supersedes <id>`; never edit an existing record file.
 
 ## Archive (research)
 
 After the Phase 2 ingestion review, archive one `research-ingest` record summarizing the
 report. Source label: `research <topic> (report.md)` unless a tracked copy exists (cite
-the tracked path). Same `add` invocation, exit handling, and uncommitted policy as
-feature archive.
+the tracked path). Same `add` invocation and exit handling as feature archive (including
+`check` on added paths and on quarantined paths when exit 5).
+
+## Capture
+
+Post-hoc transcript capture and distillation into `session-summary` records are defined
+in `memory-capture.md` (this directory) and orchestrated by the `memory-capture` skill.
+Raw files live under gitignored `_memory/raw/`; see `_memory/README.md` for `capture`,
+`check`, and `rm`.
 
 ## Loop
 

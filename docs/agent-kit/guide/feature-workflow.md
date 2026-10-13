@@ -111,7 +111,7 @@ Each task's `## Acceptance Criteria` (criterion + verification method each) is c
 
 The orchestrator presents a **"My Understanding"** summary and **waits for explicit user confirmation** before Phase 2. Phase 6/7 answers and `ladder:` (default `escalate` for interactive goals) are recorded in `goal.md`'s `phases:` block during Phase 2. There is no silent advance.
 
-**Memory recall (before Phase 2):** Once per goal, the orchestrator searches `_memory/` and records up to five picks (or `none`) in `goal.md`'s `## Recalled memory` section; empty search or tool failure never blocks. After Phase 5 **APPROVED** and green Quality Checks, the orchestrator archives a `goal-summary` plus optional decision/pitfall records (uncommitted for review). Details: [memory.md](memory.md).
+**Memory recall (before Phase 2):** Once per goal, the orchestrator searches `_memory/` and records up to five picks (or `none`) in `goal.md`'s `## Recalled memory` section; empty search or tool failure never blocks. After Phase 5 **APPROVED** and green Quality Checks, the orchestrator archives a `goal-summary` plus optional decision/pitfall records (uncommitted for review), then runs `_kit/memory.sh check <path>` on each added or quarantined path — exit **3** ⇒ report to the user and do not commit until fixed. Details: [memory.md](memory.md).
 
 ---
 
@@ -233,7 +233,7 @@ Launch `evaluator` in **audit mode** over the whole goal: every task's requireme
 
 Optional: after approval, capture behavioral evidence and launch `qa-evaluator` for user-facing surfaces.
 
-After **APPROVED** and green Quality Checks, run **memory archive** (one `goal-summary` and up to three decision/pitfall records) before optional Phases 6/7 — see [memory.md](memory.md).
+After **APPROVED** and green Quality Checks, run **memory archive** (one `goal-summary` and up to three decision/pitfall records), **`check` each added or quarantined path** (exit **3** ⇒ report, do not commit), before optional Phases 6/7 — see [memory.md](memory.md).
 
 After APPROVED + Quality Checks, read `goal.md`'s `phases:` block: when `align_docs: false`, skip Phase 6 with an orchestration-log entry ("Phase 6 skipped per goal.md"); when `pull_request: false`, skip Phase 7 likewise.
 

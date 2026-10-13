@@ -86,7 +86,7 @@ Developer guide: [docs/agent-kit/guide/README.md](https://github.com/kdcllc/skil
 | [agents-and-models.md](https://github.com/kdcllc/skills/blob/master/docs/agent-kit/guide/agents-and-models.md) | Six subagent roles and boundaries, model tiers, `models.map.md` anatomy, fallback chains, harness caveats |
 | [evaluation-system.md](https://github.com/kdcllc/skills/blob/master/docs/agent-kit/guide/evaluation-system.md) | Verdict vocabulary, confidence ladder, anti-fabrication, devil's advocate, acceptance criteria validation, `eval_depth`, test ladder, orchestration log audit trail |
 | [contributing.md](https://github.com/kdcllc/skills/blob/master/docs/agent-kit/guide/contributing.md) | Repo anatomy (canonical vs instance vs generated), self-install dogfood loop, templates/emitters, harness matrix, version + manifest + upgrades, test harness |
-| [memory.md](https://github.com/kdcllc/skills/blob/master/docs/agent-kit/guide/memory.md) | `_memory/` store, recall and archive per workflow, search CLI, prior-knowledge fence, loop proposals and integrator step 3b, harness pointers |
+| [memory.md](https://github.com/kdcllc/skills/blob/master/docs/agent-kit/guide/memory.md) | `_memory/` store, recall and archive per workflow, search CLI, redaction, `check` gate, transcript capture, prior-knowledge fence, loop proposals and integrator step 3b, harness pointers |
 
 ## What's in this folder
 
@@ -167,6 +167,7 @@ exit codes.
 | `agents/implementer`, `agents/test-writer` | Workers — light tier, ladder rungs 1–2 only |
 | `skills/feature` | Seven-phase workflow + goal/task templates + orchestration log + memory protocol reference |
 | `skills/research` | Research → Plan workflow (optional) |
+| `skills/memory-capture` | Post-hoc transcript capture and distillation into `session-summary` records |
 | `skills/{goal,task,qa}-criteria` | Evaluation checklists (goal evaluation includes devil's advocate) |
 | `skills/test-ladder` | New → impacted tests mid-cycle; full suites only at cycle end |
 | `skills/align-docs` | Phase 6: evaluator-gated sync of all docs to shipped code |
@@ -174,8 +175,8 @@ exit codes.
 | `skills/auto-loop` + `_loop/` + `_goals/backlog.md` | Autonomous loop with structural guards (optional) |
 | `skills/agent-kit-models.map.md` | The model map — the only place model IDs live per install |
 | `_kit/log-spawn.sh` + `_kit/log-spawn.cmd` | Single-copy orchestration-log writer + Windows launcher (`spawn` / `outcome` / `note`) |
-| `_kit/memory.sh` + `_kit/memory.cmd` (+ `_kit/memory.ps1` for `loop.ps1`) | Single-copy memory store + Windows launcher (`add` / `index` / `search` / `show`) |
-| `_memory/` | Tracked immutable records (`records/`, `quarantine/`); gitignored derived `.index/` and reserved `raw/` |
+| `_kit/memory.sh` + `_kit/memory.cmd` (+ `_kit/memory.ps1` for `loop.ps1`) | Single-copy memory store + Windows launcher (`add` / `index` / `search` / `show` / `redact` / `check` / `rm` / `capture`) |
+| `_memory/` | Tracked immutable records (`records/`, `quarantine/`); gitignored derived `.index/` and `raw/` (redacted captures, ledgers, distillation drafts) |
 | `ORCHESTRATION.md` | The architecture doc, filled in for the project |
 | `orchestration-kit.manifest.json` | Kit version + file hashes + embedded `answers`, enabling clean upgrades |
 

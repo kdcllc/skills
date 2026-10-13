@@ -27,7 +27,8 @@ Save the returned report as `_research/[topic]/report.md` (structure per
 Promote durable findings into {{GROUND_TRUTH_DOC}}; `_research/` stays scratch.
 
 **Archive:** one `research-ingest` after ingestion review per
-`{{IDE_DIR}}/skills/feature/reference/memory-protocol.md`.
+`{{IDE_DIR}}/skills/feature/reference/memory-protocol.md`; run `_kit/memory.sh check` on
+each path `add` writes (or quarantines) before commit.
 
 ## Phase 3 — High-level plan
 

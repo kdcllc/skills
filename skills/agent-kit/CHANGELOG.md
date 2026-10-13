@@ -8,6 +8,11 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 
 ### Added
 
+- **Memory redaction** — `add` redacts documented secret classes in the title and body before hashing; `redact` (stdin → stdout) shares the same pattern set; stderr reports counts and classes.
+- **Memory gate** — `memory.sh check [--staged] [paths]` exits **3** when a record fails the commit gate (secret, hash/id mismatch, admission violation, or staged edit under tracked memory paths).
+- **Memory hygiene** — `memory.sh rm <full-id>` removes untracked record or quarantine files only.
+- **Transcript capture** — `memory.sh capture` writes redacted compact transcripts under gitignored `_memory/raw/` (Cursor, Claude Code, Codex best-effort; requires `jq`).
+- **`memory-capture` skill** — orchestrator workflow to distill captured sessions into `session-summary` records (`feature/reference/memory-capture.md`).
 - **Windows `.cmd` launchers** — `bin/emit.cmd`, `_kit/memory.cmd`, and `_kit/log-spawn.cmd` invoke the sibling `.sh` through Git for Windows Bash; Git Bash discovery with optional `AGENT_KIT_BASH` override; exit 127 with an install message when no valid Bash is found ([reference/windows-launcher.md](reference/windows-launcher.md)).
 
 ### Removed
@@ -17,6 +22,9 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 
 ### Changed
 
+- **Memory tags** — `add` normalizes tags (split on commas or whitespace, lowercase, dedupe, keep the first six).
+- **Memory archive** — feature and research archive steps run `memory.sh check` on each path they add or quarantine.
+- **Memory tripwire** — `task-criteria` (d) carve-out for `_kit/memory.sh rm` on untracked records and human/tasked quarantine cleanup.
 - **Breaking:** Kit tools on Windows require Git for Windows when invoked from cmd or PowerShell via the `.cmd` launchers; `_kit/memory.ps1` is retained as a helper for `loop.ps1` until loop twins retire.
 - **`bin/emit.sh`** — portable Bash 3.2 + POSIX `awk` emitter (UTF-8 BOM accepted; `sha256sum` or `shasum -a 256`); no `jq` dependency.
 - **Memory pointers** — `--upgrade` rewrites installs that still tell Windows users to run `pwsh _kit/memory.ps1`.

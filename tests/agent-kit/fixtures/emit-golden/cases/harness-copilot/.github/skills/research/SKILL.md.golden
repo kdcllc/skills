@@ -27,7 +27,8 @@ docs/agent-kit/research-multi-harness-upgrade.md or the codebase, and list open 
 Promote durable findings into docs/agent-kit/research-multi-harness-upgrade.md; `_research/` stays scratch.
 
 **Archive:** one `research-ingest` after ingestion review per
-`.github/skills/feature/reference/memory-protocol.md`.
+`.github/skills/feature/reference/memory-protocol.md`; run `_kit/memory.sh check` on
+each path `add` writes (or quarantines) before commit.
 
 ## Phase 3 — High-level plan
 

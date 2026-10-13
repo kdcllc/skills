@@ -560,4 +560,43 @@ else
 fi
 EMIT_SH="$EMIT_SH_SAVE"
 
+# --- C: memory-capture skill + protocol check mention (four-harness emit) ---
+check_c_memory_capture() { # root
+  local root="$1" ide
+  for ide in .cursor .claude .github; do
+    [[ -f "$root/$ide/skills/memory-capture/SKILL.md" ]] || return 1
+    [[ -f "$root/$ide/skills/feature/reference/memory-capture.md" ]] || return 1
+  done
+  grep -qF '_kit/memory.sh check' "$root/.cursor/skills/feature/reference/memory-protocol.md" || return 1
+  grep -qF 'quarantined file' "$TASK_CRIT" || return 1
+  return 0
+}
+
+if [[ -n "${B1_ROOT:-}" ]] && check_c_memory_capture "$B1_ROOT"; then
+  report PASS "C1: memory-capture skill + reference on cursor/claude/github; protocol check; quarantine carve-out"
+else
+  report FAIL "C1: memory-capture wiring"
+fi
+
+mktemp_dir c2_root
+c2_ans="$(mktemp "${TMPDIR:-/tmp}/memwire-c2.XXXXXX")"
+CLEANUP+=("$c2_ans")
+jq '
+  .harnesses = ["codex"] |
+  .primary = "codex" |
+  .models.codex = {"frontier":"cod-front","light":"cod-light","fast":"cod-fast","alt_family":"cod-alt","frontier_alt_family":"cod-front","loop_chain":"cod-light"}
+' "$FIXTURE" > "$c2_ans"
+c2_rc=0
+run_emit_sh "$c2_root" --answers "$c2_ans" >/dev/null 2>&1 || c2_rc=$?
+c2_bad=0
+if [[ "$c2_rc" -eq 0 ]]; then
+  find "$c2_root" -path '*/skills/memory-capture/*' 2>/dev/null | grep -q . && c2_bad=1
+  find "$c2_root" -path '*/feature/reference/memory-capture.md' 2>/dev/null | grep -q . && c2_bad=1
+fi
+if [[ "$c2_rc" -eq 0 && "$c2_bad" -eq 0 ]]; then
+  report PASS "C2: codex-only emit has no memory-capture skill or reference"
+else
+  report FAIL "C2: codex-only emit must not ship memory-capture skill" "rc=$c2_rc bad=$c2_bad"
+fi
+
 finish

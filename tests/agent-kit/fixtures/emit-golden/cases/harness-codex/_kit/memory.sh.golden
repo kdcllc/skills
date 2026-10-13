@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# memory — add, index, search, and show immutable _memory/ records for the AI Orchestration Kit.
+# memory.sh — add|index|search|show|redact|check|rm|capture
 # Twin: memory.ps1 (PowerShell 7.2+) — behaviorally identical — any divergence is a bug;
 # memory.ps1 is retained as a helper for loop.ps1 until loop twins retire.
 # Emitted single-copy to `_kit/memory.sh` (Windows outside Git Bash: `_kit\memory.cmd`).
@@ -10,8 +10,12 @@
 #   memory.sh search <term>... [--kind <list>] [--limit <n>] [--include-superseded]
 #             [--engine grep|fts] [--root <dir>]
 #   memory.sh show <id> [--root <dir>]
+#   memory.sh redact [--root <dir>]
+#   memory.sh check [--staged] [--root <dir>] [<path>…]
+#   memory.sh rm <id> [--root <dir>]
+#   memory.sh capture [--harness cursor|claude|codex|all] [--from <dir>] … [--root <dir>]
 #
-# Exit codes: 0 ok · 2 usage/format · 4 missing root, file, id, or optional dependency · 5 quarantined.
+# Exit codes: 0 ok · 2 usage/format · 3 gate failed · 4 missing root, file, id, or optional dependency · 5 quarantined.
 # Errors: one line on stderr prefixed `memory: `. Store path: `<root>/_memory/`.
 #
 # Portability: bash 3.2+, LC_ALL=C, coreutils/grep/sed/awk/find; optional sqlite3 (FTS5 auto-detect).
@@ -51,12 +55,16 @@ valid_record_id() { # <id>
 
 usage() {
   cat <<'EOF'
-usage: memory.sh <add|index|search|show> [--root <dir>] ...
+usage: memory.sh <add|index|search|show|redact|check|rm|capture> [--root <dir>] ...
   add    --kind <k> --title <t> --body <path> [--source <s>] [--tags <list>] [--supersedes <list>] [--harness <h>]
   index  [--root <dir>]
   search <term>... [--kind <list>] [--limit <n>] [--include-superseded] [--engine grep|fts]
   show   <id> [--root <dir>]
-exit: 0 ok · 2 usage/format · 4 missing root/file/id/dependency · 5 quarantined
+  redact [--root <dir>]
+  check  [--staged] [--root <dir>] [<path>…]
+  rm     <id> [--root <dir>]
+  capture [--harness cursor|claude|codex|all] [--from <dir>] [--idle-hours <n>] [--since <YYYY-MM-DD>] [--root <dir>]
+exit: 0 ok · 2 usage/format · 3 gate failed · 4 missing root/file/id/dependency · 5 quarantined
 EOF
 }
 
@@ -176,6 +184,20 @@ resolve_root() { # <root-arg>
   printf '%s' "$r"
 }
 
+canonical_dir() { # <dir> → physical absolute path
+  local d="$1"
+  ( CDPATH= cd -- "$d" && pwd -P ) || return 1
+}
+
+canonical_file_path() { # <path> → physical absolute path to regular file
+  local f="$1" dir base
+  [ -f "$f" ] || return 1
+  dir="$(dirname "$f")"
+  base="$(basename "$f")"
+  dir="$(CDPATH= cd -- "$dir" && pwd -P)" || return 1
+  printf '%s/%s' "$dir" "$base"
+}
+
 store_dir() { # <root>
   printf '%s/_memory' "$1"
 }
@@ -282,6 +304,275 @@ admission_violation() { # <title> <body-file>
   tr 'ABCDEFGHIJKLMNOPQRSTUVWXYZ' 'abcdefghijklmnopqrstuvwxyz' < "$body_file" > "$folded_body"
   LC_ALL=C grep -Eq "$ADMISSION_ERE" "$folded_body" && return 0
   return 1
+}
+
+# Frozen redaction classes (ERE order and patterns match skills/agent-kit/templates/memory/README.md § Redaction).
+REDACT_CLASS_ORDER="private-key secret aws-key github-token api-key slack-token jwt azure-key"
+
+# Globals set by memory_redact_file: total replacements and comma-separated class list.
+REDACT_N=0
+REDACT_CLASSES=""
+
+count_redact_markers() { # <path> <class>
+  local n
+  n="$(grep -o "\\[REDACTED:$2\\]" "$1" 2>/dev/null | wc -l | tr -d '[:space:]')"
+  printf '%s' "${n:-0}"
+}
+
+file_has_trailing_lf() { # <path>
+  [ -s "$1" ] || return 1
+  [ "$(tail -c 1 "$1" | od -An -tx1 | tr -d ' \n')" = "0a" ]
+}
+
+strip_trailing_lf_file() { # <path>
+  local f="$1" len last
+  len="$(wc -c < "$f" | tr -d '[:space:]')"
+  [ "$len" -gt 0 ] || return 0
+  last="$(tail -c 1 "$f" | od -An -tx1 | tr -d ' \n')"
+  [ "$last" = "0a" ] || return 0
+  head -c $((len - 1)) "$f" > "${f}.notail" && mv "${f}.notail" "$f"
+}
+
+redact_private_key_body() { # <in-path> <out-path>
+  awk '
+    BEGIN { in_block = 0 }
+    # Inside an open block any line with the END marker closes it (even if it also holds a
+    # BEGIN marker): no extra marker, no extra count. The same-line BEGIN+END rule below
+    # applies only when not in a block.
+    in_block {
+      if (/-----END [A-Z0-9 ]*PRIVATE KEY-----/) { in_block = 0 }
+      next
+    }
+    /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/ && /-----END [A-Z0-9 ]*PRIVATE KEY-----/ {
+      print "[REDACTED:private-key]"
+      next
+    }
+    /-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----/ {
+      print "[REDACTED:private-key]"
+      in_block = 1
+      next
+    }
+    { print }
+  ' "$1" > "$2"
+}
+
+# sed -E scripts (LC_ALL=C): boundary groups use \1 preservation where noted in the README.
+REDACT_SED_AWS='s/((AKIA|ASIA)[0-9A-Z]{16})/[REDACTED:aws-key]/g'
+REDACT_SED_GITHUB_A='s/(^|[^A-Za-z0-9_])((gh[pousr]_[A-Za-z0-9]{36,}))/\1[REDACTED:github-token]/g'
+REDACT_SED_GITHUB_B='s/(^|[^A-Za-z0-9_])((github_pat_[A-Za-z0-9_]{22,}))/\1[REDACTED:github-token]/g'
+REDACT_SED_API='s/(^|[^A-Za-z0-9_-])((sk-(ant-)?[A-Za-z0-9_-]{20,}))/\1[REDACTED:api-key]/g'
+REDACT_SED_SLACK='s/(xox[abprs]-[A-Za-z0-9-]{10,})/[REDACTED:slack-token]/g'
+REDACT_SED_JWT='s/(eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})/[REDACTED:jwt]/g'
+REDACT_SED_AZURE='s/((AccountKey|SharedAccessKey)=)([^][;"'"'"'[:space:]][^;"'"'"'[:space:]]*)/\1[REDACTED:azure-key]/g'
+
+redact_sed_pass() { # <in> <out> <script>
+  LC_ALL=C sed -E "$3" "$1" > "$2"
+}
+
+redact_secret_assignments() { # <in-path> <out-path> — README secret class (POSIX awk)
+  awk '
+    function is_space(c) { return c == " " || c == "\t" || c == "\n" || c == "\r" || c == "\v" || c == "\f" }
+    function fold(c) {
+      if (c >= "A" && c <= "Z") return sprintf("%c", index("ABCDEFGHIJKLMNOPQRSTUVWXYZ", c) + 96)
+      return c
+    }
+    function secret_value_bad_first(c) {
+      if (is_space(c)) return 1
+      if (c == "[" || c == "]" || c == "\"" || c == "\047" || c == "<" || c == "$" || c == "{" || c == "`") return 1
+      return 0
+    }
+    function secret_value_bad_rest(c) {
+      if (is_space(c) || c == "\"" || c == "\047" || c == "`" || c == "," || c == ";") return 1
+      return 0
+    }
+    function ci_eq_at(line, pos, key,    j, c1, c2) {
+      for (j = 1; j <= length(key); j++) {
+        c1 = fold(substr(line, pos + j - 1, 1))
+        c2 = fold(substr(key, j, 1))
+        if (c1 != c2) return 0
+      }
+      return 1
+    }
+    function match_key(line, pos,    keys, i, k, n) {
+      n = length(line)
+      split("password passwd pwd secret client_secret token access_token api_key api-key apikey", keys, " ")
+      for (i = 1; i <= 10; i++) {
+        k = keys[i]
+        if (pos + length(k) - 1 <= n && ci_eq_at(line, pos, k)) return k
+      }
+      return ""
+    }
+    function value_start(line, p, n,    ch) {
+      if (p <= n && (substr(line, p, 1) == "\"" || substr(line, p, 1) == "\047")) p++
+      while (p <= n && is_space(substr(line, p, 1))) p++
+      if (p > n || (substr(line, p, 1) != "=" && substr(line, p, 1) != ":")) return 0
+      p++
+      while (p <= n && is_space(substr(line, p, 1))) p++
+      if (p <= n && (substr(line, p, 1) == "\"" || substr(line, p, 1) == "\047")) p++
+      if (p > n) return 0
+      return p
+    }
+    function redact_line(line,    out, i, n, c, b, key, k, sep_from, val_start, val_end, ch) {
+      out = ""
+      i = 1
+      n = length(line)
+      while (i <= n) {
+        c = substr(line, i, 1)
+        b = (i == 1)
+        if (!b) b = (substr(line, i - 1, 1) !~ /[A-Za-z0-9_]/)
+        if (b) {
+          key = match_key(line, i)
+          if (key != "") {
+            k = length(key)
+            sep_from = i + k
+            val_start = value_start(line, sep_from, n)
+            if (val_start > 0) {
+              ch = substr(line, val_start, 1)
+              if (!secret_value_bad_first(ch)) {
+                val_end = val_start
+                while (val_end < n) {
+                  ch = substr(line, val_end + 1, 1)
+                  if (secret_value_bad_rest(ch)) break
+                  val_end++
+                }
+                if (val_end - val_start + 1 >= 8) {
+                  out = out substr(line, i, k) substr(line, sep_from, val_start - sep_from) "[REDACTED:secret]"
+                  i = val_end + 1
+                  continue
+                }
+              }
+            }
+          }
+        }
+        out = out c
+        i++
+      }
+      return out
+    }
+    { print redact_line($0) }
+  ' "$1" > "$2"
+}
+
+memory_redact_file() { # <in-path> <out-path> <include-private-key: 0|1> [skip-count: 0|1]
+  local in="$1" out="$2" priv="$3" skip_count="${4:-0}" tmp step cls before after delta
+  local counts_in counts_out total=0 classes=""
+  tmp="$(mk_tmp)"
+  step="$(mk_tmp)"
+  if [ "$priv" = "1" ]; then
+    redact_private_key_body "$in" "$step"
+  else
+    cp "$in" "$step"
+  fi
+  redact_secret_assignments "$step" "$tmp"
+  if [ "$skip_count" = "1" ]; then
+    LC_ALL=C sed -E \
+      -e "$REDACT_SED_AWS" \
+      -e "$REDACT_SED_GITHUB_A" \
+      -e "$REDACT_SED_GITHUB_B" \
+      -e "$REDACT_SED_API" \
+      -e "$REDACT_SED_SLACK" \
+      -e "$REDACT_SED_JWT" \
+      -e "$REDACT_SED_AZURE" \
+      "$tmp" > "$out"
+    if ! file_has_trailing_lf "$in"; then
+      strip_trailing_lf_file "$out"
+    fi
+    REDACT_N=0
+    REDACT_CLASSES=""
+    return 0
+  fi
+  cp "$tmp" "$step"
+  redact_sed_pass "$step" "$tmp" "$REDACT_SED_AWS"
+  cp "$tmp" "$step"
+  redact_sed_pass "$step" "$tmp" "$REDACT_SED_GITHUB_A"
+  cp "$tmp" "$step"
+  redact_sed_pass "$step" "$tmp" "$REDACT_SED_GITHUB_B"
+  cp "$tmp" "$step"
+  redact_sed_pass "$step" "$tmp" "$REDACT_SED_API"
+  cp "$tmp" "$step"
+  redact_sed_pass "$step" "$tmp" "$REDACT_SED_SLACK"
+  cp "$tmp" "$step"
+  redact_sed_pass "$step" "$tmp" "$REDACT_SED_JWT"
+  cp "$tmp" "$step"
+  redact_sed_pass "$step" "$tmp" "$REDACT_SED_AZURE"
+  cp "$tmp" "$out"
+  if ! file_has_trailing_lf "$in"; then
+    strip_trailing_lf_file "$out"
+  fi
+  for cls in private-key secret aws-key github-token api-key slack-token jwt azure-key; do
+    if [ "$priv" != "1" ] && [ "$cls" = "private-key" ]; then
+      continue
+    fi
+    before="$(count_redact_markers "$in" "$cls")"
+    after="$(count_redact_markers "$out" "$cls")"
+    delta=$((after - before))
+    if [ "$delta" -gt 0 ]; then
+      total=$((total + delta))
+      classes="${classes:+$classes,}$cls"
+    fi
+  done
+  REDACT_N="$total"
+  REDACT_CLASSES="$classes"
+}
+
+merge_redact_classes() { # <csv-a> <csv-b>
+  local a="$1" b="$2" cls out=""
+  for cls in private-key secret aws-key github-token api-key slack-token jwt azure-key; do
+    case ",$a,$b," in
+      *",$cls,"*) out="${out:+$out,}$cls" ;;
+    esac
+  done
+  REDACT_CLASSES="$out"
+}
+
+print_redact_notice() {
+  [ "${REDACT_N:-0}" -gt 0 ] || return 0
+  printf 'memory: redacted %s secret(s): %s\n' "$REDACT_N" "$REDACT_CLASSES" >&2
+}
+
+print_add_notices() {
+  print_redact_notice
+  if [ "${TAGS_TRUNCATED:-0}" -eq 1 ]; then
+    printf 'memory: tags truncated to 6\n' >&2
+  fi
+}
+
+TAGS_TRUNCATED=0
+
+normalize_tags_list() { # <raw> — sets PARSED_LIST_ITEMS, TAGS_TRUNCATED; return 1 on invalid tag
+  local raw="$1" flat w seen="" items="" n=0 kept=""
+  PARSED_LIST_ITEMS=""
+  TAGS_TRUNCATED=0
+  [ -n "$raw" ] || return 0
+  while IFS= read -r w || [ -n "$w" ]; do
+    w="$(printf '%s' "$w" | tr 'ABCDEFGHIJKLMNOPQRSTUVWXYZ' 'abcdefghijklmnopqrstuvwxyz')"
+    [ -n "$w" ] || continue
+    case " $seen " in
+      *" $w "*) continue ;;
+    esac
+    re_match "$w" "$re_tag" || return 1
+    seen="$seen $w"
+    items="${items:+$items }$w"
+  done <<EOF
+$(printf '%s' "$raw" | tr ', \t\n\r\v\f' '\n\n\n\n\n\n\n')
+EOF
+  for w in $items; do
+    n=$((n + 1))
+    if [ "$n" -le 6 ]; then
+      kept="${kept:+$kept }$w"
+    else
+      TAGS_TRUNCATED=1
+    fi
+  done
+  PARSED_LIST_ITEMS="$kept"
+  return 0
+}
+
+enforce_body_size() { # <path>
+  local len
+  len="$(wc -c < "$1" | tr -d '[:space:]')"
+  [ "$len" -ge 1 ] || die 2 "invalid body"
+  [ "$len" -le 4096 ] || die 2 "invalid body"
 }
 
 # Read frontmatter keys from record file; sets FM_* globals. Returns 0 ok, 1 malformed.
@@ -773,17 +1064,11 @@ cmd_add() {
     valid_harness "$harness" || die 2 "invalid --harness"
   fi
 
-  local tlen
-  tlen="$(byte_len "$title")"
-  [ "$tlen" -ge 1 ] && [ "$tlen" -le 120 ] || die 2 "invalid --title"
-  case "$title" in
-    *[\"\\]*|*[[:cntrl:]]*) die 2 "invalid --title" ;;
-  esac
   case "$source" in
     *[[:cntrl:]]*) die 2 "invalid --source" ;;
   esac
 
-  parse_list "$tags_raw" tag || die 2 "invalid --tags"
+  normalize_tags_list "$tags_raw" || die 2 "invalid --tags"
   local tags_items="$PARSED_LIST_ITEMS"
   parse_list "$sup_raw" id || die 2 "invalid --supersedes"
   local sup_items="$PARSED_LIST_ITEMS"
@@ -797,8 +1082,28 @@ cmd_add() {
   have_sha256 || die 4 "no sha256 tool"
   [ -f "$body_path" ] || die 4 "body file not found: $body_path"
 
-  local body_file sha now id date commit store dup_id rel path
-  body_file="$(prepare_body_file "$body_path")"
+  local norm_body red_body title_red body_file sha now id date commit store dup_id rel path
+  body_has_nul "$body_path" && die 2 "body contains NUL byte"
+  norm_body="$(mk_tmp)"
+  normalize_body_file "$body_path" "$norm_body" || die 2 "invalid body"
+  red_body="$(mk_tmp)"
+  memory_redact_file "$norm_body" "$red_body" 1
+  local red_body_n="$REDACT_N" red_body_c="$REDACT_CLASSES" title_in title_out
+  title_in="$(mk_tmp)"
+  title_out="$(mk_tmp)"
+  printf '%s' "$title" > "$title_in"
+  memory_redact_file "$title_in" "$title_out" 0
+  title="$(cat "$title_out")"
+  REDACT_N=$((red_body_n + REDACT_N))
+  merge_redact_classes "$red_body_c" "$REDACT_CLASSES"
+  local tlen
+  tlen="$(byte_len "$title")"
+  [ "$tlen" -ge 1 ] && [ "$tlen" -le 120 ] || die 2 "invalid --title"
+  case "$title" in
+    *[\"\\]*|*[[:cntrl:]]*) die 2 "invalid --title" ;;
+  esac
+  enforce_body_size "$red_body"
+  body_file="$red_body"
   sha="$(sha256_hex < "$body_file")"
   if [ -n "${MEMORY_NOW:-}" ]; then
     now="$MEMORY_NOW"
@@ -835,6 +1140,7 @@ cmd_add() {
     else
       dup_path="$(relpath_under_root "$root" "$(id_to_quarantine_path "$store" "$dup_id")")"
     fi
+    print_add_notices
     printf 'memory: duplicate %s %s\n' "$dup_id" "$dup_path"
     exit 0
   fi
@@ -845,6 +1151,7 @@ cmd_add() {
     [ -e "$path" ] && die 4 "record exists $rel"
     write_record_file "$path" "$id" "$kind" "$title" "$date" "$source" "$commit" "$harness" \
       "$tags_items" "$sup_items" "$sha" "$body_file" 1
+    print_add_notices
     printf 'memory: quarantined %s %s\n' "$id" "$rel"
     exit 5
   fi
@@ -854,6 +1161,7 @@ cmd_add() {
   [ -e "$path" ] && die 4 "record exists $rel"
   write_record_file "$path" "$id" "$kind" "$title" "$date" "$source" "$commit" "$harness" \
     "$tags_items" "$sup_items" "$sha" "$body_file" 0
+  print_add_notices
   printf 'memory: added %s %s\n' "$id" "$rel"
   exit 0
 }
@@ -870,6 +1178,943 @@ cmd_index() {
   [ "$seen_root" -eq 1 ] || root="$(default_root)"
   root="$(resolve_root "$root")"
   run_index "$root" 0
+  exit 0
+}
+
+cmd_redact() {
+  local root="" seen_root=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --root) need_val "$@"; [ "$seen_root" -eq 0 ] || die 2 "repeated flag '--root'"; seen_root=1; root="$2"; shift 2 ;;
+      --*) die 2 "unknown flag '$1'" ;;
+      *) die 2 "unexpected argument '$1'" ;;
+    esac
+  done
+  [ "$seen_root" -eq 1 ] || root="$(default_root)"
+  root="$(resolve_root "$root")"
+  local in out
+  in="$(mk_tmp)"
+  out="$(mk_tmp)"
+  cat > "$in"
+  memory_redact_file "$in" "$out" 1
+  cat "$out"
+  print_redact_notice
+  exit 0
+}
+
+glob_check_scope() { # <store> <out-list-file>
+  local store="$1" out="$2"
+  : > "$out"
+  if [ -d "$store/records" ]; then
+    find -L "$store/records" -type f -name '*.md' 2>/dev/null >> "$out" || true
+  fi
+  if [ -d "$store/quarantine" ]; then
+    find -L "$store/quarantine" -type f -name '*.md' 2>/dev/null >> "$out" || true
+  fi
+}
+
+extract_record_body_file() { # <record-path> <out-body-file>
+  awk '
+    BEGIN { c = 0 }
+    /^---$/ && c == 0 { c = 1; next }
+    c == 1 && /^---$/ { c = 2; next }
+    c == 2 { print }
+  ' "$1" > "$2"
+}
+
+check_path_under_store() { # <root> <store> <user-path> → sets CHECK_ABS CHECK_REL; return 1 if outside
+  local root="$1" store="$2" user_path="$3" abs
+  abs="$user_path"
+  case "$abs" in
+    /*) ;;
+    *) abs="$root/$user_path" ;;
+  esac
+  abs="$(canonical_file_path "$abs")" || return 1
+  case "$abs" in
+    "$store/records"/*|"$store/quarantine"/*) ;;
+    *) return 1 ;;
+  esac
+  CHECK_ABS="$abs"
+  CHECK_REL="$(relpath_under_root "$root" "$abs")"
+  return 0
+}
+
+check_emit_fail() { # <reason> <rel-path>
+  printf 'memory: check failed %s %s\n' "$1" "$2"
+}
+
+# Validate one record file; prints failure lines to stdout. Returns 0 pass, 1 any failure.
+check_record_content() { # <root> <store> <content-file> <abs-path> <rel-path>
+  local root="$1" store="$2" content_file="$3" abs="$4" rel="$5"
+  local stem expected body_file body_sha title_in title_out red_body id_bad
+  local in_records=0 in_quarantine=0 any_fail=0
+
+  case "$rel" in
+    *.md) ;;
+    *)
+      check_emit_fail malformed "$rel"
+      return 1
+      ;;
+  esac
+
+  if ! read_frontmatter "$content_file"; then
+    check_emit_fail malformed "$rel"
+    return 1
+  fi
+
+  case "$abs" in
+    "$store/records"/*) in_records=1 ;;
+    "$store/quarantine"/*) in_quarantine=1 ;;
+  esac
+  stem="${abs##*/}"
+  stem="${stem%.md}"
+
+  id_bad=0
+  if [ "$stem" != "$FM_ID" ]; then
+    id_bad=1
+  fi
+  if [ "$in_records" -eq 1 ]; then
+    expected="$(id_to_record_path "$store" "$FM_ID")"
+    [ "$abs" = "$expected" ] || id_bad=1
+  elif [ "$in_quarantine" -eq 1 ]; then
+    expected="$(id_to_quarantine_path "$store" "$FM_ID")"
+    [ "$abs" = "$expected" ] || id_bad=1
+  fi
+  if [ "$id_bad" -eq 1 ]; then
+    check_emit_fail id-mismatch "$rel"
+    any_fail=1
+  fi
+
+  body_file="$(mk_tmp)"
+  extract_record_body_file "$content_file" "$body_file"
+  body_sha="$(sha256_hex < "$body_file")"
+  if [ "$body_sha" != "$FM_SHA256" ]; then
+    check_emit_fail sha256-mismatch "$rel"
+    any_fail=1
+  fi
+
+  title_in="$(mk_tmp)"
+  title_out="$(mk_tmp)"
+  red_body="$(mk_tmp)"
+  local secret_hit=0
+  printf '%s' "$FM_TITLE" > "$title_in"
+  memory_redact_file "$title_in" "$title_out" 0 1
+  if ! cmp -s "$title_in" "$title_out"; then
+    secret_hit=1
+  fi
+  memory_redact_file "$body_file" "$red_body" 1 1
+  if ! cmp -s "$body_file" "$red_body"; then
+    secret_hit=1
+  fi
+  if [ "$secret_hit" -eq 1 ]; then
+    check_emit_fail secret "$rel"
+    any_fail=1
+  fi
+
+  if [ "$in_records" -eq 1 ] && admission_violation "$FM_TITLE" "$body_file"; then
+    check_emit_fail admission "$rel"
+    any_fail=1
+  fi
+
+  [ "$any_fail" -eq 0 ]
+}
+
+cmd_check() {
+  local root="" staged=0 seen_root=0
+  local paths_file="" path_arg
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --root) need_val "$@"; [ "$seen_root" -eq 0 ] || die 2 "repeated flag '--root'"; seen_root=1; root="$2"; shift 2 ;;
+      --staged) staged=1; shift ;;
+      --*) die 2 "unknown flag '$1'" ;;
+      *)
+        if [ -z "$paths_file" ]; then
+          paths_file="$(mk_tmp)"
+          : > "$paths_file"
+        fi
+        printf '%s\037' "$1" >> "$paths_file"
+        shift
+        ;;
+    esac
+  done
+  [ "$seen_root" -eq 1 ] || root="$(default_root)"
+  root="$(resolve_root "$root")"
+  root="$(canonical_dir "$root")" || die 4 "root directory not found: $root"
+  local store fail=0 ok=0
+  store="$(store_dir "$root")"
+  if [ -d "$store" ]; then
+    store="$(canonical_dir "$store")" || die 4 "root directory not found: $root"
+  fi
+
+  if [ "$staged" -eq 1 ] && [ -n "$paths_file" ]; then
+    die 2 "check --staged takes no paths"
+  fi
+  if [ "$staged" -eq 1 ]; then
+    git -C "$root" rev-parse --is-inside-work-tree >/dev/null 2>&1 ||
+      die 4 "check --staged needs a git work tree"
+    have_sha256 || die 4 "no sha256 tool"
+    local status git_path rel abs content_tmp ns_file status_letter
+    ns_file="$(mk_tmp)"
+    if ! git -C "$root" diff --cached --name-status --no-renames --no-ext-diff --relative -z -- \
+      "_memory/records/" "_memory/quarantine/" > "$ns_file"; then
+      die 4 "check --staged: git diff failed"
+    fi
+    exec 3< "$ns_file"
+    while IFS= read -r -d '' status <&3; do
+      IFS= read -r -d '' git_path <&3 || break
+      [ -n "$status" ] && [ -n "$git_path" ] || continue
+      case "$git_path" in
+        _memory/records/*|_memory/quarantine/*) ;;
+        *) continue ;;
+      esac
+      rel="$git_path"
+      status_letter="${status%%[0-9]*}"
+      [ -n "$status_letter" ] || status_letter="$status"
+      case "$status_letter" in
+        D)
+          case "$git_path" in
+            _memory/quarantine/*) continue ;;
+          esac
+          check_emit_fail immutable "$rel"
+          fail=1
+          continue
+          ;;
+        A|M) ;;
+        *)
+          check_emit_fail immutable "$rel"
+          fail=1
+          continue
+          ;;
+      esac
+      case "$status_letter" in
+        M)
+          check_emit_fail immutable "$rel"
+          fail=1
+          ;;
+      esac
+      content_tmp="$(mk_tmp)"
+      if ! git -C "$root" show ":./$git_path" > "$content_tmp" 2>/dev/null; then
+        check_emit_fail malformed "$rel"
+        fail=1
+        continue
+      fi
+      abs="$root/$git_path"
+      case "$status_letter" in
+        A)
+          if check_record_content "$root" "$store" "$content_tmp" "$abs" "$rel"; then
+            ok=$((ok + 1))
+          else
+            fail=1
+          fi
+          ;;
+        M)
+          if check_record_content "$root" "$store" "$content_tmp" "$abs" "$rel"; then
+            :
+          else
+            fail=1
+          fi
+          ;;
+      esac
+    done
+    exec 3<&-
+    if [ "$fail" -ne 0 ]; then
+      exit 3
+    fi
+    printf 'memory: check ok %s file(s)\n' "$ok"
+    exit 0
+  fi
+
+  have_sha256 || die 4 "no sha256 tool"
+  local list_file abs rel CHECK_ABS CHECK_REL
+  list_file="$(mk_tmp)"
+  if [ -n "$paths_file" ]; then
+    : > "$list_file"
+    local rest part
+    rest="$(cat "$paths_file")"
+    while [ -n "$rest" ]; do
+      part="${rest%%"$US"*}"
+      if [ "$part" = "$rest" ]; then
+        rest=""
+      else
+        rest="${rest#*"$US"}"
+      fi
+      [ -n "$part" ] || continue
+      if ! check_path_under_store "$root" "$store" "$part"; then
+        die 2 "check path outside store: $part"
+      fi
+      printf '%s\n' "$CHECK_ABS" >> "$list_file"
+    done
+  else
+    glob_check_scope "$store" "$list_file"
+  fi
+  local nfiles idx outdir st running cur_idx
+  nfiles="$(wc -l < "$list_file" | tr -d '[:space:]')"
+  if [ "${nfiles:-0}" -le 1 ]; then
+    while IFS= read -r abs || [ -n "$abs" ]; do
+      [ -n "$abs" ] || continue
+      rel="$(relpath_under_root "$root" "$abs")"
+      if check_record_content "$root" "$store" "$abs" "$abs" "$rel"; then
+        ok=$((ok + 1))
+      else
+        fail=1
+      fi
+    done < "$list_file"
+  else
+    outdir="$TMPD/check_out"
+    mkdir -p "$outdir"
+    idx=0
+    running=0
+    while IFS= read -r abs || [ -n "$abs" ]; do
+      [ -n "$abs" ] || continue
+      idx=$((idx + 1))
+      cur_idx="$idx"
+      (
+        rel="$(relpath_under_root "$root" "$abs")"
+        if check_record_content "$root" "$store" "$abs" "$abs" "$rel" > "$outdir/$cur_idx.msg"; then
+          printf ok > "$outdir/$cur_idx.st"
+        else
+          printf fail > "$outdir/$cur_idx.st"
+        fi
+      ) &
+      running=$((running + 1))
+      if [ "$running" -ge 8 ]; then
+        wait
+        running=0
+      fi
+    done < "$list_file"
+    wait
+    idx=0
+    while [ "$idx" -lt "$nfiles" ]; do
+      idx=$((idx + 1))
+      [ -f "$outdir/$idx.msg" ] && [ -s "$outdir/$idx.msg" ] && cat "$outdir/$idx.msg"
+      st="$(cat "$outdir/$idx.st" 2>/dev/null || true)"
+      case "$st" in
+        ok) ok=$((ok + 1)) ;;
+        fail) fail=1 ;;
+      esac
+    done
+  fi
+  if [ "$fail" -ne 0 ]; then
+    exit 3
+  fi
+  printf 'memory: check ok %s file(s)\n' "$ok"
+  exit 0
+}
+
+capture_root_slug_s1() { # <abs-root>
+  local slug
+  slug="$(printf '%s' "$1" | sed 's/[^A-Za-z0-9]/-/g')"
+  case "$slug" in
+    -*) slug="${slug#-}" ;;
+  esac
+  printf '%s' "$slug"
+}
+
+capture_root_slug_s2() { # <abs-root>
+  printf '%s' "$1" | sed 's/[^A-Za-z0-9]/-/g'
+}
+
+capture_valid_harness_name() {
+  case "$1" in
+    cursor|claude|codex|all) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+capture_validate_idle_hours() { # <value> → stdout normalized hours; exit 2 on invalid
+  local v="$1"
+  [ -n "$v" ] || die 2 "invalid --idle-hours"
+  re_match "$v" '^[0-9]+$' || die 2 "invalid --idle-hours"
+  printf '%s' $((10#$v))
+}
+
+capture_validate_since_date() { # <YYYY-MM-DD> → exit 2 unless a real Gregorian calendar date
+  local since="$1" yy mm dd dim
+  [ -n "$since" ] || die 2 "invalid --since"
+  re_match "$since" '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' || die 2 "invalid --since"
+  yy=$((10#${since:0:4}))
+  mm=$((10#${since:5:2}))
+  dd=$((10#${since:8:2}))
+  [ "$mm" -ge 1 ] && [ "$mm" -le 12 ] || die 2 "invalid --since"
+  case "$mm" in
+    1|3|5|7|8|10|12) dim=31 ;;
+    4|6|9|11) dim=30 ;;
+    *)
+      if [ $((yy % 4)) -eq 0 ] && { [ $((yy % 100)) -ne 0 ] || [ $((yy % 400)) -eq 0 ]; }; then
+        dim=29
+      else
+        dim=28
+      fi
+      ;;
+  esac
+  [ "$dd" -ge 1 ] && [ "$dd" -le "$dim" ] || die 2 "invalid --since"
+}
+
+capture_scope_from_file() { # <transcript-file> <root-abs> → repo|unknown
+  local file="$1" root="$2"
+  awk -v root="$root" '
+    BEGIN { found = 0; rlen = length(root) }
+    {
+      text = $0
+      pos = 1
+      while (1) {
+        idx = index(substr(text, pos), root)
+        if (idx == 0) break
+        idx = pos + idx - 1
+        rest = substr(text, idx + rlen, 1)
+        if (rest == "" || rest !~ /[A-Za-z0-9._-]/) { found = 1; exit }
+        pos = idx + 1
+      }
+    }
+    END { if (found) print "repo"; else print "unknown" }
+  ' "$file"
+}
+
+capture_write_jq_filter_meta() { # <path>
+  local out="$1"
+  cat > "$out" <<'JQEOF'
+def line_obj: try (fromjson) catch empty;
+
+def cursor_parts($o):
+  if ($o | type) != "object" then empty
+  elif ($o.role // "") == "user" or ($o.role // "") == "assistant" then
+    ($o.role) as $r |
+    ($o.message.content // [] | if type == "array" then . else [] end)[] |
+    if .type == "text" then {role: $r, kind: "text", text: (.text // "")}
+    elif .type == "tool_use" then {role: $r, kind: "tool", name: (.name // "")}
+    else empty end
+  else empty end;
+
+def claude_parts($o):
+  if ($o | type) != "object" then empty
+  elif ($o.type // "") == "user" or ($o.type // "") == "assistant" then
+    ($o.type) as $r |
+    ($o.message.content // null) as $c |
+    if ($c | type) == "string" then {role: $r, kind: "text", text: $c}
+    elif ($c | type) == "array" then
+      $c[] |
+      if .type == "text" then {role: $r, kind: "text", text: (.text // "")}
+      elif .type == "tool_use" then {role: $r, kind: "tool", name: (.name // "")}
+      else empty end
+    else empty end
+  else empty end;
+
+def codex_parts($o):
+  if ($o | type) != "object" then empty
+  elif (.type // "") == "response_item" then
+    (.payload // {}) as $p |
+    if ($p.type // "") == "message" then
+      ($p.role // "") as $r |
+      if $r != "user" and $r != "assistant" then empty
+      else
+        ($p.content // [] | if type == "array" then . else [] end)[] |
+        if .type == "input_text" or .type == "output_text" then
+          {role: $r, kind: "text", text: (.text // "")}
+        else empty end
+      end
+    elif ($p.type // "") == "function_call" then
+      {role: "assistant", kind: "tool", name: ($p.name // "")}
+    else empty end
+  else empty end;
+
+def parts($h; $o):
+  if $h == "cursor" then cursor_parts($o)
+  elif $h == "claude" then claude_parts($o)
+  elif $h == "codex" then codex_parts($o)
+  else empty end;
+
+def format_parts($parts):
+  (reduce $parts[] as $p (
+    {out: "", cur: ""};
+    if $p.kind == "text" then
+      if .cur != $p.role then
+        .out = (.out + (if .out == "" then "" else "\n\n" end) + "## " + $p.role + "\n" + $p.text) | .cur = $p.role
+      else
+        .out = (.out + "\n" + $p.text)
+      end
+    elif $p.kind == "tool" then
+      if .cur != $p.role then
+        .out = (.out + (if .out == "" then "" else "\n\n" end) + "## " + $p.role + "\n[tool: " + $p.name + "]") | .cur = $p.role
+      else
+        .out = (.out + "\n[tool: " + $p.name + "]")
+      end
+    else .
+    end
+  )) | .out;
+
+split("\n")
+| map(select(length > 0))
+| map(line_obj)
+| map(select(. != null)) as $objs
+| [ $objs[] | parts($harness; .) ] as $parts
+| {
+    parsed: ($objs | length),
+    first_user: (($parts | map(select(.kind == "text" and .role == "user")) | .[0].text // ""))
+  }
+JQEOF
+}
+
+capture_write_jq_filter_body() { # <path>
+  local out="$1"
+  cat > "$out" <<'JQEOF'
+def line_obj: try (fromjson) catch empty;
+
+def cursor_parts($o):
+  if ($o | type) != "object" then empty
+  elif ($o.role // "") == "user" or ($o.role // "") == "assistant" then
+    ($o.role) as $r |
+    ($o.message.content // [] | if type == "array" then . else [] end)[] |
+    if .type == "text" then {role: $r, kind: "text", text: (.text // "")}
+    elif .type == "tool_use" then {role: $r, kind: "tool", name: (.name // "")}
+    else empty end
+  else empty end;
+
+def claude_parts($o):
+  if ($o | type) != "object" then empty
+  elif ($o.type // "") == "user" or ($o.type // "") == "assistant" then
+    ($o.type) as $r |
+    ($o.message.content // null) as $c |
+    if ($c | type) == "string" then {role: $r, kind: "text", text: $c}
+    elif ($c | type) == "array" then
+      $c[] |
+      if .type == "text" then {role: $r, kind: "text", text: (.text // "")}
+      elif .type == "tool_use" then {role: $r, kind: "tool", name: (.name // "")}
+      else empty end
+    else empty end
+  else empty end;
+
+def codex_parts($o):
+  if ($o | type) != "object" then empty
+  elif (.type // "") == "response_item" then
+    (.payload // {}) as $p |
+    if ($p.type // "") == "message" then
+      ($p.role // "") as $r |
+      if $r != "user" and $r != "assistant" then empty
+      else
+        ($p.content // [] | if type == "array" then . else [] end)[] |
+        if .type == "input_text" or .type == "output_text" then
+          {role: $r, kind: "text", text: (.text // "")}
+        else empty end
+      end
+    elif ($p.type // "") == "function_call" then
+      {role: "assistant", kind: "tool", name: ($p.name // "")}
+    else empty end
+  else empty end;
+
+def parts($h; $o):
+  if $h == "cursor" then cursor_parts($o)
+  elif $h == "claude" then claude_parts($o)
+  elif $h == "codex" then codex_parts($o)
+  else empty end;
+
+def format_parts($parts):
+  (reduce $parts[] as $p (
+    {out: "", cur: ""};
+    if $p.kind == "text" then
+      if .cur != $p.role then
+        .out = (.out + (if .out == "" then "" else "\n\n" end) + "## " + $p.role + "\n" + $p.text) | .cur = $p.role
+      else
+        .out = (.out + "\n" + $p.text)
+      end
+    elif $p.kind == "tool" then
+      if .cur != $p.role then
+        .out = (.out + (if .out == "" then "" else "\n\n" end) + "## " + $p.role + "\n[tool: " + $p.name + "]") | .cur = $p.role
+      else
+        .out = (.out + "\n[tool: " + $p.name + "]")
+      end
+    else .
+    end
+  )) | .out;
+
+split("\n")
+| map(select(length > 0))
+| map(line_obj)
+| map(select(. != null)) as $objs
+| [ $objs[] | parts($harness; .) ] as $parts
+| format_parts($parts)
+JQEOF
+}
+
+capture_parse_transcript() { # <harness> <transcript> <jq-meta> <jq-body> <meta-out> <body-out> <first-user-out>
+  local harness="$1" transcript="$2" jq_meta="$3" jq_body="$4" meta_out="$5" body_out="$6" fu_out="$7"
+  local json_line parsed fu
+  : > "$meta_out"
+  : > "$body_out"
+  : > "$fu_out"
+  json_line="$(mk_tmp)"
+  if ! jq -R -s -c --arg harness "$harness" -f "$jq_meta" "$transcript" > "$json_line" 2>/dev/null; then
+    return 1
+  fi
+  if [ ! -s "$json_line" ]; then
+    return 1
+  fi
+  parsed="$(jq -r '.parsed // 0' "$json_line" 2>/dev/null)" || return 1
+  fu="$(jq -r '.first_user // ""' "$json_line" 2>/dev/null)" || return 1
+  printf 'parsed=%s\n' "${parsed:-0}" >> "$meta_out"
+  printf '%s' "$fu" > "$fu_out"
+  if ! jq -R -s -r --arg harness "$harness" -f "$jq_body" "$transcript" > "$body_out" 2>/dev/null; then
+    return 1
+  fi
+  return 0
+}
+
+capture_meta_get() { # <meta-file> <key>
+  local meta="$1" key="$2"
+  awk -F= -v k="$key" '$1 == k { print substr($0, index($0, "=") + 1); exit }' "$meta"
+}
+
+capture_is_subagent() { # <first-user-text-file>
+  local fu="$1" text line
+  text="$(cat "$fu" 2>/dev/null || true)"
+  case "$text" in
+    *"Read and follow the context package"*) return 0 ;;
+    *"Your full context package"*) return 0 ;;
+    *"Re-check request"*) return 0 ;;
+    *"-context.md"*) return 0 ;;
+  esac
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in
+      "You are the "*subagent*) return 0 ;;
+    esac
+  done <<EOF
+$text
+EOF
+  return 1
+}
+
+capture_since_out_of_range() { # <file> <since-ref-file>
+  local f="$1" ref="$2"
+  [ -n "$ref" ] && [ -f "$ref" ] || return 1
+  if find "$f" -newer "$ref" 2>/dev/null | grep -q .; then
+    return 1
+  fi
+  return 0
+}
+
+capture_is_idle() { # <file> <idle-hours>
+  local f="$1" idle="$2"
+  [ "$idle" -eq 0 ] && return 0
+  find "$f" -mmin +$((idle * 60)) 2>/dev/null | grep -q .
+}
+
+capture_ledger_latest_sha() { # <ledger> <harness> <session>
+  local ledger="$1" harness="$2" session="$3"
+  [ -f "$ledger" ] || return 0
+  awk -F'\t' -v h="$harness" -v s="$session" '
+    $1 == h && $2 == s && NF >= 3 { sha = $3 }
+    END { if (sha != "") print sha }
+  ' "$ledger"
+}
+
+capture_ledger_append() { # <ledger> <harness> <session> <sha> <status> <ts>
+  local ledger="$1"
+  mkdir -p "$(dirname "$ledger")"
+  printf '%s\n' "$2$TAB$3$TAB$4$TAB$5$TAB$6" >> "$ledger"
+}
+
+capture_session_id() { # <harness> <path>
+  local harness="$1" path="$2" base
+  base="$(basename "$path" .jsonl)"
+  case "$harness" in
+    codex)
+      case "$base" in
+        rollout-*) base="${base#rollout-}" ;;
+      esac
+      ;;
+  esac
+  printf '%s' "$base"
+}
+
+capture_codex_cwd() { # <transcript>
+  local line
+  line="$(grep -m1 '"type":"session_meta"' "$1" 2>/dev/null || true)"
+  [ -n "$line" ] || return 1
+  jq -r '.payload.cwd // empty' 2>/dev/null <<EOF
+$line
+EOF
+}
+
+capture_list_cursor() { # <dir> <out-list>
+  local dir="$1" out="$2" f base parent_base finds
+  : > "$out"
+  [ -d "$dir" ] || return 0
+  finds="$(mk_tmp)"
+  find "$dir" -mindepth 2 -maxdepth 2 -type f -name '*.jsonl' > "$finds" 2>/dev/null || true
+  while IFS= read -r f || [ -n "$f" ]; do
+    [ -n "$f" ] || continue
+    base="$(basename "$f" .jsonl)"
+    parent_base="$(basename "$(dirname "$f")")"
+    [ "$base" = "$parent_base" ] || continue
+    printf '%s\n' "$f" >> "$out"
+  done < "$finds"
+}
+
+capture_list_claude() { # <dir> <out-list>
+  local dir="$1" out="$2"
+  : > "$out"
+  [ -d "$dir" ] || return 0
+  find "$dir" -maxdepth 1 -type f -name '*.jsonl' 2>/dev/null >> "$out" || true
+}
+
+capture_list_codex() { # <sessions-root> <root-abs> <out-list>
+  local root_sessions="$1" root_abs="$2" out="$3" f cwd finds
+  : > "$out"
+  [ -d "$root_sessions" ] || return 0
+  finds="$(mk_tmp)"
+  find "$root_sessions" -type f -name 'rollout-*.jsonl' > "$finds" 2>/dev/null || true
+  while IFS= read -r f || [ -n "$f" ]; do
+    [ -n "$f" ] || continue
+    cwd="$(capture_codex_cwd "$f")" || continue
+    [ "$cwd" = "$root_abs" ] || continue
+    printf '%s\n' "$f" >> "$out"
+  done < "$finds"
+}
+
+capture_emit_skip() { # <harness> <session> <reason>
+  printf 'memory: skipped %s %s %s\n' "$1" "$2" "$3"
+}
+
+capture_emit_captured() { # <harness> <session> <rel-path>
+  printf 'memory: captured %s %s %s\n' "$1" "$2" "$3"
+}
+
+capture_home_dot_dir() { # <name: cursor|claude|codex>
+  local n="$1" base="${HOME}/."
+  base="${base}${n}"
+  printf '%s' "$base"
+}
+
+capture_collect_sessions() { # <harness> <root-abs> <from-override> <out-list>
+  local hh="$1" root_abs="$2" from_override="$3" dest="$4"
+  local slug base_dir
+  case "$hh" in
+    cursor)
+      if [ -n "$from_override" ]; then
+        capture_list_cursor "$from_override" "$dest"
+      else
+        slug="$(capture_root_slug_s1 "$root_abs")"
+        base_dir="$(capture_home_dot_dir cursor)/projects/${slug}/agent-transcripts"
+        capture_list_cursor "$base_dir" "$dest"
+      fi
+      ;;
+    claude)
+      if [ -n "$from_override" ]; then
+        capture_list_claude "$from_override" "$dest"
+      else
+        slug="$(capture_root_slug_s2 "$root_abs")"
+        base_dir="$(capture_home_dot_dir claude)/projects/${slug}"
+        capture_list_claude "$base_dir" "$dest"
+      fi
+      ;;
+    codex)
+      if [ -n "$from_override" ]; then
+        capture_list_codex "$from_override" "$root_abs" "$dest"
+      else
+        base_dir="$(capture_home_dot_dir codex)/sessions"
+        capture_list_codex "$base_dir" "$root_abs" "$dest"
+      fi
+      ;;
+  esac
+}
+
+capture_process_one() { # <harness> <transcript> <root> <store> <idle> <since-ref> <ledger> <jq-meta> <jq-body>
+  local harness="$1" transcript="$2" root="$3" store="$4" idle="$5" since_ref="$6" ledger="$7" jq_meta="$8" jq_body="$9"
+  local session sha rel_out out_path meta fu body parsed scope ts latest
+  local transcript_abs front raw_dir tmp_out
+  session="$(capture_session_id "$harness" "$transcript")"
+  transcript_abs="$(canonical_file_path "$transcript")" || transcript_abs="$transcript"
+  sha="$(sha256_hex < "$transcript")"
+
+  if [ -n "$since_ref" ] && capture_since_out_of_range "$transcript" "$since_ref"; then
+    capture_emit_skip "$harness" "$session" out-of-range
+    return 0
+  fi
+  if ! capture_is_idle "$transcript" "$idle"; then
+    capture_emit_skip "$harness" "$session" live
+    return 0
+  fi
+
+  latest="$(capture_ledger_latest_sha "$ledger" "$harness" "$session")"
+  if [ -n "$latest" ] && [ "$latest" = "$sha" ]; then
+    capture_emit_skip "$harness" "$session" unchanged
+    return 0
+  fi
+
+  meta="$(mk_tmp)"
+  fu="$(mk_tmp)"
+  body="$(mk_tmp)"
+  if ! capture_parse_transcript "$harness" "$transcript" "$jq_meta" "$jq_body" "$meta" "$body" "$fu"; then
+    capture_emit_skip "$harness" "$session" unreadable
+    ts="$(utc_now_id_prefix)"
+    capture_ledger_append "$ledger" "$harness" "$session" "$sha" unreadable "$ts"
+    return 0
+  fi
+  parsed="$(capture_meta_get "$meta" parsed)"
+  parsed="${parsed:-0}"
+  if [ "$parsed" -eq 0 ] 2>/dev/null; then
+    capture_emit_skip "$harness" "$session" unreadable
+    ts="$(utc_now_id_prefix)"
+    capture_ledger_append "$ledger" "$harness" "$session" "$sha" unreadable "$ts"
+    return 0
+  fi
+  if capture_is_subagent "$fu"; then
+    capture_emit_skip "$harness" "$session" subagent
+    ts="$(utc_now_id_prefix)"
+    capture_ledger_append "$ledger" "$harness" "$session" "$sha" subagent "$ts"
+    return 0
+  fi
+
+  scope="$(capture_scope_from_file "$transcript" "$root")"
+  ts="$(utc_now_id_prefix)"
+  rel_out="_memory/raw/${harness}/${session}.md"
+  out_path="$store/raw/$harness/$session.md"
+  raw_dir="$store/raw/$harness"
+  mkdir -p "$raw_dir"
+  front="$(mk_tmp)"
+  {
+    printf '%s\n' '---'
+    printf 'session: %s\n' "$session"
+    printf 'harness: %s\n' "$harness"
+    printf 'transcript: %s\n' "$transcript_abs"
+    printf 'sha256: %s\n' "$sha"
+    printf 'captured: %s\n' "$ts"
+    printf 'scope: %s\n' "$scope"
+    printf '%s\n' '---'
+    cat "$body"
+  } > "$front"
+  tmp_out="$raw_dir/.${session}.md.tmp.$$"
+  memory_redact_file "$front" "$tmp_out" 1 1
+  mv "$tmp_out" "$out_path"
+  capture_emit_captured "$harness" "$session" "$rel_out"
+  capture_ledger_append "$ledger" "$harness" "$session" "$sha" captured "$ts"
+  return 0
+}
+
+cmd_capture() {
+  local root="" harness="all" from="" idle_hours=6 since="" seen_root=0 seen_harness=0 seen_from=0 seen_idle=0 seen_since=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --root) need_val "$@"; [ "$seen_root" -eq 0 ] || die 2 "repeated flag '--root'"; seen_root=1; root="$2"; shift 2 ;;
+      --harness) need_val "$@"; [ "$seen_harness" -eq 0 ] || die 2 "repeated flag '--harness'"; seen_harness=1; harness="$2"; shift 2 ;;
+      --from) need_val "$@"; [ "$seen_from" -eq 0 ] || die 2 "repeated flag '--from'"; seen_from=1; from="$2"; shift 2 ;;
+      --idle-hours) need_val "$@"; [ "$seen_idle" -eq 0 ] || die 2 "repeated flag '--idle-hours'"; seen_idle=1; idle_hours="$2"; shift 2 ;;
+      --since) need_val "$@"; [ "$seen_since" -eq 0 ] || die 2 "repeated flag '--since'"; seen_since=1; since="$2"; shift 2 ;;
+      --*) die 2 "unknown flag '$1'" ;;
+      *) die 2 "unexpected argument '$1'" ;;
+    esac
+  done
+
+  capture_valid_harness_name "$harness" || die 2 "invalid --harness"
+  if [ -n "$from" ] && [ "$harness" = "all" ]; then
+    die 2 "capture --from needs a single --harness"
+  fi
+  if [ "$seen_idle" -eq 1 ]; then
+    idle_hours="$(capture_validate_idle_hours "$idle_hours")"
+  fi
+  if [ "$seen_since" -eq 1 ]; then
+    capture_validate_since_date "$since"
+  fi
+  command -v jq >/dev/null 2>&1 || die 4 "capture needs jq"
+  if [ -z "$from" ]; then
+    [ -n "${HOME:-}" ] || die 4 "HOME is not set"
+  fi
+
+  [ "$seen_root" -eq 1 ] || root="$(default_root)"
+  root="$(resolve_root "$root")"
+  root="$(canonical_dir "$root")" || die 4 "root directory not found: $root"
+  have_sha256 || die 4 "no sha256 tool"
+
+  local store ledger jq_meta jq_body list_file work sorted h sid f since_ref ymd
+  store="$(store_dir "$root")"
+  if [ -d "$store" ]; then
+    store="$(canonical_dir "$store")" || store="$(store_dir "$root")"
+  fi
+  ledger="$store/raw/.captured"
+  since_ref=""
+  if [ -n "$since" ]; then
+    since_ref="$(mk_tmp)"
+    ymd="${since//-/}"
+    touch -t "${ymd}0000" "$since_ref" 2>/dev/null || die 2 "invalid --since"
+  fi
+  jq_meta="$(mk_tmp)"
+  jq_body="$(mk_tmp)"
+  capture_write_jq_filter_meta "$jq_meta"
+  capture_write_jq_filter_body "$jq_body"
+  list_file="$(mk_tmp)"
+  work="$(mk_tmp)"
+  : > "$work"
+
+  # Work rows: <harness-ordinal> TAB <harness> TAB <session> TAB <path>. The ordinal
+  # (cursor=1, claude=2, codex=3) fixes harness order; the sort then orders by session id.
+  local ord
+  if [ "$harness" = "all" ]; then
+    for h in cursor claude codex; do
+      case "$h" in cursor) ord=1 ;; claude) ord=2 ;; *) ord=3 ;; esac
+      capture_collect_sessions "$h" "$root" "$from" "$list_file"
+      while IFS= read -r f || [ -n "$f" ]; do
+        [ -n "$f" ] || continue
+        sid="$(capture_session_id "$h" "$f")"
+        printf '%s\t%s\t%s\t%s\n' "$ord" "$h" "$sid" "$f" >> "$work"
+      done < "$list_file"
+    done
+  else
+    case "$harness" in cursor) ord=1 ;; claude) ord=2 ;; *) ord=3 ;; esac
+    capture_collect_sessions "$harness" "$root" "$from" "$list_file"
+    while IFS= read -r f || [ -n "$f" ]; do
+      [ -n "$f" ] || continue
+      sid="$(capture_session_id "$harness" "$f")"
+      printf '%s\t%s\t%s\t%s\n' "$ord" "$harness" "$sid" "$f" >> "$work"
+    done < "$list_file"
+  fi
+  sorted="$(mk_tmp)"
+  LC_ALL=C sort -t "$TAB" -k1,1 -k3,3 -k4,4 "$work" > "$sorted"
+  while IFS="$TAB" read -r ord h sid f || [ -n "$h" ]; do
+    [ -n "$f" ] || continue
+    capture_process_one "$h" "$f" "$root" "$store" "$idle_hours" "$since_ref" "$ledger" "$jq_meta" "$jq_body"
+  done < "$sorted"
+  exit 0
+}
+
+cmd_rm() {
+  local root="" id="" seen_root=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --root) need_val "$@"; [ "$seen_root" -eq 0 ] || die 2 "repeated flag '--root'"; seen_root=1; root="$2"; shift 2 ;;
+      --*) die 2 "unknown flag '$1'" ;;
+      *)
+        [ -z "$id" ] || die 2 "unexpected argument '$1'"
+        id="$1"
+        shift
+        ;;
+    esac
+  done
+  [ -n "$id" ] || die 2 "'rm' requires id"
+  re_match "$id" "$re_id" || die 2 "invalid id"
+  [ "$seen_root" -eq 1 ] || root="$(default_root)"
+  root="$(resolve_root "$root")"
+  git -C "$root" rev-parse --is-inside-work-tree >/dev/null 2>&1 || die 4 "rm needs a git work tree"
+  local store rec q path rel ls_rc
+  store="$(store_dir "$root")"
+  rec="$(id_to_record_path "$store" "$id")"
+  q="$(id_to_quarantine_path "$store" "$id")"
+  if [ -f "$rec" ]; then
+    path="$rec"
+  elif [ -f "$q" ]; then
+    path="$q"
+  else
+    die 4 "record not found: $id"
+  fi
+  rel="$(relpath_under_root "$root" "$path")"
+  ls_rc=0
+  git -C "$root" ls-files --error-unmatch -- "$rel" >/dev/null 2>&1 || ls_rc=$?
+  if [ "$ls_rc" -eq 0 ]; then
+    die 2 "record is tracked; add a superseding record instead"
+  fi
+  if [ "$ls_rc" -ne 1 ]; then
+    die 4 "rm: git ls-files failed"
+  fi
+  rm -f "$path"
+  printf 'memory: removed %s %s\n' "$id" "$rel"
   exit 0
 }
 
@@ -1190,7 +2435,7 @@ case "$sub" in
     usage
     exit 0
     ;;
-  add|index|search|show) ;;
+  add|index|search|show|redact|check|rm|capture) ;;
   *)
     usage >&2
     die 2 "unknown subcommand '$sub'"
@@ -1211,4 +2456,8 @@ case "$sub" in
   index) cmd_index "$@" ;;
   search) cmd_search "$@" ;;
   show) cmd_show "$@" ;;
+  redact) cmd_redact "$@" ;;
+  check) cmd_check "$@" ;;
+  rm) cmd_rm "$@" ;;
+  capture) cmd_capture "$@" ;;
 esac

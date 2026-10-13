@@ -30,3 +30,5 @@ Loop-enabled installs emit `_loop/loop.ps1` and `_loop/breaker.ps1` (and the
 bash twins). `_goals/backlog.md` (create if missing; never overwrite).
 Always emits `_kit/log-spawn.sh` and `_kit/log-spawn.cmd` (single-copy; Git for Windows on Windows).
 Always emits `_kit/memory.sh`, `_kit/memory.cmd`, `_kit/memory.ps1` (loop helper), and `_memory/README.md` (single-copy), appends `_memory/.index/` and `_memory/raw/` to `.gitignore`, and appends `_memory/** text eol=lf` to `.gitattributes`; `_memory/records/` and `_memory/quarantine/` stay tracked.
+No supported Copilot transcript export — session summaries use the `memory-capture`
+skill's **orchestrator-written fallback** (see `feature/reference/memory-capture.md`).

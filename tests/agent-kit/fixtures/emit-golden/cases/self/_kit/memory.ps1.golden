@@ -1,6 +1,6 @@
 #!/usr/bin/env pwsh
 #Requires -Version 7.2
-# memory — add, index, search, and show immutable _memory/ records for the AI Orchestration Kit.
+# memory — add|index|search|show|redact|check|rm|capture
 # Twin: memory.sh (bash 3.2+) — behaviorally identical — any divergence is a bug.
 # Emitted single-copy to `_kit/memory.ps1`.
 #
@@ -13,8 +13,12 @@
 #   memory.ps1 search <term>... [--kind <list>] [--limit <n>] [--include-superseded]
 #             [--engine grep|fts] [--root <dir>]
 #   memory.ps1 show <id> [--root <dir>]
+#   memory.ps1 redact [--root <dir>]
+#   memory.ps1 check [--staged] [--root <dir>] [<path>…]
+#   memory.ps1 rm <id> [--root <dir>]
+#   memory.ps1 capture [--harness cursor|claude|codex|all] [--from <dir>] … [--root <dir>]
 #
-# Exit codes: 0 ok · 2 usage/format · 4 missing root, file, id, or optional dependency · 5 quarantined.
+# Exit codes: 0 ok · 2 usage/format · 3 gate failed · 4 missing root, file, id, or optional dependency · 5 quarantined.
 # Errors: one line on stderr prefixed `memory: `. Store path: `<root>/_memory/`.
 #
 # Portability: PowerShell 7.2+; optional sqlite3 (FTS5 auto-detect). Byte domain: Latin-1 views, raw stdio.
@@ -38,15 +42,41 @@ $Script:ReMemNow = '^[0-9]{8}T[0-9]{6}Z$'
 $Script:AdmissionRe = 'ignore (all )?(previous|prior|above) instructions|disregard (all )?(previous|prior|above)|you must now|new instructions:|<[|]?im_start[|]?>|</?system>'
 $Script:Kinds = @('goal-summary','spawn-digest','session-summary','research-ingest','decision','learning','fact','pitfall')
 $Script:Harnesses = @('claude','cursor','copilot','codex')
+$Script:ReOpts = [Text.RegularExpressions.RegexOptions]::CultureInvariant
+$Script:TagsTruncated = 0
+$Script:RedactN = 0
+$Script:RedactClasses = ''
+$Script:RedactClassOrder = @('private-key','secret','aws-key','github-token','api-key','slack-token','jwt','azure-key')
 
 function Register-Tmp([string]$Path) { [void]$Script:TmpPaths.Add($Path) }
 function New-TmpFile { $p = [IO.Path]::GetTempFileName(); Register-Tmp $p; return $p }
 function View([string]$s) { return $Script:L1.GetString($Script:U8.GetBytes($s)) }
 function ViewBytes([byte[]]$b) { return $Script:L1.GetString($b) }
 function Latin1Bytes([string]$v) { return $Script:L1.GetBytes($v) }
+function Write-Latin1Line([IO.MemoryStream]$ms, [string]$text) {
+  $bytes = $Script:L1.GetBytes($text)
+  $n = @($bytes).Count
+  if ($n -gt 0) { $ms.Write([byte[]]@($bytes), 0, $n) }
+  $ms.WriteByte(0x0A)
+}
 function Split-Lf([string]$Text, [StringSplitOptions]$Opts = [StringSplitOptions]::None) {
   if ($null -eq $Text) { return ,@() }
   return ,@([string[]]$Text.Split([char]10, $Opts))
+}
+
+function Split-LfRedact([string]$Text) {
+  if ($null -eq $Text) { return ,@('') }
+  $lines = [string[]]$Text.Split([char]10)
+  if ($lines.Count -gt 1 -and $lines[$lines.Count - 1] -eq '') {
+    return ,@($lines[0..($lines.Count - 2)])
+  }
+  return ,@($lines)
+}
+
+function Test-InputTrailingLf([string]$path) {
+  $b = [IO.File]::ReadAllBytes($path)
+  if ($b.Length -eq 0) { return $false }
+  return ($b[$b.Length - 1] -eq 0x0A)
 }
 function Write-Raw([IO.Stream]$st, [byte[]]$b) { $st.Write($b, 0, $b.Length) }
 function Write-Stdout([byte[]]$b) { Write-Raw $Script:OutB $b }
@@ -74,12 +104,16 @@ function Strip-DoubleQuotes([string]$val) {
 
 function Get-UsageText {
   return @(
-    'usage: memory.sh <add|index|search|show> [--root <dir>] ...'
+    'usage: memory.sh <add|index|search|show|redact|check|rm|capture> [--root <dir>] ...'
     '  add    --kind <k> --title <t> --body <path> [--source <s>] [--tags <list>] [--supersedes <list>] [--harness <h>]'
     '  index  [--root <dir>]'
     '  search <term>... [--kind <list>] [--limit <n>] [--include-superseded] [--engine grep|fts]'
     '  show   <id> [--root <dir>]'
-    'exit: 0 ok · 2 usage/format · 4 missing root/file/id/dependency · 5 quarantined'
+    '  redact [--root <dir>]'
+    '  check  [--staged] [--root <dir>] [<path>…]'
+    '  rm     <id> [--root <dir>]'
+    '  capture [--harness cursor|claude|codex|all] [--from <dir>] [--idle-hours <n>] [--since <YYYY-MM-DD>] [--root <dir>]'
+    'exit: 0 ok · 2 usage/format · 3 gate failed · 4 missing root/file/id/dependency · 5 quarantined'
   ) -join "`n"
 }
 
@@ -88,7 +122,7 @@ function Show-UsageStderr { Write-StderrUtf8("$(Get-UsageText)`n") }
 
 function Test-Re([string]$ViewStr, [string]$Ere) {
   if ($ViewStr.Contains([char]10)) { return $false }
-  return [regex]::IsMatch($ViewStr, $Ere)
+  return [regex]::IsMatch($ViewStr, $Ere, $Script:ReOpts)
 }
 
 function Test-Kind([string]$k) { return [Array]::IndexOf($Script:Kinds, $k) -ge 0 }
@@ -291,15 +325,289 @@ function Prepare-BodyFile([string]$inPath) {
 }
 
 function Test-Admission([string]$titleView, [string]$bodyFile) {
-  if ([regex]::IsMatch((Fold-Ascii $titleView), $Script:AdmissionRe)) { return $true }
+  if ([regex]::IsMatch((Fold-Ascii $titleView), $Script:AdmissionRe, $Script:ReOpts)) { return $true }
   $bodyBytes = [IO.File]::ReadAllBytes($bodyFile)
   $bodyView = ViewBytes $bodyBytes
   foreach ($line in (Split-Lf $bodyView)) {
     $ln = $line
     if ($ln.Length -gt 0 -and [int][char]$ln[$ln.Length - 1] -eq 0x0D) { $ln = $ln.Substring(0, $ln.Length - 1) }
-    if ([regex]::IsMatch((Fold-Ascii $ln), $Script:AdmissionRe)) { return $true }
+    if ([regex]::IsMatch((Fold-Ascii $ln), $Script:AdmissionRe, $Script:ReOpts)) { return $true }
   }
   return $false
+}
+
+function Test-FileHasTrailingLf([string]$path) {
+  if (-not (Test-Path -LiteralPath $path)) { return $false }
+  $b = [IO.File]::ReadAllBytes($path)
+  if ($b.Length -eq 0) { return $false }
+  return ($b[$b.Length - 1] -eq 0x0A)
+}
+
+function Strip-TrailingLfFile([string]$path) {
+  $b = [IO.File]::ReadAllBytes($path)
+  if ($b.Length -eq 0) { return }
+  if ($b[$b.Length - 1] -ne 0x0A) { return }
+  $nb = [byte[]]::new($b.Length - 1)
+  [Array]::Copy($b, $nb, $nb.Length)
+  [IO.File]::WriteAllBytes($path, $nb)
+}
+
+function Count-RedactMarkers([string]$path, [string]$cls) {
+  $needle = "[REDACTED:$cls]"
+  $n = 0
+  $view = ViewBytes ([IO.File]::ReadAllBytes($path))
+  $idx = 0
+  while ($true) {
+    $i = $view.IndexOf($needle, $idx, [StringComparison]::Ordinal)
+    if ($i -lt 0) { break }
+    $n++
+    $idx = $i + $needle.Length
+  }
+  return $n
+}
+
+function Merge-RedactClasses([string]$a, [string]$b) {
+  $out = [Collections.Generic.List[string]]::new()
+  foreach ($cls in $Script:RedactClassOrder) {
+    $hit = $false
+    foreach ($part in ($a -split ',')) { if ($part -ceq $cls) { $hit = $true; break } }
+    if (-not $hit) {
+      foreach ($part in ($b -split ',')) { if ($part -ceq $cls) { $hit = $true; break } }
+    }
+    if ($hit) { [void]$out.Add($cls) }
+  }
+  $Script:RedactClasses = ($out -join ',')
+}
+
+function Print-RedactNotice {
+  if ($Script:RedactN -le 0) { return }
+  Write-StderrUtf8("memory: redacted $($Script:RedactN) secret(s): $($Script:RedactClasses)`n")
+}
+
+function Print-AddNotices {
+  Print-RedactNotice
+  if ($Script:TagsTruncated -eq 1) {
+    Write-StderrUtf8("memory: tags truncated to 6`n")
+  }
+}
+
+function Normalize-TagsList([string]$Raw) {
+  $Script:TagsTruncated = 0
+  if ([string]::IsNullOrEmpty($Raw)) { return ,@() }
+  $parts = [regex]::Split($Raw, '[, \t\n\r\v\f]+')
+  $seen = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+  $all = [Collections.Generic.List[string]]::new()
+  foreach ($p in $parts) {
+    if ($p.Length -eq 0) { continue }
+    $w = Fold-Ascii $p
+    if ($w.Length -eq 0) { continue }
+    if (-not $seen.Add($w)) { continue }
+    if (-not (Test-Re $w $Script:ReTag)) { throw 'bad' }
+    [void]$all.Add($w)
+  }
+  $kept = [Collections.Generic.List[string]]::new()
+  for ($i = 0; $i -lt $all.Count; $i++) {
+    if ($i -lt 6) { [void]$kept.Add($all[$i]) }
+    else { $Script:TagsTruncated = 1 }
+  }
+  return ,@($kept.ToArray())
+}
+
+function Redact-PrivateKeyBody([string]$inPath, [string]$outPath) {
+  $view = ViewBytes ([IO.File]::ReadAllBytes($inPath))
+  $lines = Split-LfRedact $view
+  $inBlock = $false
+  $outLines = [Collections.Generic.List[string]]::new()
+  foreach ($line in $lines) {
+    $ln = [string]$line
+    if ($inBlock) {
+      if ([regex]::IsMatch($ln, '-----END [A-Z0-9 ]*PRIVATE KEY-----', $Script:ReOpts)) { $inBlock = $false }
+      continue
+    }
+    if ([regex]::IsMatch($ln, '-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----', $Script:ReOpts) -and
+        [regex]::IsMatch($ln, '-----END [A-Z0-9 ]*PRIVATE KEY-----', $Script:ReOpts)) {
+      [void]$outLines.Add('[REDACTED:private-key]')
+      continue
+    }
+    if ([regex]::IsMatch($ln, '-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----', $Script:ReOpts)) {
+      [void]$outLines.Add('[REDACTED:private-key]')
+      $inBlock = $true
+      continue
+    }
+    [void]$outLines.Add($ln)
+  }
+  $ms = [IO.MemoryStream]::new()
+  for ($j = 0; $j -lt $outLines.Count; $j++) {
+    Write-Latin1Line $ms ([string]$outLines[$j])
+  }
+  [IO.File]::WriteAllBytes($outPath, $ms.ToArray())
+}
+
+function Test-SecretSpace([char]$c) {
+  $b = [int][char]$c
+  return ($b -eq 32 -or $b -eq 9 -or $b -eq 10 -or $b -eq 13 -or $b -eq 11 -or $b -eq 12)
+}
+
+function Test-SecretBadFirst([char]$c) {
+  if (Test-SecretSpace $c) { return $true }
+  $b = [string]$c
+  if ($b -ceq '[' -or $b -ceq ']' -or $b -ceq '"' -or $b -ceq "'" -or $b -ceq '<' -or $b -ceq '$' -or $b -ceq '{' -or $b -ceq '`') { return $true }
+  return $false
+}
+
+function Test-SecretBadRest([char]$c) {
+  if (Test-SecretSpace $c) { return $true }
+  $b = [string]$c
+  if ($b -ceq '"' -or $b -ceq "'" -or $b -ceq '`' -or $b -ceq ',' -or $b -ceq ';') { return $true }
+  return $false
+}
+
+function Test-SecretKeyAt([string]$line, [int]$pos, [string]$key) {
+  for ($j = 0; $j -lt $key.Length; $j++) {
+    $c1 = Fold-Ascii ([string]$line[$pos + $j - 1])
+    $c2 = Fold-Ascii ([string]$key[$j])
+    if ($c1 -cne $c2) { return $false }
+  }
+  return $true
+}
+
+function Match-SecretKey([string]$line, [int]$pos) {
+  $keys = @('password','passwd','pwd','secret','client_secret','token','access_token','api_key','api-key','apikey')
+  foreach ($k in $keys) {
+    if ($pos + $k.Length - 1 -le $line.Length -and (Test-SecretKeyAt $line $pos $k)) { return $k }
+  }
+  return ''
+}
+
+function Get-SecretValueStart([string]$line, [int]$p) {
+  $n = $line.Length
+  if ($p -le $n -and ($line[$p - 1] -ceq '"' -or $line[$p - 1] -ceq "'")) { $p++ }
+  while ($p -le $n -and (Test-SecretSpace $line[$p - 1])) { $p++ }
+  if ($p -gt $n) { return 0 }
+  $ch = $line[$p - 1]
+  if ($ch -cne '=' -and $ch -cne ':') { return 0 }
+  $p++
+  while ($p -le $n -and (Test-SecretSpace $line[$p - 1])) { $p++ }
+  if ($p -le $n -and ($line[$p - 1] -ceq '"' -or $line[$p - 1] -ceq "'")) { $p++ }
+  if ($p -gt $n) { return 0 }
+  return $p
+}
+
+function Redact-SecretLine([string]$line) {
+  $keys = @('password','passwd','pwd','secret','client_secret','token','access_token','api_key','api-key','apikey')
+  $null = $keys
+  $out = [Text.StringBuilder]::new()
+  $i = 1
+  $n = $line.Length
+  while ($i -le $n) {
+    $c = $line[$i - 1]
+    $b = ($i -eq 1)
+    if (-not $b) {
+      $prev = $line[$i - 2]
+      $b = -not ([regex]::IsMatch([string]$prev, '[A-Za-z0-9_]', $Script:ReOpts))
+    }
+    if ($b) {
+      $key = Match-SecretKey $line $i
+      if ($key.Length -gt 0) {
+        $k = $key.Length
+        $sepFrom = $i + $k
+        $valStart = Get-SecretValueStart $line $sepFrom
+        if ($valStart -gt 0) {
+          $ch = $line[$valStart - 1]
+          if (-not (Test-SecretBadFirst $ch)) {
+            $valEnd = $valStart
+            while ($valEnd -lt $n) {
+              $ch2 = $line[$valEnd]
+              if (Test-SecretBadRest $ch2) { break }
+              $valEnd++
+            }
+            if ($valEnd - $valStart + 1 -ge 8) {
+              [void]$out.Append($line.Substring($i - 1, $k))
+              [void]$out.Append($line.Substring($sepFrom - 1, $valStart - $sepFrom))
+              [void]$out.Append('[REDACTED:secret]')
+              $i = $valEnd + 1
+              continue
+            }
+          }
+        }
+      }
+    }
+    [void]$out.Append($c)
+    $i++
+  }
+  return $out.ToString()
+}
+
+function Redact-SecretAssignments([string]$inPath, [string]$outPath) {
+  $view = ViewBytes ([IO.File]::ReadAllBytes($inPath))
+  $lines = Split-LfRedact $view
+  $ms = [IO.MemoryStream]::new()
+  foreach ($line in $lines) {
+    $ln = [string]$line
+    $red = Redact-SecretLine $ln
+    Write-Latin1Line $ms $red
+  }
+  [IO.File]::WriteAllBytes($outPath, $ms.ToArray())
+}
+
+function Redact-SedPassSimple([string]$inPath, [string]$outPath, [string]$pattern, [string]$replacement) {
+  $view = ViewBytes ([IO.File]::ReadAllBytes($inPath))
+  $lines = Split-LfRedact $view
+  $ms = [IO.MemoryStream]::new()
+  foreach ($line in $lines) {
+    $ln = [string]$line
+    $red = [regex]::Replace($ln, $pattern, $replacement, $Script:ReOpts)
+    Write-Latin1Line $ms $red
+  }
+  [IO.File]::WriteAllBytes($outPath, $ms.ToArray())
+}
+
+function Memory-RedactFile([string]$inPath, [string]$outPath, [bool]$includePrivateKey) {
+  $step = New-TmpFile
+  $tmp = New-TmpFile
+  if ($includePrivateKey) {
+    Redact-PrivateKeyBody $inPath $step
+  } else {
+    [IO.File]::WriteAllBytes($step, [IO.File]::ReadAllBytes($inPath))
+  }
+  Redact-SecretAssignments $step $tmp
+  [IO.File]::WriteAllBytes($step, [IO.File]::ReadAllBytes($tmp))
+  Redact-SedPassSimple $step $tmp '((AKIA|ASIA)[0-9A-Z]{16})' '[REDACTED:aws-key]'
+  [IO.File]::WriteAllBytes($step, [IO.File]::ReadAllBytes($tmp))
+  Redact-SedPassSimple $step $tmp '(^|[^A-Za-z0-9_])((gh[pousr]_[A-Za-z0-9]{36,}))' '${1}[REDACTED:github-token]'
+  [IO.File]::WriteAllBytes($step, [IO.File]::ReadAllBytes($tmp))
+  Redact-SedPassSimple $step $tmp '(^|[^A-Za-z0-9_])((github_pat_[A-Za-z0-9_]{22,}))' '${1}[REDACTED:github-token]'
+  [IO.File]::WriteAllBytes($step, [IO.File]::ReadAllBytes($tmp))
+  Redact-SedPassSimple $step $tmp '(^|[^A-Za-z0-9_-])((sk-(ant-)?[A-Za-z0-9_-]{20,}))' '${1}[REDACTED:api-key]'
+  [IO.File]::WriteAllBytes($step, [IO.File]::ReadAllBytes($tmp))
+  Redact-SedPassSimple $step $tmp '(xox[abprs]-[A-Za-z0-9-]{10,})' '[REDACTED:slack-token]'
+  [IO.File]::WriteAllBytes($step, [IO.File]::ReadAllBytes($tmp))
+  Redact-SedPassSimple $step $tmp '(eyJ[A-Za-z0-9_-]{10,}\.eyJ[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{10,})' '[REDACTED:jwt]'
+  [IO.File]::WriteAllBytes($step, [IO.File]::ReadAllBytes($tmp))
+  Redact-SedPassSimple $step $tmp '((AccountKey|SharedAccessKey)=)([^\[\];"'' \t\n\r\v\f][^;"'' \t\n\r\v\f]*)' '${1}[REDACTED:azure-key]'
+  [IO.File]::WriteAllBytes($step, [IO.File]::ReadAllBytes($tmp))
+  [IO.File]::Copy($step, $outPath, $true)
+  if (-not (Test-InputTrailingLf $inPath)) {
+    Strip-TrailingLfFile $outPath
+  }
+  $total = 0
+  $classes = [Collections.Generic.List[string]]::new()
+  foreach ($cls in $Script:RedactClassOrder) {
+    if (-not $includePrivateKey -and $cls -ceq 'private-key') { continue }
+    $before = Count-RedactMarkers $inPath $cls
+    $after = Count-RedactMarkers $outPath $cls
+    $delta = $after - $before
+    if ($delta -gt 0) {
+      $total += $delta
+      [void]$classes.Add($cls)
+    }
+  }
+  $Script:RedactN = $total
+  $Script:RedactClasses = ($classes -join ',')
+}
+
+function Invoke-BashOnlySub([string]$sub) {
+  Die 2 "'$sub' is bash-only; run bash _kit/memory.sh $sub (Windows: _kit\memory.cmd $sub)"
 }
 
 function Read-Frontmatter([string]$path, [ref]$Fm) {
@@ -818,11 +1126,8 @@ function Invoke-Add([string[]]$cmdArgs) {
   if (-not $seen.body) { Die 2 "'add' requires --body" }
   if (-not (Test-Kind $kind)) { Die 2 'invalid --kind' }
   if ($seen.harness -and -not (Test-Harness $harness)) { Die 2 'invalid --harness' }
-  $tlen = $title.Length
-  if ($tlen -lt 1 -or $tlen -gt 120) { Die 2 'invalid --title' }
-  if ($title.Contains('"') -or $title.Contains('\') -or (Has-ControlBytes $title)) { Die 2 'invalid --title' }
   if (Has-ControlBytes $source) { Die 2 'invalid --source' }
-  try { $tagsItems = Parse-List $tagsRaw 'tag' } catch { Die 2 'invalid --tags' }
+  try { $tagsItems = Normalize-TagsList $tagsRaw } catch { Die 2 'invalid --tags' }
   try { $supItems = Parse-List $supRaw 'id' } catch { Die 2 'invalid --supersedes' }
   $memNow = [Environment]::GetEnvironmentVariable('MEMORY_NOW')
   if ($memNow) {
@@ -832,8 +1137,25 @@ function Invoke-Add([string[]]$cmdArgs) {
   if (-not $seen.root) { $root = Get-DefaultRoot }
   $root = Resolve-Root $root
   if (-not (Test-File $bodyPath)) { Die 4 "body file not found: $(View $bodyPath)" }
+  $normBody = New-TmpFile
   $bodyTmp = Prepare-BodyFile $bodyPath
-  $bodyBytes = [IO.File]::ReadAllBytes($bodyTmp)
+  [IO.File]::Copy($bodyTmp, $normBody, $true)
+  $redBody = New-TmpFile
+  Memory-RedactFile $normBody $redBody $true
+  $redBodyN = $Script:RedactN
+  $redBodyC = $Script:RedactClasses
+  $titleIn = New-TmpFile
+  $titleOut = New-TmpFile
+  [IO.File]::WriteAllBytes($titleIn, (Latin1Bytes $title))
+  Memory-RedactFile $titleIn $titleOut $false
+  $title = ViewBytes ([IO.File]::ReadAllBytes($titleOut))
+  $Script:RedactN = $redBodyN + $Script:RedactN
+  Merge-RedactClasses $redBodyC $Script:RedactClasses
+  $tlen = $title.Length
+  if ($tlen -lt 1 -or $tlen -gt 120) { Die 2 'invalid --title' }
+  if ($title.Contains('"') -or $title.Contains('\') -or (Has-ControlBytes $title)) { Die 2 'invalid --title' }
+  $bodyBytes = [IO.File]::ReadAllBytes($redBody)
+  if ($bodyBytes.Length -lt 1 -or $bodyBytes.Length -gt 4096) { Die 2 'invalid body' }
   $sha = Get-Sha256Hex $bodyBytes
   if ($memNow) { $now = View $memNow } else { $now = Utc-NowPrefix }
   $id = "$now-$($sha.Substring(0,8))"
@@ -858,6 +1180,7 @@ function Invoke-Add([string[]]$cmdArgs) {
   if ($dupId) {
     $recP = Id-ToRecord $store $dupId
     if (Test-File $recP) { $rel = Rel-Path $root $recP } else { $rel = Rel-Path $root (Id-ToQuarantine $store $dupId) }
+    Print-AddNotices
     Write-Stdout (Latin1Bytes "memory: duplicate $dupId $rel`n")
     exit 0
   }
@@ -865,11 +1188,12 @@ function Invoke-Add([string[]]$cmdArgs) {
     id=$id; kind=$kind; title=$title; date=$date; source=$source; commit=$commit; harness=$harness
     tagsItems=$tagsItems; supItems=$supItems; sha=$sha
   }
-  if (Test-Admission $title $bodyTmp) {
+  if (Test-Admission $title $redBody) {
     $path = Id-ToQuarantine $store $id
     $rel = Rel-Path $root $path
     if (Test-File $path) { Die 4 "record exists $rel" }
     Write-RecordFile $path $meta $bodyBytes $true
+    Print-AddNotices
     Write-Stdout (Latin1Bytes "memory: quarantined $id $rel`n")
     exit 5
   }
@@ -877,7 +1201,36 @@ function Invoke-Add([string[]]$cmdArgs) {
   $rel = Rel-Path $root $path
   if (Test-File $path) { Die 4 "record exists $rel" }
   Write-RecordFile $path $meta $bodyBytes $false
+  Print-AddNotices
   Write-Stdout (Latin1Bytes "memory: added $id $rel`n")
+  exit 0
+}
+
+function Invoke-Redact([string[]]$cmdArgs) {
+  $root = ''; $seenRoot = 0
+  $i = 0
+  while ($i -lt $cmdArgs.Count) {
+    $a = View ([string]$cmdArgs[$i])
+    if ($a -ceq '--root') {
+      Need-Val '--root' $cmdArgs $i
+      if ($seenRoot) { Die 2 "repeated flag '--root'" }
+      $seenRoot = 1; $root = [string]$cmdArgs[$i+1]; $i += 2; continue
+    }
+    if ($a.StartsWith('--', [StringComparison]::Ordinal)) { Die 2 "unknown flag '$a'" }
+    Die 2 "unexpected argument '$a'"
+  }
+  if (-not $seenRoot) { $root = Get-DefaultRoot }
+  $root = Resolve-Root $root
+  $in = New-TmpFile
+  $out = New-TmpFile
+  $ms = [IO.MemoryStream]::new()
+  $stdin = [Console]::OpenStandardInput()
+  $buf = [byte[]]::new(8192)
+  while (($n = $stdin.Read($buf, 0, $buf.Length)) -gt 0) { $ms.Write($buf, 0, $n) }
+  [IO.File]::WriteAllBytes($in, $ms.ToArray())
+  Memory-RedactFile $in $out $true
+  Write-Stdout ([IO.File]::ReadAllBytes($out))
+  Print-RedactNotice
   exit 0
 }
 
@@ -1071,7 +1424,7 @@ try {
   if ($args.Count -eq 0) { Show-UsageStderr; exit 2 }
   $sub = View ([string]$args[0])
   if ($sub -ceq '--help') { Show-UsageStdout; exit 0 }
-  if ([Array]::IndexOf(@('add', 'index', 'search', 'show'), $sub) -lt 0) {
+  if ([Array]::IndexOf(@('add', 'index', 'search', 'show', 'redact', 'check', 'rm', 'capture'), $sub) -lt 0) {
     Show-UsageStderr
     Die 2 "unknown subcommand '$sub'"
   }
@@ -1083,6 +1436,10 @@ try {
     'index' { Invoke-IndexCmd $rest }
     'search' { Invoke-Search $rest }
     'show' { Invoke-Show $rest }
+    'redact' { Invoke-Redact $rest }
+    'check' { Invoke-BashOnlySub 'check' }
+    'rm' { Invoke-BashOnlySub 'rm' }
+    'capture' { Invoke-BashOnlySub 'capture' }
   }
 } finally {
   foreach ($p in $Script:TmpPaths) {

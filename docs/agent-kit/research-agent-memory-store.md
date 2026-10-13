@@ -2,8 +2,10 @@
 
 **Date**: 2026-10-08 · **Status**: research ingested; direction agreed; Release A
 (`memory-store-a-core`) shipped in kit v0.30.0; Release B (`memory-store-b-wiring`)
-**shipped in agent-kit v1.0.0** (folded into the 1.0.0 release); `-c-capture` →
-`-d-backfill` remain (see Roadmap). **Method**: external deep-research report ingested against
+**shipped in agent-kit v1.0.0** (folded into the 1.0.0 release); Release C
+(`memory-store-c-capture`) **implemented** (agent-kit **[Unreleased]** — redaction, commit
+gate, transcript capture, `memory-capture` skill; not yet tagged). Release D
+(`memory-store-d-backfill`) remains (see Roadmap). **Method**: external deep-research report ingested against
 kit ground truth, with the load-bearing harness claims spot-verified against live vendor
 docs on 2026-10-08. Full scratch report and ingestion review:
 `_research/agent-memory-store/report.md` (gitignored).
@@ -117,7 +119,7 @@ Codebase conventions the design must follow (from the ingestion review):
 |---|---|
 | `memory-store-a-core` | Record schema (`_memory/README.md`). `_kit/memory.sh` / `.ps1` twins with `add` (schema validation, id, dedupe, admission screen → quarantine), `index`, `search`, `show`. Emitter + setup wiring and gitignore lines. Harness-matrix corrections. Tests |
 | `memory-store-b-wiring` | **Shipped (v1.0.0).** Feature-skill read protocol (≤ 5 records, DATA fence (citations — each fence entry carries id, source, and commit)) and archive triggers (goal close, research ingest). Pointer blocks in each harness's always-loaded file (Cursor: one `.mdc` sentence). Loop integrator materialises outbox proposals and archives `LEARNINGS`/`ESCALATIONS` lines at integrate time (not shipped — see deviations). Evaluator auto-fail plus tripwire: "kit agent sets Claude `memory:`". **Shipped deviations:** separate `## Memory` pointer block (Claude Code / Copilot / Codex) (not merged into the orchestration pointer); `LEARNINGS`/`ESCALATIONS` not auto-archived as records. |
-| `memory-store-c-capture` | Secret redaction twins plus a pre-commit gate. Post-hoc transcript scanners (Claude Code, Cursor, Codex) into gitignored `_memory/raw/`. Orchestrator-driven distillation into `session-summary` records. Copilot falls back to orchestrator-written summaries. Capture hooks follow as a later goal |
+| `memory-store-c-capture` | **Implemented (Unreleased).** Secret redaction twins plus opt-in pre-commit gate (`check`; never installed by the kit). `check`, `rm`, and `capture` are bash-only — the PowerShell twin prints a pointer and exits **2**. Post-hoc transcript scanners (Claude Code, Cursor, Codex) into gitignored `_memory/raw/`. Orchestrator-driven distillation via the `memory-capture` skill into `session-summary` records. Copilot falls back to orchestrator-written summaries. **Shipped deviations:** no `claude` → `claude-code` harness rename; loop integrator step 3b unchanged (no `check` there). Capture hooks follow as a later goal |
 | `memory-store-d-backfill` | Deterministic back-fill of closed goals, decisions, learnings, resolved escalations and research reports in this repo, using an explicit "closed" signal. Distil the existing Cursor transcripts |
 
 ## Open questions

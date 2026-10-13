@@ -1102,7 +1102,7 @@ run_behavioral_suite() {
   run 20261008T130000Z; expect_rc 2 "missing subcommand"
   run 20261008T130000Z frob; expect_rc 2 "unknown subcommand"
   run 20261008T130000Z add --kind fact --title T --body "$B/b.md" --harness claude-code --root "$R"; expect_rc 2 "harness claude-code"
-  run 20261008T130000Z add --kind fact --title T --body "$B/b.md" --tags 'Bad Tag' --root "$R"; expect_rc 2 "bad tag"
+  run 20261008T130000Z add --kind fact --title T --body "$B/b.md" --tags 'bad!!' --root "$R"; expect_rc 2 "bad tag"
   run 2026-10-08 add --kind fact --title T --body "$B/b.md" --root "$R"; expect_rc 2 "malformed MEMORY_NOW"
   run 20261008T130000Z add --kind fact --title T --body "$B/b.md" --supersedes nope --root "$R"; expect_rc 2 "malformed supersedes id"
   run 20261008T130002Z add --kind fact --title $'a\tb' --body "$B/b.md" --root "$R"; expect_rc 2 "title tab"
@@ -1298,6 +1298,11 @@ run_behavioral_suite() {
   run 20261008T170000Z search alpha --engine fts --root "$T"; expect_rc 4 "fts without fts.db"
   
     report_section "n" "fts vs grep quote missing db"
+  echo "== Release C redaction + hygiene"
+  . "$REPO_ROOT/tests/agent-kit/lib/memory-redaction-behavioral.sh"
+  run_release_c_redaction_behavioral
+  report_section "rc-redact" "Release C redaction tag hygiene redact twin"
+  sf=0
   echo "== help"
   direct_twin --help; { [ "$RC" = 0 ] && [ -n "$OUT" ]; } && ok "--help first" || ko "--help" "rc=$RC"
   direct_twin search --help; { [ "$RC" = 0 ] && [ -n "$OUT" ]; } && ok "--help after subcommand" || ko "search --help" "rc=$RC"
@@ -1342,7 +1347,7 @@ run_behavioral_suite() {
   run 20261008T200009Z add --kind fact --title "$(printf 'a\nb')" --body "$B/c1.md" --root "$X"; expect_rc 2 "newline in title"
   run 20261008T200009Z add --kind fact --title T --source "$(printf 'a\nkind: x')" --body "$B/c1.md" --root "$X"; expect_rc 2 "newline in source"
   run "$(printf '20261008T200010Z\nx')" add --kind fact --title T --body "$B/c1.md" --root "$X"; expect_rc 2 "newline in MEMORY_NOW"
-  run 20261008T200010Z add --kind fact --title T --body "$B/c1.md" --tags "$(printf 'x\t')" --root "$X"; expect_rc 2 "tab in tag"
+  run 20261008T200010Z add --kind fact --title T --body "$B/c1.md" --tags "$(printf '!!\tx')" --root "$X"; expect_rc 2 "invalid tag after whitespace split"
   # hand-edited [a,b] record + body with --- rule + CRLF record
   hid2=20261008T200011Z-aaaaaaaa; printf -- '---\nid: %s\nkind: fact\ntitle: "hand"\ndate: 2026-10-08\nsource: ""\ncommit: none\nharness: ""\ntags: [a,b]\nsupersedes: []\nsha256: 00\n---\nabove\n---\nzzbelow\n' "$hid2" > "$X/_memory/records/2026/10/$hid2.md"
   mirror_file "$X/_memory/records/2026/10/$hid2.md"
@@ -1429,6 +1434,9 @@ run_behavioral_suite() {
   fi
 }
 
+# Release C bash-only subcommands (check, rm, capture) — not run under twin parity.
+. "$REPO_ROOT/tests/agent-kit/lib/memory-release-c.sh"
+
 case_m_twin_parity() {
   command -v pwsh >/dev/null 2>&1 || return 2
   local trd i final_bad=0
@@ -1474,7 +1482,7 @@ structural_cases() {
   grep -qF '`<\|?im_start\|?>`' "$f" || { report FAIL "(q) README patterns"; return; }
   grep -qF '`</?system>`' "$f" || { report FAIL "(q) README patterns"; return; }
   local got exp
-  got="$(sed -n '45,57p' "$f")"
+  got="$(sed -n '49,61p' "$f")"
   exp="$(cat <<'EOF'
 ---
 id: <id>
@@ -1583,6 +1591,12 @@ else
 fi
 
 run_memory_followup_cases
+
+if suite_selected bash && [[ "$MEMORY_SH" == "$CANON_MEMORY_SH" ]]; then
+  run_release_c_bash_only
+else
+  report SKIP "[bash-only] Release C check/rm/capture" "not bash leg or MEMORY_SH overridden"
+fi
 
 if [[ "$MEMORY_SH" != "$CANON_MEMORY_SH" ]]; then
   report SKIP "(q)-(t) structural" "MEMORY_SH overridden"
