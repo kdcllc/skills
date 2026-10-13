@@ -28,6 +28,8 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$HERE/../../.." && pwd)"
 cd "$REPO_ROOT" || exit 1
 
+. "$HERE/../lib/parallel.sh"
+
 EMIT_SH="${EMIT_SH:-$REPO_ROOT/skills/agent-kit/bin/emit.sh}"
 KIT="$REPO_ROOT/skills/agent-kit"
 FIXTURE_ROOT="${EMIT_GOLDEN_ROOT:-$REPO_ROOT/tests/agent-kit/fixtures/emit-golden}"
@@ -219,6 +221,14 @@ report_fail() {
   echo "FAIL: $1 -- $2" >&2
 }
 
+report_fail_par() {
+  if [ $# -ge 2 ]; then
+    report_fail "$1" "$2"
+  else
+    report_fail "$1" "parallel"
+  fi
+}
+
 clear_case_goldens() { # case_dir
   local case_dir="$1"
   find "$case_dir" -type f -name '*.golden' -delete 2>/dev/null || true
@@ -324,7 +334,11 @@ CASES=(
   error-upgrade-blocked
 )
 
-trap cleanup_farms EXIT
+_suite_cleanup() {
+  cleanup_farms
+  par_cleanup
+}
+trap _suite_cleanup EXIT
 
 if [ ! -f "$FIXTURE_ROOT/CAPTURED_WITH.txt" ]; then
   echo "emit-golden: missing CAPTURED_WITH.txt" >&2
@@ -359,9 +373,21 @@ if [ ! -f "$FIXTURE_ROOT/cases/self/emit.exit-code.golden" ]; then
   exit 1
 fi
 
+init_path_no_pwsh
+
+PAR_COUNTERS="pass fail"
+PAR_LISTS="FAILED_CASES"
+PAR_REPORT_FAIL="report_fail_par"
+
+blk_run_case() {
+  run_case "$1"
+}
+
+par_init
 for c in "${CASES[@]}"; do
-  run_case "$c"
+  par_block blk_run_case "$c"
 done
+par_finish
 
 echo
 echo "PASS: $pass   FAIL: $fail"

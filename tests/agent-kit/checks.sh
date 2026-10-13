@@ -12,9 +12,8 @@
 #   B. The emitted instance (.claude/, .cursor/, _loop/) contains no unresolved
 #      uppercase double-brace tokens and no leftover bootstrap, IF, or ENDIF
 #      comments. Label: "instance fully resolved (tokens, bootstrap, IF)".
-#      (Both checks-script twins — checks.sh and checks.ps1 — are excluded:
-#      this file contains the patterns themselves, and the twins are one
-#      logical unit.
+#      (tests/agent-kit/checks.sh is excluded: this file contains the patterns
+#      themselves.
 #      `.claude/skills/agent-kit/` and `.cursor/skills/agent-kit/` are also excluded:
 #      those are the self-install compiler copies, which are supposed to keep
 #      unresolved tokens / bootstrap comments. Pattern notes: unresolved
@@ -58,9 +57,8 @@
 #      JSON, uncaught exception, etc.) the whole sub-check FAILs "verifier
 #      failed (exit N)" with the captured output as detail -- a dead verifier
 #      is never silently green. Otherwise: for every entry in the manifest's
-#      `files` map, the checks-script twins (`tests/agent-kit/checks.sh` and
-#      `tests/agent-kit/checks.ps1`) report "self, excluded" and never fail (deadlock
-#      fix — J cannot guard the twins' own in-progress edits);
+#      `files` map, `tests/agent-kit/checks.sh` reports "self, excluded" and never
+#      fails (deadlock fix — J cannot guard its own in-progress edits);
 #      `seedFiles` entries report "seed, exempt" and never fail on
 #      drift; every other entry gets its sha256 recomputed against the working
 #      tree, and FAILs listing every mismatched/missing path. These per-path
@@ -93,7 +91,7 @@
 #      colon interpolation inside double-quoted strings (colon not followed by
 #      a variable-name character, no backslash exemption) across a target set
 #      derived at run time: every *.ps1 under skills/agent-kit/templates/,
-#      _loop/, and scripts/, excluding any file named checks.ps1. A missing
+#      _loop/, and scripts/. A missing
 #      root is skipped and noted without failing by itself; the empty-set FAIL
 #      fires only when the TOTAL derived set across all present roots is
 #      empty.
@@ -114,9 +112,10 @@
 #      diffed against the `.claude` twin). Converts silent divergence between
 #      the two emitted skill trees into an immediate red check. SKIPs if
 #      `.cursor/skills/` is absent.
-#   O. Emitter twins parse: `bash -n skills/agent-kit/bin/emit.sh` (PASS/FAIL)
-#      and skip-aware pwsh parse of `skills/agent-kit/bin/emit.ps1`
-#      (PASS / SKIP when pwsh is absent / FAIL).
+#   O. Emitter parse: `bash -n skills/agent-kit/bin/emit.sh` (PASS/FAIL).
+#   P. Instance Windows launchers: `_kit/memory.cmd` and `_kit/log-spawn.cmd`
+#      present; `_kit/log-spawn.ps1` absent; `_kit/memory.ps1` still present;
+#      root `.gitattributes` contains `*.cmd -text`.
 set -u
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -193,7 +192,7 @@ check_a() {
 check_b() {
   local hits
   hits="$(grep -rnE '\{\{[A-Z_]+\}\}|<!-- (BOOTSTRAP|IF|ENDIF)' .claude/ .cursor/ _loop/ \
-            --exclude='checks.sh' --exclude='checks.ps1' --exclude-dir='agent-kit' 2>/dev/null)"
+            --exclude='checks.sh' --exclude-dir='agent-kit' 2>/dev/null)"
   if [[ -n "$hits" ]]; then
     report FAIL "B: instance fully resolved (tokens, bootstrap, IF)" "leftover tokens/bootstrap/IF comments"
     printf '%s\n' "$hits" >&2
@@ -505,7 +504,7 @@ files = data.get("files", {})
 seed = set(data.get("seedFiles", []))
 print(f"COUNT {len(files)}")
 for path, expected in files.items():
-    if path in ("tests/agent-kit/checks.sh", "tests/agent-kit/checks.ps1"):
+    if path == "tests/agent-kit/checks.sh":
         print(f"SELF {path}")
         continue
     if path in seed:
@@ -669,7 +668,7 @@ check_k() {
 # scan, not a parser -- here-strings/multi-line constructs are out of scope;
 # check F owns parser-level truth where pwsh exists). Derived target set
 # computed at run time: every *.ps1 under skills/agent-kit/templates/, _loop/,
-# and scripts/, excluding any file named checks.ps1. A missing root is
+# and scripts/. A missing root is
 # skipped and noted without failing by itself; the empty-set FAIL fires only
 # when the TOTAL derived set across all present roots is empty.
 # ---------------------------------------------------------------------------
@@ -684,7 +683,7 @@ check_l() {
     fi
     while IFS= read -r -d '' f; do
       targets+=("$f")
-    done < <(find "$root" -type f -name '*.ps1' ! -name 'checks.ps1' -print0)
+    done < <(find "$root" -type f -name '*.ps1' -print0)
   done
 
   if ((${#targets[@]} == 0)); then
@@ -768,11 +767,10 @@ check_n() {
 }
 
 # ---------------------------------------------------------------------------
-# Check O: emitter twins parse — bash -n of skills/agent-kit/bin/emit.sh and
-# skip-aware pwsh parse of skills/agent-kit/bin/emit.ps1.
+# Check O: emitter parse — bash -n of skills/agent-kit/bin/emit.sh.
 # ---------------------------------------------------------------------------
 check_o() {
-  local out rc
+  local out
   if [[ ! -f skills/agent-kit/bin/emit.sh ]]; then
     report FAIL "O: emit.sh bash -n" "skills/agent-kit/bin/emit.sh not found"
   elif out="$(bash -n skills/agent-kit/bin/emit.sh 2>&1)"; then
@@ -780,40 +778,26 @@ check_o() {
   else
     report FAIL "O: emit.sh bash -n" "$out"
   fi
+}
 
-  if ! command -v pwsh >/dev/null 2>&1; then
-    report SKIP "O: emit.ps1 pwsh parse" "pwsh not available"
-    return
-  fi
-  if [[ ! -f skills/agent-kit/bin/emit.ps1 ]]; then
-    report FAIL "O: emit.ps1 pwsh parse" "skills/agent-kit/bin/emit.ps1 not found"
-    return
-  fi
-  out="$(PWSH_TARGET_FILE="skills/agent-kit/bin/emit.ps1" pwsh -NoProfile -Command '
-      $ErrorActionPreference = "Stop"
-      $path = $env:PWSH_TARGET_FILE
-      try {
-        $tokens = $null
-        $errs = $null
-        [System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$tokens, [ref]$errs) | Out-Null
-        if ($errs.Count -gt 0) {
-          $errs | ForEach-Object { Write-Output $_.ToString() }
-          exit 2
-        }
-        exit 0
-      } catch {
-        Write-Output $_.Exception.Message
-        exit 3
-      }
-    ' 2>&1)"
-  rc=$?
-  if ((rc == 2)); then
-    report FAIL "O: emit.ps1 pwsh parse" "parse errors found"
-    printf '%s\n' "$out" >&2
-  elif ((rc != 0)); then
-    report FAIL "O: emit.ps1 pwsh parse" "pwsh invocation error (exit $rc): $out"
+# ---------------------------------------------------------------------------
+# Check P: instance Windows launchers and retired log-spawn.ps1 twin.
+# ---------------------------------------------------------------------------
+check_p() {
+  local bad=()
+  [[ -f _kit/memory.cmd ]] || bad+=("_kit/memory.cmd missing")
+  [[ -f _kit/log-spawn.cmd ]] || bad+=("_kit/log-spawn.cmd missing")
+  [[ -f _kit/memory.ps1 ]] || bad+=("_kit/memory.ps1 missing")
+  [[ ! -f _kit/log-spawn.ps1 ]] || bad+=("_kit/log-spawn.ps1 must be absent (pruned on upgrade)")
+  if [[ -f .gitattributes ]]; then
+    grep -qxF '*.cmd -text' .gitattributes || bad+=(".gitattributes missing '*.cmd -text'")
   else
-    report PASS "O: emit.ps1 pwsh parse"
+    bad+=(".gitattributes missing")
+  fi
+  if ((${#bad[@]})); then
+    report FAIL "P: instance Windows launchers (.cmd) + no log-spawn.ps1" "${bad[*]}"
+  else
+    report PASS "P: instance Windows launchers (.cmd) + no log-spawn.ps1"
   fi
 }
 
@@ -832,6 +816,7 @@ check_l
 check_m
 check_n
 check_o
+check_p
 
 echo
 echo "=== checks.sh summary ==="

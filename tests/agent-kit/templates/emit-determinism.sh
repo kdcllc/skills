@@ -1,28 +1,37 @@
 #!/usr/bin/env bash
-# Guard: skills/agent-kit/bin/emit.sh + emit.ps1 determinism (goal D-8, kit v0.27.0).
+# Guard: skills/agent-kit/bin/emit.sh determinism (goal D-8, kit v0.27.0) and portability
+# (runtime-bash-single-source: Bash 3.2, POSIX awk, no jq).
 #
-# Behavioral cases (a)–(m) run in mktemp roots only — never emit into the live repo.
-# Override EMIT_SH / EMIT_PS1 for mutation runs at the bottom.
+# Behavioral cases run in mktemp roots only — never emit into the live repo.
+# Override EMIT_SH for mutation runs at the bottom. jq is an OPTIONAL oracle: every
+# comparison that needs it SKIPs (never FAILs) when jq is not on PATH, and case (p)
+# emits with jq hidden from PATH.
 #
 # Exit 0 when no FAIL; 1 otherwise.
 set -u
 
 export LC_ALL=C
 export EMIT_DATE=2026-09-03
-export PATH=/tmp/pwsh-tools:$PATH
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$HERE/../../.." && pwd)"
 cd "$REPO_ROOT" || exit 1
 
+. "$HERE/../lib/parallel.sh"
+. "$HERE/../lib/emit-cache.sh"
+
 EMIT_SH="${EMIT_SH:-$REPO_ROOT/skills/agent-kit/bin/emit.sh}"
-EMIT_PS1="${EMIT_PS1:-$REPO_ROOT/skills/agent-kit/bin/emit.ps1}"
 KIT="${EMIT_KIT:-$REPO_ROOT/skills/agent-kit}"
 FIXTURE="$REPO_ROOT/tests/agent-kit/fixtures/self-answers.json"
 BOOTSTRAP_IDS="$KIT/reference/bootstrap-ids.md"
 
 pass=0; fail=0; skip=0
-CLEANUP=()
+RUN_TMP=""
+PATH_WITHOUT_JQ=""
+AWK_SHIM_gawk=""
+AWK_SHIM_mawk=""
+AWK_SHIM_busybox=""
+if command -v jq >/dev/null 2>&1; then HAVE_JQ=1; else HAVE_JQ=0; fi
 
 report() { # report <PASS|FAIL|SKIP> <name> [detail]
   local status="$1" name="$2" detail="${3:-}"
@@ -34,14 +43,14 @@ report() { # report <PASS|FAIL|SKIP> <name> [detail]
 }
 
 mktemp_root() {
-  local d; d="$(mktemp -d)"
-  CLEANUP+=("$d")
+  local d
+  d="$(mktemp -d "$RUN_TMP/root.XXXXXX")"
   printf '%s' "$d"
 }
 
 mktemp_file() {
-  local f; f="$(mktemp)"
-  CLEANUP+=("$f")
+  local f
+  f="$(mktemp "$RUN_TMP/file.XXXXXX")"
   printf '%s' "$f"
 }
 
@@ -62,12 +71,35 @@ class_a_ids() {
 
 run_emit_sh() { # root --kit DIR [extra args...]
   local root="$1"; shift
-  bash "$EMIT_SH" --root "$root" "$@"
+  "$BASH" "$EMIT_SH" --root "$root" "$@"
 }
 
-run_emit_ps1() { # root --kit DIR [extra args...]
-  local root="$1"; shift
-  pwsh -NoProfile -File "$EMIT_PS1" --root "$root" "$@"
+# Print PATH with the given command names removed: every PATH entry that holds one of
+# them becomes a symlink farm of its other executables (farms are cleaned up on exit).
+path_without() { # cmd...
+  local entry farm f base cmd hit result="" old="$PATH" rest
+  rest="$old"
+  while [ -n "$rest" ]; do
+    if [ "${rest#*:}" != "$rest" ]; then entry="${rest%%:*}"; rest="${rest#*:}"; else entry="$rest"; rest=""; fi
+    [ -n "$entry" ] || continue
+    hit=0
+    for cmd in "$@"; do
+      if [ -e "$entry/$cmd" ]; then hit=1; fi
+    done
+    if [ "$hit" -eq 1 ]; then
+      farm="$(mktemp -d "${RUN_TMP:-/tmp}/pwf.XXXXXX")"
+      for f in "$entry"/*; do
+        [ -e "$f" ] || continue
+        base="$(basename "$f")"
+        for cmd in "$@"; do [ "$base" = "$cmd" ] && continue 2; done
+        ln -s "$f" "$farm/$base" 2>/dev/null || cp -f "$f" "$farm/$base"
+      done
+      result="${result:+$result:}$farm"
+    else
+      result="${result:+$result:}$entry"
+    fi
+  done
+  printf '%s' "$result"
 }
 
 manifest_key_order_ok() { # manifest-path — top-level key order per D-3 (not jq's sorted keys)
@@ -109,18 +141,19 @@ case_a_twice_identical() {
   diff -r "$r1" "$r2" >/dev/null 2>&1
 }
 
-case_b_twin_parity() {
-  local rsh rps
-  rsh="$(mktemp_root)"; rps="$(mktemp_root)"
-  run_emit_sh "$rsh" --kit "$KIT" --answers "$FIXTURE" >/dev/null 2>&1 || return 1
-  run_emit_ps1 "$rps" --kit "$KIT" --answers "$FIXTURE" >/dev/null 2>&1 || return 1
-  diff -r "$rsh" "$rps" >/dev/null 2>&1
+case_c0_manifest_key_order() {
+  local root mf
+  root="$(mktemp_root)"
+  emit_cache_copy "$root" "$FIXTURE" || return 1
+  mf="$root/orchestration-kit.manifest.json"
+  manifest_key_order_ok "$mf" || return 1
+  [[ "$(tail -c 2 "$mf" | od -An -c | tr -d ' ')" == '}\n' ]]
 }
 
 case_c_manifest_shape() {
   local root mf
   root="$(mktemp_root)"
-  run_emit_sh "$root" --kit "$KIT" --answers "$FIXTURE" >/dev/null 2>&1 || return 1
+  emit_cache_copy "$root" "$FIXTURE" || return 1
   mf="$root/orchestration-kit.manifest.json"
   jq -e '.answers.schema == 1' "$mf" >/dev/null 2>&1 || return 1
   jq -e '.options.forge | type == "string"' "$mf" >/dev/null 2>&1 || return 1
@@ -139,7 +172,7 @@ case_c_manifest_shape() {
 case_d_no_leftovers() {
   local root
   root="$(mktemp_root)"
-  run_emit_sh "$root" --kit "$KIT" --answers "$FIXTURE" >/dev/null 2>&1 || return 1
+  emit_cache_copy "$root" "$FIXTURE" || return 1
   leftover_template_markers_empty "$root"
 }
 
@@ -211,7 +244,7 @@ CASE_H_DETAIL=""
 case_h_upgrade() {
   local root rc out mf target='.claude/agents/implementer.md' snap before after
   root="$(mktemp_root)"
-  run_emit_sh "$root" --kit "$KIT" --answers "$FIXTURE" >/dev/null 2>&1 || return 1
+  emit_cache_copy "$root" "$FIXTURE" || return 1
   snap="$(sha256sum "$root/$target" | awk '{print $1}')"
   printf '\nUSER_EDIT\n' >> "$root/$target"
   set +e
@@ -268,7 +301,7 @@ case_h_upgrade() {
 case_i_cursor_isolation_and_variants() {
   local root ans cc_ans
   root="$(mktemp_root)"
-  run_emit_sh "$root" --kit "$KIT" --answers "$FIXTURE" >/dev/null 2>&1 || return 1
+  emit_cache_copy "$root" "$FIXTURE" || return 1
   local claude_refs ro_files=() f agent base
   claude_refs="$(grep -rc '\.claude/' "$root/.cursor" --exclude-dir=setup 2>/dev/null | awk -F: '{s+=$2} END{print s+0}')"
   [[ "${claude_refs:-0}" -eq 0 ]] || return 1
@@ -309,14 +342,14 @@ case_i_cursor_isolation_and_variants() {
 case_j_executables() {
   local root
   root="$(mktemp_root)"
-  run_emit_sh "$root" --kit "$KIT" --answers "$FIXTURE" >/dev/null 2>&1 || return 1
+  emit_cache_copy "$root" "$FIXTURE" || return 1
   [[ -x "$root/_kit/log-spawn.sh" && -x "$root/_kit/memory.sh" && -x "$root/_loop/loop.sh" && -x "$root/_loop/breaker.sh" ]]
 }
 
 case_n_memory_emit_paths() {
   local root gi ga
   root="$(mktemp_root)"
-  run_emit_sh "$root" --kit "$KIT" --answers "$FIXTURE" >/dev/null 2>&1 || return 1
+  emit_cache_copy "$root" "$FIXTURE" || return 1
   run_emit_sh "$root" --kit "$KIT" --answers "$FIXTURE" >/dev/null 2>&1 || return 1
   [[ -f "$root/_kit/memory.ps1" && -f "$root/_memory/README.md" ]] || return 1
   gi="$(grep -cxF '_memory/.index/' "$root/.gitignore" || true)"
@@ -342,18 +375,16 @@ case_o_memory_readme_prune() {
   [[ ! -f "$root/_memory/README.md" && -f "$user" && "$before" == "$after" ]]
 }
 
-case_k_parse_twins() {
-  bash -n "$EMIT_SH" 2>/dev/null || return 1
-  command -v pwsh >/dev/null 2>&1 || return 0
-  local perr
-  perr="$(pwsh -NoProfile -Command "\$e=\$null; [void][System.Management.Automation.Language.Parser]::ParseFile('$EMIT_PS1',[ref]\$null,[ref]\$e); \$e.Count" 2>/dev/null | tr -d '\r ')"
-  [[ "$perr" == "0" ]]
+case_k_parse_portable() {
+  "$BASH" -n "$EMIT_SH" 2>/dev/null || return 1
+  # No Bash 4+, GNU-only or jq constructs may creep back into the emitter.
+  ! grep -nE 'declare -A|local -A|mapfile|readarray|\$\{[A-Za-z_]+(,,|\^\^)|local -n|declare -g|wait -n|\[-1\]|--ignore-fail-on-non-empty|\bjq\b' "$EMIT_SH" >/dev/null
 }
 
 case_l_dry_run_no_writes() {
   local root out n
   root="$(mktemp_root)"
-  run_emit_sh "$root" --kit "$KIT" --answers "$FIXTURE" >/dev/null 2>&1 || return 1
+  emit_cache_copy "$root" "$FIXTURE" || return 1
   set +e
   out="$(run_emit_sh "$root" --kit "$KIT" --dry-run --upgrade 2>&1)"
   set -e
@@ -365,139 +396,445 @@ case_l_dry_run_no_writes() {
 }
 
 case_m_verify_sort_order() {
-  local ans err_sh err_ps rc_sh rc_ps
+  local ans err_sh rc_sh
   ans="$(mktemp_file)"
   jq '.bootstrap["stack-note"]="{{ROGUE_B}}" | .bootstrap["skills-tree"]="{{ROGUE_A}}"' "$FIXTURE" > "$ans"
   set +e
   err_sh="$(run_emit_sh "$(mktemp_root)" --kit "$KIT" --answers "$ans" 2>&1)"
   rc_sh=$?
-  err_ps="$(run_emit_ps1 "$(mktemp_root)" --kit "$KIT" --answers "$ans" 2>&1)"
-  rc_ps=$?
   set -e
-  [[ "$rc_sh" -eq 5 && "$rc_ps" -eq 5 ]] || return 1
-  [[ "$err_sh" == "$err_ps" ]] || return 1
+  [[ "$rc_sh" -eq 5 ]] || return 1
+  [[ "$err_sh" == *'{{'* || "$err_sh" == *'verify:'* ]] || return 1
   [[ "$err_sh" == "$(printf '%s\n' "$err_sh" | LC_ALL=C sort)" ]] || return 1
 }
 
-cleanup() {
-  local d
-  for d in "${CLEANUP[@]}"; do
-    rm -rf "$d"
-  done
+case_p_jq_hidden() { # emit, re-emit and upgrade with jq (and only jq) hidden from PATH
+  local nojq r_norm r_nojq rc
+  local nojq="$PATH_WITHOUT_JQ"
+  r_nojq="$(mktemp_root)"
+  PATH="$nojq" command -v jq >/dev/null 2>&1 && return 1
+  r_norm="$(mktemp_root)"
+  run_emit_sh "$r_norm" --kit "$KIT" --answers "$FIXTURE" >/dev/null 2>&1 || return 1
+  PATH="$nojq" "$BASH" "$EMIT_SH" --root "$r_nojq" --kit "$KIT" --answers "$FIXTURE" >/dev/null 2>&1 || return 1
+  diff -r "$r_norm" "$r_nojq" >/dev/null 2>&1 || return 1
+  # upgrade reads the answers back out of the manifest (parser + canonical writer, no jq)
+  PATH="$nojq" "$BASH" "$EMIT_SH" --root "$r_nojq" --kit "$KIT" --upgrade >/dev/null 2>&1 || return 1
+  diff -r "$r_norm" "$r_nojq" >/dev/null 2>&1
 }
-trap cleanup EXIT
 
-# ---------------------------------------------------------------------------
-# Cases (a)–(m)
-# ---------------------------------------------------------------------------
-if case_a_twice_identical; then
-  report PASS "(a) fixture emitted twice → diff -r empty"
-else
-  report FAIL "(a) fixture emitted twice → diff -r empty"
-fi
-
-if command -v pwsh >/dev/null 2>&1; then
-  if case_b_twin_parity; then
-    report PASS "(b) emit.sh vs emit.ps1 → diff -r empty incl. manifest"
-  else
-    report FAIL "(b) emit.sh vs emit.ps1 → diff -r empty incl. manifest"
+case_q_answers_round_trip() { # stress corpus: answers survive emit → manifest → upgrade byte-exactly
+  local stress="$REPO_ROOT/tests/agent-kit/fixtures/emit-golden/cases/string-stress/answers.json"
+  local root mf1 mf2
+  [[ -f "$stress" ]] || return 1
+  root="$(mktemp_root)"
+  emit_cache_copy "$root" "$stress" || return 1
+  mf1="$(cat "$root/orchestration-kit.manifest.json")"
+  run_emit_sh "$root" --kit "$KIT" --upgrade >/dev/null 2>&1 || return 1
+  mf2="$(cat "$root/orchestration-kit.manifest.json")"
+  [[ "$mf1" == "$mf2" ]] || return 1
+  if [[ "$HAVE_JQ" -eq 1 ]]; then
+    # optional oracle: manifest answers == jq -S of the input
+    [[ "$(jq -S . "$stress")" == "$(jq -S .answers "$root/orchestration-kit.manifest.json")" ]] || return 1
   fi
-else
-  report SKIP "(b) emit.sh vs emit.ps1 twin parity" "pwsh not on PATH"
-fi
+}
 
-if case_c_manifest_shape; then
-  report PASS "(c) manifest hashes, key order, seedFiles vs files"
-else
-  report FAIL "(c) manifest hashes, key order, seedFiles vs files"
-fi
+case_r_pointer_upgrade() { # stale `pwsh _kit/memory.ps1` pointer: dry-run says write, upgrade rewrites only that literal
+  local root cm good stale out got want old new
+  old='`pwsh _kit/memory.ps1` on Windows'
+  new='`_kit\memory.cmd` from cmd or PowerShell on Windows (needs Git for Windows)'
+  root="$(mktemp_root)"
+  emit_cache_copy "$root" "$FIXTURE" || return 1
+  cm="$root/CLAUDE.md"
+  good="$(cat "$cm"; printf x)"; good="${good%x}"
+  [[ "$good" == *"$new"* && "$good" != *"$old"* ]] || return 1
+  # downgrade to the old pointer text and put user bytes (one with a CR) around it
+  stale="${good/"$new"/$old}"
+  printf 'USER TOP\r\n%sUSER BOTTOM\n' "$stale" > "$cm"
+  out="$(run_emit_sh "$root" --kit "$KIT" --dry-run --upgrade 2>&1)" || return 1
+  grep -qxF 'write CLAUDE.md' <<<"$out" || return 1
+  run_emit_sh "$root" --kit "$KIT" --upgrade >/dev/null 2>&1 || return 1
+  got="$(cat "$cm"; printf x)"; got="${got%x}"
+  want="$(printf 'USER TOP\r\n%sUSER BOTTOM\n' "$good"; printf x)"; want="${want%x}"
+  [[ "$got" == "$want" ]] || return 1
+  out="$(run_emit_sh "$root" --kit "$KIT" --dry-run --upgrade 2>&1)" || return 1
+  grep -qxF 'keep CLAUDE.md' <<<"$out"
+}
 
-if case_d_no_leftovers; then
-  report PASS "(d) emitted tree has no leftover template markers"
-else
-  report FAIL "(d) emitted tree has no leftover template markers"
-fi
+# --- (s) UTF-8 BOM tolerance (jq skips one leading BOM; Windows tools write one) -------
+case_s_bom_inputs() {
+  local ans r_norm r_bom r_set err
+  ans="$(mktemp_file)"
+  { printf '\357\273\277'; cat "$FIXTURE"; } > "$ans"
+  r_bom="$(mktemp_root)"; r_set="$(mktemp_root)"
+  r_norm="$(mktemp_root)"
+  run_emit_sh "$r_norm" --kit "$KIT" --answers "$FIXTURE" >/dev/null 2>&1 || return 1
+  # BOM-prefixed answers file → same tree as the plain one
+  run_emit_sh "$r_bom" --kit "$KIT" --answers "$ans" >/dev/null 2>&1 || return 1
+  diff -r "$r_norm" "$r_bom" >/dev/null 2>&1 || return 1
+  # BOM-prefixed manifest read back by --upgrade → rewritten byte-identically
+  { printf '\357\273\277'; cat "$r_bom/orchestration-kit.manifest.json"; } > "$r_bom/m.tmp"
+  mv "$r_bom/m.tmp" "$r_bom/orchestration-kit.manifest.json"
+  run_emit_sh "$r_bom" --kit "$KIT" --upgrade >/dev/null 2>&1 || return 1
+  diff -r "$r_norm" "$r_bom" >/dev/null 2>&1 || return 1
+  # BOM-prefixed settings.json that already holds the depth key → no "left untouched" warning
+  mkdir -p "$r_set/.claude"
+  { printf '\357\273\277'; printf '{"env":{"CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH":"3"}}\n'; } > "$r_set/.claude/settings.json"
+  err="$(run_emit_sh "$r_set" --kit "$KIT" --answers "$FIXTURE" 2>&1 >/dev/null)" || return 1
+  [[ "$err" != *'left untouched'* ]]
+}
 
-if case_e1_template_rogue; then
-  report PASS "(e1) {{ROGUE}} in --kit template → exit 3, nothing written"
-else
-  report FAIL "(e1) {{ROGUE}} in --kit template → exit 3, nothing written"
-fi
+# --- (t) JSON edge cases, per awk ---------------------------------------------------
+# One extra top-level answers key carries strings and numbers that stress the awk JSON
+# layer. The expected manifest subtree below was derived ONCE from jq-1.6
+# (`jq -S '{answers:{zzedge_probe:.}}'`, middle lines); non-ASCII characters are written
+# as {U+XXXX} placeholders (UTF-8 bytes substituted below) so this file stays ASCII.
+# If an awk disagrees, fix emit.sh — never this expectation.
+EDGE_PROBE_JSON='{"zz":1,"ascii":"\b\f\/|\u007f|\u0000|\u001f|\"\\|\n\t\r","utf8":"\u00e9|\u20ac|\ud83c\udfad|\udc00x|\u0080|\u07ff|\u0800|\uffff|\ud800\udc00|\udbff\udfff","keys":{"":0,"a\tb":1,"\u00e9":2,"b":3,"B":4,"\ud83c\udfad":5},"empty":{"o":{},"a":[]},"nested":[{"k":[{"x":1,"w":[]},[]]},[[],{}],null,true,false],"nums":[-0,1.0,1e20,-1.5e-7,12345678901234567890,0.1,100,1E2,-0.0,1e1000]}'
 
-if case_e2_bootstrap_rogue; then
-  report PASS "(e2) {{ROGUE}} in bootstrap answer → exit 5 naming emitted file"
-else
-  report FAIL "(e2) {{ROGUE}} in bootstrap answer → exit 5 naming emitted file"
-fi
+edge_expected() { # prints the expected manifest subtree
+  local t
+  t="$(cat <<'EDGE_EOF'
+    "zzedge_probe": {
+      "ascii": "\b\f/|\u007f|\u0000|\u001f|\"\\|\n\t\r",
+      "empty": {
+        "a": [],
+        "o": {}
+      },
+      "keys": {
+        "": 0,
+        "B": 4,
+        "a\tb": 1,
+        "b": 3,
+        "{U+00E9}": 2,
+        "{U+1F3AD}": 5
+      },
+      "nested": [
+        {
+          "k": [
+            {
+              "w": [],
+              "x": 1
+            },
+            []
+          ]
+        },
+        [
+          [],
+          {}
+        ],
+        null,
+        true,
+        false
+      ],
+      "nums": [
+        -0,
+        1,
+        1e+20,
+        -1.5e-07,
+        12345678901234567000,
+        0.1,
+        100,
+        100,
+        -0,
+        1.7976931348623157e+308
+      ],
+      "utf8": "{U+00E9}|{U+20AC}|{U+1F3AD}|{U+FFFD}x|{U+0080}|{U+07FF}|{U+0800}|{U+FFFF}|{U+10000}|{U+10FFFF}",
+      "zz": 1
+    }
+EDGE_EOF
+)"
+  t="${t//\{U+00E9\}/$'\303\251'}"
+  t="${t//\{U+20AC\}/$'\342\202\254'}"
+  t="${t//\{U+1F3AD\}/$'\360\237\216\255'}"
+  t="${t//\{U+FFFD\}/$'\357\277\275'}"
+  t="${t//\{U+0080\}/$'\302\200'}"
+  t="${t//\{U+07FF\}/$'\337\277'}"
+  t="${t//\{U+0800\}/$'\340\240\200'}"
+  t="${t//\{U+FFFF\}/$'\357\277\277'}"
+  t="${t//\{U+10000\}/$'\360\220\200\200'}"
+  t="${t//\{U+10FFFF\}/$'\364\217\277\277'}"
+  printf '%s' "$t"
+}
 
-if case_f_unbalanced_if; then
-  report PASS "(f) unbalanced <!-- IF loop --> → exit 6 with file:line"
-else
-  report FAIL "(f) unbalanced <!-- IF loop --> → exit 6 with file:line"
-fi
-
-if case_g_check_answers; then
-  report PASS "(g) --check-answers: empty bootstrap ids vs fixture"
-else
-  report FAIL "(g) --check-answers: empty bootstrap ids vs fixture"
-fi
-
-if case_h_upgrade; then
-  report PASS "(h) upgrade blocked/dry-run/force, prune, foreign, seed, missing answers" "${CASE_H_DETAIL:-}"
-else
-  report FAIL "(h) upgrade blocked/dry-run/force, prune, foreign, seed, missing answers" "${CASE_H_DETAIL:-}"
-fi
-
-if case_i_cursor_isolation_and_variants; then
-  report PASS "(i) .cursor isolation, readonly agents, models.map parity, copilot+codex ORCH, copilot feature agent+SKILL.md"
-else
-  report FAIL "(i) .cursor isolation, readonly agents, models.map parity, copilot+codex ORCH, copilot feature agent+SKILL.md"
-fi
-
-if case_j_executables; then
-  report PASS "(j) _kit/log-spawn.sh, memory.sh, _loop/{loop,breaker}.sh are executable"
-else
-  report FAIL "(j) _kit/log-spawn.sh, memory.sh, _loop/{loop,breaker}.sh are executable"
-fi
-
-if case_n_memory_emit_paths; then
-  report PASS "(n) memory.ps1 + _memory/README.md; gitignore/gitattributes lines"
-else
-  report FAIL "(n) memory.ps1 + _memory/README.md; gitignore/gitattributes lines"
-fi
-
-if case_o_memory_readme_prune; then
-  report PASS "(o) kit README removed → _memory/README.md pruned; user record kept"
-else
-  report FAIL "(o) kit README removed → _memory/README.md pruned; user record kept"
-fi
-
-if case_k_parse_twins; then
-  report PASS "(k) bash -n emit.sh + pwsh parse emit.ps1"
-else
-  report FAIL "(k) bash -n emit.sh + pwsh parse emit.ps1"
-fi
-
-if case_l_dry_run_no_writes; then
-  report PASS "(l) --dry-run --upgrade on fresh root prints zero write lines"
-else
-  report FAIL "(l) --dry-run --upgrade on fresh root prints zero write lines"
-fi
-
-if command -v pwsh >/dev/null 2>&1; then
-  if case_m_verify_sort_order; then
-    report PASS "(m) two rogue bootstrap answers → sorted identical stderr sh/ps1"
+# Sets SHIM_DIR to a temp dir whose `awk` is the named implementation; returns 1 when
+# that awk is not installed. busybox gets a tiny exec wrapper (a symlink to the
+# multi-call binary would also work, but must not be chmod'ed).
+SHIM_DIR=""
+awk_shim_dir() { # gawk|mawk|busybox
+  local name="$1" bin
+  SHIM_DIR=""
+  case "$name" in
+    busybox)
+      bin="$(command -v busybox 2>/dev/null)" || return 1
+      "$bin" awk 'BEGIN { exit 0 }' >/dev/null 2>&1 || return 1
+      ;;
+    *) bin="$(command -v "$name" 2>/dev/null)" || return 1 ;;
+  esac
+  SHIM_DIR="$(mktemp -d "$RUN_TMP/awk-shim.XXXXXX")"
+  if [[ "$name" == busybox ]]; then
+    printf '#!/bin/sh\nexec "%s" awk "$@"\n' "$bin" > "$SHIM_DIR/awk"
+    chmod +x "$SHIM_DIR/awk"
   else
-    report FAIL "(m) two rogue bootstrap answers → sorted identical stderr sh/ps1"
+    ln -s "$bin" "$SHIM_DIR/awk"
   fi
-else
-  report SKIP "(m) verify stderr twin parity" "pwsh not on PATH"
-fi
+}
+
+case_t_json_edges() { # <shim-dir or empty for the default awk>
+  local shim="$1" ans root got want
+  ans="$(mktemp_file)"
+  head -n 1 "$FIXTURE" | grep -qx '{' || return 1
+  EDGE_PROBE="$EDGE_PROBE_JSON" awk 'NR == 1 { print; print "  \"zzedge_probe\": " ENVIRON["EDGE_PROBE"] ","; next } { print }' "$FIXTURE" > "$ans"
+  root="$(mktemp_root)"
+  PATH="${shim:+$shim:}$PATH" "$BASH" "$EMIT_SH" --root "$root" --kit "$KIT" --answers "$ans" >/dev/null 2>&1 || return 1
+  got="$(sed -n '/^    "zzedge_probe": /,/^    }$/p' "$root/orchestration-kit.manifest.json")"
+  want="$(edge_expected)"
+  [[ -n "$got" && "$got" == "$want" ]]
+}
+
+_suite_cleanup() {
+  rm -rf "$RUN_TMP"
+  par_cleanup
+  emit_cache_cleanup
+}
+trap _suite_cleanup EXIT
+
+RUN_TMP="$(mktemp -d 2>/dev/null || mktemp -d -t emit-det)"
+PATH_WITHOUT_JQ="$(path_without jq)"
+for _awk in gawk mawk busybox; do
+  if awk_shim_dir "$_awk"; then
+    eval "AWK_SHIM_${_awk}=\"\$SHIM_DIR\""
+  fi
+done
+
+blk_a() {
+  if case_a_twice_identical; then
+    report PASS "(a) fixture emitted twice → diff -r empty"
+  else
+    report FAIL "(a) fixture emitted twice → diff -r empty"
+  fi
+}
+blk_c0() {
+  if case_c0_manifest_key_order; then
+    report PASS "(c0) manifest top-level key order, trailing newline (no jq)"
+  else
+    report FAIL "(c0) manifest top-level key order, trailing newline (no jq)"
+  fi
+}
+blk_c() {
+  if [[ "$HAVE_JQ" -ne 1 ]]; then
+    report SKIP "(c) manifest hashes, key order, seedFiles vs files" "jq not on PATH"
+  elif case_c_manifest_shape; then
+    report PASS "(c) manifest hashes, key order, seedFiles vs files"
+  else
+    report FAIL "(c) manifest hashes, key order, seedFiles vs files"
+  fi
+}
+blk_d() {
+  if case_d_no_leftovers; then
+    report PASS "(d) emitted tree has no leftover template markers"
+  else
+    report FAIL "(d) emitted tree has no leftover template markers"
+  fi
+}
+blk_e1() {
+  if case_e1_template_rogue; then
+    report PASS "(e1) {{ROGUE}} in --kit template → exit 3, nothing written"
+  else
+    report FAIL "(e1) {{ROGUE}} in --kit template → exit 3, nothing written"
+  fi
+}
+blk_e2() {
+  if [[ "$HAVE_JQ" -ne 1 ]]; then
+    report SKIP "(e2) {{ROGUE}} in bootstrap answer → exit 5 naming emitted file" "jq not on PATH"
+  elif case_e2_bootstrap_rogue; then
+    report PASS "(e2) {{ROGUE}} in bootstrap answer → exit 5 naming emitted file"
+  else
+    report FAIL "(e2) {{ROGUE}} in bootstrap answer → exit 5 naming emitted file"
+  fi
+}
+blk_f() {
+  if case_f_unbalanced_if; then
+    report PASS "(f) unbalanced <!-- IF loop --> → exit 6 with file:line"
+  else
+    report FAIL "(f) unbalanced <!-- IF loop --> → exit 6 with file:line"
+  fi
+}
+blk_g() {
+  if [[ "$HAVE_JQ" -ne 1 ]]; then
+    report SKIP "(g) --check-answers: empty bootstrap ids vs fixture" "jq not on PATH"
+  elif case_g_check_answers; then
+    report PASS "(g) --check-answers: empty bootstrap ids vs fixture"
+  else
+    report FAIL "(g) --check-answers: empty bootstrap ids vs fixture"
+  fi
+}
+blk_h() {
+  if [[ "$HAVE_JQ" -ne 1 ]]; then
+    report SKIP "(h) upgrade blocked/dry-run/force, prune, foreign, seed, missing answers" "jq not on PATH"
+  elif case_h_upgrade; then
+    report PASS "(h) upgrade blocked/dry-run/force, prune, foreign, seed, missing answers" "${CASE_H_DETAIL:-}"
+  else
+    report FAIL "(h) upgrade blocked/dry-run/force, prune, foreign, seed, missing answers" "${CASE_H_DETAIL:-}"
+  fi
+}
+blk_i() {
+  if [[ "$HAVE_JQ" -ne 1 ]]; then
+    report SKIP "(i) .cursor isolation, readonly agents, models.map parity, copilot+codex ORCH, copilot feature agent+SKILL.md" "jq not on PATH"
+  elif case_i_cursor_isolation_and_variants; then
+    report PASS "(i) .cursor isolation, readonly agents, models.map parity, copilot+codex ORCH, copilot feature agent+SKILL.md"
+  else
+    report FAIL "(i) .cursor isolation, readonly agents, models.map parity, copilot+codex ORCH, copilot feature agent+SKILL.md"
+  fi
+}
+blk_j() {
+  if case_j_executables; then
+    report PASS "(j) _kit/log-spawn.sh, memory.sh, _loop/{loop,breaker}.sh are executable"
+  else
+    report FAIL "(j) _kit/log-spawn.sh, memory.sh, _loop/{loop,breaker}.sh are executable"
+  fi
+}
+blk_n() {
+  if case_n_memory_emit_paths; then
+    report PASS "(n) memory.ps1 + _memory/README.md; gitignore/gitattributes lines"
+  else
+    report FAIL "(n) memory.ps1 + _memory/README.md; gitignore/gitattributes lines"
+  fi
+}
+blk_o() {
+  if case_o_memory_readme_prune; then
+    report PASS "(o) kit README removed → _memory/README.md pruned; user record kept"
+  else
+    report FAIL "(o) kit README removed → _memory/README.md pruned; user record kept"
+  fi
+}
+blk_k() {
+  if case_k_parse_portable; then
+    report PASS "(k) bash -n emit.sh + no Bash 4 / GNU-only / jq constructs"
+  else
+    report FAIL "(k) bash -n emit.sh + no Bash 4 / GNU-only / jq constructs"
+  fi
+}
+blk_p() {
+  if case_p_jq_hidden; then
+    report PASS "(p) emit + upgrade with jq hidden from PATH → tree identical to normal emit"
+  else
+    report FAIL "(p) emit + upgrade with jq hidden from PATH → tree identical to normal emit"
+  fi
+}
+blk_q() {
+  if case_q_answers_round_trip; then
+    report PASS "(q) string-stress answers round-trip emit → upgrade (jq -S oracle when jq present)"
+  else
+    report FAIL "(q) string-stress answers round-trip emit → upgrade (jq -S oracle when jq present)"
+  fi
+}
+blk_r() {
+  if case_r_pointer_upgrade; then
+    report PASS "(r) old pwsh memory pointer: dry-run reports write; upgrade rewrites only the literal"
+  else
+    report FAIL "(r) old pwsh memory pointer: dry-run reports write; upgrade rewrites only the literal"
+  fi
+}
+blk_s() {
+  if case_s_bom_inputs; then
+    report PASS "(s) UTF-8 BOM on answers, manifest and settings.json is ignored (no jq)"
+  else
+    report FAIL "(s) UTF-8 BOM on answers, manifest and settings.json is ignored (no jq)"
+  fi
+}
+blk_t_default() {
+  if case_t_json_edges ""; then
+    report PASS "(t) JSON edge cases byte-exact vs jq -S expectation -- default awk"
+  else
+    report FAIL "(t) JSON edge cases byte-exact vs jq -S expectation -- default awk"
+  fi
+}
+blk_t_gawk() {
+  local shim="$AWK_SHIM_gawk"
+  if [ -z "$shim" ]; then
+    report SKIP "(t) JSON edge cases byte-exact vs jq -S expectation -- gawk" "gawk not installed"
+  elif case_t_json_edges "$shim"; then
+    report PASS "(t) JSON edge cases byte-exact vs jq -S expectation -- gawk"
+  else
+    report FAIL "(t) JSON edge cases byte-exact vs jq -S expectation -- gawk"
+  fi
+}
+blk_t_mawk() {
+  local shim="$AWK_SHIM_mawk"
+  if [ -z "$shim" ]; then
+    report SKIP "(t) JSON edge cases byte-exact vs jq -S expectation -- mawk" "mawk not installed"
+  elif case_t_json_edges "$shim"; then
+    report PASS "(t) JSON edge cases byte-exact vs jq -S expectation -- mawk"
+  else
+    report FAIL "(t) JSON edge cases byte-exact vs jq -S expectation -- mawk"
+  fi
+}
+blk_t_busybox() {
+  local shim="$AWK_SHIM_busybox"
+  if [ -z "$shim" ]; then
+    report SKIP "(t) JSON edge cases byte-exact vs jq -S expectation -- busybox" "busybox not installed"
+  elif case_t_json_edges "$shim"; then
+    report PASS "(t) JSON edge cases byte-exact vs jq -S expectation -- busybox"
+  else
+    report FAIL "(t) JSON edge cases byte-exact vs jq -S expectation -- busybox"
+  fi
+}
+blk_l() {
+  if case_l_dry_run_no_writes; then
+    report PASS "(l) --dry-run --upgrade on fresh root prints zero write lines"
+  else
+    report FAIL "(l) --dry-run --upgrade on fresh root prints zero write lines"
+  fi
+}
+blk_m() {
+  if [[ "$HAVE_JQ" -ne 1 ]]; then
+    report SKIP "(m) two rogue bootstrap answers → verify stderr sorted" "jq not on PATH"
+  elif case_m_verify_sort_order; then
+    report PASS "(m) two rogue bootstrap answers → verify stderr sorted"
+  else
+    report FAIL "(m) two rogue bootstrap answers → verify stderr sorted"
+  fi
+}
+
+PAR_COUNTERS="pass fail skip"
+PAR_REPORT_FAIL="report"
+
+emit_cache_init
+par_init
+par_block blk_a
+par_block blk_c0
+par_block blk_c
+par_block blk_d
+par_block blk_e1
+par_block blk_e2
+par_block blk_f
+par_block blk_g
+par_block blk_h
+par_block blk_i
+par_block blk_j
+par_block blk_n
+par_block blk_o
+par_block blk_k
+par_block blk_p
+par_block blk_q
+par_block blk_r
+par_block blk_s
+par_block blk_t_default
+par_block blk_t_gawk
+par_block blk_t_mawk
+par_block blk_t_busybox
+par_block blk_l
+par_block blk_m
+par_finish
+emit_cache_verify
 
 # ---------------------------------------------------------------------------
 # Mutation evidence (only when running canonical twins — not when EMIT_SH overridden)
 # ---------------------------------------------------------------------------
 if [[ "$EMIT_SH" == "$REPO_ROOT/skills/agent-kit/bin/emit.sh" ]]; then
+  _mut_cache_save="${AGENT_KIT_EMIT_CACHE:-}"
+  AGENT_KIT_EMIT_CACHE=off
+  emit_cache_init
   mut_j="$(mktemp_file)"
   cp "$EMIT_SH" "$mut_j"
   sed -i 's/chmod +x "$dest"/: # chmod disabled/' "$mut_j"
@@ -514,18 +851,33 @@ if [[ "$EMIT_SH" == "$REPO_ROOT/skills/agent-kit/bin/emit.sh" ]]; then
   cp "$EMIT_SH" "$mut_e"
   sed -i 's/if ! verify_all; then/if false; then # verify disabled/' "$mut_e"
   EMIT_SH="$mut_e"
-  if case_e2_bootstrap_rogue; then
-    report FAIL "mutation (e2): verify disabled must fail bootstrap-rogue assertion"
+  if [[ "$HAVE_JQ" -ne 1 ]]; then
+    report SKIP "mutation (e2): verify disabled → bootstrap-rogue assertion fails" "jq not on PATH"
+    report SKIP "mutation (m): verify disabled → sorted-verify assertion fails" "jq not on PATH"
   else
-    report PASS "mutation (e2): verify disabled → bootstrap-rogue assertion fails"
-  fi
-  if case_m_verify_sort_order; then
-    report FAIL "mutation (m): verify disabled must fail sorted-verify assertion"
-  else
-    report PASS "mutation (m): verify disabled → sorted-verify assertion fails"
+    if case_e2_bootstrap_rogue; then
+      report FAIL "mutation (e2): verify disabled must fail bootstrap-rogue assertion"
+    else
+      report PASS "mutation (e2): verify disabled → bootstrap-rogue assertion fails"
+    fi
+    if case_m_verify_sort_order; then
+      report FAIL "mutation (m): verify disabled must fail sorted-verify assertion"
+    else
+      report PASS "mutation (m): verify disabled → sorted-verify assertion fails"
+    fi
   fi
   EMIT_SH="$EMIT_SH_SAVE"
   rm -f "$mut_j" "$mut_e"
+  if [ -n "${EMIT_CACHE_OFF_ROOT:-}" ] && [ -d "${EMIT_CACHE_OFF_ROOT:-}" ]; then
+    rm -rf "$EMIT_CACHE_OFF_ROOT"
+    EMIT_CACHE_OFF_ROOT=""
+  fi
+  if [ -n "$_mut_cache_save" ] && [ "$_mut_cache_save" != "off" ]; then
+    export AGENT_KIT_EMIT_CACHE="$_mut_cache_save"
+  else
+    unset AGENT_KIT_EMIT_CACHE
+    emit_cache_init
+  fi
 fi
 
 echo

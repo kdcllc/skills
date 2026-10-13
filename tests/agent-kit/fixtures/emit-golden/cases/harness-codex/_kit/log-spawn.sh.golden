@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # log-spawn — append-only orchestration-log writer for the AI Orchestration Kit.
-# Emitted single-copy to `_kit/log-spawn.sh` (twin: `_kit/log-spawn.ps1`, PowerShell 7+,
-# behaviorally identical — same flags, same entry text byte-for-byte, same exit codes;
-# any divergence is a bug). The orchestrator runs it INLINE after writing a context
+# Emitted single-copy to `_kit/log-spawn.sh` (Windows outside Git Bash: `_kit\log-spawn.cmd`
+# — Git for Windows required). The orchestrator runs it INLINE after writing a context
 # package / report file; it prints exactly one line on success.
 #
 # CLI CONTRACT (frozen — the feature skill and ORCHESTRATION.md describe this):

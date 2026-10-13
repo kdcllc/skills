@@ -13,12 +13,13 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$HERE/../../.." && pwd)"
 cd "$REPO_ROOT" || exit 1
 
+. "$HERE/../lib/parallel.sh"
+. "$HERE/../lib/emit-cache.sh"
+
 EMIT_SH="${EMIT_SH:-$REPO_ROOT/skills/agent-kit/bin/emit.sh}"
-EMIT_PS1="${EMIT_PS1:-$REPO_ROOT/skills/agent-kit/bin/emit.ps1}"
 KIT="${EMIT_KIT:-$REPO_ROOT/skills/agent-kit}"
 FIXTURE="$REPO_ROOT/tests/agent-kit/fixtures/self-answers.json"
 LOG_SPAWN_SH="$REPO_ROOT/skills/agent-kit/templates/tools/log-spawn.sh"
-LOG_SPAWN_PS1="$REPO_ROOT/skills/agent-kit/templates/tools/log-spawn.ps1"
 
 TEMPLATES="$REPO_ROOT/skills/agent-kit/templates"
 SETUP_SKILL="$REPO_ROOT/skills/agent-kit/SKILL.md"
@@ -27,7 +28,12 @@ EMITTER_CLAUDE="$REPO_ROOT/skills/agent-kit/emitters/claude-code.md"
 
 TMP_BASE="$(mktemp -d)"
 TMP_N=0
-trap 'rm -rf "$TMP_BASE"' EXIT
+_suite_cleanup() {
+  rm -rf "$TMP_BASE"
+  par_cleanup
+  emit_cache_cleanup
+}
+trap _suite_cleanup EXIT
 
 pass=0
 fail=0
@@ -42,14 +48,12 @@ report() { # report <PASS|FAIL|SKIP> <name> [detail]
   esac
 }
 
-alloc_path() { # <prefix> → sets ALLOC_PATH
-  TMP_N=$((TMP_N + 1))
-  ALLOC_PATH="$TMP_BASE/${1}-${TMP_N}"
+alloc_path() { # <prefix> → sets ALLOC_PATH (unique per call for parallel blocks)
+  ALLOC_PATH="$(mktemp "$TMP_BASE/${1}.XXXXXX")"
 }
 
 alloc_root() {
-  alloc_path root
-  mkdir -p "$ALLOC_PATH"
+  ALLOC_PATH="$(mktemp -d "$TMP_BASE/root.XXXXXX")"
 }
 
 alloc_answers() {
@@ -59,10 +63,6 @@ alloc_answers() {
 
 run_emit_sh() { # root [emit args...]
   bash "$EMIT_SH" --root "$1" --kit "$KIT" "${@:2}"
-}
-
-run_emit_ps1() { # root [emit args...]
-  pwsh -NoProfile -File "$EMIT_PS1" --root "$1" --kit "$KIT" "${@:2}"
 }
 
 capture_emit_sh() { # root [emit args...] → EMIT_RC, EMIT_STDOUT, EMIT_STDERR files
@@ -162,129 +162,6 @@ answers_case2() { # outfile
   ' "$FIXTURE" > "$1"
 }
 
-twin_parity_answers() { # answers-file
-  local ans="$1"
-  alloc_root
-  local rsh="$ALLOC_PATH"
-  alloc_root
-  local rps="$ALLOC_PATH"
-  alloc_path twin
-  local osh="$ALLOC_PATH.sh.out" oss="$ALLOC_PATH.sh.err"
-  local ops="$ALLOC_PATH.ps.out" pes="$ALLOC_PATH.ps.err"
-  local rc_sh rc_ps
-
-  run_emit_sh "$rsh" --answers "$ans" >"$osh" 2>"$oss"
-  rc_sh=$?
-  run_emit_ps1 "$rps" --answers "$ans" >"$ops" 2>"$pes"
-  rc_ps=$?
-  # Expose the pwsh run so callers can assert the expected outcome, not just parity
-  # (two twins failing identically must not pass vacuously).
-  TWIN_RC="$rc_ps"
-  TWIN_STDOUT="$ops"
-  TWIN_STDERR="$pes"
-
-  [[ "$rc_sh" == "$rc_ps" ]] || return 1
-  cmp -s "$osh" "$ops" || return 1
-  cmp -s "$oss" "$pes" || return 1
-  if [[ "$rc_sh" -eq 0 ]]; then
-    diff -r "$rsh" "$rps" >/dev/null 2>&1 || return 1
-  fi
-}
-
-twin_parity_cc() { # label want_rc jq-filter [jq args…] — emit_cc_base + filter, then twin parity
-  local label="$1" want_rc="$2" filter="$3" ans
-  shift 3
-  alloc_answers
-  ans="$ALLOC_PATH"
-  emit_cc_base "$ans"
-  jq "$@" "$filter" "$ans" > "${ans}.tmp" && mv "${ans}.tmp" "$ans" || return 1
-  if ! twin_parity_answers "$ans"; then
-    echo "twin parity: emit.ps1 vs emit.sh differ for: $label" >&2
-    return 1
-  fi
-  if [[ "$TWIN_RC" != "$want_rc" ]]; then
-    echo "twin parity: $label exited $TWIN_RC from both twins, expected $want_rc" >&2
-    return 1
-  fi
-}
-
-twin_expect_silent() { # label — last twin run: warnings 0 on stdout, no emit warning on stderr
-  local label="$1" w
-  w="$(warnings_from_stdout_file "$TWIN_STDOUT")"
-  if [[ "$w" != 0 ]] || grep -qF 'emit: warning:' "$TWIN_STDERR"; then
-    echo "twin parity: $label expected silence (warnings 0), got warnings '${w}'" >&2
-    return 1
-  fi
-}
-
-twin_expect_problem() { # label exact_line — last twin run: exact line on stderr only
-  local label="$1" line="$2"
-  if ! assert_problem_stderr_only "$TWIN_STDERR" "$TWIN_STDOUT" "$line"; then
-    echo "twin parity: $label missing exact stderr line: $line" >&2
-    return 1
-  fi
-}
-
-twin_parity_upgrade() { # answers-file (v0.28-style)
-  local ans="$1"
-  alloc_root
-  local rsh="$ALLOC_PATH"
-  alloc_root
-  local rps="$ALLOC_PATH"
-  local osh oss ops pes rc_sh rc_ps line
-
-  run_emit_sh "$rsh" --answers "$ans" >/dev/null 2>&1 || return 1
-  run_emit_ps1 "$rps" --answers "$ans" >/dev/null 2>&1 || return 1
-  jq '.kitVersion = "0.28.0"' "$rsh/orchestration-kit.manifest.json" > "$rsh/orchestration-kit.manifest.json.tmp" \
-    && mv "$rsh/orchestration-kit.manifest.json.tmp" "$rsh/orchestration-kit.manifest.json"
-  jq '.kitVersion = "0.28.0"' "$rps/orchestration-kit.manifest.json" > "$rps/orchestration-kit.manifest.json.tmp" \
-    && mv "$rps/orchestration-kit.manifest.json.tmp" "$rps/orchestration-kit.manifest.json"
-
-  alloc_path twin-up
-  osh="$ALLOC_PATH.sh.out"; oss="$ALLOC_PATH.sh.err"
-  ops="$ALLOC_PATH.ps.out"; pes="$ALLOC_PATH.ps.err"
-
-  run_emit_sh "$rsh" --upgrade >"$osh" 2>"$oss"
-  rc_sh=$?
-  run_emit_ps1 "$rps" --upgrade >"$ops" 2>"$pes"
-  rc_ps=$?
-
-  [[ "$rc_sh" == "$rc_ps" ]] || return 1
-  cmp -s "$osh" "$ops" || return 1
-  cmp -s "$oss" "$pes" || return 1
-  if [[ "$rc_sh" -eq 0 ]]; then
-    diff -r "$rsh" "$rps" >/dev/null 2>&1 || return 1
-  fi
-  [[ "$rc_ps" -eq 0 ]] || return 1
-
-  # Second step: loop_chain "fable" injected into BOTH manifests' .answers → exit 3.
-  jq '.answers.models["claude-code"].loop_chain = "fable"' "$rsh/orchestration-kit.manifest.json" \
-    > "$rsh/orchestration-kit.manifest.json.tmp" \
-    && mv "$rsh/orchestration-kit.manifest.json.tmp" "$rsh/orchestration-kit.manifest.json" || return 1
-  jq '.answers.models["claude-code"].loop_chain = "fable"' "$rps/orchestration-kit.manifest.json" \
-    > "$rps/orchestration-kit.manifest.json.tmp" \
-    && mv "$rps/orchestration-kit.manifest.json.tmp" "$rps/orchestration-kit.manifest.json" || return 1
-
-  alloc_path twin-up-fable
-  osh="$ALLOC_PATH.sh.out"; oss="$ALLOC_PATH.sh.err"
-  ops="$ALLOC_PATH.ps.out"; pes="$ALLOC_PATH.ps.err"
-
-  run_emit_sh "$rsh" --upgrade >"$osh" 2>"$oss"
-  rc_sh=$?
-  run_emit_ps1 "$rps" --upgrade >"$ops" 2>"$pes"
-  rc_ps=$?
-
-  [[ "$rc_sh" == "$rc_ps" ]] || return 1
-  cmp -s "$osh" "$ops" || return 1
-  cmp -s "$oss" "$pes" || return 1
-  if [[ "$rc_sh" -eq 0 ]]; then
-    diff -r "$rsh" "$rps" >/dev/null 2>&1 || return 1
-  fi
-  [[ "$rc_ps" -eq 3 ]] || return 1
-  line="emit: models.claude-code.loop_chain entry 'fable' can bill usage credits in headless runs"
-  assert_problem_stderr_only "$pes" "$ops" "$line" || return 1
-}
-
 # ---------------------------------------------------------------------------
 # Case 1 — fast tier on terminal (four harnesses)
 # ---------------------------------------------------------------------------
@@ -295,7 +172,7 @@ case_1() {
   answers_case1 "$ans"
   alloc_root
   root="$ALLOC_PATH"
-  run_emit_sh "$root" --answers "$ans" >/dev/null 2>&1 || return 1
+  emit_cache_copy "$root" "$ans" || return 1
   grep -qxF 'model: cc-fast-id' "$root/.claude/agents/terminal.md" || return 1
   grep -qxF 'model: cur-fast-id' "$root/.cursor/agents/terminal.md" || return 1
   grep -qxF 'model: ["cop-fast-id"]' "$root/.github/agents/terminal.agent.md" || return 1
@@ -312,7 +189,7 @@ case_2() {
   answers_case2 "$ans"
   alloc_root
   root="$ALLOC_PATH"
-  run_emit_sh "$root" --answers "$ans" >/dev/null 2>&1 || return 1
+  emit_cache_copy "$root" "$ans" || return 1
   grep -qxF "model: $cc_light" "$root/.claude/agents/terminal.md" || return 1
   grep -qxF "model: $cur_light" "$root/.cursor/agents/terminal.md" || return 1
 }
@@ -575,10 +452,6 @@ case_10_logspawn_bash() {
   logspawn_run_case10 bash bash "$LOG_SPAWN_SH"
 }
 
-case_10_logspawn_pwsh() {
-  logspawn_run_case10 pwsh pwsh -NoProfile -File "$LOG_SPAWN_PS1"
-}
-
 # Case 11 — canonical agent templates (frontmatter only)
 case_11() {
   local fm
@@ -619,80 +492,8 @@ case_13() {
   [[ -z "$hits" ]]
 }
 
-case_8_twin() {
-  local ans
-
-  alloc_answers
-  ans="$ALLOC_PATH"
-  answers_case1 "$ans"
-  twin_parity_answers "$ans" || return 1
-
-  alloc_answers
-  ans="$ALLOC_PATH"
-  answers_case2 "$ans"
-  twin_parity_answers "$ans" || return 1
-
-  alloc_answers
-  ans="$ALLOC_PATH"
-  emit_cc_base "$ans"
-  jq '.models["claude-code"].frontier_alt_family = .models["claude-code"].frontier | del(.models["claude-code"].arbiter_same_family)' \
-    "$ans" > "${ans}.tmp" && mv "${ans}.tmp" "$ans"
-  twin_parity_answers "$ans" || return 1
-
-  # Case 3, flag on: frontier_alt_family == frontier + arbiter_same_family: true → warnings 0
-  twin_parity_cc "case 3 flag on" 0 '
-    .models["claude-code"].frontier_alt_family = .models["claude-code"].frontier |
-    .models["claude-code"].arbiter_same_family = true
-  ' || return 1
-  twin_expect_silent "case 3 flag on" || return 1
-
-  alloc_answers
-  ans="$ALLOC_PATH"
-  emit_cc_base "$ans"
-  jq '
-    .models["claude-code"].frontier = "claude-opus-5-5" |
-    .models["claude-code"].alt_family = "claude-sonnet-5-5" |
-    .models["claude-code"].frontier_alt_family = "claude-sonnet-5-5" |
-    .models["claude-code"].arbiter_same_family = true
-  ' "$ans" > "${ans}.tmp" && mv "${ans}.tmp" "$ans"
-  twin_parity_answers "$ans" || return 1
-
-  # Case 4, all three equal + flag: silence
-  twin_parity_cc "case 4 all three equal + flag" 0 '
-    .models["claude-code"].frontier_alt_family = .models["claude-code"].frontier |
-    .models["claude-code"].alt_family = .models["claude-code"].frontier |
-    .models["claude-code"].arbiter_same_family = true
-  ' || return 1
-  twin_expect_silent "case 4 all three equal + flag" || return 1
-
-  # Case 5: denylist (bare, prefix-glob, comma-split, exact) → exit 3; clean chain → exit 0
-  local chains=(best fable claude-fable-2026 x,fable)
-  local tokens=(best fable claude-fable-2026 fable)
-  local i
-  for i in "${!chains[@]}"; do
-    twin_parity_cc "case 5 loop_chain ${chains[$i]}" 3 \
-      '.models["claude-code"].loop_chain = $c' --arg c "${chains[$i]}" || return 1
-    twin_expect_problem "case 5 loop_chain ${chains[$i]}" \
-      "emit: models.claude-code.loop_chain entry '${tokens[$i]}' can bill usage credits in headless runs" || return 1
-  done
-  twin_parity_cc "case 5 clean loop_chain" 0 '.' || return 1
-  twin_expect_silent "case 5 clean loop_chain" || return 1
-
-  # Case 6: arbiter_same_family "yes" (string) and fast 42 (JSON number) → exit 3
-  alloc_answers
-  ans="$ALLOC_PATH"
-  emit_cc_base "$ans"
-  jq '.models["claude-code"].arbiter_same_family = "yes"' "$ans" > "${ans}.tmp" && mv "${ans}.tmp" "$ans"
-  twin_parity_answers "$ans" || return 1
-
-  twin_parity_cc "case 6 fast 42" 3 '.models["claude-code"].fast = 42' || return 1
-  twin_expect_problem "case 6 fast 42" 'emit: models.claude-code.fast must be a string' || return 1
-
-  # Case 7: v0.28-style --upgrade (warn, exit 0) then loop_chain "fable" in .answers (exit 3)
-  alloc_answers
-  ans="$ALLOC_PATH"
-  emit_v028_answers "$ans"
-  twin_parity_upgrade "$ans" || return 1
+case_8_bash() {
+  case_1 && case_2 && case_3 && case_4 && case_5 && case_6 && case_7
 }
 
 # ---------------------------------------------------------------------------
@@ -706,59 +507,81 @@ if [[ -n "${MODEL_CURRENCY_ONLY:-}" ]]; then
   esac
 fi
 
-if case_1; then report PASS "case 1 fast tier → terminal model on claude/cursor/copilot/codex"
-else report FAIL "case 1 fast tier → terminal model on claude/cursor/copilot/codex"; fi
+CASE8_LABEL="case 8 bash-only emit.sh bundle (cases 1–7 regression gate)"
 
-if case_2; then report PASS "case 2 no fast → terminal uses light ID"
-else report FAIL "case 2 no fast → terminal uses light ID"; fi
+blk_case_1() {
+  if case_1; then report PASS "case 1 fast tier → terminal model on claude/cursor/copilot/codex"
+  else report FAIL "case 1 fast tier → terminal model on claude/cursor/copilot/codex"; fi
+}
+blk_case_2() {
+  if case_2; then report PASS "case 2 no fast → terminal uses light ID"
+  else report FAIL "case 2 no fast → terminal uses light ID"; fi
+}
+blk_case_3() {
+  if case_3; then report PASS "case 3 frontier_alt_family equals frontier warning + flag silence"
+  else report FAIL "case 3 frontier_alt_family equals frontier warning + flag silence"; fi
+}
+blk_case_4() {
+  if case_4; then report PASS "case 4 alt_family arbiter warning; three equal + flag silent"
+  else report FAIL "case 4 alt_family arbiter warning; three equal + flag silent"; fi
+}
+blk_case_5() {
+  if case_5; then report PASS "case 5 loop_chain denylist (best/fable/claude-fable/x,fable) + clean chain"
+  else report FAIL "case 5 loop_chain denylist (best/fable/claude-fable/x,fable) + clean chain"; fi
+}
+blk_case_6() {
+  if case_6; then report PASS "case 6 arbiter_same_family boolean + fast string validation"
+  else report FAIL "case 6 arbiter_same_family boolean + fast string validation"; fi
+}
+blk_case_7() {
+  if case_7; then report PASS "case 7 v0.28 upgrade manifest warn + fable exit 3 + terminal on light"
+  else report FAIL "case 7 v0.28 upgrade manifest warn + fable exit 3 + terminal on light"; fi
+}
+blk_case_8() {
+  if case_8_bash; then report PASS "$CASE8_LABEL"
+  else report FAIL "$CASE8_LABEL"; fi
+}
+blk_case_9() {
+  if case_9; then report PASS "case 9 bracket-param Cursor model emitted unquoted"
+  else report FAIL "case 9 bracket-param Cursor model emitted unquoted"; fi
+}
+blk_case_10_bash() {
+  if case_10_logspawn_bash; then report PASS "case 10 log-spawn.sh model_check (match, MISMATCH, unverified x2)"
+  else report FAIL "case 10 log-spawn.sh model_check (match, MISMATCH, unverified x2)"; fi
+}
+blk_case_11() {
+  if case_11; then report PASS "case 11 terminal {{MODEL_FAST}}/effort low; diagnostician xhigh (frontmatter)"
+  else report FAIL "case 11 terminal {{MODEL_FAST}}/effort low; diagnostician xhigh (frontmatter)"; fi
+}
+blk_case_12() {
+  if case_12; then report PASS "case 12 models.map + SKILL Step 3 + emitters + model_check guidance"
+  else report FAIL "case 12 models.map + SKILL Step 3 + emitters + model_check guidance"; fi
+}
+blk_case_13() {
+  if case_13; then report PASS "case 13 dogfood: no cursor-grok / gpt-5.6-sol-medium pins"
+  else report FAIL "case 13 dogfood: no cursor-grok / gpt-5.6-sol-medium pins"; fi
+}
 
-if case_3; then report PASS "case 3 frontier_alt_family equals frontier warning + flag silence"
-else report FAIL "case 3 frontier_alt_family equals frontier warning + flag silence"; fi
+PAR_COUNTERS="pass fail skip"
+PAR_REPORT_FAIL="report"
 
-if case_4; then report PASS "case 4 alt_family arbiter warning; three equal + flag silent"
-else report FAIL "case 4 alt_family arbiter warning; three equal + flag silent"; fi
-
-if case_5; then report PASS "case 5 loop_chain denylist (best/fable/claude-fable/x,fable) + clean chain"
-else report FAIL "case 5 loop_chain denylist (best/fable/claude-fable/x,fable) + clean chain"; fi
-
-if case_6; then report PASS "case 6 arbiter_same_family boolean + fast string validation"
-else report FAIL "case 6 arbiter_same_family boolean + fast string validation"; fi
-
-if case_7; then report PASS "case 7 v0.28 upgrade manifest warn + fable exit 3 + terminal on light"
-else report FAIL "case 7 v0.28 upgrade manifest warn + fable exit 3 + terminal on light"; fi
-
-CASE8_LABEL="case 8 twin parity emit.ps1 vs emit.sh (1 fast tier x4 harnesses; 2 no fast; 3 warn + flag silent; 4 alt_family warn + all-equal silent; 5 best/fable/claude-fable-2026/x,fable + clean chain; 6 arbiter_same_family \"yes\" + fast 42; 7 v0.28 --upgrade + loop_chain fable)"
-if command -v pwsh >/dev/null 2>&1; then
-  if case_8_twin; then
-    report PASS "$CASE8_LABEL"
-  else
-    report FAIL "$CASE8_LABEL"
-  fi
-else
-  report SKIP "$CASE8_LABEL" "pwsh not on PATH"
-fi
-
-if case_9; then report PASS "case 9 bracket-param Cursor model emitted unquoted"
-else report FAIL "case 9 bracket-param Cursor model emitted unquoted"; fi
-
-if case_10_logspawn_bash; then report PASS "case 10 log-spawn.sh model_check (match, MISMATCH, unverified x2)"
-else report FAIL "case 10 log-spawn.sh model_check (match, MISMATCH, unverified x2)"; fi
-
-if command -v pwsh >/dev/null 2>&1; then
-  if case_10_logspawn_pwsh; then report PASS "case 10 log-spawn.ps1 model_check (match, MISMATCH, unverified x2)"
-  else report FAIL "case 10 log-spawn.ps1 model_check (match, MISMATCH, unverified x2)"; fi
-else
-  report SKIP "case 10 log-spawn.ps1" "pwsh not on PATH"
-fi
-
-if case_11; then report PASS "case 11 terminal {{MODEL_FAST}}/effort low; diagnostician xhigh (frontmatter)"
-else report FAIL "case 11 terminal {{MODEL_FAST}}/effort low; diagnostician xhigh (frontmatter)"; fi
-
-if case_12; then report PASS "case 12 models.map + SKILL Step 3 + emitters + model_check guidance"
-else report FAIL "case 12 models.map + SKILL Step 3 + emitters + model_check guidance"; fi
-
-if case_13; then report PASS "case 13 dogfood: no cursor-grok / gpt-5.6-sol-medium pins"
-else report FAIL "case 13 dogfood: no cursor-grok / gpt-5.6-sol-medium pins"; fi
+emit_cache_init
+par_init
+par_block blk_case_1
+par_block blk_case_2
+par_block blk_case_3
+par_block blk_case_4
+par_block blk_case_5
+par_block blk_case_6
+par_block blk_case_7
+par_block blk_case_8
+par_block blk_case_9
+par_block blk_case_10_bash
+par_block blk_case_11
+par_block blk_case_12
+par_block blk_case_13
+par_finish
+emit_cache_verify
 
 # ---------------------------------------------------------------------------
 # Mutation checks (AC2) — temp copies only
@@ -773,7 +596,7 @@ else
   cp -a "$REPO_ROOT/tests" "$REPO_ROOT/skills" "$mut_root/"
   sed -i 's/{{MODEL_FAST}}/{{MODEL_LIGHT}}/' "$mut_root/skills/agent-kit/templates/agents/terminal.md"
   mut_rc=0
-  MODEL_CURRENCY_NESTED=1 bash "$mut_root/tests/agent-kit/templates/model-currency.sh" >/dev/null 2>&1 || mut_rc=$?
+  MODEL_CURRENCY_NESTED=1 AGENT_KIT_EMIT_CACHE=off bash "$mut_root/tests/agent-kit/templates/model-currency.sh" >/dev/null 2>&1 || mut_rc=$?
   if [[ "$mut_rc" -eq 1 ]]; then
     report PASS "mutation AC2: terminal template MODEL_LIGHT revert fails full script (exit 1)"
   else
@@ -785,7 +608,7 @@ else
   cp "$EMIT_SH" "$mut_emit"
   sed -i 's/LOOP_CHAIN_USAGE_CREDIT_DENYLIST=(best fable/LOOP_CHAIN_USAGE_CREDIT_DENYLIST=(best/' "$mut_emit"
   mut5_rc=0
-  MODEL_CURRENCY_NESTED=1 EMIT_SH="$mut_emit" MODEL_CURRENCY_ONLY=5 bash "$HERE/model-currency.sh" >/dev/null 2>&1 || mut5_rc=$?
+  MODEL_CURRENCY_NESTED=1 AGENT_KIT_EMIT_CACHE=off EMIT_SH="$mut_emit" MODEL_CURRENCY_ONLY=5 bash "$HERE/model-currency.sh" >/dev/null 2>&1 || mut5_rc=$?
   if [[ "$mut5_rc" -eq 1 ]]; then
     report PASS "mutation AC2: fable denylist removal fails case 5 (exit 1)"
   else

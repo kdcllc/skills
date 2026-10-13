@@ -206,10 +206,10 @@ fi
 # 5c. Token resolution per harness: README prose + emit.sh ide_dir_for behaviour.
 if grep -qF 'translates per harness' "$EMIT_README" 2>/dev/null \
    && grep -qF 'ide_dir_for()' "$EMIT_SH" 2>/dev/null \
-   && grep -qF 'TOKENS[IDE_DIR]="$(ide_dir_for "$h")"' "$EMIT_SH" 2>/dev/null; then
-  report PASS "bin/README.md + emit.sh: tokens resolved per harness (ide_dir_for + IDE_DIR assignment)"
+   && grep -qF 'map_set TOKENS IDE_DIR "$(ide_dir_for "$h")"' "$EMIT_SH" 2>/dev/null; then
+  report PASS "bin/README.md + emit.sh: tokens resolved per harness (ide_dir_for + IDE_DIR via map_set)"
 else
-  report FAIL "bin/README.md + emit.sh: tokens resolved per harness (ide_dir_for + IDE_DIR assignment)"
+  report FAIL "bin/README.md + emit.sh: tokens resolved per harness (ide_dir_for + IDE_DIR via map_set)"
 fi
 
 # 5d. Single-copy artifacts are written from the primary harness in emit.sh.

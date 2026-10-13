@@ -11,9 +11,11 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$HERE/../../.." && pwd)"
 cd "$REPO_ROOT" || exit 1
 
+. "$HERE/../lib/parallel.sh"
+. "$HERE/../lib/emit-cache.sh"
+
 KIT="${EMIT_KIT:-$REPO_ROOT/skills/agent-kit}"
 EMIT_SH="${EMIT_SH:-$REPO_ROOT/skills/agent-kit/bin/emit.sh}"
-EMIT_PS1="${EMIT_PS1:-$REPO_ROOT/skills/agent-kit/bin/emit.ps1}"
 FIXTURE="$REPO_ROOT/tests/agent-kit/fixtures/self-answers.json"
 
 TEMPLATES="$KIT/templates"
@@ -46,10 +48,12 @@ count_leak_roots() { # memory-wiring.* roots under the SAME dir mktemp uses
   find "${TMPDIR:-/tmp}" -maxdepth 1 -type d -name 'memory-wiring.*' 2>/dev/null | wc -l | tr -d ' '
 }
 
-cleanup() {
+_suite_cleanup() {
   [[ ${#CLEANUP[@]} -gt 0 ]] && rm -rf "${CLEANUP[@]}"
+  par_cleanup
+  emit_cache_cleanup
 }
-trap cleanup EXIT
+trap _suite_cleanup EXIT
 
 report() {
   local status="$1" name="$2" detail="${3:-}"
@@ -226,119 +230,142 @@ LEAK_TMP_BEFORE="$(count_leak_roots)"   # BEFORE our own scratch root exists
 TMP_BASE="$(mktemp -d "${TMPDIR:-/tmp}/memory-wiring.XXXXXX")"
 CLEANUP+=("$TMP_BASE")
 
-# --- S1 ---
-if check_no_memory_frontmatter_in_dir "$AGENTS_DIR"; then
-  report PASS "S1: template agents have no memory: frontmatter"
-else
-  report FAIL "S1: template agents have no memory: frontmatter"
-fi
-s1_inst_skip=0
-for inst in "$REPO_ROOT/.claude/agents" "$REPO_ROOT/.cursor/agents"; do
-  if [[ -d "$inst" ]]; then
-    if check_no_memory_frontmatter_in_dir "$inst"; then
-      report PASS "S1: instance agents ($(basename "$(dirname "$inst")")) no memory:"
-    else
-      report FAIL "S1: instance agents ($(basename "$(dirname "$inst")")) no memory:"
-    fi
+blk_s1() {
+  local s1_inst_skip=0
+  if check_no_memory_frontmatter_in_dir "$AGENTS_DIR"; then
+    report PASS "S1: template agents have no memory: frontmatter"
   else
-    s1_inst_skip=1
+    report FAIL "S1: template agents have no memory: frontmatter"
   fi
-done
-[[ "$s1_inst_skip" -eq 1 ]] && report SKIP "S1: emitted instance agents" "instance absent"
-mktemp_dir s1_mut_dir
-awk 'BEGIN{opened=0}
-  /^---$/ { print; if (opened==0) { print "memory: project"; opened=1 }; next }
-  { print }' "$AGENTS_DIR/terminal.md" > "$s1_mut_dir/bad-agent.md"
-if agent_has_memory_frontmatter "$s1_mut_dir/bad-agent.md"; then
-  report PASS "S1-mutation: memory: frontmatter detected on copy"
-else
-  report FAIL "S1-mutation: memory: frontmatter not detected on copy"
-fi
-mktemp_dir s1_mut_good
-cp "$AGENTS_DIR/terminal.md" "$s1_mut_good/good.md"
-if agent_has_memory_frontmatter "$s1_mut_good/good.md"; then
-  report FAIL "S1-mutation-invert: clean agent falsely has memory:"
-else
-  report PASS "S1-mutation-invert: clean copy fails memory: detector"
-fi
+  for inst in "$REPO_ROOT/.claude/agents" "$REPO_ROOT/.cursor/agents"; do
+    if [[ -d "$inst" ]]; then
+      if check_no_memory_frontmatter_in_dir "$inst"; then
+        report PASS "S1: instance agents ($(basename "$(dirname "$inst")")) no memory:"
+      else
+        report FAIL "S1: instance agents ($(basename "$(dirname "$inst")")) no memory:"
+      fi
+    else
+      s1_inst_skip=1
+    fi
+  done
+  [[ "$s1_inst_skip" -eq 1 ]] && report SKIP "S1: emitted instance agents" "instance absent"
+  mktemp_dir s1_mut_dir
+  awk 'BEGIN{opened=0}
+    /^---$/ { print; if (opened==0) { print "memory: project"; opened=1 }; next }
+    { print }' "$AGENTS_DIR/terminal.md" > "$s1_mut_dir/bad-agent.md"
+  if agent_has_memory_frontmatter "$s1_mut_dir/bad-agent.md"; then
+    report PASS "S1-mutation: memory: frontmatter detected on copy"
+  else
+    report FAIL "S1-mutation: memory: frontmatter not detected on copy"
+  fi
+  mktemp_dir s1_mut_good
+  cp "$AGENTS_DIR/terminal.md" "$s1_mut_good/good.md"
+  if agent_has_memory_frontmatter "$s1_mut_good/good.md"; then
+    report FAIL "S1-mutation-invert: clean agent falsely has memory:"
+  else
+    report PASS "S1-mutation-invert: clean copy fails memory: detector"
+  fi
+}
 
-# --- S2 ---
-if check_s2_wiring; then
-  report PASS "S2: fence, protocol refs, Recalled memory, Archive outbox paragraph"
-else
-  report FAIL "S2: fence, protocol refs, Recalled memory, Archive outbox paragraph"
-fi
-mktemp_dir s2_mut
-cp "$FEATURE_TPL" "$s2_mut/feature.md"
-sed -i 's|<outbox>/memory/|<outbox>/broken/|' "$s2_mut/feature.md"
-FEATURE_TPL="$s2_mut/feature.md"
-check_s2_wiring && s2_mut_ok=1 || s2_mut_ok=0
-FEATURE_TPL="$TEMPLATES/skills/feature/SKILL.template.md"
-if [[ "$s2_mut_ok" -eq 0 ]]; then
-  report PASS "S2-mutation: Archive outbox path break fails check"
-else
-  report FAIL "S2-mutation: mutant still passed"
-fi
+blk_s2() {
+  local s2_mut_ok tpl="$FEATURE_TPL"
+  if check_s2_wiring; then
+    report PASS "S2: fence, protocol refs, Recalled memory, Archive outbox paragraph"
+  else
+    report FAIL "S2: fence, protocol refs, Recalled memory, Archive outbox paragraph"
+  fi
+  mktemp_dir s2_mut
+  cp "$FEATURE_TPL" "$s2_mut/feature.md"
+  sed -i 's|<outbox>/memory/|<outbox>/broken/|' "$s2_mut/feature.md"
+  FEATURE_TPL="$s2_mut/feature.md"
+  check_s2_wiring && s2_mut_ok=1 || s2_mut_ok=0
+  FEATURE_TPL="$tpl"
+  if [[ "$s2_mut_ok" -eq 0 ]]; then
+    report PASS "S2-mutation: Archive outbox path break fails check"
+  else
+    report FAIL "S2-mutation: mutant still passed"
+  fi
+}
 
-# --- S3 ---
-if check_s3_protected_paths "$LOOP_SH" && check_s3_protected_paths "$LOOP_PS1"; then
-  report PASS "S3: PROTECTED_PATHS include _memory/records/ and quarantine/"
-else
-  report FAIL "S3: PROTECTED_PATHS include _memory/records/ and quarantine/"
-fi
-mktemp_dir s3_mut
-cp "$LOOP_SH" "$s3_mut/loop.sh"
-sed -i '/_memory\/records\//d' "$s3_mut/loop.sh"
-if check_s3_protected_paths "$s3_mut/loop.sh"; then
-  report FAIL "S3-mutation: stripped copy still passed check"
-else
-  report PASS "S3-mutation: stripped copy fails check_s3_protected_paths"
-fi
+blk_s3() {
+  if check_s3_protected_paths "$LOOP_SH" && check_s3_protected_paths "$LOOP_PS1"; then
+    report PASS "S3: PROTECTED_PATHS include _memory/records/ and quarantine/"
+  else
+    report FAIL "S3: PROTECTED_PATHS include _memory/records/ and quarantine/"
+  fi
+  mktemp_dir s3_mut
+  cp "$LOOP_SH" "$s3_mut/loop.sh"
+  sed -i '/_memory\/records\//d' "$s3_mut/loop.sh"
+  if check_s3_protected_paths "$s3_mut/loop.sh"; then
+    report FAIL "S3-mutation: stripped copy still passed check"
+  else
+    report PASS "S3-mutation: stripped copy fails check_s3_protected_paths"
+  fi
+}
 
-# --- S4 ---
-if check_s4_tripwires; then
-  report PASS "S4: task-criteria + goal-criteria memory tripwires"
-else
-  report FAIL "S4: task-criteria + goal-criteria memory tripwires"
-fi
-mktemp_dir s4_mut
-cp "$TASK_CRIT" "$s4_mut/task.md"
-sed -i '/Claude `memory:` frontmatter/d' "$s4_mut/task.md"
-TASK_CRIT="$s4_mut/task.md"
-check_s4_tripwires && s4m=1 || s4m=0
-TASK_CRIT="$TEMPLATES/skills/task-criteria/SKILL.template.md"
-[[ "$s4m" -eq 0 ]] && report PASS "S4-mutation: tripwire removal fails check" \
-  || report FAIL "S4-mutation: tripwire removal still passed"
+blk_s4() {
+  local s4m tpl="$TASK_CRIT"
+  if check_s4_tripwires; then
+    report PASS "S4: task-criteria + goal-criteria memory tripwires"
+  else
+    report FAIL "S4: task-criteria + goal-criteria memory tripwires"
+  fi
+  mktemp_dir s4_mut
+  cp "$TASK_CRIT" "$s4_mut/task.md"
+  sed -i '/Claude `memory:` frontmatter/d' "$s4_mut/task.md"
+  TASK_CRIT="$s4_mut/task.md"
+  check_s4_tripwires && s4m=1 || s4m=0
+  TASK_CRIT="$tpl"
+  [[ "$s4m" -eq 0 ]] && report PASS "S4-mutation: tripwire removal fails check" \
+    || report FAIL "S4-mutation: tripwire removal still passed"
+}
 
-# --- S5 ---
-if check_s5_loop_paths; then
-  report PASS "S5: loop skill outbox/memory + PROMPT substitution"
-else
-  report FAIL "S5: loop skill outbox/memory + PROMPT substitution"
-fi
-mktemp_dir s5_mut
-cp "$LOOP_PROMPT" "$s5_mut/PROMPT.md"
-sed -i 's|%%OUTBOX_DIR%%/memory/|%%OUTBOX_DIR%%/nowhere/|' "$s5_mut/PROMPT.md"
-LOOP_PROMPT="$s5_mut/PROMPT.md"
-check_s5_loop_paths && s5m=1 || s5m=0
-LOOP_PROMPT="$TEMPLATES/loop/PROMPT.md"
-[[ "$s5m" -eq 0 ]] && report PASS "S5-mutation: PROMPT path break fails check" \
-  || report FAIL "S5-mutation: PROMPT path break still passed"
+blk_s5() {
+  local s5m lp="$LOOP_PROMPT"
+  if check_s5_loop_paths; then
+    report PASS "S5: loop skill outbox/memory + PROMPT substitution"
+  else
+    report FAIL "S5: loop skill outbox/memory + PROMPT substitution"
+  fi
+  mktemp_dir s5_mut
+  cp "$LOOP_PROMPT" "$s5_mut/PROMPT.md"
+  sed -i 's|%%OUTBOX_DIR%%/memory/|%%OUTBOX_DIR%%/nowhere/|' "$s5_mut/PROMPT.md"
+  LOOP_PROMPT="$s5_mut/PROMPT.md"
+  check_s5_loop_paths && s5m=1 || s5m=0
+  LOOP_PROMPT="$lp"
+  [[ "$s5m" -eq 0 ]] && report PASS "S5-mutation: PROMPT path break fails check" \
+    || report FAIL "S5-mutation: PROMPT path break still passed"
+}
 
-# --- S6 ---
-if check_s6_readme; then
-  report PASS "S6: memory README Searching, no planned stub, no templates"
-else
-  report FAIL "S6: memory README Searching, no planned stub, no templates"
-fi
-mktemp_dir s6_mut
-cp "$MEM_README" "$s6_mut/README.md"
-printf '\nPlanned: read protocol\n' >> "$s6_mut/README.md"
-MEM_README="$s6_mut/README.md"
-check_s6_readme && s6m=1 || s6m=0
-MEM_README="$TEMPLATES/memory/README.md"
-[[ "$s6m" -eq 0 ]] && report PASS "S6-mutation: planned stub fails check" \
-  || report FAIL "S6-mutation: planned stub still passed"
+blk_s6() {
+  local s6m mr="$MEM_README"
+  if check_s6_readme; then
+    report PASS "S6: memory README Searching, no planned stub, no templates"
+  else
+    report FAIL "S6: memory README Searching, no planned stub, no templates"
+  fi
+  mktemp_dir s6_mut
+  cp "$MEM_README" "$s6_mut/README.md"
+  printf '\nPlanned: read protocol\n' >> "$s6_mut/README.md"
+  MEM_README="$s6_mut/README.md"
+  check_s6_readme && s6m=1 || s6m=0
+  MEM_README="$mr"
+  [[ "$s6m" -eq 0 ]] && report PASS "S6-mutation: planned stub fails check" \
+    || report FAIL "S6-mutation: planned stub still passed"
+}
+
+PAR_COUNTERS="pass fail skip"
+PAR_REPORT_FAIL="report"
+
+emit_cache_init
+par_init
+par_block blk_s1
+par_block blk_s2
+par_block blk_s3
+par_block blk_s4
+par_block blk_s5
+par_block blk_s6
+par_finish
 
 if ! command -v jq >/dev/null 2>&1; then
   report SKIP "B1-B4 emit cases" "jq not on PATH"
@@ -349,55 +376,110 @@ mktemp_dir ans_dir
 ans_path="$ans_dir/answers.json"
 four_harness_answers "$ans_path"
 
-# --- B1 ---
+# --- B1 (sequential: seeds B1_ROOT for B2–B4) ---
 mktemp_dir b1_root
-mkdir -p "$b1_root"
+B1_ROOT="$b1_root"
+b1_rc=0
+emit_cache_copy "$b1_root" "$ans_path" || b1_rc=$?
 ( cd "$b1_root" && git init -q )
-run_emit_sh "$b1_root" --answers "$ans_path" >/dev/null 2>&1 || b1_rc=$?
 if [[ "${b1_rc:-0}" -eq 0 ]] && check_b1_fresh "$b1_root"; then
   report PASS "B1: fresh emit memory marker once + exact .mdc sentence"
 else
   report FAIL "B1: fresh emit memory marker once + exact .mdc sentence" "rc=${b1_rc:-0}"
 fi
 mktemp_dir b1_mut
-cp -a "$b1_root/." "$b1_mut/"
+cp -a "$B1_ROOT/." "$b1_mut/"
 grep -vF "$MDC_MEMORY_SENT" "$b1_mut/.cursor/rules/orchestration.mdc" > "$b1_mut/.cursor/rules/orchestration.mdc.n" \
   && mv "$b1_mut/.cursor/rules/orchestration.mdc.n" "$b1_mut/.cursor/rules/orchestration.mdc"
 check_b1_fresh "$b1_mut" && b1m=1 || b1m=0
 [[ "$b1m" -eq 0 ]] && report PASS "B1-mutation: .mdc sentence removal fails check" \
   || report FAIL "B1-mutation: .mdc sentence removal still passed"
+emit_cache_verify
 
-# --- B2 ---
-mktemp_dir b2_root
-cp -a "$b1_root/." "$b2_root/"
-for pf in "${POINTER_FILES[@]}"; do
+blk_b2() {
+  local b2_root b2_ok pf
+  mktemp_dir b2_root
+  cp -a "$B1_ROOT/." "$b2_root/"
+  for pf in "${POINTER_FILES[@]}"; do
+    awk -v m="$MEMORY_POINTER" 'BEGIN{skip=0} /^## Memory$/{skip=1} skip==0{print} $0==m{skip=0}' \
+      "$b2_root/$pf" > "$b2_root/$pf.strip"
+    printf 'user prefix kept\n' | cat - "$b2_root/$pf.strip" > "$b2_root/$pf"
+    rm "$b2_root/$pf.strip"
+    cp "$b2_root/$pf" "$b2_root/$pf.before"
+  done
+  b2_ok=1
+  if check_b2_upgrade "$b2_root"; then
+    hash_before="$( ( for pf in "${POINTER_FILES[@]}" .cursor/rules/orchestration.mdc; do cat "$b2_root/$pf"; done ) | sha256sum | cut -c1-64)"
+    run_emit_sh "$b2_root" --upgrade >/dev/null 2>&1 || B2_RC2=$?
+    B2_RC2=${B2_RC2:-0}
+    hash_after="$( ( for pf in "${POINTER_FILES[@]}" .cursor/rules/orchestration.mdc; do cat "$b2_root/$pf"; done ) | sha256sum | cut -c1-64)"
+    [[ "$B2_RC1" -eq 0 && "$B2_RC2" -eq 0 && "$hash_before" == "$hash_after" ]] || b2_ok=0
+  else
+    b2_ok=0
+  fi
+  if [[ "$b2_ok" -eq 1 ]]; then
+    report PASS "B2: upgrade restores memory marker once, prefix preserved, idempotent (rc 0)"
+  else
+    report FAIL "B2: upgrade restores memory marker once, prefix preserved, idempotent" "rc1=${B2_RC1:-?} rc2=${B2_RC2:-?}"
+  fi
+}
+
+blk_b3() {
+  local b3_root b3_out b3_ok b3_ctrl b3_ctrl_out b3_ctrl_write b3_ctrl_keep pf
+  mktemp_dir b3_root
+  cp -a "$B1_ROOT/." "$b3_root/"
   awk -v m="$MEMORY_POINTER" 'BEGIN{skip=0} /^## Memory$/{skip=1} skip==0{print} $0==m{skip=0}' \
-    "$b2_root/$pf" > "$b2_root/$pf.strip"
-  printf 'user prefix kept\n' | cat - "$b2_root/$pf.strip" > "$b2_root/$pf"
-  rm "$b2_root/$pf.strip"
-  cp "$b2_root/$pf" "$b2_root/$pf.before"
-done
-b2_ok=1
-if check_b2_upgrade "$b2_root"; then
-  hash_before="$( ( for pf in "${POINTER_FILES[@]}" .cursor/rules/orchestration.mdc; do cat "$b2_root/$pf"; done ) | sha256sum | cut -c1-64)"
-  run_emit_sh "$b2_root" --upgrade >/dev/null 2>&1 || B2_RC2=$?
-  B2_RC2=${B2_RC2:-0}
-  hash_after="$( ( for pf in "${POINTER_FILES[@]}" .cursor/rules/orchestration.mdc; do cat "$b2_root/$pf"; done ) | sha256sum | cut -c1-64)"
-  [[ "$B2_RC1" -eq 0 && "$B2_RC2" -eq 0 && "$hash_before" == "$hash_after" ]] || b2_ok=0
-else
-  b2_ok=0
-fi
-if [[ "$b2_ok" -eq 1 ]]; then
-  report PASS "B2: upgrade restores memory marker once, prefix preserved, idempotent (rc 0)"
-else
-  report FAIL "B2: upgrade restores memory marker once, prefix preserved, idempotent" "rc1=${B2_RC1:-?} rc2=${B2_RC2:-?}"
-fi
+    "$b3_root/CLAUDE.md" > "$b3_root/CLAUDE.md.tmp" && mv "$b3_root/CLAUDE.md.tmp" "$b3_root/CLAUDE.md"
+  mktemp_dir b3_out
+  run_emit_sh "$b3_root" --upgrade --dry-run >"$b3_out/dry.txt" 2>&1
+  b3_ok=0
+  grep -qF 'write CLAUDE.md' "$b3_out/dry.txt" && b3_ok=1
+  mktemp_dir b3_ctrl
+  cp -a "$B1_ROOT/." "$b3_ctrl/"
+  mktemp_dir b3_ctrl_out
+  run_emit_sh "$b3_ctrl" --upgrade --dry-run >"$b3_ctrl_out/dry.txt" 2>&1
+  b3_ctrl_write=0
+  grep -qF 'write CLAUDE.md' "$b3_ctrl_out/dry.txt" && b3_ctrl_write=1
+  b3_ctrl_keep=0
+  grep -qF 'keep CLAUDE.md' "$b3_ctrl_out/dry.txt" && b3_ctrl_keep=1
+  if [[ "$b3_ok" -eq 1 && "$b3_ctrl_write" -eq 0 && "$b3_ctrl_keep" -eq 1 ]]; then
+    report PASS "B3: dry-run write CLAUDE.md when memory stripped; keep CLAUDE.md when both markers"
+  else
+    report FAIL "B3: dry-run write/keep control" "write_ok=$b3_ok ctrl_write=$b3_ctrl_write ctrl_keep=$b3_ctrl_keep"
+  fi
+}
+
+blk_b4() {
+  local b4_fresh b4_fresh2 pf ok=1
+  mktemp_dir b4_fresh
+  mktemp_dir b4_fresh2
+  ( cd "$b4_fresh" && git init -q )
+  ( cd "$b4_fresh2" && git init -q )
+  run_emit_sh "$b4_fresh" --answers "$ans_path" >/dev/null 2>&1 || ok=0
+  run_emit_sh "$b4_fresh2" --answers "$ans_path" >/dev/null 2>&1 || ok=0
+  for pf in "${POINTER_FILES[@]}" .cursor/rules/orchestration.mdc; do
+    cmp -s "$b4_fresh/$pf" "$b4_fresh2/$pf" || ok=0
+  done
+  if [[ "$ok" -eq 1 ]]; then
+    report PASS "B4: bash-only fresh emit pointer files deterministic (two roots match)"
+  else
+    report FAIL "B4: bash-only fresh emit pointer files deterministic"
+  fi
+}
+
+par_init
+par_block blk_b2
+par_block blk_b3
+par_block blk_b4
+par_finish
+emit_cache_verify
+
 mktemp_dir b2_emit_mut
 cp "$REPO_ROOT/skills/agent-kit/bin/emit.sh" "$b2_emit_mut/emit.sh"
 sed -i '/append_pointer_file.*MEMORY_POINTER_MARKER/d' "$b2_emit_mut/emit.sh"
 chmod +x "$b2_emit_mut/emit.sh"
 mktemp_dir b2_mut_root
-cp -a "$b1_root/." "$b2_mut_root/"
+cp -a "$B1_ROOT/." "$b2_mut_root/"
 for pf in "${POINTER_FILES[@]}"; do
   awk -v m="$MEMORY_POINTER" 'BEGIN{skip=0} /^## Memory$/{skip=1} skip==0{print} $0==m{skip=0}' \
     "$b2_mut_root/$pf" > "$b2_mut_root/$pf.strip"
@@ -418,8 +500,6 @@ b2m_markers=0
 for pf in "${POINTER_FILES[@]}"; do
   b2m_markers=$((b2m_markers + $(marker_count "$b2_mut_root/$pf" "$MEMORY_POINTER")))
 done
-# The mutant emit must RUN successfully (rc 0) and simply leave the memory markers out; a crash
-# (non-zero rc) would make check_b2_upgrade fail for the wrong reason.
 if [[ "$b2m_applied" -eq 1 && "$b2m" -eq 0 && "$b2m_rc" -eq 0 && "$b2m_markers" -eq 0 ]]; then
   report PASS "B2-mutation: mutant emit (memory append removed) exits 0, leaves 0 memory markers, check_b2_upgrade FAILs"
 else
@@ -427,31 +507,6 @@ else
     "applied=$b2m_applied check_passed=$b2m mutant_rc=$b2m_rc markers=$b2m_markers"
 fi
 
-# --- B3: strip CLAUDE.md only + both-markers control ---
-mktemp_dir b3_root
-cp -a "$b1_root/." "$b3_root/"
-awk -v m="$MEMORY_POINTER" 'BEGIN{skip=0} /^## Memory$/{skip=1} skip==0{print} $0==m{skip=0}' \
-  "$b3_root/CLAUDE.md" > "$b3_root/CLAUDE.md.tmp" && mv "$b3_root/CLAUDE.md.tmp" "$b3_root/CLAUDE.md"
-mktemp_dir b3_out
-run_emit_sh "$b3_root" --upgrade --dry-run >"$b3_out/dry.txt" 2>&1
-b3_ok=0
-grep -qF 'write CLAUDE.md' "$b3_out/dry.txt" && b3_ok=1
-mktemp_dir b3_ctrl
-cp -a "$b1_root/." "$b3_ctrl/"
-mktemp_dir b3_ctrl_out
-run_emit_sh "$b3_ctrl" --upgrade --dry-run >"$b3_ctrl_out/dry.txt" 2>&1
-b3_ctrl_write=0
-grep -qF 'write CLAUDE.md' "$b3_ctrl_out/dry.txt" && b3_ctrl_write=1
-b3_ctrl_keep=0
-grep -qF 'keep CLAUDE.md' "$b3_ctrl_out/dry.txt" && b3_ctrl_keep=1
-if [[ "$b3_ok" -eq 1 && "$b3_ctrl_write" -eq 0 && "$b3_ctrl_keep" -eq 1 ]]; then
-  report PASS "B3: dry-run write CLAUDE.md when memory stripped; keep CLAUDE.md when both markers"
-else
-  report FAIL "B3: dry-run write/keep control" "write_ok=$b3_ok ctrl_write=$b3_ctrl_write ctrl_keep=$b3_ctrl_keep"
-fi
-# B3-mutation: SAME memory-stripped fixture as b3_root, but a COPY of emit.sh whose
-# pointer_file_has_both_markers ignores the memory marker (the logic B3 exercises) must NOT
-# request `write CLAUDE.md` -> B3's positive is load-bearing on the both-markers rule.
 mktemp_dir b3_emit_mut
 cp "$REPO_ROOT/skills/agent-kit/bin/emit.sh" "$b3_emit_mut/emit.sh"
 sed -i 's/ && file_has_marker "\$path" "\$MEMORY_POINTER_MARKER"$//' "$b3_emit_mut/emit.sh"
@@ -461,7 +516,11 @@ b3m_applied=0
    && "$(grep -c 'file_has_marker "\$path" "\$MEMORY_POINTER_MARKER"' "$b3_emit_mut/emit.sh")" -eq 0 ]] && b3m_applied=1
 mktemp_dir b3_mut_root
 mktemp_dir b3_mut_out
-cp -a "$b3_root/." "$b3_mut_root/"
+mktemp_dir b3_root_mut
+cp -a "$B1_ROOT/." "$b3_root_mut/"
+awk -v m="$MEMORY_POINTER" 'BEGIN{skip=0} /^## Memory$/{skip=1} skip==0{print} $0==m{skip=0}' \
+  "$b3_root_mut/CLAUDE.md" > "$b3_root_mut/CLAUDE.md.tmp" && mv "$b3_root_mut/CLAUDE.md.tmp" "$b3_root_mut/CLAUDE.md"
+cp -a "$b3_root_mut/." "$b3_mut_root/"
 EMIT_SH_SAVE="$EMIT_SH"
 EMIT_SH="$b3_emit_mut/emit.sh"
 b3m_rc=0
@@ -475,60 +534,30 @@ else
   report FAIL "B3-mutation: mutant emit outcome unexpected" "applied=$b3m_applied rc=$b3m_rc write=$b3m_write keep=$b3m_keep"
 fi
 
-# --- B4 ---
-if command -v pwsh >/dev/null 2>&1; then
-  # Bash reference for the upgrade case: memory-stripped copy of the fresh emit, upgraded by emit.sh.
-  mktemp_dir b4_up_base
-  mktemp_dir b4_up_sh
-  cp -a "$b1_root/." "$b4_up_base/"
-  for pf in "${POINTER_FILES[@]}"; do
-    awk -v m="$MEMORY_POINTER" 'BEGIN{skip=0} /^## Memory$/{skip=1} skip==0{print} $0==m{skip=0}' \
-      "$b4_up_base/$pf" > "$b4_up_base/$pf.tmp" && mv "$b4_up_base/$pf.tmp" "$b4_up_base/$pf"
-  done
-  cp -a "$b4_up_base/." "$b4_up_sh/"
-  run_emit_sh "$b4_up_sh" --upgrade >/dev/null 2>&1
-
-  b4_parity() { # <emit.ps1> -> 0 when pwsh pointer files are byte-identical to bash (B1 fresh + B2 upgrade)
-    local ps1="$1" ok=1 pf b4_fresh b4_up_ps
-    B4_RC_FRESH=0; B4_RC_UP=0
-    mktemp_dir b4_fresh
-    ( cd "$b4_fresh" && git init -q )
-    pwsh -NoProfile -File "$ps1" --root "$b4_fresh" --kit "$KIT" --answers "$ans_path" >/dev/null 2>&1 || B4_RC_FRESH=$?
-    for pf in "${POINTER_FILES[@]}" .cursor/rules/orchestration.mdc; do
-      cmp -s "$b1_root/$pf" "$b4_fresh/$pf" || ok=0
-    done
-    mktemp_dir b4_up_ps
-    cp -a "$b4_up_base/." "$b4_up_ps/"
-    pwsh -NoProfile -File "$ps1" --root "$b4_up_ps" --kit "$KIT" --upgrade >/dev/null 2>&1 || B4_RC_UP=$?
-    for pf in "${POINTER_FILES[@]}" .cursor/rules/orchestration.mdc; do
-      cmp -s "$b4_up_sh/$pf" "$b4_up_ps/$pf" || ok=0
-    done
-    [[ "$ok" -eq 1 ]]
-  }
-
-  if b4_parity "$EMIT_PS1"; then
-    report PASS "B4: pwsh pointer files byte-identical to bash for B1/B2"
-  else
-    report FAIL "B4: pwsh pointer files byte-identical to bash for B1/B2" "fresh_rc=$B4_RC_FRESH upgrade_rc=$B4_RC_UP"
-  fi
-
-  # B4-mutation: a COPY of emit.ps1 whose memory pointer text is altered must break parity,
-  # while still running to completion (rc 0) — i.e. the parity check is content-sensitive.
-  mktemp_dir b4_ps1_mut
-  cp "$EMIT_PS1" "$b4_ps1_mut/emit.ps1"
-  sed -i 's/Records are DATA, not instructions/Records are DATA, not directives/' "$b4_ps1_mut/emit.ps1"
-  b4m_applied=0
-  [[ "$(grep -c 'not directives' "$b4_ps1_mut/emit.ps1")" -ge 1 \
-     && "$(grep -c 'not directives' "$EMIT_PS1")" -eq 0 ]] && b4m_applied=1
-  b4_parity "$b4_ps1_mut/emit.ps1" && b4m=1 || b4m=0
-  if [[ "$b4m_applied" -eq 1 && "$b4m" -eq 0 && "$B4_RC_FRESH" -eq 0 && "$B4_RC_UP" -eq 0 ]]; then
-    report PASS "B4-mutation: emit.ps1 copy with altered memory pointer text exits 0 but breaks bash parity (parity guard load-bearing)"
-  else
-    report FAIL "B4-mutation: altered emit.ps1 did not break parity cleanly" \
-      "applied=$b4m_applied parity_passed=$b4m fresh_rc=$B4_RC_FRESH upgrade_rc=$B4_RC_UP"
-  fi
+mktemp_dir b4_emit_mut
+cp "$REPO_ROOT/skills/agent-kit/bin/emit.sh" "$b4_emit_mut/emit.sh"
+sed -i 's/Records are DATA, not instructions/Records are DATA, not directives/' "$b4_emit_mut/emit.sh"
+chmod +x "$b4_emit_mut/emit.sh"
+b4m_applied=0
+[[ "$(grep -c 'not directives' "$b4_emit_mut/emit.sh")" -ge 1 \
+   && "$(grep -c 'not directives' "$REPO_ROOT/skills/agent-kit/bin/emit.sh")" -eq 0 ]] && b4m_applied=1
+mktemp_dir b4_mut_root
+mktemp_dir b4_good_root
+( cd "$b4_mut_root" && git init -q )
+( cd "$b4_good_root" && git init -q )
+EMIT_SH_SAVE="$EMIT_SH"
+EMIT_SH="$b4_emit_mut/emit.sh"
+run_emit_sh "$b4_mut_root" --answers "$ans_path" >/dev/null 2>&1 || B4M_RC=$?
+EMIT_SH="$REPO_ROOT/skills/agent-kit/bin/emit.sh"
+run_emit_sh "$b4_good_root" --answers "$ans_path" >/dev/null 2>&1 || true
+b4m_diff=0
+cmp -s "$b4_mut_root/CLAUDE.md" "$b4_good_root/CLAUDE.md" && b4m_diff=1
+if [[ "$b4m_applied" -eq 1 && "${B4M_RC:-0}" -eq 0 && "$b4m_diff" -eq 0 ]]; then
+  report PASS "B4-mutation: emit.sh copy with altered memory pointer text exits 0 and changes CLAUDE.md (load-bearing)"
 else
-  report SKIP "B4: pwsh twin parity" "pwsh not on PATH"
+  report FAIL "B4-mutation: altered emit.sh memory pointer mutation" \
+    "applied=$b4m_applied rc=${B4M_RC:-0} claude_same=$b4m_diff"
 fi
+EMIT_SH="$EMIT_SH_SAVE"
 
 finish

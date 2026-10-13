@@ -2,7 +2,10 @@
 
 This reference defines how kit workflows **recall** prior records into worker context,
 **archive** new records at goal close, and how the **loop** integrates slot proposals.
-On Windows, use `pwsh _kit/memory.ps1` wherever this doc says `_kit/memory.sh`.
+On Windows outside Git Bash, use `_kit\memory.cmd` wherever this doc says
+`_kit/memory.sh` (Git for Windows required; see the kit's
+[windows-launcher.md](https://github.com/kdcllc/skills/blob/master/skills/agent-kit/reference/windows-launcher.md)).
+`_kit/memory.ps1` remains for `loop.ps1` only.
 
 ## Recall
 

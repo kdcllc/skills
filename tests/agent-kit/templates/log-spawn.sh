@@ -15,9 +15,8 @@
 #   (f) every success call prints exactly one stdout line
 #   (g) header present; line count strictly increasing (append-only)
 #   (i)–(v) Footprint / --work-chars / pre-v0.26 fallback in a second fixture
-#   pwsh twin: (a)–(e3) and (i)–(v) rerun via log-spawn.ps1 in a second fixture; logs
-#   identical after timestamp normalization; exit codes 2/3/4 match. SKIP when pwsh
-#   is absent.
+#   Structural checks align emitters/manifest/instance with _kit/log-spawn.sh + .cmd
+#   (retired log-spawn.ps1 twin must not appear).
 # Structural section — emitters, canonical + instance feature skills / ORCHESTRATION
 # files, manifest keys, instance `_kit/` byte-identity (SKIP when an instance file is
 # absent).
@@ -30,7 +29,7 @@ REPO_ROOT="$(cd "$HERE/../../.." && pwd)"
 cd "$REPO_ROOT" || exit 1
 
 CANON_SH="$REPO_ROOT/skills/agent-kit/templates/tools/log-spawn.sh"
-CANON_PS1="$REPO_ROOT/skills/agent-kit/templates/tools/log-spawn.ps1"
+LAUNCHER_CMD="$REPO_ROOT/skills/agent-kit/templates/tools/bash-launcher.cmd"
 BIN="${LOG_SPAWN_BIN:-$CANON_SH}"
 
 pass=0; fail=0; skip=0
@@ -57,7 +56,7 @@ make_fixture() { # make_fixture → prints fixture dir
 }
 
 # run_suite <label> <runner...> — runs (a)–(g) in a fresh fixture with the given runner
-# (e.g. "bash /path/log-spawn.sh" or "pwsh -NoProfile -File /path/log-spawn.ps1").
+# (e.g. "bash /path/log-spawn.sh").
 # Sets SUITE_LOG to the produced log path.
 run_suite() {
   local label="$1"; shift
@@ -296,48 +295,7 @@ else
   report FAIL "bash -n $(basename "$BIN")"
 fi
 run_suite bash bash "$BIN"
-BASH_LOG="$SUITE_LOG"; BASH_CODES="$SUITE_CODES"
 run_work_suite bash bash "$BIN"
-BASH_WORK_LOG="$WORK_LOG"; BASH_FALLBACK_LOG="$FALLBACK_LOG"
-
-# ---------------------------------------------------------------------------
-# Behavioral — pwsh twin (parity)
-# ---------------------------------------------------------------------------
-if command -v pwsh >/dev/null 2>&1; then
-  perr="$(pwsh -NoProfile -Command "\$e=\$null; [System.Management.Automation.Language.Parser]::ParseFile('$CANON_PS1',[ref]\$null,[ref]\$e) | Out-Null; \$e.Count" 2>/dev/null | tr -d '\r ')"
-  if [[ "$perr" == "0" ]]; then
-    report PASS "pwsh parser: log-spawn.ps1 has zero parse errors"
-  else
-    report FAIL "pwsh parser: log-spawn.ps1" "errors=$perr"
-  fi
-  run_suite pwsh pwsh -NoProfile -File "$CANON_PS1"
-  PS_LOG="$SUITE_LOG"; PS_CODES="$SUITE_CODES"
-  if diff <(sed -E "$TS_RE" "$BASH_LOG") <(sed -E "$TS_RE" "$PS_LOG") >/dev/null 2>&1; then
-    report PASS "twin parity: bash and pwsh logs identical after timestamp normalization"
-  else
-    report FAIL "twin parity: logs differ" "$(diff <(sed -E "$TS_RE" "$BASH_LOG") <(sed -E "$TS_RE" "$PS_LOG") | head -5 | tr '\n' '|')"
-  fi
-  if [[ "$BASH_CODES" == "$PS_CODES" ]]; then
-    report PASS "twin parity: exit codes match ($PS_CODES)"
-  else
-    report FAIL "twin parity: exit codes" "bash='$BASH_CODES' pwsh='$PS_CODES'"
-  fi
-  if ! grep -q $'\r' "$PS_LOG" && [[ "$(head -c 3 "$PS_LOG" | od -An -tx1 | tr -d ' \n')" != "efbbbf" ]]; then
-    report PASS "twin parity: pwsh log is LF, no BOM"
-  else
-    report FAIL "twin parity: pwsh log has CRLF or BOM"
-  fi
-  run_work_suite pwsh pwsh -NoProfile -File "$CANON_PS1"
-  if diff <(sed -E "$TS_RE" "$BASH_WORK_LOG") <(sed -E "$TS_RE" "$WORK_LOG") >/dev/null 2>&1 \
-     && diff <(sed -E "$TS_RE" "$BASH_FALLBACK_LOG") <(sed -E "$TS_RE" "$FALLBACK_LOG") >/dev/null 2>&1; then
-    report PASS "twin parity (i)–(v): bash and pwsh work/fallback logs identical after timestamp normalization"
-  else
-    report FAIL "twin parity (i)–(v): logs differ" \
-      "$(diff <(sed -E "$TS_RE" "$BASH_WORK_LOG") <(sed -E "$TS_RE" "$WORK_LOG") | head -5 | tr '\n' '|')"
-  fi
-else
-  report SKIP "pwsh twin parity" "pwsh not on PATH"
-fi
 
 # ---------------------------------------------------------------------------
 # model_check — match / MISMATCH / unverified / openai family (bash + pwsh twin)
@@ -424,19 +382,15 @@ run_model_check_case() { # <label> <runner...>
 }
 
 run_model_check_case bash bash "$BIN"
-if command -v pwsh >/dev/null 2>&1; then
-  run_model_check_case pwsh pwsh -NoProfile -File "$CANON_PS1"
-else
-  report SKIP "pwsh model_check twin" "pwsh not on PATH"
-fi
 
 # ---------------------------------------------------------------------------
 # Structural wiring
 # ---------------------------------------------------------------------------
 for em in claude-code cursor copilot codex; do
   f="$REPO_ROOT/skills/agent-kit/emitters/$em.md"
-  if grep -qF '_kit/log-spawn.sh' "$f" && grep -qF '_kit/log-spawn.ps1' "$f"; then
-    report PASS "emitter $em.md emits _kit/log-spawn.sh + .ps1"
+  if grep -qF '_kit/log-spawn.sh' "$f" && grep -qF '_kit/log-spawn.cmd' "$f" \
+     && ! grep -qF '_kit/log-spawn.ps1' "$f"; then
+    report PASS "emitter $em.md emits _kit/log-spawn.sh + .cmd (no .ps1)"
   else
     report FAIL "emitter $em.md missing _kit/log-spawn row"
   fi
@@ -461,8 +415,10 @@ for f in .claude/skills/feature/SKILL.md .cursor/skills/feature/SKILL.md .claude
 done
 
 if [[ -f orchestration-kit.manifest.json ]]; then
-  if grep -qF '"_kit/log-spawn.sh"' orchestration-kit.manifest.json && grep -qF '"_kit/log-spawn.ps1"' orchestration-kit.manifest.json; then
-    report PASS "manifest keys _kit/log-spawn.sh + .ps1 present"
+  if grep -qF '"_kit/log-spawn.sh"' orchestration-kit.manifest.json \
+     && grep -qF '"_kit/log-spawn.cmd"' orchestration-kit.manifest.json \
+     && ! grep -qF '"_kit/log-spawn.ps1"' orchestration-kit.manifest.json; then
+    report PASS "manifest keys _kit/log-spawn.sh + .cmd present (no .ps1)"
   else
     report FAIL "manifest missing _kit/log-spawn keys"
   fi
@@ -470,20 +426,47 @@ else
   report SKIP "manifest _kit keys" "orchestration-kit.manifest.json absent"
 fi
 
-if [[ -f _kit/log-spawn.sh && -f _kit/log-spawn.ps1 ]]; then
-  if cmp -s _kit/log-spawn.sh "$CANON_SH" && cmp -s _kit/log-spawn.ps1 "$CANON_PS1"; then
-    report PASS "instance _kit/log-spawn.* byte-identical to canonical"
+if [[ -f _kit/log-spawn.sh && -f _kit/log-spawn.cmd && ! -f _kit/log-spawn.ps1 ]]; then
+  if cmp -s _kit/log-spawn.sh "$CANON_SH" \
+     && cmp -s _kit/log-spawn.cmd "$LAUNCHER_CMD"; then
+    report PASS "instance _kit/log-spawn.sh + .cmd byte-identical to canonical"
   else
-    report FAIL "instance _kit/log-spawn.* differs from canonical"
+    report FAIL "instance _kit/log-spawn.sh/.cmd differs from canonical"
   fi
 else
-  report SKIP "instance _kit/log-spawn.*" "absent"
+  report SKIP "instance _kit/log-spawn.sh/.cmd" "absent or stale .ps1 present"
 fi
 
-if ! grep -q '{{' "$CANON_SH" && ! grep -q '{{' "$CANON_PS1"; then
-  report PASS "canonical twins contain no template tokens"
+if ! grep -q '{{' "$CANON_SH"; then
+  report PASS "canonical log-spawn.sh contains no template tokens"
 else
-  report FAIL "canonical twins contain '{{'"
+  report FAIL "canonical log-spawn.sh contains '{{'"
+fi
+
+# Upgrade prune: stale _kit/log-spawn.ps1 from a prior manifest is removed.
+upgrade_prune_logspawn_ps1() {
+  local root mf out pruned
+  command -v jq >/dev/null 2>&1 || return 2
+  root="$(mktemp -d)"
+  mf="$root/orchestration-kit.manifest.json"
+  cp "$REPO_ROOT/tests/agent-kit/fixtures/self-answers.json" "$root/.answers.json"
+  run_emit_sh() { bash "$REPO_ROOT/skills/agent-kit/bin/emit.sh" --root "$root" --kit "$REPO_ROOT/skills/agent-kit" "$@"; }
+  run_emit_sh --answers "$root/.answers.json" >/dev/null 2>&1 || return 1
+  mf="$root/orchestration-kit.manifest.json"
+  printf 'stale ps1 twin\n' > "$root/_kit/log-spawn.ps1"
+  pruned="$(sha256sum "$root/_kit/log-spawn.ps1" | awk '{print $1}')"
+  jq --arg h "$pruned" '.files["_kit/log-spawn.ps1"]=$h' "$mf" > "${mf}.tmp" && mv "${mf}.tmp" "$mf"
+  out="$(run_emit_sh --upgrade 2>&1)" || return 1
+  grep -qE '· pruned [1-9][0-9]* ·' <<<"$out" || return 1
+  [[ ! -f "$root/_kit/log-spawn.ps1" ]] || return 1
+  rm -rf "$root"
+}
+if ! command -v jq >/dev/null 2>&1; then
+  report SKIP "upgrade prune log-spawn.ps1" "jq not on PATH"
+elif upgrade_prune_logspawn_ps1; then
+  report PASS "upgrade prunes stale _kit/log-spawn.ps1 (stdout prune count ≥ 1)"
+else
+  report FAIL "upgrade prune stale _kit/log-spawn.ps1"
 fi
 
 echo

@@ -566,8 +566,8 @@ Every subagent invocation requires a complete context package:
 ### Orchestration log (spawn ledger)
 
 `_goals/[goal-name]/orchestration-log.md` is an append-only spawn ledger written ONLY
-through the emitted tool `_kit/log-spawn.sh` (`pwsh _kit/log-spawn.ps1` on Windows —
-same flags, byte-identical output). The orchestrator runs it inline (one-line output;
+through the emitted tool `_kit/log-spawn.sh` (Windows outside Git Bash:
+`_kit\log-spawn.cmd` — Git for Windows required; same flags, byte-identical output). The orchestrator runs it inline (one-line output;
 exempt from the `terminal` spawn rule). The header's running io_est_tokens /
 work_est_tokens totals are "see latest entry" — the script never rewrites a line.
 Every entry references artifact files rather than inlining them:
@@ -878,7 +878,7 @@ _goals/<goal>/orchestration-log.md  # Append-only spawn ledger per goal (written
 _goals/<goal>/spawns/NN-context.md  # Context package sent to spawn #NN (verbatim)
 _goals/<goal>/spawns/NN-report.md   # Report returned by spawn #NN (verbatim)
 _goals/breaker-state.json       # Model circuit breaker state (runtime, gitignored)
-_kit/{log-spawn.sh,log-spawn.ps1}  # Single-copy tools: orchestration-log writer twins
+_kit/{log-spawn.sh,log-spawn.cmd}  # Single-copy tools: orchestration-log writer + Windows launcher
 _kit/{memory.sh,memory.ps1}  # Single-copy tools: memory store (add / index / search / show)
 _memory/records/ · _memory/quarantine/  # Tracked memory records (immutable, one per file) — see _memory/README.md
 _memory/.index/ · _memory/raw/  # Derived index / reserved transcripts (gitignored)
@@ -918,7 +918,7 @@ _loop/{loop.sh,loop.ps1,breaker.sh,breaker.ps1,PROMPT.md}  # Headless loop drive
 _goals/<goal>/orchestration-log.md  # Append-only spawn ledger per goal (written by _kit/log-spawn.*)
 _goals/<goal>/spawns/NN-context.md  # Context package sent to spawn #NN (verbatim)
 _goals/<goal>/spawns/NN-report.md   # Report returned by spawn #NN (verbatim)
-_kit/{log-spawn.sh,log-spawn.ps1}  # Single-copy tools: orchestration-log writer twins
+_kit/{log-spawn.sh,log-spawn.cmd}  # Single-copy tools: orchestration-log writer + Windows launcher
 _kit/{memory.sh,memory.ps1}  # Single-copy tools: memory store (add / index / search / show)
 _memory/records/ · _memory/quarantine/  # Tracked memory records (immutable, one per file) — see _memory/README.md
 _memory/.index/ · _memory/raw/  # Derived index / reserved transcripts (gitignored)
@@ -958,7 +958,7 @@ _goals/<goal>/orchestration-log.md  # Append-only spawn ledger per goal (written
 _goals/<goal>/spawns/NN-context.md  # Context package sent to spawn #NN (verbatim)
 _goals/<goal>/spawns/NN-report.md   # Report returned by spawn #NN (verbatim)
 _goals/breaker-state.json       # Model circuit breaker state (runtime, gitignored)
-_kit/{log-spawn.sh,log-spawn.ps1}  # Single-copy tools: orchestration-log writer twins
+_kit/{log-spawn.sh,log-spawn.cmd}  # Single-copy tools: orchestration-log writer + Windows launcher
 _kit/{memory.sh,memory.ps1}  # Single-copy tools: memory store (add / index / search / show)
 _memory/records/ · _memory/quarantine/  # Tracked memory records (immutable, one per file) — see _memory/README.md
 _memory/.index/ · _memory/raw/  # Derived index / reserved transcripts (gitignored)
@@ -994,7 +994,7 @@ _loop/{loop.sh,loop.ps1,breaker.sh,breaker.ps1,PROMPT.md}  # Headless loop drive
 _goals/<goal>/orchestration-log.md  # Append-only spawn ledger per goal (written by _kit/log-spawn.*)
 _goals/<goal>/spawns/NN-context.md  # Context package sent to spawn #NN (verbatim)
 _goals/<goal>/spawns/NN-report.md   # Report returned by spawn #NN (verbatim)
-_kit/{log-spawn.sh,log-spawn.ps1}  # Single-copy tools: orchestration-log writer twins
+_kit/{log-spawn.sh,log-spawn.cmd}  # Single-copy tools: orchestration-log writer + Windows launcher
 _kit/{memory.sh,memory.ps1}  # Single-copy tools: memory store (add / index / search / show)
 _memory/records/ · _memory/quarantine/  # Tracked memory records (immutable, one per file) — see _memory/README.md
 _memory/.index/ · _memory/raw/  # Derived index / reserved transcripts (gitignored)
@@ -1046,7 +1046,7 @@ session.
 {{FULL_TEST_COMMAND}}         # rung 3 — cycle end only
 ```
 
-**Orchestration log** (orchestrator runs these inline; `pwsh _kit/log-spawn.ps1` on Windows):
+**Orchestration log** (orchestrator runs these inline; Windows outside Git Bash: `_kit\log-spawn.cmd` — Git for Windows required):
 ```bash
 _kit/log-spawn.sh spawn --goal my-goal --agent implementer --phase "Phase 4 task 02" \
   --model-requested <model-id> --context _goals/my-goal/spawns/03-context.md \
@@ -1056,7 +1056,7 @@ _kit/log-spawn.sh outcome --goal my-goal --spawn 03 --report _goals/my-goal/spaw
 _kit/log-spawn.sh note --goal my-goal --text "Phase 4 complete"
 ```
 
-**Memory store** (`pwsh _kit/memory.ps1 …` on Windows — same flags):
+**Memory store** (Windows outside Git Bash: `_kit\memory.cmd …` — Git for Windows required; same flags; `memory.ps1` remains for `loop.ps1`):
 ```bash
 _kit/memory.sh add --kind decision --title "Example" --body /tmp/body.md --harness claude
 _kit/memory.sh search orchestration --kind decision,pitfall --limit 5

@@ -51,7 +51,10 @@ canonical templates are Claude-format:
 | Token usage exposure (headless CLI) | `claude -p --output-format json` → `usage` + `total_cost_usd` ✅ (verified 2026-09-03) | `agent -p --output-format json` → camelCase `usage` (`inputTokens` = uncached only) ✅ (verified 2026-09-03) | none documented ❌ | `codex exec --json` → `turn.completed.usage` incl. `reasoning_output_tokens` ✅ (verified 2026-09-03) |
 
 Windows note: per-harness CLI availability on Windows is unverified — the loop
-drivers assume the harness CLI runs natively where invoked.
+drivers assume the harness CLI runs natively where invoked. **Kit tools** (`bin/emit.*`,
+`_kit/memory.*`, `_kit/log-spawn.*`) require **Git for Windows** when invoked from cmd
+or PowerShell via the `.cmd` launchers; inside Git Bash, call the `.sh` scripts with
+`bash` directly ([windows-launcher.md](windows-launcher.md)).
 
 ## Friction points every emitter must respect
 

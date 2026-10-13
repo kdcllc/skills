@@ -156,7 +156,7 @@ artifact. Skip on the default branch (say so), if the user declines, or on
 ## Orchestration log (append-only spawn ledger)
 
 `_goals/[goal]/orchestration-log.md` is written ONLY through `_kit/log-spawn.sh`
-(`pwsh _kit/log-spawn.ps1` on Windows; same flags — see `--help` or ORCHESTRATION.md).
+(Windows outside Git Bash: `_kit\log-spawn.cmd`; Git for Windows required; same flags — see `--help` or ORCHESTRATION.md).
 **Before** each spawn: write the full context package to
 `_goals/[goal]/spawns/NN-context.md` (NN = next free number), then
 `_kit/log-spawn.sh spawn --goal [goal] --agent [agent] --phase "…" --model-requested [id] --context [that file] [--writes --why --expect]`

@@ -49,7 +49,7 @@ If you also changed emitter mappings or `skills/agent-kit/SKILL.md`, include tho
 
 ## Self-install scripts
 
-[`scripts/agent-kit/self-install.sh`](../../../scripts/agent-kit/self-install.sh) and [`scripts/agent-kit/self-install.ps1`](../../../scripts/agent-kit/self-install.ps1) are **kit-repo-only** first-mile helpers that, as of v0.19.0, are twins with identical defaults, guards, and exit codes.
+[`scripts/agent-kit/self-install.sh`](../../../scripts/agent-kit/self-install.sh) is a **kit-repo-only** first-mile helper with defaults, guards, and exit codes documented below.
 
 ### What they copy
 
@@ -118,7 +118,7 @@ When live vendor docs contradict the harness matrix, trust the live docs for emi
 ## Emitters (caveats only)
 
 As of v0.27.0, per-harness translation runs in [`skills/agent-kit/bin/emit.sh`](../../../skills/agent-kit/bin/emit.sh) /
-[`emit.ps1`](../../../skills/agent-kit/bin/emit.ps1). Emitter files under
+[`emit.cmd`](../../../skills/agent-kit/bin/emit.cmd). Emitter files under
 [`skills/agent-kit/emitters/`](../../../skills/agent-kit/emitters/) hold **caveats only** — live
 model-list check URLs, silent-fallback warnings, and similar harness friction — not
 translation tables. Full CLI contract: [`skills/agent-kit/bin/README.md`](../../../skills/agent-kit/bin/README.md).
@@ -249,6 +249,5 @@ Install and user-side usage topics belong in [getting-started.md](getting-starte
 - [`skills/agent-kit/emitters/codex.md`](../../../skills/agent-kit/emitters/codex.md) — Codex caveats
 - [`skills/agent-kit/reference/harness-matrix.md`](../../../skills/agent-kit/reference/harness-matrix.md) — verified per-harness capability ledger
 - [`scripts/agent-kit/self-install.sh`](../../../scripts/agent-kit/self-install.sh) — bash self-install flags and copy/symlink logic
-- [`scripts/agent-kit/self-install.ps1`](../../../scripts/agent-kit/self-install.ps1) — PowerShell twin
 - [`tests/agent-kit/loop-harness/run.sh`](../../../tests/agent-kit/loop-harness/run.sh) — behavioral harness header and coverage scope
 - `orchestration-kit.manifest.json` — manifest shape and `seedFiles` (instance file; gitignored in this repo)

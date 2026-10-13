@@ -50,7 +50,7 @@ Optional: start an unattended run (sandboxed!) with `_loop/loop.sh 10` or
   `full` triggers), a post-exhaustion **continuation ladder**, and an append-only
   **orchestration log** per goal with `io_est_tokens` (orchestrator I/O proxy, chars/4)
   and `work_est_tokens` (subagent self-reported Footprint /4) — appended by the emitted
-  `_kit/log-spawn.sh` / `.ps1` twins, with every context package and verbatim report
+  `_kit/log-spawn.sh` (Windows outside Git Bash: `_kit\log-spawn.cmd`; Git for Windows required), with every context package and verbatim report
   stored under `_goals/<goal>/spawns/`. How each piece arrived is in
   [CHANGELOG.md](CHANGELOG.md); mechanics are in
   [evaluation-system.md](https://github.com/kdcllc/skills/blob/master/docs/agent-kit/guide/evaluation-system.md).
@@ -66,11 +66,11 @@ Optional: start an unattended run (sandboxed!) with `_loop/loop.sh 10` or
   capture when the headless CLI exposes it (`LOOP_USAGE_FORMAT`), and a single
   human-approved PR at run end. Knobs, exit codes, and the safety model are documented in
   [autonomous-loop.md](https://github.com/kdcllc/skills/blob/master/docs/agent-kit/guide/autonomous-loop.md).
-- A **deterministic emitter** (`bin/emit.sh` / `emit.ps1` in the installed `agent-kit` skill): after the LLM
+- A **deterministic emitter** (`bin/emit.sh`; Windows outside Git Bash: `bin\emit.cmd`; Git for Windows required) in the installed `agent-kit` skill: after the LLM
   interview, one answers file and one script command compile canonical templates into
   every targeted harness — same inputs yield byte-identical output; upgrades re-emit
   from manifest-embedded `answers`.
-- A **git-tracked memory store** (`_memory/` + `_kit/memory.sh` / `_kit/memory.ps1`): orchestrator recall before planning, archive at goal close, searchable immutable records, DATA fence for workers, loop integrator proposals — as of v1.0.0. See [memory.md](https://github.com/kdcllc/skills/blob/master/docs/agent-kit/guide/memory.md).
+- A **git-tracked memory store** (`_memory/` + `_kit/memory.sh` and `_kit\memory.cmd` on Windows; `_kit/memory.ps1` remains a helper for `loop.ps1` until loop twins retire): orchestrator recall before planning, archive at goal close, searchable immutable records, DATA fence for workers, loop integrator proposals — as of v1.0.0. See [memory.md](https://github.com/kdcllc/skills/blob/master/docs/agent-kit/guide/memory.md).
 
 ## Documentation
 
@@ -93,11 +93,11 @@ Developer guide: [docs/agent-kit/guide/README.md](https://github.com/kdcllc/skil
 | Path | What it is |
 |------|------------|
 | `SKILL.md` | The `/agent-kit` workflow (detect → greenfield gate → inspect → skill suggestions → interview → emit) and the placeholder table; `metadata.version` is the kit version |
-| `bin/` | `emit.sh` + `emit.ps1` — the deterministic emitter twins (flags and exit codes in [bin/README.md](bin/README.md)) |
+| `bin/` | `emit.sh` + `emit.cmd` (Windows launcher) — deterministic emitter (flags and exit codes in [bin/README.md](bin/README.md)) |
 | `templates/` | The canonical source: architecture doc, `models.map.md`, six agents, the skills (each a `SKILL.template.md`, renamed to `SKILL.md` at emit), the loop drivers, and the `_kit/` tools |
 | `emitters/` | Per-harness caveats (live model-check URLs, silent-fallback warnings) |
 | `reference/` | `harness-matrix.md` (verified harness facts) and `bootstrap-ids.md` (answers-file id table) |
-| `CHANGELOG.md` | Version history, including the 0.x history from before the move to kdcllc/skills |
+| `CHANGELOG.md` | Version history; 1.0.0 rolls up the 0.x releases from before the move to kdcllc/skills |
 
 Maintainer material lives in the [kdcllc/skills](https://github.com/kdcllc/skills) repository, outside this folder, so it never ships with the skill: the developer guide and research studies under `docs/agent-kit/`, the test suites under `tests/agent-kit/`, and the dogfood installer under `scripts/agent-kit/`.
 
@@ -151,11 +151,12 @@ tiers, QA surfaces, research workflow, autonomous loop, delivery forge), writes
 
 ```bash
 bash .claude/skills/agent-kit/bin/emit.sh --answers orchestration-kit.answers.json
-# or: pwsh .claude/skills/agent-kit/bin/emit.ps1 --answers orchestration-kit.answers.json
+# Windows outside Git Bash (Git for Windows required; forward slashes in path args):
+# .claude\skills\agent-kit\bin\emit.cmd --answers orchestration-kit.answers.json
 # (Cursor: .cursor/skills/agent-kit; Copilot: .github/skills/agent-kit)
 ```
 
-The Bash twin requires `jq`; use `emit.ps1` when jq is missing. If a manifest already
+If a manifest already
 exists, run with `--dry-run` first. See [bin/README.md](bin/README.md) for flags and
 exit codes.
 
@@ -172,8 +173,8 @@ exit codes.
 | `skills/ship-pr` | Phase 7: approval-gated forge delivery (GitHub / Azure DevOps / GitLab / hand-over) |
 | `skills/auto-loop` + `_loop/` + `_goals/backlog.md` | Autonomous loop with structural guards (optional) |
 | `skills/agent-kit-models.map.md` | The model map — the only place model IDs live per install |
-| `_kit/log-spawn.sh` + `_kit/log-spawn.ps1` | Single-copy orchestration-log writer twins (`spawn` / `outcome` / `note`) |
-| `_kit/memory.sh` + `_kit/memory.ps1` | Single-copy memory-store twins (`add` / `index` / `search` / `show`) |
+| `_kit/log-spawn.sh` + `_kit/log-spawn.cmd` | Single-copy orchestration-log writer + Windows launcher (`spawn` / `outcome` / `note`) |
+| `_kit/memory.sh` + `_kit/memory.cmd` (+ `_kit/memory.ps1` for `loop.ps1`) | Single-copy memory store + Windows launcher (`add` / `index` / `search` / `show`) |
 | `_memory/` | Tracked immutable records (`records/`, `quarantine/`); gitignored derived `.index/` and reserved `raw/` |
 | `ORCHESTRATION.md` | The architecture doc, filled in for the project |
 | `orchestration-kit.manifest.json` | Kit version + file hashes + embedded `answers`, enabling clean upgrades |
@@ -189,8 +190,7 @@ Start your first feature with `/feature`.
 Start an unattended run (sandboxed!) with `_loop/loop.sh 10` or `pwsh _loop/loop.ps1 10` (PowerShell 7+).
 
 Loop driver behavior (dispatch, slots, worktrees, circuit breakers, exit codes) is
-documented in [autonomous-loop.md](https://github.com/kdcllc/skills/blob/master/docs/agent-kit/guide/autonomous-loop.md);
-when each piece shipped is in [CHANGELOG.md](CHANGELOG.md).
+documented in [autonomous-loop.md](https://github.com/kdcllc/skills/blob/master/docs/agent-kit/guide/autonomous-loop.md).
 
 ## Model tiers
 

@@ -1508,8 +1508,10 @@ EOF
   done
   f="$REPO_ROOT/skills/agent-kit/templates/ORCHESTRATION.md"
   mem_cnt="$(grep -cF '_kit/{memory.sh,memory.ps1}' "$f" || true)"
-  ls_cnt="$(grep -cF '_kit/{log-spawn.sh,log-spawn.ps1}' "$f" || true)"
-  if [[ "$mem_cnt" -eq "$ls_cnt" && "$mem_cnt" -ge 1 ]]; then
+  ls_cnt="$(grep -cF '_kit/{log-spawn.sh,log-spawn.cmd}' "$f" || true)"
+  ls_ps1=0
+  grep -qF 'log-spawn.ps1' "$f" && ls_ps1=1
+  if [[ "$mem_cnt" -eq "$ls_cnt" && "$mem_cnt" -ge 1 && "$ls_ps1" -eq 0 ]]; then
     report PASS "(s) emitters + ORCHESTRATION memory/log-spawn parity"
   else
     report FAIL "(s) ORCHESTRATION counts memory=$mem_cnt log-spawn=$ls_cnt"

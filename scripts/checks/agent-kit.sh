@@ -7,7 +7,7 @@
 #     isolation);
 #   - the developer-guide link checker;
 #   - the invocation-flags template guard.
-# The full suite (instance checks, harness, twin parity) is tests/agent-kit/run-all.sh.
+# The full suite (instance checks, harness) is tests/agent-kit/run-all.sh.
 set -u
 
 ROOT="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"

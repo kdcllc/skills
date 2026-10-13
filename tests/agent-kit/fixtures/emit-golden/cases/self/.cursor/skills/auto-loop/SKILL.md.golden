@@ -216,8 +216,8 @@ Phase 6 doc alignment is APPROVED (or skipped per story frontmatter):
   `<outbox>/learnings.md` instead (path supplied in your prompt) — never
   append to `_goals/LEARNINGS.md` directly; the driver's integrator appends
   it in order.
-- **Manual mode only**: archive memory with `_kit/memory.sh add` (`pwsh
-  _kit/memory.ps1` on Windows) per the protocol; include the new record paths
+- **Manual mode only**: archive memory with `_kit/memory.sh add` (Windows outside Git
+  Bash: `_kit\memory.cmd add` — Git for Windows required) per the protocol; include the new record paths
   in the story's `feat:` commit (driver-dispatched mode writes proposals to
   `<outbox>/memory/` instead — the integrator adds and commits them).
 - **Memory size gates, manual mode only** (hard, check after appending):

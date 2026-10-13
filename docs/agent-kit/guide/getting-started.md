@@ -117,7 +117,7 @@ table (`bootstrap.domain-skill-rows`) and the feature skill's layer → skills m
 
 As of v0.27.0, per-harness translation (path mapping, frontmatter shape, pointer rules)
 runs inside [`skills/agent-kit/bin/emit.sh`](../../../skills/agent-kit/bin/emit.sh) /
-[`emit.ps1`](../../../skills/agent-kit/bin/emit.ps1) — not in LLM prose. See
+[`emit.cmd`](../../../skills/agent-kit/bin/emit.cmd) — not in LLM prose. See
 [`skills/agent-kit/bin/README.md`](../../../skills/agent-kit/bin/README.md) for the full CLI contract.
 Emitter files under [`skills/agent-kit/emitters/`](../../../skills/agent-kit/emitters/) are **caveats
 only** (live model-check URLs, silent-fallback warnings). The table below summarizes

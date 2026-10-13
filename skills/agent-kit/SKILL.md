@@ -11,7 +11,7 @@ metadata:
 You are installing a multi-agent orchestration system (orchestrator coordinates,
 worker subagents execute with fresh context, skeptical evaluators verify) into the
 **current project**. The kit keeps ONE canonical template source in Claude Code format
-(`templates/`). `bin/emit.sh` / `emit.ps1` compiles it per harness; `emitters/`
+(`templates/`). `bin/emit.sh` (Windows outside Git Bash: `bin/emit.cmd`) compiles it per harness; `emitters/`
 are caveats only. Consult `reference/harness-matrix.md` for verified capabilities and friction points —
 when live harness docs contradict it, trust the docs and update the matrix.
 
@@ -318,18 +318,20 @@ rung-5 arbiter — the emitter warns if the IDs match without this flag).
 
 ## Step 5 — Emit
 
-Run the twin that fits this environment **inline** — the output is one line; the
-terminal-spawn rule does not apply:
+Run the emitter **inline** — the output is one line; the terminal-spawn rule does not
+apply:
 
 - `bash $SETUP/bin/emit.sh --answers orchestration-kit.answers.json`
-- `pwsh $SETUP/bin/emit.ps1 --answers orchestration-kit.answers.json`
+- On Windows outside Git Bash: `$SETUP\bin\emit.cmd --answers orchestration-kit.answers.json`
+  (path arguments use forward slashes; Git for Windows required — see
+  [reference/windows-launcher.md](reference/windows-launcher.md))
 
 This kit repo's own dogfood uses `scripts/agent-kit/self-install.sh`. If `orchestration-kit.manifest.json` already exists, run with `--dry-run` first.
 
 | Exit | Meaning | Action |
 |------|---------|--------|
 | 0 | ok | continue to Step 6 |
-| 2 | usage / jq missing / answers unreadable | install `jq` or use `emit.ps1`; fix the path |
+| 2 | usage / answers unreadable | fix the path or answers file permissions |
 | 3 | answers invalid **or** `--check-answers` found unanswered ids | fix answers |
 | 4 | user-modified files (listed on stderr) | show the user the listed files, ask, `--force` |
 | 5 | verify failed | report the listed verify hits as a kit bug |

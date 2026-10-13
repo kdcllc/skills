@@ -3,9 +3,6 @@
 # from this working tree into the harness destination directories.
 # Never emitted to consumers; internal to the kdcllc/skills repo only.
 #
-# Twin: self-install.ps1 (PowerShell 7+) — behaviorally identical —
-# same defaults, guards, and exit codes; any divergence is a bug.
-#
 # After copying skills, runs skills/agent-kit/bin/emit.sh from
 # tests/agent-kit/fixtures/self-answers.json unless --no-emit. Dest paths are the
 # definition; this script does not invoke npx or any network tool.
@@ -28,7 +25,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 
 # _usage is printed only on the unknown-flag path; never on missing-skills or
-# install-failure paths. Binding decision — ps1 twin must match.
+# install-failure paths.
 _usage() {
   echo "Usage: $(basename "$0") [--dry-run] [--symlink] [--force] [--no-emit] [--force-emit]" >&2
   echo "  --dry-run  Print planned dest paths; write nothing; exit 0." >&2
@@ -203,7 +200,7 @@ trap _on_exit EXIT
 _SNAPSHOT_DIR="$(mktemp -d)"
 
 # Parent dirs (.claude/skills/, .cursor/skills/, .agents/skills/) created during
-# a rolled-back run may remain — no parent-dir cleanup is performed. Twin must match.
+# a rolled-back run may remain — no parent-dir cleanup is performed.
 
 # Snapshot all dest paths before any mutation.
 if (( SYMLINK == 1 )); then

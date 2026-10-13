@@ -21,7 +21,7 @@
 #     pristine-clause literal tripwire; and a frozen TMPDIR characterization
 #     of the herestring sentinel check under an unwritable TMPDIR.
 #   - self-install block (no _loop/ required): assertions 69+ exercise
-#     scripts/agent-kit/self-install.sh and self-install.ps1 against a temp fixture —
+#     scripts/agent-kit/self-install.sh against a temp fixture —
 #     copy-mode, overwrite, --force, dry-run, --dry-run --symlink, unknown-flag,
 #     empty-skills, sibling-preservation, rollback, --symlink, mode-transition,
 #     .gitignore dest-lines, bash -n, ps1 structural-parity, ps1 parse (pwsh-
@@ -100,9 +100,8 @@ source "$BREAKER_SH"
 
 # ===========================================================================
 # Self-install dogfood assertions (69+, no _loop/ required).
-# Exercises scripts/agent-kit/self-install.sh and scripts/agent-kit/self-install.ps1 against a
-# temp fixture only — never writes to the live repo dests (.claude/, .cursor/,
-# .agents/ under REPO_ROOT).
+# Exercises scripts/agent-kit/self-install.sh against a temp fixture only — never
+# writes to the live repo dests (.claude/, .cursor/, .agents/ under REPO_ROOT).
 # ===========================================================================
 
 # Build shared temp fixture: two top-level skills (agent-kit, other) — only
@@ -113,8 +112,7 @@ SI_FIX="$TMP/si-fix"
 mkdir -p "$SI_FIX/scripts/agent-kit" \
          "$SI_FIX/skills/agent-kit/templates/skills/feature" \
          "$SI_FIX/skills/other"
-cp "$REPO_ROOT/scripts/agent-kit/self-install.sh"  "$SI_FIX/scripts/agent-kit/self-install.sh"
-cp "$REPO_ROOT/scripts/agent-kit/self-install.ps1" "$SI_FIX/scripts/agent-kit/self-install.ps1"
+cp "$REPO_ROOT/scripts/agent-kit/self-install.sh" "$SI_FIX/scripts/agent-kit/self-install.sh"
 printf 'SKILL:agent-kit\n'          > "$SI_FIX/skills/agent-kit/SKILL.md"
 printf 'NESTED:feature-not-a-skill\n' > "$SI_FIX/skills/agent-kit/templates/skills/feature/SKILL.md"
 printf 'SKILL:other\n'              > "$SI_FIX/skills/other/SKILL.md"
@@ -129,31 +127,27 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 70. ps1 structural-parity: four required markers must all be present in the
-#     ps1 twin (grep only — does not require pwsh).
+# 70. bash structural markers on scripts/agent-kit/self-install.sh (grep only).
 # ---------------------------------------------------------------------------
-_ps1_requires=0; _ps1_dryrun=0; _ps1_claude=0; _ps1_twin=0
-grep -qF '#Requires -Version 7.0'  "$REPO_ROOT/scripts/agent-kit/self-install.ps1" && _ps1_requires=1
-grep -qF -- '--dry-run'             "$REPO_ROOT/scripts/agent-kit/self-install.ps1" && _ps1_dryrun=1
-grep -qF '.claude/skills/'          "$REPO_ROOT/scripts/agent-kit/self-install.ps1" && _ps1_claude=1
-grep -qF 'Twin: self-install.sh'    "$REPO_ROOT/scripts/agent-kit/self-install.ps1" && _ps1_twin=1
-if [[ "$_ps1_requires$_ps1_dryrun$_ps1_claude$_ps1_twin" == "1111" ]]; then
-  report PASS "70: ps1 structural-parity (#Requires/--dry-run/.claude/skills/Twin markers present)"
+_sh_dryrun=0; _sh_claude=0; _sh_noemit=0; _sh_emit=0
+grep -qF -- '--dry-run' "$REPO_ROOT/scripts/agent-kit/self-install.sh" && _sh_dryrun=1
+grep -qF '.claude/skills/' "$REPO_ROOT/scripts/agent-kit/self-install.sh" && _sh_claude=1
+grep -qF -- '--no-emit' "$REPO_ROOT/scripts/agent-kit/self-install.sh" && _sh_noemit=1
+grep -qF 'emit.sh' "$REPO_ROOT/scripts/agent-kit/self-install.sh" && _sh_emit=1
+if [[ "$_sh_dryrun$_sh_claude$_sh_noemit$_sh_emit" == "1111" ]]; then
+  report PASS "70: bash structural markers (--dry-run/.claude/skills/--no-emit/emit.sh present)"
 else
-  report FAIL "70: ps1 structural-parity" \
-    "requires=$_ps1_requires dryrun=$_ps1_dryrun claude=$_ps1_claude twin=$_ps1_twin"
+  report FAIL "70: bash structural markers" \
+    "dryrun=$_sh_dryrun claude=$_sh_claude noemit=$_sh_noemit emit=$_sh_emit"
 fi
 
 # ---------------------------------------------------------------------------
-# 71. README (mandatory): repo README.md cites both installer script paths.
+# 71. CONTRIBUTING cites the bash dogfood installer (single copy).
 # ---------------------------------------------------------------------------
-_readme_sh=0; _readme_ps1=0
-grep -qF 'scripts/agent-kit/self-install.sh' "$REPO_ROOT/CONTRIBUTING.md" && _readme_sh=1
-grep -qF 'self-install.ps1'        "$REPO_ROOT/CONTRIBUTING.md" && _readme_ps1=1
-if [[ "$_readme_sh$_readme_ps1" == "11" ]]; then
-  report PASS "71: README contains scripts/agent-kit/self-install.sh and self-install.ps1"
+if grep -qF 'scripts/agent-kit/self-install.sh' "$REPO_ROOT/CONTRIBUTING.md"; then
+  report PASS "71: CONTRIBUTING cites scripts/agent-kit/self-install.sh"
 else
-  report FAIL "71: README missing self-install script references" "sh=$_readme_sh ps1=$_readme_ps1"
+  report FAIL "71: CONTRIBUTING missing scripts/agent-kit/self-install.sh"
 fi
 
 # ---------------------------------------------------------------------------
@@ -433,55 +427,6 @@ if [[ "$_mt_exit2" -eq 0 && "$_mt_claude_real" -eq 1 && \
 else
   report FAIL "83: mode-transition" \
     "exit1=$_mt_exit1 exit2=$_mt_exit2 claude_real=$_mt_claude_real cursor_real=$_mt_cursor_real bytes_ok=$_mt_bytes_ok"
-fi
-
-# ---------------------------------------------------------------------------
-# 84. pwsh: parse repo scripts/agent-kit/self-install.ps1 via .NET parser (zero errors).
-#     If pwsh is absent, SKIP.
-# ---------------------------------------------------------------------------
-if command -v pwsh &>/dev/null; then
-  _pwsh_parse_ok=0
-  _pwsh_parse_scr="$TMP/si-parse-test.ps1"
-  cat > "$_pwsh_parse_scr" <<'EOPWSH'
-$src = Get-Content -Raw -LiteralPath $args[0]
-$errors = $null
-$null = [System.Management.Automation.Language.Parser]::ParseInput($src, [ref]$null, [ref]$errors)
-exit $errors.Count
-EOPWSH
-  pwsh -NoProfile -File "$_pwsh_parse_scr" "$REPO_ROOT/scripts/agent-kit/self-install.ps1" 2>/dev/null \
-    && _pwsh_parse_ok=1
-  if [[ "$_pwsh_parse_ok" -eq 1 ]]; then
-    report PASS "84: pwsh parses scripts/agent-kit/self-install.ps1 with zero errors"
-  else
-    report FAIL "84: pwsh parses scripts/agent-kit/self-install.ps1 with zero errors" "parser reported errors"
-  fi
-else
-  report SKIP "84: pwsh absent -- ps1 parse skipped"
-fi
-
-# ---------------------------------------------------------------------------
-# 85. pwsh live copy-mode: run ps1 twin against a temp fixture; verify both
-#     harness dests have the expected SKILL.md files. If pwsh is absent, SKIP.
-# ---------------------------------------------------------------------------
-if command -v pwsh &>/dev/null; then
-  _pwsh_dir="$TMP/si-pwsh"
-  cp -a "$SI_FIX" "$_pwsh_dir"
-  _pwsh_exit=0
-  ( cd "$TMP" && pwsh -NoProfile -File "$_pwsh_dir/scripts/agent-kit/self-install.ps1" --no-emit ) 2>/dev/null \
-    || _pwsh_exit=$?
-  _pwsh_claude_ok=0; _pwsh_cursor_ok=0
-  [[ -f "$_pwsh_dir/.claude/skills/agent-kit/SKILL.md" && \
-     ! -e "$_pwsh_dir/.claude/skills/other" ]] && _pwsh_claude_ok=1
-  [[ -f "$_pwsh_dir/.cursor/skills/agent-kit/SKILL.md" && \
-     ! -e "$_pwsh_dir/.cursor/skills/other" ]] && _pwsh_cursor_ok=1
-  if [[ "$_pwsh_exit" -eq 0 && "$_pwsh_claude_ok" -eq 1 && "$_pwsh_cursor_ok" -eq 1 ]]; then
-    report PASS "85: pwsh live copy-mode: ps1 twin installs agent-kit (only) to both harness dests"
-  else
-    report FAIL "85: pwsh live copy-mode" \
-      "exit=$_pwsh_exit claude_ok=$_pwsh_claude_ok cursor_ok=$_pwsh_cursor_ok"
-  fi
-else
-  report SKIP "85: pwsh absent -- ps1 live copy-mode skipped"
 fi
 
 # ---------------------------------------------------------------------------

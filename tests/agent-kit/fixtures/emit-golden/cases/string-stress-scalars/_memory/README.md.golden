@@ -197,8 +197,10 @@ Default `search` hides superseded rows (`legacy alpha` is absent until
 
 ## CLI
 
-Twins: `_kit/memory.sh …` and `pwsh _kit/memory.ps1 …` (PowerShell 7.2+). Behavior,
-messages, and exit codes match.
+Primary: `_kit/memory.sh …`. Windows outside Git Bash: `_kit\memory.cmd …` (Git for
+Windows required). `_kit/memory.ps1` (PowerShell 7.2+) remains as a helper for
+`loop.ps1` until loop twins retire. Behavior, messages, and exit codes match across
+the Bash and `.cmd` paths.
 
 **Exit codes:** `0` ok · `2` usage/format · `4` missing root, file, id, or optional
 dependency · `5` quarantined.

@@ -40,6 +40,13 @@ source, unverified · 💬 = blog/secondary, unverified.
 > immutable record per file, `_kit/memory.*` twins, keyword + optional FTS5 search,
 > orchestrator-only reads under a DATA fence. Corrects the Claude Code AGENTS.md fact
 > (read only when no CLAUDE.md exists). Release A shipped in v0.30.0; B–D pending.
+>
+> **See also**: [research-runtime-language.md](research-runtime-language.md)
+> (2026-10-12) — runtime-language study for the kit's scripts: no harness guarantees
+> `node` or `python3`, the PowerShell twins require pwsh 7 that fresh Windows lacks, and
+> `emit.sh` needs Bash 4+ that stock macOS lacks. Recommends Bash as the single source of
+> truth behind a Git Bash launcher on Windows, retiring the `.ps1` twins group by group.
+> Implementation pending.
 
 ---
 
