@@ -1527,17 +1527,17 @@ capture_validate_idle_hours() { # <value> → stdout normalized hours; exit 2 on
   local v="$1"
   [ -n "$v" ] || die 2 "invalid --idle-hours"
   re_match "$v" '^[0-9]+$' || die 2 "invalid --idle-hours"
+  [ "${#v}" -le 6 ] || die 2 "invalid --idle-hours"
   printf '%s' $((10#$v))
 }
 
-capture_validate_since_date() { # <YYYY-MM-DD> → exit 2 unless a real Gregorian calendar date
+gregorian_date_valid_p() { # <YYYY-MM-DD> → exit 0 if real Gregorian calendar date
   local since="$1" yy mm dd dim
-  [ -n "$since" ] || die 2 "invalid --since"
-  re_match "$since" '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' || die 2 "invalid --since"
+  re_match "$since" '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' || return 1
   yy=$((10#${since:0:4}))
   mm=$((10#${since:5:2}))
   dd=$((10#${since:8:2}))
-  [ "$mm" -ge 1 ] && [ "$mm" -le 12 ] || die 2 "invalid --since"
+  [ "$mm" -ge 1 ] && [ "$mm" -le 12 ] || return 1
   case "$mm" in
     1|3|5|7|8|10|12) dim=31 ;;
     4|6|9|11) dim=30 ;;
@@ -1549,7 +1549,14 @@ capture_validate_since_date() { # <YYYY-MM-DD> → exit 2 unless a real Gregoria
       fi
       ;;
   esac
-  [ "$dd" -ge 1 ] && [ "$dd" -le "$dim" ] || die 2 "invalid --since"
+  [ "$dd" -ge 1 ] && [ "$dd" -le "$dim" ]
+}
+
+capture_validate_since_date() { # <YYYY-MM-DD> → exit 2 unless a real Gregorian calendar date
+  local since="$1"
+  [ -n "$since" ] || die 2 "invalid --since"
+  re_match "$since" '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' || die 2 "invalid --since"
+  gregorian_date_valid_p "$since" || die 2 "invalid --since"
 }
 
 capture_scope_from_file() { # <transcript-file> <root-abs> → repo|unknown
@@ -2726,7 +2733,8 @@ backfill_research_ts() { # <report.md>
     /^\*\*Date\*\*: / {
       v = $0; sub(/^\*\*Date\*\*: /, "", v)
       sub(/ · .*/, "", v)
-      if (v ~ /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/) {
+      sub(/\r$/, "", v)
+      if (v ~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]$/) {
         gsub(/-/, "", v)
         print v "T120000Z"
         found = 1
@@ -2735,6 +2743,53 @@ backfill_research_ts() { # <report.md>
     }
     END { if (!found) print "19700101T000000Z" }
   ' "$1"
+}
+
+backfill_add_body_sha() { # <raw-body-file> → stdout sha256 hex of body as cmd_add would hash it
+  local raw="$1" prep norm red len
+  prep="$(mk_tmp)"
+  backfill_prepare_body "$raw" "$prep" || return 1
+  norm="$(mk_tmp)"
+  red="$(mk_tmp)"
+  normalize_body_file "$prep" "$norm" || return 1
+  memory_redact_file "$norm" "$red" 1
+  len="$(wc -c < "$red" | tr -d '[:space:]')"
+  [ "$len" -ge 1 ] && [ "$len" -le 4096 ] || return 1
+  sha256_hex < "$red"
+}
+
+backfill_body_sha_in_store_p() { # <store> <sha256-hex>
+  local store="$1" want="$2" list f
+  list="$(mk_tmp)"
+  glob_dedupe_files "$store" "$list"
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    read_frontmatter "$f" || continue
+    [ "$FM_SHA256" = "$want" ] && return 0
+  done < "$list"
+  return 1
+}
+
+backfill_escalation_status() { # <store> <raw-body-file> <resolved-date-or-empty>
+  local store="$1" raw="$2" resd="$3" sha raw_apply
+  if [ -z "$resd" ]; then
+    printf 'skip:open'
+    return 0
+  fi
+  re_match "$resd" '^[0-9]{4}-[0-9]{2}-[0-9]{2}$' && gregorian_date_valid_p "$resd" || {
+    printf 'skip:bad-date'
+    return 0
+  }
+  if have_sha256; then
+    raw_apply="$(mk_tmp)"
+    printf '%s' "$(cat "$raw")" > "$raw_apply"
+    sha="$(backfill_add_body_sha "$raw_apply")" || sha=""
+    if [ -n "$sha" ] && backfill_body_sha_in_store_p "$store" "$sha"; then
+      printf 'skip:archived'
+      return 0
+    fi
+  fi
+  printf 'would-add'
 }
 
 backfill_build_research_body() { # <root> <topic> <out>
@@ -2954,14 +3009,13 @@ cmd_backfill() {
               if [ "$in_e" -eq 1 ]; then
                 idx=$((idx + 1))
                 ename="$(basename "$ef")#${idx}"
-                if [ -z "$resd" ]; then
-                  backfill_emit_plan_or_apply escalation "$ename" "skip:open" "" ""
-                else
+                st="$(backfill_escalation_status "$store" "$bodyf" "$resd")"
+                if [ "$st" = "would-add" ]; then
                   BF_ESC_TITLE="$etitle"
                   BF_ESC_RES="$resd"
                   BF_ESC_BODY="$(cat "$bodyf")"
-                  backfill_emit_plan_or_apply escalation "$ename" "would-add" "" ""
                 fi
+                backfill_emit_plan_or_apply escalation "$ename" "$st" "" ""
               fi
               in_e=1
               etitle="${eline##\#\# }"
@@ -2986,14 +3040,13 @@ cmd_backfill() {
         if [ "$in_e" -eq 1 ]; then
           idx=$((idx + 1))
           ename="$(basename "$ef")#${idx}"
-          if [ -z "$resd" ]; then
-            backfill_emit_plan_or_apply escalation "$ename" "skip:open" "" ""
-          else
+          st="$(backfill_escalation_status "$store" "$bodyf" "$resd")"
+          if [ "$st" = "would-add" ]; then
             BF_ESC_TITLE="$etitle"
             BF_ESC_RES="$resd"
             BF_ESC_BODY="$(cat "$bodyf")"
-            backfill_emit_plan_or_apply escalation "$ename" "would-add" "" ""
           fi
+          backfill_emit_plan_or_apply escalation "$ename" "$st" "" ""
         fi
       done < "$esc_files"
     fi

@@ -22,10 +22,13 @@ never edit files and never fix anything — you read, verify, and return a verdi
   issue and then approving anyway with no mention of it is an auto-audit failure, not
   an acceptable call.
 - **Execute before you score.** Run the task's targeted tests and commands yourself
-  before writing any verdict — reading the report or the diff alone is not enough. If
-  the verdict's "What I verified" section shows no execution evidence (a command you
-  ran plus its output),   the verdict is invalid. (Arbitration mode excepted — see
-  **Arbitration mode**; no code is under review, so arbiter evidence is
+  before writing any verdict — reading the report or the diff alone is not enough. When
+  the harness runs you read-only (shell refused), use orchestrator-supplied verbatim
+  evidence (each acceptance criterion's command plus its output), mark those items in
+  **What I verified** as orchestrator evidence, and treat any criterion with no evidence
+  as an issue — never a pass. Otherwise, if **What I verified** shows no execution
+  evidence (a command you ran plus its output), the verdict is invalid. (Arbitration mode
+  excepted — see **Arbitration mode**; no code is under review, so arbiter evidence is
   acceptance-criteria citation only.)
 
 ## Existence checks & anti-fabrication (hard rules)

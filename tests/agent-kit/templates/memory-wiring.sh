@@ -29,6 +29,8 @@ LOOP_PROMPT="$TEMPLATES/loop/PROMPT.md"
 LOOP_SH="$TEMPLATES/loop/loop.sh"
 LOOP_PS1="$TEMPLATES/loop/loop.ps1"
 MEM_README="$TEMPLATES/memory/README.md"
+MEM_CAPTURE_TPL="$TEMPLATES/skills/memory-capture/SKILL.template.md"
+EVALUATOR_TPL="$TEMPLATES/agents/evaluator.md"
 TASK_CRIT="$TEMPLATES/skills/task-criteria/SKILL.template.md"
 GOAL_CRIT="$TEMPLATES/skills/goal-criteria/SKILL.template.md"
 AGENTS_DIR="$TEMPLATES/agents"
@@ -189,6 +191,17 @@ check_s6_readme() {
   grep -qF 'Planned: read protocol' "$MEM_README" && return 1
   grep -qF '## Searching' "$MEM_README" || return 1
   grep -q '{{' "$MEM_README" && return 1
+  return 0
+}
+
+check_s7_memory_store_text() {
+  grep -qF 'record-id|skipped date sha256' "$MEM_README" || return 1
+  grep -qF 'non-empty 5th column' "$MEM_README" || return 1
+  grep -qF 'grew since it was distilled' "$MEM_CAPTURE_TPL" || return 1
+  grep -qF '`--supersedes`' "$MEM_CAPTURE_TPL" || return 1
+  grep -qF 'orchestrator-supplied verbatim' "$EVALUATOR_TPL" || return 1
+  grep -qF 'first spawn `terminal` per acceptance-criterion command' "$FEATURE_TPL" || return 1
+  grep -qF '### Canonical template leak check' "$GOAL_CRIT" || return 1
   return 0
 }
 
@@ -354,6 +367,24 @@ blk_s6() {
     || report FAIL "S6-mutation: planned stub still passed"
 }
 
+blk_s7() {
+  local s7m cap="$MEM_CAPTURE_TPL"
+  if check_s7_memory_store_text; then
+    report PASS "S7: README ledger + capture/distill/evaluator/feature/goal-criteria template text"
+  else
+    report FAIL "S7: README ledger + capture/distill/evaluator/feature/goal-criteria template text"
+  fi
+  mktemp_dir s7_mut
+  cp "$MEM_CAPTURE_TPL" "$s7_mut/SKILL.template.md"
+  sed '/grew since it was distilled/d' "$s7_mut/SKILL.template.md" > "$s7_mut/SKILL.template.md.n" \
+    && mv "$s7_mut/SKILL.template.md.n" "$s7_mut/SKILL.template.md"
+  MEM_CAPTURE_TPL="$s7_mut/SKILL.template.md"
+  check_s7_memory_store_text && s7m=1 || s7m=0
+  MEM_CAPTURE_TPL="$cap"
+  [[ "$s7m" -eq 0 ]] && report PASS "S7-mutation: missing re-distill text fails check" \
+    || report FAIL "S7-mutation: missing re-distill text still passed"
+}
+
 PAR_COUNTERS="pass fail skip"
 PAR_REPORT_FAIL="report"
 
@@ -365,6 +396,7 @@ par_block blk_s3
 par_block blk_s4
 par_block blk_s5
 par_block blk_s6
+par_block blk_s7
 par_finish
 
 if ! command -v jq >/dev/null 2>&1; then

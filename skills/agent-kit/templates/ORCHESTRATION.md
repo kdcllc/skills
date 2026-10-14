@@ -824,7 +824,7 @@ flowchart TD
 | **Capture** | Optional recall when distilling a session | `memory-capture` skill: `_kit/memory.sh capture` → scope confirm → distill → `add` → `check`; gitignored `_memory/raw/` |
 | **Back-fill** | Optional recall before a one-time legacy import | `_kit/memory.sh backfill --plan` (no writes), review output, then `--apply`; closed goals, research topics named with `--only`, and resolved escalations; closed signals — the kit writes the `ARCHIVED:` note and `_research/<topic>/ingested` marker; a human adds the escalation `resolved:` line inside the entry — see `_memory/README.md` (`backfill`, **Closed signals**); one-time transcript import via `memory-capture` (runbook: `{{IDE_DIR}}/skills/feature/reference/memory-capture.md`; Codex-only installs: run `capture` per `_memory/README.md` and distill from a Claude Code, Cursor or Copilot session) |
 
-Before committing memory records, run `_kit/memory.sh check <paths>` before committing, or
+Before committing memory records, run `_kit/memory.sh check <paths>`, or
 `check --staged` for everything staged. Exit **3** means the gate failed (secret, hash/id mismatch,
 admission violation, or a staged edit under tracked `_memory/records/` or
 `_memory/quarantine/`) — fix or remove the file before commit. The kit does not install a
@@ -892,7 +892,7 @@ _goals/breaker-state.json       # Model circuit breaker state (runtime, gitignor
 _kit/{log-spawn.sh,log-spawn.cmd}  # Single-copy tools: orchestration-log writer + Windows launcher
 _kit/{memory.sh,memory.ps1}  # Single-copy tools: memory store (add / index / search / show / redact / check / rm / capture / backfill)
 _memory/records/ · _memory/quarantine/  # Tracked memory records (immutable, one per file) — see _memory/README.md
-_memory/.index/ · _memory/raw/  # Derived index / reserved transcripts (gitignored)
+_memory/.index/ · _memory/raw/  # Derived index; capture output, ledgers and drafts (gitignored)
 _loop/{loop.sh,loop.ps1,breaker.sh,breaker.ps1,PROMPT.md}  # Headless loop driver (if enabled)
 ```
 <!-- ENDIF loop -->
@@ -934,7 +934,7 @@ _goals/<goal>/spawns/NN-report.md   # Report returned by spawn #NN (verbatim)
 _kit/{log-spawn.sh,log-spawn.cmd}  # Single-copy tools: orchestration-log writer + Windows launcher
 _kit/{memory.sh,memory.ps1}  # Single-copy tools: memory store (add / index / search / show / redact / check / rm / capture / backfill)
 _memory/records/ · _memory/quarantine/  # Tracked memory records (immutable, one per file) — see _memory/README.md
-_memory/.index/ · _memory/raw/  # Derived index / reserved transcripts (gitignored)
+_memory/.index/ · _memory/raw/  # Derived index; capture output, ledgers and drafts (gitignored)
 ```
 <!-- ENDIF !loop -->
 <!-- ENDIF research -->
@@ -976,7 +976,7 @@ _goals/breaker-state.json       # Model circuit breaker state (runtime, gitignor
 _kit/{log-spawn.sh,log-spawn.cmd}  # Single-copy tools: orchestration-log writer + Windows launcher
 _kit/{memory.sh,memory.ps1}  # Single-copy tools: memory store (add / index / search / show / redact / check / rm / capture / backfill)
 _memory/records/ · _memory/quarantine/  # Tracked memory records (immutable, one per file) — see _memory/README.md
-_memory/.index/ · _memory/raw/  # Derived index / reserved transcripts (gitignored)
+_memory/.index/ · _memory/raw/  # Derived index; capture output, ledgers and drafts (gitignored)
 _loop/{loop.sh,loop.ps1,breaker.sh,breaker.ps1,PROMPT.md}  # Headless loop driver (if enabled)
 ```
 <!-- ENDIF loop -->
@@ -1014,7 +1014,7 @@ _goals/<goal>/spawns/NN-report.md   # Report returned by spawn #NN (verbatim)
 _kit/{log-spawn.sh,log-spawn.cmd}  # Single-copy tools: orchestration-log writer + Windows launcher
 _kit/{memory.sh,memory.ps1}  # Single-copy tools: memory store (add / index / search / show / redact / check / rm / capture / backfill)
 _memory/records/ · _memory/quarantine/  # Tracked memory records (immutable, one per file) — see _memory/README.md
-_memory/.index/ · _memory/raw/  # Derived index / reserved transcripts (gitignored)
+_memory/.index/ · _memory/raw/  # Derived index; capture output, ledgers and drafts (gitignored)
 ```
 <!-- ENDIF !loop -->
 <!-- ENDIF !research -->

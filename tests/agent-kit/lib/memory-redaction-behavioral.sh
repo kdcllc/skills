@@ -4,6 +4,13 @@ run_release_c_redaction_behavioral() {
   local RR="" GH="" PAT="" SK="" JWT="" f="" id="" sha="" leaks=0 exp_redact=
   mktemp_root RR
 
+  twins_redact_diverge_p() { # <infile> <ps1-path> → exit 0 when bash vs pwsh redact stdout differ
+    local in="$1" ps1="$2"
+    bash "$MEMORY_SH" redact < "$in" >"$B/twin.a" 2>/dev/null
+    pwsh -NoProfile -NonInteractive -File "$ps1" redact < "$in" >"$B/twin.b" 2>/dev/null
+    ! cmp -s "$B/twin.a" "$B/twin.b"
+  }
+
   release_c_redact() { # <infile> [optional MEMORY_PS1 override for pwsh leg]
     local in="$1" ps1="${2:-$MEMORY_PS1}" rc_b=0
     if [[ "${M_PARITY:-0}" -eq 1 ]]; then
@@ -137,14 +144,18 @@ EOF
   release_c_redact "$B/rc.pk"; grep -q '\[REDACTED:private-key\]' <<<"$OUT" && ok "class private-key" || ko "class pk"
 
   if [[ "$label" == "__parity__" ]] && command -v pwsh >/dev/null 2>&1; then
-    local pb="$M_PARITY_BAD" mut_ps1="" canon_out="" mut_out=""
-    mut_ps1="$(mktemp "${TMPDIR:-/tmp}/memps1mut.XXXXXX")"
-    cp "$MEMORY_PS1" "$mut_ps1"
-    sed -i 's/\[REDACTED:secret\]/[REDACTED:SECRET]/' "$mut_ps1"
+    local mut_ps1=""
     printf 'password=abcdefgh9\n' > "$B/parity.proof.in"
-    bash "$MEMORY_SH" redact < "$B/parity.proof.in" >"$B/parity.proof.a" 2>/dev/null
-    pwsh -NoProfile -NonInteractive -File "$mut_ps1" redact < "$B/parity.proof.in" >"$B/parity.proof.b" 2>/dev/null
-    if ! cmp -s "$B/parity.proof.a" "$B/parity.proof.b"; then
+    if twins_redact_diverge_p "$B/parity.proof.in" "$MEMORY_PS1"; then
+      ko "parity redact negative control" "canonical twins must not diverge"
+    else
+      echo "PASS: parity redact negative control: canonical twins match (no divergence)"
+      ok "parity redact negative control: canonical twins match (no divergence)"
+    fi
+    mut_ps1="$(mktemp "${TMPDIR:-/tmp}/memps1mut.XXXXXX")"
+    sed 's/\[REDACTED:secret\]/[REDACTED:SECRET]/' "$MEMORY_PS1" > "$mut_ps1"
+    if twins_redact_diverge_p "$B/parity.proof.in" "$mut_ps1"; then
+      echo "PASS: parity redact compares stdout bytes (mutant ps1 diverges)"
       ok "parity redact compares stdout bytes (mutant ps1 diverges)"
     else
       ko "parity redact proof" "mutant did not diverge"

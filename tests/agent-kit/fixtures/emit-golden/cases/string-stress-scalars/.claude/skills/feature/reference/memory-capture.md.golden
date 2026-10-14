@@ -106,14 +106,20 @@ or evaluator pass.
 ## Ledger and fallback guard
 
 Every distilled or skipped session gets one TAB-separated line in `_memory/raw/.distilled`
-(`_memory/README.md` **Ledger formats**): `harness<TAB>session<TAB>record-id|skipped<TAB>YYYYMMDD`,
-the date being the UTC date of the write.
+(`_memory/README.md` **Ledger formats**):
+`harness<TAB>session<TAB>record-id|skipped<TAB>YYYYMMDD<TAB>sha256` — the date is the UTC
+date of the write; the 5th column is the raw file's frontmatter `sha256` at distill/skip
+time (fallback rows leave it empty). A session is pending when it has no row, or when its
+latest row has a non-empty 5th column that differs from the raw file's current `sha256`
+(legacy four-column rows never re-offer). Re-distill with `--supersedes <latest row record
+id>` when that row holds a record id (not `skipped`).
 
 The fallback is for sessions with no raw file: always for Copilot; for Cursor and Claude Code
 only when capture cannot run (exit 4 `capture needs jq`, or no transcript directory for that
 harness). If capture ran but the current session is still live, run the skill again after the
 session has been idle `--idle-hours` (default 6) — no fallback. A fallback row is
-`harness<TAB>fallback:<label><TAB>record-id<TAB>YYYYMMDD`. At the scope gate for a later raw
+`harness<TAB>fallback:<label><TAB>record-id<TAB>YYYYMMDD<TAB>` (trailing TAB = empty 5th
+column; may omit). At the scope gate for a later raw
 session, the orchestrator lists `fallback:` rows for the same harness dated within one day of
 that raw session's date and asks whether the session is already summarized; if yes, `skip`.
 

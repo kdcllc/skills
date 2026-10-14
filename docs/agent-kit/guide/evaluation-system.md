@@ -113,7 +113,7 @@ Task evaluation applies the ladder per requirement ([`task-criteria/SKILL.templa
 
 ### Execute before you score
 
-Evaluators must **run** targeted tests and commands before writing a verdict. Reading the report or diff alone is insufficient. If the verdict's "What I verified" section shows no execution evidence (a command run plus its output), the verdict is invalid ([`agents/evaluator.md`](../../../skills/agent-kit/templates/agents/evaluator.md)). As of v0.20.0, arbitration mode is the exception: no code is under review, so execute-before-score does not apply; arbiter evidence is acceptance-criterion citation only ([`agents/evaluator.md`](../../../skills/agent-kit/templates/agents/evaluator.md) § Arbitration mode).
+Evaluators must **run** targeted tests and commands before writing a verdict. Reading the report or diff alone is insufficient. When the harness runs the evaluator **read-only** (shell refused, or `readonly: true` in the emitted evaluator agent), use **orchestrator-supplied verbatim evidence** — each acceptance criterion's command plus its output — mark those items in **What I verified** as **orchestrator evidence**, and treat any criterion with **no** evidence as an issue, never a pass ([`agents/evaluator.md`](../../../skills/agent-kit/templates/agents/evaluator.md)). The feature orchestrator **first** spawns **`terminal`** per acceptance-criterion command (Phase 5 final audit: the audit's commands) and attaches the output before launching the evaluator ([`feature/SKILL.template.md`](../../../skills/agent-kit/templates/skills/feature/SKILL.template.md) Phase 4 step 3, Phase 5). Otherwise, if **What I verified** shows no execution evidence (a command you ran plus its output), the verdict is invalid. As of v0.20.0, arbitration mode is the exception: no code is under review, so execute-before-score does not apply; arbiter evidence is acceptance-criterion citation only ([`agents/evaluator.md`](../../../skills/agent-kit/templates/agents/evaluator.md) § Arbitration mode).
 
 ### Calibration exemplars (as of v0.19.0)
 
@@ -189,6 +189,12 @@ At goal evaluation, the evaluator verifies write-set disjointness ([`goal-criter
 **Orchestrator-owned carve-out:** `_goals/` artifacts (goal files, orchestration log) and Phase 6 doc surfaces listed in the align-docs map sit **outside** the task write-set union — coverage and single-owner apply to task-owned product files only.
 
 Any violation of the seven checks is **NEEDS REVISION**. A missing ownership block is also **NEEDS REVISION** (fail closed).
+
+## Scope discipline (goal evaluation)
+
+Goal evaluation also applies scope discipline from [`goal-criteria/SKILL.template.md`](../../../skills/agent-kit/templates/skills/goal-criteria/SKILL.template.md) §4 (out-of-scope section, no smuggled refactoring, no contradiction with constraints or ground truth).
+
+**Canonical template leak check** ([`goal-criteria/SKILL.template.md`](../../../skills/agent-kit/templates/skills/goal-criteria/SKILL.template.md) § Canonical template leak check): when a task's `writes` include paths the project distributes as reusable templates (for example a canonical `templates/` tree), flag **NEEDS REVISION** if its requirements or proposed content copy **this repository's own** goal slugs from `_goals/` or `_goals/archive/`, memory record ids (`YYYYMMDDTHHMMSSZ-<hex>`), or verbatim memory record titles from `_memory/records/` into those templates — templates must stay generic. Clearly labeled placeholder samples in a task requirement are not a leak (informational note only, not **NEEDS REVISION**).
 
 ## Staged test ladder
 

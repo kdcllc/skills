@@ -117,6 +117,16 @@ The goal's `phases:` block must declare `ladder:` as `escalate` or `auto`. A mis
 Out-of-scope section exists; no task smuggles in unrelated refactoring; no requirement
 contradicts the constraints or the ground-truth doc ({{GROUND_TRUTH_DOC}}).
 
+### Canonical template leak check
+
+When a task's `writes` include paths the project distributes as reusable templates (for
+example a canonical `templates/` tree), flag NEEDS REVISION if its requirements or
+proposed content copy **this repository's own** goal slugs from `_goals/` or
+`_goals/archive/`, memory record ids (`YYYYMMDDTHHMMSSZ-<hex>`), or verbatim memory
+record titles from `_memory/records/` into those templates — templates must stay
+generic. Clearly labeled placeholder samples in a task requirement are not a leak
+(informational note only, not NEEDS REVISION).
+
 ### Memory protocol (goal-level)
 
 When `goal.md` carries a `## Recalled memory` section, every id listed must exist

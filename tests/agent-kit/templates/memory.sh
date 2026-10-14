@@ -1481,6 +1481,9 @@ structural_cases() {
   grep -qF '`new instructions:`' "$f" || { report FAIL "(q) README patterns"; return; }
   grep -qF '`<\|?im_start\|?>`' "$f" || { report FAIL "(q) README patterns"; return; }
   grep -qF '`</?system>`' "$f" || { report FAIL "(q) README patterns"; return; }
+  grep -qF 'record-id|skipped date sha256' "$f" || { report FAIL "(q) README ledger .distilled format"; return; }
+  grep -qF 'non-empty 5th column' "$f" || { report FAIL "(q) README .distilled re-offer rule"; return; }
+  grep -qF 'git ls-files --error-unmatch' "$f" || { report FAIL "(q) README rm tracked vs untracked"; return; }
   local got exp
   got="$(sed -n '49,61p' "$f")"
   exp="$(cat <<'EOF'

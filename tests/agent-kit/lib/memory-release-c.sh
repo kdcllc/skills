@@ -2,10 +2,13 @@
 # Uses caller report, mktemp_dir, mktemp_root, MEMORY_SH, MEMORY_PS1, REPO_ROOT, CANON_MEMORY_SH.
 
 run_release_c_bash_only() {
-  local R="" B="" T="" out="" rc=0 id="" p="" mut="" mutsh="" n=0 RC_MEMORY_SH=""
-  RC_MEMORY_SH="$MEMORY_SH"
+  local R="" B="" T="" out="" rc=0 id="" p="" mut="" mutsh="" n=0
   mktemp_dir T
   mktemp_dir B
+
+  rc_two_secret_hits() { # <check stdout> → 0 when exactly two secret failure lines
+    [[ "$(grep -c 'check failed secret' <<<"$1")" -eq 2 ]]
+  }
 
   rc_fresh() { # tag
     n=$((n + 1))
@@ -30,7 +33,7 @@ run_release_c_bash_only() {
   rc_chk() { # name args...
     local name="$1" out2="" rc2=0
     shift
-    out2="$(bash "$RC_MEMORY_SH" check "$@" --root "$R" 2>&1)"; rc2=$?
+    out2="$(bash "$MEMORY_SH" check "$@" --root "$R" 2>&1)"; rc2=$?
     case "$name" in
       empty-ok) [[ "$rc2" -eq 0 && "$out2" == 'memory: check ok 0 file(s)' ]] && report PASS "[bash-only] (rc-check-$name)" \
         || report FAIL "[bash-only] (rc-check-$name)" "rc=$rc2 out=$out2" ;;
@@ -106,7 +109,7 @@ run_release_c_bash_only() {
 
   rc_fresh; p="$(rc_add 20261013T130000Z 'clean body\n')"; rc_git add -A; rc_git commit -qm c
   git -C "$R" mv "$p" "$(dirname "$R/$p")/renamed-id.md"; rc_git add -A
-  out="$(bash "$RC_MEMORY_SH" check --staged --root "$R" 2>&1)"; rc=$?
+  out="$(bash "$MEMORY_SH" check --staged --root "$R" 2>&1)"; rc=$?
   grep -q 'check failed immutable' <<<"$out" && grep -q "$p" <<<"$out" \
     && grep -q 'renamed-id.md' <<<"$out" && [[ "$rc" -eq 3 ]] \
     && report PASS "[bash-only] (rc-check-staged-git-mv) immutable old + reasons on new" \
@@ -153,12 +156,18 @@ run_release_c_bash_only() {
   p="$(rc_add 20261013T130010Z 'clean one\n')"
   p2="$(rc_add 20261013T130011Z 'clean two\n')"
   printf 'token=abcdefgh9\n' >> "$R/$p"
+  out_one="$(bash "$MEMORY_SH" check "$R/$p" --root "$R" 2>&1)"; rc_one=$?
+  if rc_two_secret_hits "$out_one"; then
+    report FAIL "[bash-only] (rc-check-title-body-secret-proof-negative)" "one-hit control must not satisfy predicate"
+  elif [[ "$rc_one" -eq 3 && "$(grep -c 'check failed secret' <<<"$out_one")" -eq 1 ]]; then
+    report PASS "[bash-only] (rc-check-title-body-secret-proof-negative) one secret line → predicate false"
+  else
+    report FAIL "[bash-only] (rc-check-title-body-secret-proof-negative)" "rc=$rc_one out=$out_one"
+  fi
   printf 'token=abcdefgh9\n' >> "$R/$p2"
-  out="$(bash "$RC_MEMORY_SH" check "$R/$p" "$R/$p2" --root "$R" 2>&1)"; rc=$?
-  if [[ "$rc" -eq 3 && "$(grep -c 'check failed secret' <<<"$out")" -eq 2 ]]; then
-    [[ "$rc" -eq 3 && "$(grep -c 'check failed secret' <<<"$out")" -eq 1 ]] \
-      && report FAIL "[bash-only] (rc-check-title-body-secret-proof)" "one-line arm would pass with two secret lines" \
-      || report PASS "[bash-only] (rc-check-title-body-secret-proof) one-line arm active (two secret lines)"
+  out="$(bash "$MEMORY_SH" check "$R/$p" "$R/$p2" --root "$R" 2>&1)"; rc=$?
+  if [[ "$rc" -eq 3 ]] && rc_two_secret_hits "$out"; then
+    report PASS "[bash-only] (rc-check-title-body-secret-proof) two secret lines → predicate true"
   else
     report FAIL "[bash-only] (rc-check-title-body-secret-proof)" "rc=$rc out=$out"
   fi
@@ -226,7 +235,7 @@ run_release_c_bash_only() {
 
 run_release_c_mutations() {
   local B="$1" T="$2" mutsh="" out="" rc=0 p="" Rm="" H2="$B/home2" Rc="" S1="" CU2="" id2='c-sub-mut'
-  local canon_ok=0 mut_ok=0 sha_fix="" save_sh="" RC_MEMORY_SH="$MEMORY_SH"
+  local canon_ok=0 mut_ok=0 sha_fix=""
 
   rc_mut_logic() { # sed assert cname setup [staged]
     local sedscript="$1" assert="$2" cname="$3" setup="$4" staged="${5:-}"
@@ -259,8 +268,6 @@ run_release_c_mutations() {
         git -C "$Rm" rm -q _memory/quarantine/*.md 2>/dev/null || true
         git -C "$Rm" -c user.email=e@x -c user.name=n add -A ;;
     esac
-    save_sh="$RC_MEMORY_SH"
-    RC_MEMORY_SH="$MEMORY_SH"
     if [[ -n "$staged" ]]; then
       canon_out="$(bash "$MEMORY_SH" check --staged --root "$Rm" 2>&1)"; canon_rc=$?
       out="$(bash "$mutsh" check --staged --root "$Rm" 2>&1)"; rc=$?
@@ -268,7 +275,6 @@ run_release_c_mutations() {
       canon_out="$(bash "$MEMORY_SH" check "$Rm/$p" --root "$Rm" 2>&1)"; canon_rc=$?
       out="$(bash "$mutsh" check "$Rm/$p" --root "$Rm" 2>&1)"; rc=$?
     fi
-    RC_MEMORY_SH="$save_sh"
     rm -f "$mutsh"
     case "$cname" in
       *secret*) canon_ok=$([[ "$canon_rc" -eq 3 && "$canon_out" == *secret* ]] && echo 1 || echo 0)

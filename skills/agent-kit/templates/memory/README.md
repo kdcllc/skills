@@ -276,8 +276,8 @@ usage: memory.sh <add|index|search|show|redact|check|rm|capture|backfill> [--roo
 exit: 0 ok · 2 usage/format · 3 gate failed · 4 missing root/file/id/dependency · 5 quarantined
 ```
 
-**PowerShell twin:** `memory.ps1` implements `add` (with redaction and tag rules) and
-`redact`; `check`, `rm`, `capture`, and `backfill` exit 2 with
+**PowerShell twin:** `memory.ps1` implements `add` (with redaction and tag rules),
+`index`, `search`, `show`, and `redact`; `check`, `rm`, `capture`, and `backfill` exit 2 with
 `memory: '<sub>' is bash-only; run bash _kit/memory.sh <sub> (Windows: _kit\memory.cmd <sub>)`.
 
 ### add
@@ -382,9 +382,9 @@ rm <id> [--root <dir>]
 Invalid id → exit 2 `memory: invalid id`; root not a git work tree → exit 4 `memory: rm needs a git work tree`;
 not found in `records/` or `quarantine/` → exit 4 `memory: record not found: <id>`; tracked
 (`git ls-files --error-unmatch` succeeds) → exit 2
-`memory: record is tracked; add a superseding record instead`; `git ls-files` any other
-non-zero exit → exit 4 `memory: rm: git ls-files failed` (nothing deleted); otherwise deletes
-the file → stdout `memory: removed <id> <repo-relative path>`, exit 0.
+`memory: record is tracked; add a superseding record instead`; exit 1 (untracked) from
+`git ls-files --error-unmatch` → stdout `memory: removed <id> <repo-relative path>`, exit 0;
+any other non-zero exit → exit 4 `memory: rm: git ls-files failed` (nothing deleted).
 
 ### capture
 
@@ -395,9 +395,10 @@ capture [--harness cursor|claude|codex|all] [--from <dir>] [--idle-hours <n>] [-
 Defaults: harness `all`, idle-hours `6`, no `--since`. Flag and format validation (exit 2)
 runs before dependency checks (exit 4). `--from` overrides the transcript directory and
 requires a single harness (else exit 2 `memory: capture --from needs a single --harness`);
-invalid `--harness` → exit 2 `memory: invalid --harness`; when `--idle-hours` is given, a
-non-negative integer only (leading zeros allowed, e.g. `08` → 8 h; else exit 2
-`memory: invalid --idle-hours`); when `--since` is given, it must be a real Gregorian
+invalid `--harness` → exit 2 `memory: invalid --harness`; when `--idle-hours` is given, the
+value must be 1–6 ASCII digits (`0`–`9` only; leading zeros allowed, e.g. `08` → 8 h);
+anything else (empty, non-digit characters, or 7 or more digits) → exit 2
+`memory: invalid --idle-hours`; when `--since` is given, it must be a real Gregorian
 calendar date `YYYY-MM-DD`, checked in bash (month `01`–`12`, day `01` through the last day
 of that month; a leap year is divisible by 4 and not by 100 unless also by 400, so
 `2024-02-29` and `2000-02-29` are valid and `2026-02-29` and `1900-02-29` are not); anything
@@ -448,8 +449,9 @@ same git HEAD (or outside git, `commit: none`) yield byte-identical records.
 both → exit 2 `memory: backfill takes --plan or --apply, not both`. Kind flags `--goals`,
 `--research`, and `--escalations` select sources; when none are given, all three run.
 `--only <name>` (repeatable) names goal folders and research topics (exact names). When any
-`--only` is given, escalations are processed only if `--escalations` is also given. A name
-that matches only a kind excluded by the kind flags prints
+`--only` is given, goal folders and research topics not named are not listed at all (no output
+line, not counted in the summary). Escalations are processed only if `--escalations` is also given.
+A name that matches only a kind excluded by the kind flags prints
 `memory: backfill only <name> skip:excluded-kind`. Each `--only` name matching no goal and no
 topic → one line `memory: backfill only <name> skip:not-found`. Other flag errors use the
 generic usage messages above.
@@ -471,8 +473,9 @@ Decision per goal, first match wins:
 4. otherwise `skip:open`.
 
 Timestamp: (3a) the `### <ts>` heading of that SPAWN entry; (3b) that note's `<ts>`; (3c) the
-last `### <ts>` line in the log. Verdict text: (3a) as above; (3b) the note text after `— `;
-(3c) `opted in with --only`. When several signals hold, (a) beats (b) beats (c).
+last valid `### <ts>` line in the log (`^### [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}[+-][0-9]{2}:[0-9]{2}`),
+or `19700101T000000Z` when the log has no such heading. Verdict text: (3a) as above; (3b) the note
+text after `— `; (3c) `opted in with --only`. When several signals hold, (a) beats (b) beats (c).
 
 **Goal record.** Kind `goal-summary`; source `goal <g> (goal.md)`; title
 `<g>: back-filled goal summary`; tags `backfill` plus `<g>` when it matches the tag ERE
@@ -491,8 +494,8 @@ record has source `research <t> (report.md)` → `skip:archived`; else named by 
 `research <t> (report.md)`; title `<t>: back-filled research summary`; tags `backfill`,
 `research`; body `Research <t> — back-filled from report.md.` · blank · the text under
 `## Summary of Findings` up to the next `## ` line. Timestamp: the `**Date**:` value of
-report.md (text after `**Date**: ` up to ` · ` or end of line) when it is `YYYY-MM-DD`, at
-`T120000Z`; else `19700101T000000Z`.
+report.md (text after `**Date**: ` up to ` · ` or end of line, with any trailing CR stripped
+before parsing) when it is `YYYY-MM-DD`, at `T120000Z`; else `19700101T000000Z`.
 
 **Accepted limitation:** a legacy research record whose source cites a tracked copy of the
 report (not `research <t> (report.md)`) is not detected as archived; research back-fill is
@@ -500,12 +503,22 @@ opt-in via `--only`.
 
 **Escalations.** Sources `_goals/ESCALATIONS.md` and `_goals/archive/ESCALATIONS-*.md`. An entry
 starts at a line beginning `## ` and runs to the next `## ` line or end of file; text before
-the first `## ` and `# ` H1 lines are ignored. Resolved when the entry has a line matching
-`^- resolved: [0-9]{4}-[0-9]{2}-[0-9]{2} .+$`; else `skip:open`. Name `<file name>#<n>` (1-based
-entry index in that file). Record: kind `decision`; source `goals ledger (<file name>)`; title =
-heading text after `## `; tags `backfill`, `escalation`; body = the whole entry (heading
-included); timestamp = the `resolved:` date at `T120000Z`. Idempotence for escalations relies
-on `add`'s body-hash dedupe (a re-run reports `duplicate`).
+the first `## ` and `# ` H1 lines are ignored. Decision per entry, first match wins:
+
+1. no line matching `^- resolved: [0-9]{4}-[0-9]{2}-[0-9]{2} .+$` → `skip:open`;
+2. the date on the entry's **last** matching `- resolved: YYYY-MM-DD …` line is not a real
+   Gregorian calendar date (month `01`–`12`, day within month length, leap years) →
+   `memory: backfill escalation <name> skip:bad-date` (not imported in `--plan` or `--apply`);
+3. the candidate body hash (same normalization and redaction `add` uses) already appears as a
+   `sha256:` under `records/` or `quarantine/` → `memory: backfill escalation <name> skip:archived`
+   (counted as skipped in `--plan` and `--apply`; hashing uses temporary files outside the store
+   only; `--plan` writes nothing under the root);
+4. otherwise `would-add` (`--apply`: `add`).
+
+Name `<file name>#<n>` (1-based entry index in that file). Record: kind `decision`; source
+`goals ledger (<file name>)`; title = heading text after `## `; tags `backfill`, `escalation`;
+body = the whole entry (heading included); timestamp = the valid date from the **last** matching
+`- resolved:` line at `T120000Z`.
 
 **Sanitizing and size.** Titles: `"` → `'`, `\` → `/`, control characters → space, ASCII
 spaces trimmed, then cut to ≤ 120 bytes at a UTF-8 character boundary; an empty result becomes
@@ -554,9 +567,15 @@ file bytes contain the absolute root path followed by end of a line or a charact
 
 - `raw/.captured` — TAB-separated `harness session sha256 status captured` (latest row per
   harness+session wins).
-- `raw/.distilled` — TAB-separated `harness session record-id|skipped date` (written by the
-  distillation workflow). Orchestrator-written fallback rows (memory-capture skill) put
-  `fallback:<label>` in the **session** column instead of a transcript session id; harness
-  is `copilot`, `cursor`, or `claude` (never `codex` — Codex installs have no skill).
+- `raw/.distilled` — TAB-separated `harness session record-id|skipped date sha256` (written by the
+  distillation workflow). The 5th column is the raw session file's frontmatter `sha256` when the
+  row was written; fallback rows (`fallback:<label>` sessions) leave it empty or omit it; legacy
+  4-column rows remain valid and never trigger a re-offer. **Re-offer:** a raw session is pending
+  for distillation when it has no row, or when its latest row has a non-empty 5th column that
+  differs from the raw file's current `sha256`; a newly distilled record supersedes the latest row's record
+  id when that row holds one (`session-summary` with `--supersedes`). Orchestrator-written fallback
+  rows (memory-capture skill) put `fallback:<label>` in the **session** column instead of a
+  transcript session id; harness is `copilot`, `cursor`, or `claude` (never `codex` — Codex
+  installs have no skill).
 
 **Planned:** Capture hooks are later kit work.

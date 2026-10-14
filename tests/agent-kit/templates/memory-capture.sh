@@ -4,7 +4,8 @@ set -u
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$HERE/../../.." && pwd)"
-MEMORY_SH="${MEMORY_SH:-$REPO_ROOT/skills/agent-kit/templates/tools/memory.sh}"
+CANON_MEMORY_SH="$REPO_ROOT/skills/agent-kit/templates/tools/memory.sh"
+MEMORY_SH="${MEMORY_SH:-$CANON_MEMORY_SH}"
 
 pass=0; fail=0; skip=0
 CLEANUP=()
@@ -157,6 +158,16 @@ HOME="$H" bash "$MEMORY_SH" capture --root "$R" --harness bogus 2>/dev/null; [[ 
 HOME="$H" bash "$MEMORY_SH" capture --root "$R" --idle-hours x 2>/dev/null; [[ $? -eq 2 ]] \
   && report PASS "capture bad --idle-hours exit 2" || report FAIL "capture bad idle-hours"
 
+idle7_out="$(HOME="$H" bash "$MEMORY_SH" capture --root "$R" --idle-hours 1234567 2>&1)"; idle7_rc=$?
+grep -qxF 'memory: invalid --idle-hours' <<<"$idle7_out" && [[ "$idle7_rc" -eq 2 ]] \
+  && report PASS "capture --idle-hours 7 digits exit 2 + message" \
+  || report FAIL "capture idle-hours 7 digits" "rc=$idle7_rc out=$idle7_out"
+
+idle6_out="$(HOME="$H" bash "$MEMORY_SH" capture --root "$R" --harness cursor --idle-hours 100000 2>&1)"; idle6_rc=$?
+[[ "$idle6_rc" -eq 0 && "$idle6_out" != *'invalid --idle-hours'* ]] \
+  && report PASS "capture --idle-hours 6 digits accepted" \
+  || report FAIL "capture idle-hours 6 digits" "rc=$idle6_rc out=$(printf '%s' "$idle6_out" | tr '\n' '|')"
+
 HOME="$H" bash "$MEMORY_SH" capture --root "$R" --since 2026-13-45x 2>/dev/null; [[ $? -eq 2 ]] \
   && report PASS "capture bad --since exit 2" || report FAIL "capture bad since"
 
@@ -253,6 +264,29 @@ for d in 2026-02-30 2026-13-01; do
   HOME="$H" bash "$MEMORY_SH" capture --root "$R" --harness cursor --since "$d" 2>/dev/null; [[ $? -eq 2 ]] || cal_ok=0
 done
 [[ "$cal_ok" -eq 1 ]] && report PASS "capture impossible calendar dates exit 2" || report FAIL "capture bad calendar dates"
+
+cap_mut_idle() { # sed assert_fn
+  local sedscript="$1" name="$2" fn="$3" mutsh canon_ok=0 mut_ok=0
+  mutsh="$(mktemp "${TMPDIR:-/tmp}/memcapmut.XXXXXX")"
+  sed "$sedscript" "$CANON_MEMORY_SH" > "$mutsh"
+  chmod +x "$mutsh"
+  if MEMORY_SH="$CANON_MEMORY_SH" "$fn"; then canon_ok=1; fi
+  if MEMORY_SH="$mutsh" "$fn"; then mut_ok=1; fi
+  rm -f "$mutsh"
+  if [[ "$canon_ok" -eq 1 && "$mut_ok" -eq 0 ]]; then
+    report PASS "mutation-$name: canonical PASS, mutant FAIL"
+  else
+    report FAIL "mutation-$name" "canon_ok=$canon_ok mut_ok=$mut_ok"
+  fi
+}
+
+assert_idle7_reject() {
+  local out rc
+  out="$(HOME="$H" bash "$MEMORY_SH" capture --root "$R" --idle-hours 1234567 2>&1)"; rc=$?
+  grep -qxF 'memory: invalid --idle-hours' <<<"$out" && [[ "$rc" -eq 2 ]]
+}
+cap_mut_idle 's/\[ "\${#v}" -le 6 \] || die 2/true # mut-idle-cap/' \
+  'drop-idle-hours-digit-cap' assert_idle7_reject
 
 echo
 echo "PASS: $pass   FAIL: $fail   SKIP: $skip"

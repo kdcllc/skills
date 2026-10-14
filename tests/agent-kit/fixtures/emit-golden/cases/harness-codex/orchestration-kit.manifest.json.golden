@@ -21,7 +21,7 @@
   "files": {
     ".codex/agents/diagnostician.md": "7d0121fb18ee3c128bc3884acd8aee1796c3ae5161d5f3506315d1614a52f1f2",
     ".codex/agents/diagnostician.toml": "e0e4d37c81f763b18f09b0440c01714f80ed7f82c8bf7104e406cccb4c720e96",
-    ".codex/agents/evaluator.md": "e2686f965f414594cd8f6d77be09e1c047790704a0f8e33a70b20c13168c8327",
+    ".codex/agents/evaluator.md": "4093550ff74d9055bf400181c30b0f89aa4a15b5f945030dba429fbb90baac6e",
     ".codex/agents/evaluator.toml": "e0e4d37c81f763b18f09b0440c01714f80ed7f82c8bf7104e406cccb4c720e96",
     ".codex/agents/implementer.md": "851758f9e6982f1d2eb08ae4b927249ed9c37206b5c73be51fc6e66621ed8585",
     ".codex/agents/implementer.toml": "4092fe6c250c290e8ca3b43ef5998904f0965247e5aff3d837d486395d06241b",
@@ -32,18 +32,18 @@
     ".codex/agents/test-writer.md": "fd310b91980bae2cbe0230156ccb4d9f771291423816c3d224d6ec16582b79b2",
     ".codex/agents/test-writer.toml": "4092fe6c250c290e8ca3b43ef5998904f0965247e5aff3d837d486395d06241b",
     ".codex/config.toml": "52eed364237d0eb7475b8e1beb571842cd14d1fd526854b4ca9ecb8b828c1042",
-    "ORCHESTRATION.md": "bb1d4bc7ca9ac6c5d957c3f8617277c47e77c98ce4c8929c51f06d4507048381",
+    "ORCHESTRATION.md": "57c37b43821c207cc74107f00b9f23c12c390e57527aa13e5d3b5a913c6b81ca",
     "_kit/log-spawn.cmd": "ae9541294a03f741311ff8bc0d5c6f9985d6947fb42f7aaeaf6613088e34bf7e",
     "_kit/log-spawn.sh": "da1a893e6e34a6767b1c1f54b73a0edd10d2c1ab2c520763b21203406faf0ab8",
     "_kit/memory.cmd": "ae9541294a03f741311ff8bc0d5c6f9985d6947fb42f7aaeaf6613088e34bf7e",
     "_kit/memory.ps1": "ab1972554d139c838c0908f78ac5619257faff4d24d6e2dbcb228ba8ceea63c6",
-    "_kit/memory.sh": "dc175c4a6dc3c4212d2ae5a0aa686e4373c2d4b2cf6c877aca145129c9251a25",
+    "_kit/memory.sh": "7522f351ec824db32d819449d6da1b14a9b32413f0945cc67fe08a4ff5c4f51c",
     "_loop/PROMPT.md": "e05a16a6d77d7421d3d06d01d97035a3e184bfd54b3428b323b872d5249a94c4",
     "_loop/breaker.ps1": "aca26dccdd9110c7da79aef8d2369401fec4b07d98e8fe3d19eaa9f4e6c47750",
     "_loop/breaker.sh": "92d762f93a3a76db1f8176f454c4ad401f65b5449a8bd8bbbd0c690344a6c686",
     "_loop/loop.ps1": "0ab4db21a9800172fc15d6b0718f7d146febb559f456e23aa95c52ecc2b890bf",
     "_loop/loop.sh": "f9820c1db5ddddbba091b66db773d2e208df3cfbd2540cf87a7f790c1c206fd0",
-    "_memory/README.md": "c8199b4c9f82fe04a48daa19f37c3dacdbe3a3428bde00895450635c39d8baf4"
+    "_memory/README.md": "283b2444625a62b011b65edf1d74c295b5cc43320c7469e1912dea1b11179b2f"
   },
   "answers": {
     "bootstrap": {

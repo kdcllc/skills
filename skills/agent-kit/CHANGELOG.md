@@ -8,6 +8,8 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 
 ### Added
 
+- **Distillation re-offer** — `.distilled` rows may carry a 5th column (the raw file's frontmatter `sha256`, the transcript hash recorded by capture); sessions whose raw hash differs from the latest row are offered again; re-distilled `session-summary` records may pass `--supersedes` (documented in `_memory/README.md`, the `memory-capture` skill, and `feature/reference/memory-capture.md`).
+- **Goal-criteria leak check** — flags task plans that copy this install's own goal slugs, memory record ids, or record titles into canonical `templates/` content.
 - **Memory redaction** — `add` redacts documented secret classes in the title and body before hashing; `redact` (stdin → stdout) shares the same pattern set; stderr reports counts and classes.
 - **Memory gate** — `memory.sh check [--staged] [paths]` exits **3** when a record fails the commit gate (secret, hash/id mismatch, admission violation, or staged edit under tracked memory paths).
 - **Memory hygiene** — `memory.sh rm <full-id>` removes untracked record or quarantine files only.
@@ -18,6 +20,12 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 - **`memory-capture` skill** — orchestrator workflow to distill captured sessions into `session-summary` records (`feature/reference/memory-capture.md`).
 - **Windows `.cmd` launchers** — `bin/emit.cmd`, `_kit/memory.cmd`, and `_kit/log-spawn.cmd` invoke the sibling `.sh` through Git for Windows Bash; Git Bash discovery with optional `AGENT_KIT_BASH` override; exit 127 with an install message when no valid Bash is found ([reference/windows-launcher.md](reference/windows-launcher.md)).
 
+### Fixed
+
+- **`capture --idle-hours`** — more than six digits exits **2** with `memory: invalid --idle-hours`.
+- **Backfill escalations** — impossible `resolved:` calendar dates print `skip:bad-date`; bodies whose normalized redacted hash already exists under `records/` or `quarantine/` print `skip:archived` in both `--plan` and `--apply` (not `would-add` / duplicate-only on apply).
+- **Backfill research dates** — `**Date**:` values strip a trailing CR before parsing (CRLF reports keep their real id).
+
 ### Removed
 
 - **Breaking:** `bin/emit.ps1` and emitted `_kit/log-spawn.ps1` — use `bin/emit.sh` (Bash 3.2+, no `jq`) or, on Windows outside Git Bash, `bin/emit.cmd`, `_kit/memory.cmd`, and `_kit/log-spawn.cmd` (Git for Windows required).
@@ -25,6 +33,9 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 
 ### Changed
 
+- **Memory README** — `rm` documents `git ls-files --error-unmatch` exit **1** as the untracked delete case; backfill `--only` omits unnamed goals/topics; closed-goal (3c) id falls back to `19700101T000000Z` when the log has no valid `### <ts>` heading; `memory.ps1` subcommand list matches the twin.
+- **Evaluator evidence (read-only harnesses)** — the evaluator agent judges orchestrator-supplied verbatim command output when shell is refused; the `feature` skill has the orchestrator spawn `terminal` for each acceptance-criterion verification command before evaluation on read-only harnesses.
+- **ORCHESTRATION** — memory check-gate wording and `_memory/raw/` tool-tree labels (capture output, ledgers and drafts).
 - **Memory tags** — `add` normalizes tags (split on commas or whitespace, lowercase, dedupe, keep the first six).
 - **Memory archive** — feature and research archive steps run `memory.sh check` on each path they add or quarantine.
 - **Memory tripwire** — `task-criteria` (d) carve-out for `_kit/memory.sh rm` on untracked records and human/tasked quarantine cleanup.

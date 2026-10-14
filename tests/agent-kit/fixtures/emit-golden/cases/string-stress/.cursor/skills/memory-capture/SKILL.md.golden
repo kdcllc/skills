@@ -61,19 +61,25 @@ above). Ask: **write fallback summary** for this session, or **end**. On **write
 
 ### 2. Pick the next session
 
-List `_memory/raw/<harness>/*.md` with no row in `_memory/raw/.distilled` (same harness +
-session). Order: `cursor`, `claude`, `codex`, then session id (`LC_ALL=C sort`). **stop**
-ends the run.
+List `_memory/raw/<harness>/*.md` pending distillation (README **Ledger formats**): no
+`.distilled` row for that harness+session, or the latest row has a non-empty 5th column
+(`sha256` at write time) that differs from the raw file's current frontmatter `sha256`
+(legacy four-column rows never re-offer). Order: `cursor`, `claude`, `codex`, then session
+id (`LC_ALL=C sort`). **stop** ends the run.
 
 ### 3. Scope gate (human)
 
 Show harness, session, scope (`repo`/`unknown`), captured time, first user line (≤ 200
-chars). Also list any `.distilled` rows for the same harness whose session starts
+chars). When the latest `.distilled` row has a non-empty 5th column that differs from the
+raw file's current `sha256`, tell the human the session **grew since it was distilled** and will re-distill
+with `--supersedes` when the prior row holds a record id. Also list any `.distilled` rows
+for the same harness whose session starts
 `fallback:` and whose date is within one day of this raw session's date (session date per
 the reference), and ask whether this session is already summarized by one of them. Ask:
 **in-scope**, **skip**, or **stop**. Already summarized → **skip**. **skip** → append one
 TAB-separated line to `_memory/raw/.distilled`:
-`harness<TAB>session<TAB>skipped<TAB>YYYYMMDD` (UTC date; README **Ledger formats**).
+`harness<TAB>session<TAB>skipped<TAB>YYYYMMDD<TAB>sha256` (UTC date; 5th column = raw
+file's frontmatter `sha256`; README **Ledger formats**).
 **stop** → end.
 
 ### 4. Goal-folder context for tags
@@ -98,7 +104,8 @@ PASS → no `.distilled` row.
 
 ### 7. Add
 
-On evaluator PASS, use verified title/tags:
+On evaluator PASS, use verified title/tags. When re-distilling (latest `.distilled` row
+holds a record id, not `skipped`), pass `--supersedes <that record id>`:
 
 ```
 _kit/memory.sh add --kind session-summary \
@@ -106,7 +113,8 @@ _kit/memory.sh add --kind session-summary \
   --source "<harness>-session <first 8 chars of session id>" \
   --harness <harness> \
   --tags "<tags from implementer report>" \
-  --body <draft-path>
+  --body <draft-path> \
+  [--supersedes <latest row record id when re-distilling>]
 ```
 
 Title like `2026-01-15 session: add retry to the export job`; ≤ 120 bytes;
@@ -118,7 +126,8 @@ to step 6. Exit **0** duplicate → success for ledger.
 
 `_kit/memory.sh check <path from add>`. Exit **3** → show line, `rm` if untracked, fix,
 re-run from step 6. Exit **0** → append one TAB-separated line to `_memory/raw/.distilled`:
-`harness<TAB>session<TAB>record-id<TAB>YYYYMMDD` (UTC date; README **Ledger formats**).
+`harness<TAB>session<TAB>record-id<TAB>YYYYMMDD<TAB>sha256` (UTC date; 5th column = raw
+file's frontmatter `sha256`; README **Ledger formats**).
 Then step 2 or end.
 
 ## Orchestrator-written fallback
@@ -127,7 +136,8 @@ Then step 2 or end.
 session's context (reference rules, including fallback attribution; no implementer).
 Propose title and tags yourself, then steps **6–8** with `--harness copilot|cursor|claude`
 and `--source "<harness>-session <label>"`. The step 8 row is
-`harness<TAB>fallback:<label><TAB>record-id<TAB>YYYYMMDD`, so a later capture run's scope
+`harness<TAB>fallback:<label><TAB>record-id<TAB>YYYYMMDD<TAB>` (trailing TAB = empty 5th
+column; may omit the column; README **Ledger formats**), so a later capture run's scope
 gate (step 3) can spot the overlap.
 
 ## Subagent packages
