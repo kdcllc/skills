@@ -50,6 +50,7 @@ canonical templates are Claude-format:
 | Unattended mode | headless `claude -p` ⚠️ | Cloud Agents (L1 only) ✅ | Copilot coding agent on issues ⚠️ | `approval_policy: never` + `sandbox_mode` 🔎 |
 | Token usage exposure (headless CLI) | `claude -p --output-format json` → `usage` + `total_cost_usd` ✅ (verified 2026-09-03) | `agent -p --output-format json` → camelCase `usage` (`inputTokens` = uncached only) ✅ (verified 2026-09-03) | none documented ❌ | `codex exec --json` → `turn.completed.usage` incl. `reasoning_output_tokens` ✅ (verified 2026-09-03) |
 | Kit transcript capture (`_memory/raw/`, gitignored) | `_kit/memory.sh capture` scans `~/.claude/projects/<slug>/*.jsonl` under `$HOME` | `_kit/memory.sh capture` scans `~/.cursor/projects/<slug>/agent-transcripts/` | orchestrator-written fallback only (no export API) | `_kit/memory.sh capture --harness codex` best-effort on `~/.codex/sessions/`; docs-only skills tree |
+| Kit memory backfill (`backfill`, deterministic) | `_kit/memory.sh backfill --plan` / `--apply` (bash only; Windows outside Git Bash: `_kit\memory.cmd`) | same | same | same |
 
 Windows note: per-harness CLI availability on Windows is unverified — the loop
 drivers assume the harness CLI runs natively where invoked. **Kit tools** (`bin/emit.*`,

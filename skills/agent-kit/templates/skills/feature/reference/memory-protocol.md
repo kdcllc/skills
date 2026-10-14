@@ -111,6 +111,10 @@ then log a spawn note with the tool line. 5 (quarantined) → tell the user, run
 `_kit/memory.sh check <path>` on the **quarantined** path too, log a spawn note with the
 tool line; do not retry automatically. 2 or 4 → log and continue.
 
+After every path from this archive passes `check` (under `records/` or `quarantine/`),
+log one closed marker listing **all** ids `add` wrote (including quarantined):
+`_kit/log-spawn.sh note --goal <g> --text "ARCHIVED: <id> [<id>…]"` (space-separated).
+
 Records stay **uncommitted** with the goal's other changes for human review. Corrections
 to an untracked record: `_kit/memory.sh rm <full-id>`, fix the draft, re-`add`. Committed
 records: a new record with `--supersedes <id>`; never edit an existing record file.
@@ -120,7 +124,16 @@ records: a new record with `--supersedes <id>`; never edit an existing record fi
 After the Phase 2 ingestion review, archive one `research-ingest` record summarizing the
 report. Source label: `research <topic> (report.md)` unless a tracked copy exists (cite
 the tracked path). Same `add` invocation and exit handling as feature archive (including
-`check` on added paths and on quarantined paths when exit 5).
+`check` on added paths and on quarantined paths when exit 5). Then write
+`_research/<topic>/ingested`: line 1 = UTC `YYYY-MM-DDTHH:MM:SSZ`, line 2 = the record
+id(s) from this archive separated by spaces.
+
+## Back-fill
+
+Legacy closed goals, opted-in research topics, and resolved escalations can be imported
+deterministically with `_kit/memory.sh backfill` (no LLM). Usage, `--plan` / `--apply`,
+and **Closed signals** the kit writes from now on are in `_memory/README.md` (`backfill`
+and `Closed signals` under that section).
 
 ## Capture
 
@@ -135,13 +148,16 @@ Raw files live under gitignored `_memory/raw/`; see `_memory/README.md` for `cap
 in the story commit like any other tracked `_memory/` files.
 
 **Driver-dispatched mode.** The feature Archive step writes **proposals** instead of
-calling `add`. One file per record under `<outbox>/memory/<name>.md`:
+calling `add`. Slots never log an `ARCHIVED` note — integrated records carry
+`source:` so backfill rule 2(b) detects them. Each **goal-summary** proposal **must**
+set `source:` to `goal <g> (goal.md)` or `_goals/<g>/goal.md` when that file is
+tracked. One file per record under `<outbox>/memory/<name>.md`:
 
 ```
 kind: <kind>
 title: <title>
 tags: <a, b>          (optional)
-source: <label>       (optional)
+source: <label>       (required for goal-summary — goal <g> (goal.md) or tracked _goals/<g>/goal.md)
 harness: <harness>    (optional)
 ---
 <body>
@@ -184,7 +200,10 @@ Step 3b never changes run exit code, backlog, or breaker state, and never aborts
 
 **Protected paths.** `_memory/records/` and `_memory/quarantine/` are integrator-only in
 dispatched mode. No story declares `_memory/` in `writes:`; dispatched slots never stage
-`_memory/` (CB0). `LEARNINGS.md` / `ESCALATIONS.md` lines are not converted into records.
+`_memory/` (CB0). LEARNINGS lines are not converted into records; resolved escalation
+entries can be back-filled with `_kit/memory.sh backfill --escalations` (see
+`_memory/README.md`). Driver-dispatched goal-summary proposals must set `source:` to
+`goal <g> (goal.md)` or `_goals/<g>/goal.md` when tracked; no `ARCHIVED` note.
 
 ## Rules
 

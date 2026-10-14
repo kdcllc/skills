@@ -12,6 +12,9 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 - **Memory gate** — `memory.sh check [--staged] [paths]` exits **3** when a record fails the commit gate (secret, hash/id mismatch, admission violation, or staged edit under tracked memory paths).
 - **Memory hygiene** — `memory.sh rm <full-id>` removes untracked record or quarantine files only.
 - **Transcript capture** — `memory.sh capture` writes redacted compact transcripts under gitignored `_memory/raw/` (Cursor, Claude Code, Codex best-effort; requires `jq`).
+- **Memory backfill** — `memory.sh backfill --plan` / `--apply` (bash-only) deterministically imports closed goals, research topics named with `--only`, and resolved escalations into records via `add`; `memory.ps1 backfill` prints the bash-only pointer (exit **2**).
+- **Closed signals** — feature archive logs `ARCHIVED: <ids>`; research archive writes `_research/<topic>/ingested`; loop skill documents the escalation `resolved:` line convention (archived entries keep it).
+- **Transcript back-fill runbook** — `memory-capture` skill and `feature/reference/memory-capture.md` document one-time session-by-session import after `capture` (cost and scope guidance).
 - **`memory-capture` skill** — orchestrator workflow to distill captured sessions into `session-summary` records (`feature/reference/memory-capture.md`).
 - **Windows `.cmd` launchers** — `bin/emit.cmd`, `_kit/memory.cmd`, and `_kit/log-spawn.cmd` invoke the sibling `.sh` through Git for Windows Bash; Git Bash discovery with optional `AGENT_KIT_BASH` override; exit 127 with an install message when no valid Bash is found ([reference/windows-launcher.md](reference/windows-launcher.md)).
 

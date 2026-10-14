@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# memory.sh — add|index|search|show|redact|check|rm|capture
+# memory.sh — add|index|search|show|redact|check|rm|capture|backfill
 # Twin: memory.ps1 (PowerShell 7.2+) — behaviorally identical — any divergence is a bug;
 # memory.ps1 is retained as a helper for loop.ps1 until loop twins retire.
 # Emitted single-copy to `_kit/memory.sh` (Windows outside Git Bash: `_kit\memory.cmd`).
@@ -14,6 +14,7 @@
 #   memory.sh check [--staged] [--root <dir>] [<path>…]
 #   memory.sh rm <id> [--root <dir>]
 #   memory.sh capture [--harness cursor|claude|codex|all] [--from <dir>] … [--root <dir>]
+#   memory.sh backfill [--plan|--apply] [--goals] [--research] [--escalations] [--only <name>] [--root <dir>]
 #
 # Exit codes: 0 ok · 2 usage/format · 3 gate failed · 4 missing root, file, id, or optional dependency · 5 quarantined.
 # Errors: one line on stderr prefixed `memory: `. Store path: `<root>/_memory/`.
@@ -55,7 +56,7 @@ valid_record_id() { # <id>
 
 usage() {
   cat <<'EOF'
-usage: memory.sh <add|index|search|show|redact|check|rm|capture> [--root <dir>] ...
+usage: memory.sh <add|index|search|show|redact|check|rm|capture|backfill> [--root <dir>] ...
   add    --kind <k> --title <t> --body <path> [--source <s>] [--tags <list>] [--supersedes <list>] [--harness <h>]
   index  [--root <dir>]
   search <term>... [--kind <list>] [--limit <n>] [--include-superseded] [--engine grep|fts]
@@ -64,6 +65,7 @@ usage: memory.sh <add|index|search|show|redact|check|rm|capture> [--root <dir>] 
   check  [--staged] [--root <dir>] [<path>…]
   rm     <id> [--root <dir>]
   capture [--harness cursor|claude|codex|all] [--from <dir>] [--idle-hours <n>] [--since <YYYY-MM-DD>] [--root <dir>]
+  backfill [--plan|--apply] [--goals] [--research] [--escalations] [--only <name>] [--root <dir>]
 exit: 0 ok · 2 usage/format · 3 gate failed · 4 missing root/file/id/dependency · 5 quarantined
 EOF
 }
@@ -2417,6 +2419,619 @@ cmd_search() {
   exit 0
 }
 
+
+# --- backfill (Release D) ---
+
+backfill_cut_utf8_bytes() { # <in-file> <out-file> <max-bytes>
+  # Cut at <max-bytes>, then drop a trailing incomplete UTF-8 sequence (lead byte 0xC0-0xF7
+  # followed by fewer continuation bytes than it needs). ASCII and complete sequences are kept.
+  # Pure byte logic (od + awk under LC_ALL=C); no external UTF-8 tooling.
+  local in="$1" out="$2" max="$3" tmp len drop
+  len="$(wc -c < "$in" | tr -d '[:space:]')"
+  if [ "$len" -le "$max" ]; then cp "$in" "$out"; return 0; fi
+  tmp="$(mk_tmp)"
+  head -c "$max" "$in" > "$tmp"
+  drop="$(tail -c 4 "$tmp" | od -An -v -tu1 | awk '
+    { for (i = 1; i <= NF; i++) b[++n] = $i + 0 }
+    END {
+      for (j = 1; j <= n && j <= 4; j++) {
+        v = b[n - j + 1]
+        if (v < 128) break
+        if (v < 192) continue
+        need = (v < 224) ? 2 : (v < 240) ? 3 : (v < 248) ? 4 : 0
+        if (need > 0 && j < need) { print j; exit }
+        break
+      }
+      print 0
+    }
+  ' | head -n 1)"
+  case "$drop" in 1|2|3) ;; *) drop=0 ;; esac
+  if [ "$drop" -gt 0 ]; then
+    head -c $((max - drop)) "$tmp" > "$out"
+  else
+    cp "$tmp" "$out"
+  fi
+}
+
+backfill_sanitize_title() { # <text> <fallback> → stdout
+  local t="$1" fb="$2" tmp outf
+  tmp="$(mk_tmp)"
+  printf '%s' "$t" | sed 's/"/'"'"'/g;s/\\/\//g' | tr '\000-\037\177' ' ' > "$tmp"
+  t="$(trim_ascii_sp "$(cat "$tmp")")"
+  [ -n "$t" ] || t="$fb"
+  outf="$(mk_tmp)"
+  printf '%s' "$t" > "$tmp"
+  backfill_cut_utf8_bytes "$tmp" "$outf" 120
+  cat "$outf"
+}
+
+backfill_ts_to_id_prefix() { # <ts> → stdout YYYYMMDDTHHMM00Z
+  local ts="$1"
+  re_match "$ts" '^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}[+-][0-9]{2}:[0-9]{2}$' || {
+    printf '19700101T000000Z\n'
+    return
+  }
+  export BF_Y="${ts:0:4}" BF_MO="${ts:5:2}" BF_D="${ts:8:2}" BF_H="${ts:11:2}" BF_MI="${ts:14:2}"
+  export BF_SGN="${ts:16:1}" BF_OH="${ts:17:2}" BF_OM="${ts:20:2}"
+  awk '
+    function is_leap(y) { return (y % 4 == 0 && y % 100 != 0) || (y % 400 == 0) }
+    function dim(y, m) {
+      if (m == 2) return is_leap(y) ? 29 : 28
+      if (m == 4 || m == 6 || m == 9 || m == 11) return 30
+      return 31
+    }
+    function civil_to_days(y, m, d,    i, x) {
+      x = 365 * (y - 1) + int((y - 1) / 4) - int((y - 1) / 100) + int((y - 1) / 400)
+      for (i = 1; i < m; i++) x += dim(y, i)
+      return x + d - 1
+    }
+    function days_to_ymd(z,    y, m, d) {
+      for (y = 1; y <= 9999; y++) {
+        if (z < civil_to_days(y + 1, 1, 1)) break
+      }
+      for (m = 12; m >= 1; m--) {
+        if (z >= civil_to_days(y, m, 1)) break
+      }
+      d = z - civil_to_days(y, m, 1) + 1
+      return y SUBSEP m SUBSEP d
+    }
+    function pad2(n) { return (n < 10 ? "0" : "") n }
+    BEGIN {
+      y = ENVIRON["BF_Y"] + 0; mo = ENVIRON["BF_MO"] + 0; d = ENVIRON["BF_D"] + 0
+      h = ENVIRON["BF_H"] + 0; mi = ENVIRON["BF_MI"] + 0
+      sgn = ENVIRON["BF_SGN"]; oh = ENVIRON["BF_OH"] + 0; om = ENVIRON["BF_OM"] + 0
+      off = oh * 60 + om; if (sgn == "-") off = -off
+      total_local = civil_to_days(y, mo, d) * 1440 + h * 60 + mi
+      total_utc = total_local - off
+      z = int(total_utc / 1440)
+      utc_min = total_utc - z * 1440
+      if (utc_min < 0) { utc_min += 1440; z-- }
+      split(days_to_ymd(z), p, SUBSEP)
+      printf "%s%s%sT%s%s00Z", p[1], pad2(p[2]), pad2(p[3]), pad2(int(utc_min / 60)), pad2(utc_min % 60)
+    }
+  '
+}
+
+backfill_utc_date_from_prefix() { # <YYYYMMDDTHHMM00Z>
+  local p="$1"
+  printf '%s-%s-%s' "${p:0:4}" "${p:4:2}" "${p:6:2}"
+}
+
+backfill_source_exists() { # <store> <source>
+  local store="$1" want="$2" list f
+  list="$(mk_tmp)"
+  glob_dedupe_files "$store" "$list"
+  while IFS= read -r f; do
+    [ -n "$f" ] || continue
+    read_frontmatter "$f" || continue
+    [ "$FM_SOURCE" = "$want" ] && return 0
+  done < "$list"
+  return 1
+}
+
+backfill_heading_ts() { # <### heading line> → stdout ts or empty
+  printf '%s\n' "$1" | LC_ALL=C sed -n 's/^### \([0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9][+-][0-9][0-9]:[0-9][0-9]\).*/\1/p' | head -n 1
+}
+
+backfill_id_in_store() { # <store> <id>
+  local store="$1" id="$2"
+  [ -f "$(id_to_record_path "$store" "$id")" ] && return 0
+  [ -f "$(id_to_quarantine_path "$store" "$id")" ] && return 0
+  return 1
+}
+
+backfill_goal_status() { # <root> <store> <goal> <only_hit:0|1> → prints 3 lines: status, ts, verdict
+  local root="$1" store="$2" g="$3" only_hit="$4"
+  local log="$root/_goals/$g/orchestration-log.md" line last_spawn="" ts="" verdict="" last_note="" any_ts=""
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="${line%$'\r'}"
+    if printf '%s\n' "$line" | LC_ALL=C grep -Eq '^### [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}[+-][0-9]{2}:[0-9]{2}' 2>/dev/null; then
+      ts_part="$(backfill_heading_ts "$line")"
+      [ -n "$ts_part" ] && any_ts="$ts_part"
+      if printf '%s\n' "$line" | LC_ALL=C grep -Eq '^### [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}[+-][0-9]{2}:[0-9]{2} — SPAWN evaluator \(Phase 5' 2>/dev/null; then
+        last_spawn="$line"
+      elif printf '%s\n' "$line" | LC_ALL=C grep -Eq '^### [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}[+-][0-9]{2}:[0-9]{2} — Phase 5 APPROVED' 2>/dev/null; then
+        last_note="$line"
+      fi
+    fi
+  done < "$log"
+  if [ -n "$last_spawn" ]; then
+    local num vline
+    ts_part="$(backfill_heading_ts "$last_spawn")"
+    num="${last_spawn##*[#}"
+    num="${num%]}"
+    vline="$(awk -v n="$num" '
+      index($0, "- OUTCOME [#" n "]: ") == 1 {
+        v = $0
+        sub(/^- OUTCOME \[#[0-9]+\]: /, "", v)
+        sub(/ · model reported:.*/, "", v)
+        print v
+        exit
+      }
+    ' "$log")"
+    case "$vline" in
+      APPROVED*)
+        ts="$ts_part"
+        verdict="$vline"
+        ;;
+    esac
+  fi
+  if [ -z "$verdict" ] && [ -n "$last_note" ]; then
+    ts="$(backfill_heading_ts "$last_note")"
+    verdict="${last_note#* — }"
+    [ -n "$verdict" ] || verdict="Phase 5 APPROVED"
+  fi
+  if [ -z "$verdict" ] && [ "$only_hit" = "1" ]; then
+    ts="$any_ts"
+    verdict="opted in with --only"
+  fi
+  if [ -n "$verdict" ]; then
+    printf 'would-add\n%s\n%s\n' "$ts" "$verdict"
+  else
+    printf 'skip:open\n\n\n'
+  fi
+}
+
+backfill_goal_archived_p() { # <root> <store> <goal>
+  local root="$1" store="$2" g="$3" log="$root/_goals/$g/orchestration-log.md" line rest id
+  backfill_source_exists "$store" "goal $g (goal.md)" && return 0
+  backfill_source_exists "$store" "_goals/$g/goal.md" && return 0
+  while IFS= read -r line || [ -n "$line" ]; do
+    line="${line%$'\r'}"
+    if printf '%s\n' "$line" | LC_ALL=C grep -Eq '^### [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}[+-][0-9]{2}:[0-9]{2} — ARCHIVED:' 2>/dev/null; then
+      rest="${line#*ARCHIVED:}"
+      rest="$(trim_ascii_sp "$rest")"
+      for id in $rest; do
+        backfill_id_in_store "$store" "$id" && return 0
+      done
+    fi
+  done < "$log"
+  return 1
+}
+
+backfill_build_goal_body() { # <root> <goal> <verdict> <utc-date> <out-file>
+  local root="$1" g="$2" verdict="$3" udate="$4" out="$5" goal="$root/_goals/$g/goal.md"
+  export BF_GOAL_MD="$goal" BF_G="$g" BF_VERDICT="$verdict" BF_UDATE="$udate" BF_FU="$root/_goals/$g/follow-ups.md"
+  awk '
+    BEGIN {
+      gm = ENVIRON["BF_GOAL_MD"]; g = ENVIRON["BF_G"]; fu = ENVIRON["BF_FU"]
+      verdict = ENVIRON["BF_VERDICT"]; udate = ENVIRON["BF_UDATE"]
+      prob = ""; in_prob = 0; in_sc = 0; sc = ""; last_sc = ""
+      while ((getline line < gm) > 0) {
+        sub(/\r$/, "", line)
+        if (line ~ /^## Problem Statement/) { in_prob = 1; in_sc = 0; continue }
+        if (line ~ /^## /) {
+          if (in_sc && last_sc != "") { sc = sc "- " last_sc "\n"; last_sc = "" }
+          in_prob = 0; in_sc = 0
+        }
+        if (line ~ /^## Success Criteria/) {
+          if (last_sc != "") { sc = sc "- " last_sc "\n"; last_sc = "" }
+          in_sc = 1; in_prob = 0; continue
+        }
+        if (in_prob) {
+          if (line ~ /^[[:space:]]*$/) { if (prob != "") in_prob = 0; continue }
+          if (prob == "") prob = line; else prob = prob " " line
+        }
+        if (in_sc && line ~ /^- \[[ xX]\] /) {
+          if (last_sc != "") sc = sc "- " last_sc "\n"
+          t = line; sub(/^- \[[ xX]\] /, "", t)
+          last_sc = t
+        } else if (in_sc && line ~ /^[[:space:]]+/ && last_sc != "") {
+          sub(/^[[:space:]]+/, "", line)
+          if (line != "") last_sc = last_sc " " line
+        }
+      }
+      close(gm)
+      if (last_sc != "") sc = sc "- " last_sc "\n"
+      printf "Goal %s — back-filled from goal.md and orchestration-log.md.\n\n", g
+      if (prob != "") printf "Problem: %s\n\n", prob
+      if (sc != "") { printf "Success criteria:\n%s\n", sc }
+      printf "Final verdict: %s (%s)\n\n", verdict, udate
+      n = 0; fu_lines = ""
+      while ((getline line < fu) > 0) {
+        sub(/\r$/, "", line)
+        if (line !~ /^[[:space:]]*$/) { fu_lines = fu_lines line "\n"; n++ }
+        if (n >= 20) break
+      }
+      close(fu)
+      if (n > 0) { printf "Follow-ups:\n%s", fu_lines }
+    }
+  ' > "$out"
+}
+
+backfill_prepare_body() { # <raw-body-file> <out-file>
+  local raw="$1" out="$2" norm red trunc ell='…'
+  norm="$(mk_tmp)"; red="$(mk_tmp)"; trunc="$(mk_tmp)"
+  normalize_body_file "$raw" "$norm" || return 1
+  memory_redact_file "$norm" "$red" 1 1
+  local len max=4096 elen
+  elen="$(printf '%s\n' "$ell" | wc -c | tr -d '[:space:]')"
+  len="$(wc -c < "$red" | tr -d '[:space:]')"
+  if [ "$len" -le "$max" ]; then cp "$red" "$out"; return 0; fi
+  local budget=$((max - elen - 1)) partial line1f cutf
+  partial="$(mk_tmp)"; line1f="$(mk_tmp)"; cutf="$(mk_tmp)"
+  awk -v budget="$budget" '
+    { lines[++n] = $0 }
+    END {
+      out = ""; used = 0
+      for (i = 1; i <= n; i++) {
+        need = length(lines[i]) + (out == "" ? 0 : 1)
+        if (used + need > budget) break
+        if (out == "") out = lines[i]; else out = out "\n" lines[i]
+        used += need
+      }
+      if (out != "") print out
+    }
+  ' "$red" > "$partial"
+  if [ ! -s "$partial" ]; then
+    head -n 1 "$red" > "$line1f"
+    backfill_cut_utf8_bytes "$line1f" "$cutf" "$budget"
+    { cat "$cutf"; printf '\n%s\n' "$ell"; } > "$trunc"
+  else
+    { cat "$partial"; printf '%s\n' "$ell"; } > "$trunc"
+  fi
+  normalize_body_file "$trunc" "$out" || return 1
+}
+
+backfill_run_add() { # <root> <kind> <title> <body> <source> <tags> <id_prefix> → sets BF_ADD_LINE BF_ADD_RC; stderr passed
+  local root="$1" kind="$2" title="$3" body="$4" source="$5" tags="$6" id_prefix="$7"
+  local script out err rc first
+  script="${BASH_SOURCE[0]:-$0}"
+  script="$(cd "$(dirname "$script")" && pwd)/$(basename "$script")"
+  out="$(mk_tmp)"; err="$(mk_tmp)"
+  rc=0
+  MEMORY_NOW="$id_prefix" bash "$script" add --kind "$kind" --title "$title" --body "$body" \
+    --source "$source" --tags "$tags" --root "$root" >"$out" 2>"$err" || rc=$?
+  BF_ADD_RC="$rc"
+  BF_ADD_LINE="$(head -n 1 "$out" | tr -d '\r')"
+  BF_ADD_ERR_FIRST="$(head -n 1 "$err" | tr -d '\r')"
+  cat "$err" >&2
+}
+
+backfill_goal_tags() { # <goal> → stdout
+  local g="$1"
+  if re_match "$g" "$re_tag"; then printf 'backfill %s' "$g"; else printf 'backfill'; fi
+}
+
+backfill_research_status() { # <root> <store> <topic> <only_hit>
+  local root="$1" store="$2" t="$3" only_hit="$4"
+  [ -f "$root/_research/$t/ingested" ] && { printf 'skip:archived'; return; }
+  backfill_source_exists "$store" "research $t (report.md)" && { printf 'skip:archived'; return; }
+  [ "$only_hit" = "1" ] && { printf 'would-add'; return; }
+  printf 'skip:not-selected'
+}
+
+backfill_research_ts() { # <report.md>
+  awk '
+    /^\*\*Date\*\*: / {
+      v = $0; sub(/^\*\*Date\*\*: /, "", v)
+      sub(/ · .*/, "", v)
+      if (v ~ /^[0-9]{4}-[0-9]{2}-[0-9]{2}$/) {
+        gsub(/-/, "", v)
+        print v "T120000Z"
+        found = 1
+        exit
+      }
+    }
+    END { if (!found) print "19700101T000000Z" }
+  ' "$1"
+}
+
+backfill_build_research_body() { # <root> <topic> <out>
+  local root="$1"
+  local topic="$2"
+  local out="$3"
+  local rp="$root/_research/$topic/report.md"
+  local part
+  part="$(mk_tmp)"
+  awk '
+    /^## Summary of Findings/ { inf = 1; next }
+    inf && /^## / { exit }
+    inf { lines[++n] = $0 }
+    END {
+      start = 1; end = n
+      while (start <= end && lines[start] ~ /^[[:space:]]*$/) start++
+      while (end >= start && lines[end] ~ /^[[:space:]]*$/) end--
+      for (i = start; i <= end; i++) print lines[i]
+    }
+  ' "$rp" > "$part"
+  {
+    printf 'Research %s — back-filled from report.md.\n\n' "$topic"
+    [ -s "$part" ] && cat "$part"
+  } > "$out"
+}
+
+cmd_backfill() {
+  local root="" mode="plan" do_goals=1 do_research=1 do_esc=1
+  local seen_root=0 seen_plan=0 seen_apply=0 seen_goals=0 seen_research=0 seen_esc=0
+  local only_raw="" only_items=""
+  local w=0 s=0 a=0 d=0 q=0 f=0 exit_rc=0
+  local only_goal="" only_topic="" only_name g t
+
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --root) need_val "$@"; [ "$seen_root" -eq 0 ] || die 2 "repeated flag '--root'"; seen_root=1; root="$2"; shift 2 ;;
+      --plan) [ "$seen_apply" -eq 0 ] || die 2 "backfill takes --plan or --apply, not both"; seen_plan=1; mode="plan"; shift ;;
+      --apply) [ "$seen_plan" -eq 0 ] || die 2 "backfill takes --plan or --apply, not both"; seen_apply=1; mode="apply"; shift ;;
+      --goals) [ "$seen_goals" -eq 0 ] || die 2 "repeated flag '--goals'"; seen_goals=1; do_goals=1; shift ;;
+      --research) [ "$seen_research" -eq 0 ] || die 2 "repeated flag '--research'"; seen_research=1; do_research=1; shift ;;
+      --escalations) [ "$seen_esc" -eq 0 ] || die 2 "repeated flag '--escalations'"; seen_esc=1; do_esc=1; shift ;;
+      --only) need_val "$@"; only_raw="${only_raw}${only_raw:+$NL}$2"; shift 2 ;;
+      --*) die 2 "unknown flag '$1'" ;;
+      *) die 2 "unexpected argument '$1'" ;;
+    esac
+  done
+
+  if [ "$seen_goals" -eq 1 ] || [ "$seen_research" -eq 1 ] || [ "$seen_esc" -eq 1 ]; then
+    do_goals=0; do_research=0; do_esc=0
+    [ "$seen_goals" -eq 1 ] && do_goals=1
+    [ "$seen_research" -eq 1 ] && do_research=1
+    [ "$seen_esc" -eq 1 ] && do_esc=1
+  fi
+
+  [ "$seen_root" -eq 1 ] || root="$(default_root)"
+  root="$(resolve_root "$root")"
+  local store goals_dir="$root/_goals" research_dir="$root/_research"
+  store="$(store_dir "$root")"
+
+  if [ -n "$only_raw" ]; then
+    only_items="$(printf '%s' "$only_raw" | tr '\n' ' ')"
+  fi
+
+  backfill_emit_plan_or_apply() {
+    local kind="$1" name="$2" status="$3" ts="$4" verdict="$5"
+    local title source tags id_prefix udate raw_body prep_body title_s esc_file
+    if [ "$status" = "would-add" ] && [ "$mode" = "plan" ]; then
+      printf 'memory: backfill %s %s would-add\n' "$kind" "$name"
+      w=$((w + 1))
+      return 0
+    fi
+    if [ "${status#skip:}" != "$status" ]; then
+      printf 'memory: backfill %s %s %s\n' "$kind" "$name" "$status"
+      s=$((s + 1))
+      return 0
+    fi
+    if [ "$mode" = "plan" ]; then return 0; fi
+    case "$kind" in
+      goal)
+        title="${name}: back-filled goal summary"
+        source="goal $name (goal.md)"
+        tags="$(backfill_goal_tags "$name")"
+        id_prefix="$(backfill_ts_to_id_prefix "$ts")"
+        udate="$(backfill_utc_date_from_prefix "$id_prefix")"
+        raw_body="$(mk_tmp)"
+        backfill_build_goal_body "$root" "$name" "$verdict" "$udate" "$raw_body"
+        prep_body="$(mk_tmp)"
+        backfill_prepare_body "$raw_body" "$prep_body" || {
+          printf 'memory: backfill %s %s failed 2 invalid body\n' "$kind" "$name"
+          f=$((f + 1)); return 0
+        }
+        title_s="$(backfill_sanitize_title "$title" "$name")"
+        backfill_run_add "$root" "goal-summary" "$title_s" "$prep_body" "$source" "$tags" "$id_prefix"
+        ;;
+      research)
+        title="${name}: back-filled research summary"
+        source="research $name (report.md)"
+        tags="backfill research"
+        id_prefix="$(backfill_research_ts "$root/_research/$name/report.md")"
+        raw_body="$(mk_tmp)"
+        backfill_build_research_body "$root" "$name" "$raw_body"
+        prep_body="$(mk_tmp)"
+        backfill_prepare_body "$raw_body" "$prep_body" || {
+          printf 'memory: backfill %s %s failed 2 invalid body\n' "$kind" "$name"
+          f=$((f + 1)); return 0
+        }
+        title_s="$(backfill_sanitize_title "$title" "$name")"
+        backfill_run_add "$root" "research-ingest" "$title_s" "$prep_body" "$source" "$tags" "$id_prefix"
+        ;;
+      escalation)
+        esc_file="$(printf '%s' "$name" | sed 's/#.*//')"
+        title_s="$(backfill_sanitize_title "$BF_ESC_TITLE" "$name")"
+        source="goals ledger ($esc_file)"
+        tags="backfill escalation"
+        id_prefix="$(printf '%sT120000Z' "$(printf '%s' "$BF_ESC_RES" | tr -d '-')")"
+        raw_body="$(mk_tmp)"
+        printf '%s' "$BF_ESC_BODY" > "$raw_body"
+        prep_body="$(mk_tmp)"
+        backfill_prepare_body "$raw_body" "$prep_body" || {
+          printf 'memory: backfill %s %s failed 2 invalid body\n' "$kind" "$name"
+          f=$((f + 1)); return 0
+        }
+        backfill_run_add "$root" "decision" "$title_s" "$prep_body" "$source" "$tags" "$id_prefix"
+        ;;
+    esac
+    case "$BF_ADD_RC" in
+      0)
+        case "$BF_ADD_LINE" in
+          memory:\ added\ *)
+            printf 'memory: backfill %s %s added %s\n' "$kind" "$name" "${BF_ADD_LINE#memory: added }"
+            a=$((a + 1))
+            ;;
+          memory:\ duplicate\ *)
+            printf 'memory: backfill %s %s duplicate %s\n' "$kind" "$name" "${BF_ADD_LINE#memory: duplicate }"
+            d=$((d + 1))
+            ;;
+          *) printf 'memory: backfill %s %s failed %s %s\n' "$kind" "$name" "$BF_ADD_RC" "$BF_ADD_ERR_FIRST"; f=$((f + 1)) ;;
+        esac
+        ;;
+      5)
+        printf 'memory: backfill %s %s quarantined %s\n' "$kind" "$name" "${BF_ADD_LINE#memory: quarantined }"
+        q=$((q + 1))
+        ;;
+      *)
+        printf 'memory: backfill %s %s failed %s %s\n' "$kind" "$name" "$BF_ADD_RC" "$BF_ADD_ERR_FIRST"
+        f=$((f + 1))
+        ;;
+    esac
+  }
+
+  if [ "$do_goals" -eq 1 ] && [ -d "$goals_dir" ]; then
+    local goal_list="$(mk_tmp)"
+    find "$goals_dir" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | LC_ALL=C sort > "$goal_list"
+    while IFS= read -r gd; do
+      [ -n "$gd" ] || continue
+      g="$(basename "$gd")"
+      [ -f "$gd/goal.md" ] || continue
+      if [ -n "$only_items" ]; then
+        case " $only_items " in *" $g "*) ;; *) continue ;; esac
+      fi
+      only_hit=0
+      case " $only_items " in *" $g "*) only_hit=1 ;; esac
+      if [ ! -f "$gd/orchestration-log.md" ]; then
+        backfill_emit_plan_or_apply goal "$g" "skip:no-log" "" ""
+        continue
+      fi
+      if backfill_goal_archived_p "$root" "$store" "$g"; then
+        backfill_emit_plan_or_apply goal "$g" "skip:archived" "" ""
+        continue
+      fi
+      local meta st ts verdict
+      meta="$(backfill_goal_status "$root" "$store" "$g" "$only_hit")"
+      st="$(printf '%s\n' "$meta" | sed -n '1p')"
+      ts="$(printf '%s\n' "$meta" | sed -n '2p')"
+      verdict="$(printf '%s\n' "$meta" | sed -n '3p')"
+      if [ "$st" = "would-add" ]; then
+        backfill_emit_plan_or_apply goal "$g" "$st" "$ts" "$verdict"
+      else
+        backfill_emit_plan_or_apply goal "$g" "skip:open" "" ""
+      fi
+    done < "$goal_list"
+  fi
+
+  if [ "$do_research" -eq 1 ] && [ -d "$research_dir" ]; then
+    local rlist="$(mk_tmp)"
+    find "$research_dir" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | LC_ALL=C sort > "$rlist"
+    while IFS= read -r rd; do
+      [ -n "$rd" ] || continue
+      t="$(basename "$rd")"
+      [ -f "$rd/report.md" ] || continue
+      only_hit=0
+      case " $only_items " in *" $t "*) only_hit=1 ;; esac
+      if [ -n "$only_items" ] && [ "$only_hit" -eq 0 ]; then continue; fi
+      st="$(backfill_research_status "$root" "$store" "$t" "$only_hit")"
+      backfill_emit_plan_or_apply research "$t" "$st" "" ""
+    done < "$rlist"
+  fi
+
+  if [ "$do_esc" -eq 1 ]; then
+    if [ -n "$only_items" ] && [ "$seen_esc" -eq 0 ]; then
+      :
+    else
+      local esc_files="$(mk_tmp)" ef entries
+      {
+        [ -f "$goals_dir/ESCALATIONS.md" ] && printf '%s\n' "$goals_dir/ESCALATIONS.md"
+        if [ -d "$goals_dir/archive" ]; then
+          find "$goals_dir/archive" -maxdepth 1 -type f -name 'ESCALATIONS-*.md' 2>/dev/null || true
+        fi
+      } | awk '{ b = $0; sub(/.*\//, "", b); print b "\t" $0 }' | LC_ALL=C sort -u -t "$TAB" -k1,1 -k2,2 | cut -f2- > "$esc_files"
+      while IFS= read -r ef; do
+        [ -n "$ef" ] || continue
+        local idx=0 in_e=0 etitle="" resd="" bodyf="" ename eline
+        while IFS= read -r eline || [ -n "$eline" ]; do
+          eline="${eline%$'\r'}"
+          case "$eline" in
+            '## '*)
+              if [ "$in_e" -eq 1 ]; then
+                idx=$((idx + 1))
+                ename="$(basename "$ef")#${idx}"
+                if [ -z "$resd" ]; then
+                  backfill_emit_plan_or_apply escalation "$ename" "skip:open" "" ""
+                else
+                  BF_ESC_TITLE="$etitle"
+                  BF_ESC_RES="$resd"
+                  BF_ESC_BODY="$(cat "$bodyf")"
+                  backfill_emit_plan_or_apply escalation "$ename" "would-add" "" ""
+                fi
+              fi
+              in_e=1
+              etitle="${eline##\#\# }"
+              resd=""
+              bodyf="$(mk_tmp)"
+              printf '%s\n' "$eline" > "$bodyf"
+              ;;
+            *)
+              [ "$in_e" -eq 1 ] || continue
+              case "$eline" in
+                '# '[!#]*) continue ;;
+                '#') continue ;;
+              esac
+              printf '%s\n' "$eline" >> "$bodyf"
+              if printf '%s\n' "$eline" | LC_ALL=C grep -Eq '^- resolved: [0-9]{4}-[0-9]{2}-[0-9]{2} .+$' 2>/dev/null; then
+                resd="${eline#- resolved: }"
+                resd="${resd%% *}"
+              fi
+              ;;
+          esac
+        done < "$ef"
+        if [ "$in_e" -eq 1 ]; then
+          idx=$((idx + 1))
+          ename="$(basename "$ef")#${idx}"
+          if [ -z "$resd" ]; then
+            backfill_emit_plan_or_apply escalation "$ename" "skip:open" "" ""
+          else
+            BF_ESC_TITLE="$etitle"
+            BF_ESC_RES="$resd"
+            BF_ESC_BODY="$(cat "$bodyf")"
+            backfill_emit_plan_or_apply escalation "$ename" "would-add" "" ""
+          fi
+        fi
+      done < "$esc_files"
+    fi
+  fi
+
+  if [ -n "$only_items" ]; then
+    for only_name in $only_items; do
+      local is_goal=0 is_topic=0
+      [ -d "$goals_dir/$only_name" ] && [ -f "$goals_dir/$only_name/goal.md" ] && is_goal=1
+      [ -f "$research_dir/$only_name/report.md" ] && is_topic=1
+      local matched_included=0
+      [ "$is_goal" -eq 1 ] && [ "$do_goals" -eq 1 ] && matched_included=1
+      [ "$is_topic" -eq 1 ] && [ "$do_research" -eq 1 ] && matched_included=1
+      if [ "$matched_included" -eq 1 ]; then
+        continue
+      fi
+      if [ "$is_goal" -eq 1 ] || [ "$is_topic" -eq 1 ]; then
+        printf 'memory: backfill only %s skip:excluded-kind\n' "$only_name"
+        s=$((s + 1))
+        continue
+      fi
+      if [ "$is_goal" -eq 0 ] && [ "$is_topic" -eq 0 ]; then
+        printf 'memory: backfill only %s skip:not-found\n' "$only_name"
+        s=$((s + 1))
+      fi
+    done
+  fi
+
+  if [ "$mode" = "plan" ]; then
+    printf 'memory: backfill plan %s would-add, %s skipped\n' "$w" "$s"
+  else
+    printf 'memory: backfill %s added, %s duplicate, %s quarantined, %s failed, %s skipped\n' "$a" "$d" "$q" "$f" "$s"
+  fi
+  if [ "$f" -gt 0 ]; then exit 4; fi
+  if [ "$q" -gt 0 ]; then exit 5; fi
+  exit 0
+}
+
 # --- main ---
 [ $# -eq 0 ] && { usage >&2; exit 2; }
 
@@ -2435,7 +3050,7 @@ case "$sub" in
     usage
     exit 0
     ;;
-  add|index|search|show|redact|check|rm|capture) ;;
+  add|index|search|show|redact|check|rm|capture|backfill) ;;
   *)
     usage >&2
     die 2 "unknown subcommand '$sub'"
@@ -2460,4 +3075,5 @@ case "$sub" in
   check) cmd_check "$@" ;;
   rm) cmd_rm "$@" ;;
   capture) cmd_capture "$@" ;;
+  backfill) cmd_backfill "$@" ;;
 esac

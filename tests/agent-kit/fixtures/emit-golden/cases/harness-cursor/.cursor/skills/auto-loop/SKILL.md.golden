@@ -170,7 +170,8 @@ Follow the `feature` skill's Phases 2–6 with three substitutions: **the story'
 acceptance criteria replace Phase 1 alignment** (there is no user to ask),
 **Phase 7 (`pull_request`) is deferred to the end of the whole run** — the loop
 never pushes during per-story iterations — and **in driver-dispatched mode the
-feature Archive step writes proposals to `<outbox>/memory/` instead of calling
+feature Archive step writes proposals to `<outbox>/memory/` with
+`source: goal <g> (goal.md)` and no `ARCHIVED` note instead of calling
 `_kit/memory.sh add`** (manual mode still archives with `add` and includes new
 record paths in the story commit). If the story is too ambiguous to derive a goal from,
 treat that as a blocking issue (step 4). When creating `goal.md`, record `phases:`
@@ -219,11 +220,14 @@ Phase 6 doc alignment is APPROVED (or skipped per story frontmatter):
 - **Manual mode only**: archive memory with `_kit/memory.sh add` (Windows outside Git
   Bash: `_kit\memory.cmd add` — Git for Windows required) per the protocol; include the new record paths
   in the story's `feat:` commit (driver-dispatched mode writes proposals to
-  `<outbox>/memory/` instead — the integrator adds and commits them).
+  `<outbox>/memory/` with `source: goal <g> (goal.md)` and no `ARCHIVED` note — the
+  integrator adds and commits them).
 - **Memory size gates, manual mode only** (hard, check after appending):
   `_goals/LEARNINGS.md` ≥ 15 KB → compact now (merge duplicates, summarize
   older entries; keep it one-read useful); `_goals/ESCALATIONS.md` ≥ 20 KB →
-  move resolved entries to `_goals/archive/`. Driver-dispatched mode never
+  move resolved entries to `_goals/archive/ESCALATIONS-<YYYY-MM>.md` (each entry starts
+  with `## <story-id>: <title>`; keep any `- resolved: YYYY-MM-DD <decision>` line).
+  Driver-dispatched mode never
   runs these gates and never compacts either file itself — the driver checks
   size after integrating your outbox and, on breach, defers the rewrite to
   the next manual iteration instead of compacting inside a slot.
@@ -241,9 +245,11 @@ If evaluation cycles exhaust or the story is blocked:
 - Do NOT commit implementation work; leave the tree clean (`git checkout .` /
   `git clean -fd` limited to files you created for this story).
 - **Manual mode only**: if `attempts` has reached 3, set `blocked: true` on the
-  story and append an entry to `_goals/ESCALATIONS.md` (story id, what failed,
-  evaluator verdicts, what a human must decide); commit ONLY the backlog +
-  escalation change: `chore: block <story-id> after 3 attempts`.
+  story and append an entry to `_goals/ESCALATIONS.md` starting with
+  `## <story-id>: <title>` (what failed, evaluator verdicts, what a human must
+  decide); a human resolving it adds `- resolved: YYYY-MM-DD <decision>` inside the
+  entry; commit ONLY the backlog + escalation change:
+  `chore: block <story-id> after 3 attempts`.
   **Driver-dispatched**: write that same entry to `<outbox>/escalations.md`
   instead — never set `blocked` or touch `_goals/ESCALATIONS.md` directly;
   the driver applies the transition and appends your entry itself.

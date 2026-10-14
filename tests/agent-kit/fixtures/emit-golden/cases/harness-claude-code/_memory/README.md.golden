@@ -180,9 +180,10 @@ evaluator, qa-evaluator, or terminal). After a goal is approved, it **archives**
 `research-ingest` after ingestion review. Loop manual mode adds records with `add`;
 driver-dispatched slots write `<outbox>/memory/*.md` proposals for the integrator.
 
-This store holds durable, searchable **records**. `_goals/LEARNINGS.md` and
-`_goals/ESCALATIONS.md` remain the in-repo ledgers for loop learnings and escalations;
-they are not auto-imported here.
+This store holds durable, searchable **records**. `_goals/LEARNINGS.md` remains the
+in-repo ledger for loop learnings and is not auto-imported here. `_goals/ESCALATIONS.md`
+(and archived copies under `_goals/archive/`) stay the live escalation ledger; resolved
+entries can be back-filled into records with `backfill --escalations` (see below).
 
 Full recall, fence, archive, and loop rules:
 `<harness dir>/skills/feature/reference/memory-protocol.md`, where `<harness dir>` is
@@ -248,7 +249,8 @@ Windows required). `_kit/memory.ps1` (PowerShell 7.2+) remains as a helper for
 the Bash and `.cmd` paths.
 
 **Exit codes:** `0` ok · `2` usage/format · `3` gate failed (`check` only) · `4` missing
-root, file, id, or optional dependency · `5` quarantined.
+root, file, id, or optional dependency · `5` quarantined. For `backfill`, only `0`, `2`,
+`4`, and `5` apply (`3` is never used).
 
 **Common:** every subcommand accepts `--root <dir>` (default: git repo root, else cwd).
 Store root is `<root>/_memory`. `--help` as the first argument, or right after the
@@ -261,7 +263,7 @@ stderr and exits 2. Usage errors reuse these existing messages (exit 2 unless no
 `memory.sh` included):
 
 ```
-usage: memory.sh <add|index|search|show|redact|check|rm|capture> [--root <dir>] ...
+usage: memory.sh <add|index|search|show|redact|check|rm|capture|backfill> [--root <dir>] ...
   add    --kind <k> --title <t> --body <path> [--source <s>] [--tags <list>] [--supersedes <list>] [--harness <h>]
   index  [--root <dir>]
   search <term>... [--kind <list>] [--limit <n>] [--include-superseded] [--engine grep|fts]
@@ -270,11 +272,12 @@ usage: memory.sh <add|index|search|show|redact|check|rm|capture> [--root <dir>] 
   check  [--staged] [--root <dir>] [<path>…]
   rm     <id> [--root <dir>]
   capture [--harness cursor|claude|codex|all] [--from <dir>] [--idle-hours <n>] [--since <YYYY-MM-DD>] [--root <dir>]
+  backfill [--plan|--apply] [--goals] [--research] [--escalations] [--only <name>] [--root <dir>]
 exit: 0 ok · 2 usage/format · 3 gate failed · 4 missing root/file/id/dependency · 5 quarantined
 ```
 
 **PowerShell twin:** `memory.ps1` implements `add` (with redaction and tag rules) and
-`redact`; `check`, `rm`, and `capture` exit 2 with
+`redact`; `check`, `rm`, `capture`, and `backfill` exit 2 with
 `memory: '<sub>' is bash-only; run bash _kit/memory.sh <sub> (Windows: _kit\memory.cmd <sub>)`.
 
 ### add
@@ -430,6 +433,114 @@ otherwise captured (ledgered as `captured`).
 Stdout per session: `memory: skipped <harness> <session> <reason>` or
 `memory: captured <harness> <session> <repo-relative path>`; exit 0.
 
+### backfill
+
+```
+backfill [--plan|--apply] [--goals] [--research] [--escalations] [--only <name>] [--root <dir>]
+```
+
+Bash-only (`memory.ps1 backfill` prints the bash-only pointer, exit 2). Deterministic,
+LLM-free back-fill of closed goals, opted-in research topics, and resolved escalations into
+records via the existing `add` path (redaction, admission, dedupe). Identical inputs at the
+same git HEAD (or outside git, `commit: none`) yield byte-identical records.
+
+**Flags.** `--plan` (default) writes nothing (not even directories); `--apply` adds records;
+both → exit 2 `memory: backfill takes --plan or --apply, not both`. Kind flags `--goals`,
+`--research`, and `--escalations` select sources; when none are given, all three run.
+`--only <name>` (repeatable) names goal folders and research topics (exact names). When any
+`--only` is given, escalations are processed only if `--escalations` is also given. A name
+that matches only a kind excluded by the kind flags prints
+`memory: backfill only <name> skip:excluded-kind`. Each `--only` name matching no goal and no
+topic → one line `memory: backfill only <name> skip:not-found`. Other flag errors use the
+generic usage messages above.
+
+**Goals.** Candidates: every directory `_goals/<g>/` with `goal.md` (`LC_ALL=C` order).
+Decision per goal, first match wins:
+
+1. no `orchestration-log.md` → `skip:no-log`;
+2. **archived** → `skip:archived` when (a) the log has a line matching
+   `^### [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}[+-][0-9]{2}:[0-9]{2} — ARCHIVED:` listing at
+   least one id that exists under `records/` or `quarantine/`, or (b) any record or quarantine
+   file has `source:` equal to `goal <g> (goal.md)` or to `_goals/<g>/goal.md`;
+3. **closed** → `would-add` when (a) the LAST SPAWN entry whose agent is `evaluator` and whose
+   phase text (between `(` and `)` after the agent name) starts `Phase 5` (terminal,
+   qa-evaluator and other Phase 5 spawns are ignored) has an `- OUTCOME [#NN]: ` line whose
+   verdict (text between `- OUTCOME [#NN]: ` and ` · model reported:`) starts `APPROVED`; or
+   (b) the log has a note line `^### <ts> — Phase 5 APPROVED`; or (c) `<g>` is named by
+   `--only`;
+4. otherwise `skip:open`.
+
+Timestamp: (3a) the `### <ts>` heading of that SPAWN entry; (3b) that note's `<ts>`; (3c) the
+last `### <ts>` line in the log. Verdict text: (3a) as above; (3b) the note text after `— `;
+(3c) `opted in with --only`. When several signals hold, (a) beats (b) beats (c).
+
+**Goal record.** Kind `goal-summary`; source `goal <g> (goal.md)`; title
+`<g>: back-filled goal summary`; tags `backfill` plus `<g>` when it matches the tag ERE
+(`^[a-z0-9][a-z0-9-]*$`). Body sections in this order (omit a section and its blank line when
+empty):
+
+`Goal <g> — back-filled from goal.md and orchestration-log.md.` · blank · `Problem: ` + the
+first paragraph under `## Problem Statement` joined into one line · blank · `Success criteria:`
+then one `- <text>` line per `- [ ]`/`- [x]` item under `## Success Criteria` (checkbox removed,
+continuation lines joined) · blank · `Final verdict: <verdict text> (<YYYY-MM-DD UTC date of the
+timestamp>)` · blank · `Follow-ups:` then the first 20 non-empty lines of `_goals/<g>/follow-ups.md`.
+
+**Research.** Candidates: `_research/<t>/report.md`. `_research/<t>/ingested` exists, or any
+record has source `research <t> (report.md)` → `skip:archived`; else named by `--only` →
+`would-add`; else `skip:not-selected`. Record: kind `research-ingest`; source
+`research <t> (report.md)`; title `<t>: back-filled research summary`; tags `backfill`,
+`research`; body `Research <t> — back-filled from report.md.` · blank · the text under
+`## Summary of Findings` up to the next `## ` line. Timestamp: the `**Date**:` value of
+report.md (text after `**Date**: ` up to ` · ` or end of line) when it is `YYYY-MM-DD`, at
+`T120000Z`; else `19700101T000000Z`.
+
+**Accepted limitation:** a legacy research record whose source cites a tracked copy of the
+report (not `research <t> (report.md)`) is not detected as archived; research back-fill is
+opt-in via `--only`.
+
+**Escalations.** Sources `_goals/ESCALATIONS.md` and `_goals/archive/ESCALATIONS-*.md`. An entry
+starts at a line beginning `## ` and runs to the next `## ` line or end of file; text before
+the first `## ` and `# ` H1 lines are ignored. Resolved when the entry has a line matching
+`^- resolved: [0-9]{4}-[0-9]{2}-[0-9]{2} .+$`; else `skip:open`. Name `<file name>#<n>` (1-based
+entry index in that file). Record: kind `decision`; source `goals ledger (<file name>)`; title =
+heading text after `## `; tags `backfill`, `escalation`; body = the whole entry (heading
+included); timestamp = the `resolved:` date at `T120000Z`. Idempotence for escalations relies
+on `add`'s body-hash dedupe (a re-run reports `duplicate`).
+
+**Sanitizing and size.** Titles: `"` → `'`, `\` → `/`, control characters → space, ASCII
+spaces trimmed, then cut to ≤ 120 bytes at a UTF-8 character boundary; an empty result becomes
+the candidate name. Bodies: built, then redacted (the `add` redaction), then cut to ≤ 4096
+bytes after normalization — at the last line boundary that fits, leaving room for a final line
+`…`; a first line longer than the limit is cut at a UTF-8 boundary.
+
+**UTC conversion** of `YYYY-MM-DDTHH:MM±HH:MM` to `YYYYMMDDTHHMM00Z` in bash/awk (offset
+subtraction with minute, hour, day, month, year rollover and Gregorian leap years).
+
+**Output and exit.** Order: goals, research, escalations; within goals and research,
+`LC_ALL=C` by name; within escalations, by source file name (`LC_ALL=C`) then by entry index
+(numeric).
+`--plan`: `memory: backfill <kind> <name> would-add` or `… skip:<reason>`; summary
+`memory: backfill plan <w> would-add, <s> skipped`. `--apply`: `memory: backfill <kind> <name>
+added|duplicate|quarantined <id> <path>`, skip lines as in plan, or
+`memory: backfill <kind> <name> failed <rc> <first stderr line of add>`; `add`'s own stderr
+notices pass through to stderr; summary `memory: backfill <a> added, <d> duplicate,
+<q> quarantined, <f> failed, <s> skipped`. The run continues after a failed candidate. Exit 0;
+4 when any candidate failed; else 5 when any was quarantined. `<kind>` is `goal`, `research`
+or `escalation`.
+
+#### Closed signals
+
+From now on the kit writes explicit archived/closed markers so later `backfill` runs skip
+sources that already have records:
+
+- **Goals:** the feature archive step logs
+  `_kit/log-spawn.sh note --goal <g> --text "ARCHIVED: <id> [<id>…]"` (one line). Driver-dispatched loop archives have no ARCHIVED note; their proposals carry `source: goal <g> (goal.md)` so rule 2(b) detects them.
+- **Research:** the research archive step writes `_research/<topic>/ingested` with line 1 = UTC
+  `YYYY-MM-DDTHH:MM:SSZ` and line 2 = the record id(s) separated by spaces.
+- **Escalations:** a human resolving an entry adds the line `- resolved: YYYY-MM-DD <decision>`
+  inside the entry (entries start with `## <story-id>: <title>`, archived to
+  `_goals/archive/ESCALATIONS-<YYYY-MM>.md`).
+
 ### Raw session file format
 
 Frontmatter keys: `session`, `harness`, `transcript` (absolute path), `sha256` (of the
@@ -448,4 +559,4 @@ file bytes contain the absolute root path followed by end of a line or a charact
   `fallback:<label>` in the **session** column instead of a transcript session id; harness
   is `copilot`, `cursor`, or `claude` (never `codex` — Codex installs have no skill).
 
-**Planned:** History back-fill and capture hooks are later kit work.
+**Planned:** Capture hooks are later kit work.

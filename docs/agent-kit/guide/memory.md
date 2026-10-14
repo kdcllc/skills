@@ -1,4 +1,4 @@
-**Who this is for / What you'll learn:** Kit **users** who want durable, searchable knowledge across sessions and machines, and **contributors** documenting how memory interacts with `/feature`, `/research`, and the autonomous loop. You will learn what belongs in `_memory/` versus goal and loop artifacts, when the orchestrator recalls and archives records, how to search and add records with `_kit/memory.sh` / `_kit/memory.ps1`, the prior-knowledge DATA fence, pointer rules in always-loaded files, and common failure modes. Workflow phase detail stays in [feature-workflow.md](feature-workflow.md) and [research-workflow.md](research-workflow.md); harness-native stores are contrasted in [research-agent-memory-store.md](../research-agent-memory-store.md).
+**Who this is for / What you'll learn:** Kit **users** who want durable, searchable knowledge across sessions and machines, and **contributors** documenting how memory interacts with `/feature`, `/research`, and the autonomous loop. You will learn what belongs in `_memory/` versus goal and loop artifacts, when the orchestrator recalls and archives records, how to search and add records with `_kit/memory.sh` / `_kit/memory.ps1`, back-fill legacy work, the prior-knowledge DATA fence, pointer rules in always-loaded files, and common failure modes. Workflow phase detail stays in [feature-workflow.md](feature-workflow.md) and [research-workflow.md](research-workflow.md); harness-native stores are contrasted in [research-agent-memory-store.md](../research-agent-memory-store.md).
 
 # Memory store (`_memory/`)
 
@@ -50,14 +50,14 @@ flowchart TD
 ### Feature workflow (`/feature`)
 
 - **Recall:** Once **before Phase 2** (goal creation). Run `_kit/memory.sh search <term>… --limit 10`, read candidates with `show <id>`, pick **≤ 5** (drop anything contradicted by the codebase). Write ids or `none` into `goal.md` **`## Recalled memory`**. After `_goals/<goal>/` exists, log picks or failure with `_kit/log-spawn.sh note`. Any non-zero exit, missing tool, or stderr `memory: 0 results` ⇒ treat as **no prior knowledge** — the phase never blocks.
-- **Archive:** After Phase 5 **APPROVED** and green **Quality Checks**, before optional Phases 6/7: one **`goal-summary`** plus zero to three **`decision`** / **`pitfall`** records via `_kit/memory.sh add` (drafts under `_goals/<goal>/memory-drafts/`). After each added or quarantined path, run `_kit/memory.sh check <path>`; exit **3** ⇒ report the failing stdout line to the user and do not commit until fixed. Untracked bad record ⇒ `_kit/memory.sh rm <id>`; committed correction ⇒ new record with **`--supersedes`**. Records stay **uncommitted** with the goal for human review. Exit **5** (quarantined) ⇒ report to the user, run `check` on the quarantined path too; do not retry automatically.
+- **Archive:** After Phase 5 **APPROVED** and green **Quality Checks**, before optional Phases 6/7: one **`goal-summary`** plus zero to three **`decision`** / **`pitfall`** records via `_kit/memory.sh add` (drafts under `_goals/<goal>/memory-drafts/`). After each added or quarantined path, run `_kit/memory.sh check <path>`; exit **3** ⇒ report the failing stdout line to the user and do not commit until fixed. After every path passes `check`, the orchestrator logs one closed marker `_kit/log-spawn.sh note --goal <g> --text "ARCHIVED: <id> [<id>…]"` listing **all** ids `add` wrote (including quarantined). Driver-dispatched slots write no ARCHIVED note; their **`goal-summary`** proposals set `source: goal <g> (goal.md)` (or `_goals/<g>/goal.md` when that file is tracked). Untracked bad record ⇒ `_kit/memory.sh rm <id>`; committed correction ⇒ new record with **`--supersedes`**. Records stay **uncommitted** with the goal for human review. Exit **5** (quarantined) ⇒ report to the user, run `check` on the quarantined path too; do not retry automatically.
 
 See [feature-workflow.md](feature-workflow.md) for phase mechanics.
 
 ### Research workflow (`/research`)
 
 - **Recall:** Once at **Phase 1**, with `--kind research-ingest,decision` so settled research is not re-litigated. Picks go to `_research/<topic>/recalled-memory.md` until Phase 4.
-- **Archive:** After the Phase 2 ingestion review, one **`research-ingest`** record summarizing the report (same `add`, **`check`**, exit **3**, and **`rm` / `--supersedes`** correction rules as feature archive).
+- **Archive:** After the Phase 2 ingestion review, one **`research-ingest`** record summarizing the report (same `add`, **`check`**, exit **3**, and **`rm` / `--supersedes`** correction rules as feature archive). After `check`, the archive step writes `_research/<topic>/ingested` (line 1 UTC `YYYY-MM-DDTHH:MM:SSZ`, line 2 the record id(s) separated by spaces).
 - **Research-born goals:** Phase 4 copies Phase 1 picks into the new goal’s `## Recalled memory`; feature recall does **not** run again.
 
 See [research-workflow.md](research-workflow.md).
@@ -75,7 +75,7 @@ See [autonomous-loop.md](autonomous-loop.md).
 
 ## How to search
 
-Run from the repo root or pass **`--root <dir>`** (store path is `<root>/_memory/`). Primary: `_kit/memory.sh`; Windows outside Git Bash: `_kit\memory.cmd` (Git for Windows). `_kit/memory.ps1` (PowerShell 7.2+) implements `add` (with redaction) and `redact`; **`check`**, **`rm`**, and **`capture`** are bash-only — the PowerShell twin prints `memory: '<sub>' is bash-only; run bash _kit/memory.sh <sub> (Windows: _kit\memory.cmd <sub>)` and exits **2**.
+Run from the repo root or pass **`--root <dir>`** (store path is `<root>/_memory/`). Primary: `_kit/memory.sh`; Windows outside Git Bash: `_kit\memory.cmd` (Git for Windows). `_kit/memory.ps1` (PowerShell 7.2+) implements `add` (with redaction), `index`, `search`, `show`, and `redact`; **`check`**, **`rm`**, **`capture`**, and **`backfill`** are bash-only — the PowerShell twin prints `memory: '<sub>' is bash-only; run bash _kit/memory.sh <sub> (Windows: _kit\memory.cmd <sub>)` and exits **2**.
 
 **Terms:** At least one required. Each term is an ASCII **case-folded substring** match; every term contributes to the score.
 
@@ -185,6 +185,39 @@ Defaults: harness `all`, idle-hours `6`, no `--since`. **`capture` requires `jq`
 
 **Distillation:** The emitted **`memory-capture`** skill orchestrates one session per increment: scope gate (human) → implementer draft (body-only under `raw/drafts/`) → evaluator (admission screen, privacy grep for remote owner, `$HOME`, emails) → `add` → **`check` on the record path** → one TAB-separated row in `raw/.distilled` (written by the distillation workflow, not by `capture`). **Fallback:** Copilot always uses the orchestrator-written fallback (no scanner). Cursor and Claude Code use it only when `capture` cannot run — exit **4** `capture needs jq`, or exit **0** with no transcript directory for the active harness; if the only skip is **`live`** for the current session, offer no fallback — rerun after the idle window (default 6 h). **Quoted turns:** every claim that the user chose, approved, or decided something must quote a `## user` turn from the raw file (≤ 160 characters, ellipsis allowed), or attribute the choice to the assistant or orchestrator — never to the user without a quote. Normative rules: [`memory-capture.md`](../../../skills/agent-kit/templates/skills/feature/reference/memory-capture.md). Codex-only installs emit no skill tree — operators use `capture` / `check` from `_memory/README.md` and distill from another harness session in the same repo.
 
+## Back-fill (`backfill`)
+
+```
+_kit/memory.sh backfill [--plan|--apply] [--goals] [--research] [--escalations] [--only <name>] [--root <dir>]
+```
+
+Bash-only, deterministic, LLM-free. Candidates go through the existing `add` path (redaction, admission, dedupe). Identical inputs at the same git HEAD yield byte-identical records; record ids are derived from source timestamps.
+
+**Flags:** `--plan` (default) writes nothing; `--apply` adds records; both together ⇒ exit **2**. Kind flags `--goals`, `--research`, and `--escalations` select sources; when none are given, all three run. `--only <name>` (repeatable) names goal folders and research topics (exact names). When any `--only` is given, escalations run only if `--escalations` is also given.
+
+**`--only` and skip reasons:** Any `--only` limits candidates to the named goals and topics. A goal with no `orchestration-log.md` is `skip:no-log` (checked first). Without `--only`, every research topic without an `ingested` marker or matching record prints `skip:not-selected`; with `--only`, unnamed goals and topics are not listed at all. An `--only` name matching no goal and no topic prints `memory: backfill only <name> skip:not-found`; one that matches only a kind excluded by the kind flags prints `memory: backfill only <name> skip:excluded-kind`.
+
+| Source | Closed when | Skipped as archived when | Record |
+|--------|-------------|--------------------------|--------|
+| Goals (`_goals/<g>/goal.md` + log) | last Phase 5 evaluator SPAWN has an OUTCOME starting `APPROVED`; or a `### <ts> — Phase 5 APPROVED` note; or named by `--only` | an `ARCHIVED:` note listing an existing id, or a record with source `goal <g> (goal.md)` / `_goals/<g>/goal.md` | `goal-summary` |
+| Research (`_research/<t>/report.md`) | named by `--only` (legacy topics) | `ingested` marker exists, or a record with source `research <t> (report.md)` | `research-ingest` |
+| Escalations (`_goals/ESCALATIONS.md`, `_goals/archive/ESCALATIONS-<YYYY-MM>.md`) | the entry has `- resolved: YYYY-MM-DD <decision>` | dedupe by body hash (`--apply` reports `duplicate`; `--plan` still says would-add) | `decision` |
+
+**Output:** `--plan` prints `memory: backfill <kind> <name> would-add` or `… skip:<reason>` plus a plan summary; `--apply` prints `added`, `duplicate`, `quarantined`, or `failed` per candidate (skips match plan). Exit **0**; **4** when any candidate failed; otherwise **5** when any was quarantined. The run continues after a failed candidate.
+
+### Closed signals the kit writes from now on
+
+- **Goals:** the feature archive step logs `_kit/log-spawn.sh note --goal <g> --text "ARCHIVED: <id> [<id>…]"` (one line). Driver-dispatched loop archives have no ARCHIVED note; their **`goal-summary`** proposals set `source: goal <g> (goal.md)` (or `_goals/<g>/goal.md` when that file is tracked) so backfill detects them as archived.
+- **Research:** the research archive step writes `_research/<topic>/ingested` with line 1 = UTC `YYYY-MM-DDTHH:MM:SSZ` and line 2 = the record id(s) separated by spaces.
+- **Escalations:** a human resolving an entry adds the line `- resolved: YYYY-MM-DD <decision>` inside the entry (entries start with `## <story-id>: <title>`, archived to `_goals/archive/ESCALATIONS-<YYYY-MM>.md`).
+
+**One-time transcript back-fill:** run `capture`, then the `memory-capture` skill session by session — runbook in [`memory-capture.md`](../../../skills/agent-kit/templates/skills/feature/reference/memory-capture.md). Codex-only installs run `capture` and distill from a Claude Code, Cursor, or Copilot session.
+
+```bash
+_kit/memory.sh backfill --plan
+_kit/memory.sh backfill --apply --only <goal> --goals
+```
+
 ## Prior-knowledge fence and pointers
 
 **Fence (recall picks only):** Heading must be exact:
@@ -223,14 +256,13 @@ Emit also writes the memory pointer block per harness; see [getting-started.md](
 | Integrator `!!! memory proposal …` | Malformed proposal, rejected add, quarantine, or skipped tool — fix the proposal or `_kit/memory.*` |
 | `!!! memory records left uncommitted: git add failed (exit N)` or `… git commit failed (exit N)` | Step 3b added/quarantined paths but could not commit; records stay **uncommitted** (may be staged) — fix git identity/hooks |
 | Later slot CB0 after failed memory commit | Uncommitted records swept by `git add -A` — fix identity/hooks so step 3b commits succeed |
+| exit **4** on `backfill --apply` | One or more candidates failed — read the `memory: backfill <kind> <name> failed <rc> …` line; the run continued for other candidates |
+| exit **5** on `backfill --apply` | A candidate was quarantined — review `_memory/quarantine/` |
+| `backfill goal <g> skip:open` | No Phase 5 APPROVED signal in the log — name it with `--only <g>` if it is really done |
 
-## Planned (Release D)
+## Status
 
-Release C (`memory-store-c-capture`) — redaction, `check`, `rm`, post-hoc `capture`, and the `memory-capture` distillation skill — ships in agent-kit **[Unreleased]** (not yet tagged; capture **hooks** remain a later goal). Still planned:
-
-- **Release D (`memory-store-d-backfill`):** Deterministic back-fill of closed goals, research, and transcripts where a closed signal exists.
-
-Roadmap detail: [research-agent-memory-store.md](../research-agent-memory-store.md).
+Releases C (`memory-store-c-capture`: redaction, `check`, `rm`, `capture`, `memory-capture`) and D (`memory-store-d-backfill`: `backfill` and closed signals) ship in agent-kit **[Unreleased]** (not yet tagged). Capture **hooks** remain a later goal. Roadmap detail: [research-agent-memory-store.md](../research-agent-memory-store.md).
 
 ## Instance note (this repository)
 
@@ -240,7 +272,7 @@ In **kdcllc/skills**, `_memory/` is **tracked** while `_goals/` and `_research/`
 
 - [`skills/agent-kit/templates/memory/README.md`](../../../skills/agent-kit/templates/memory/README.md) — layout, record schema, search scoring, CLI exit codes
 - [`skills/agent-kit/templates/skills/feature/reference/memory-protocol.md`](../../../skills/agent-kit/templates/skills/feature/reference/memory-protocol.md) — recall, fence, archive, loop proposals, integrator step 3b
-- [`skills/agent-kit/templates/tools/memory.sh`](../../../skills/agent-kit/templates/tools/memory.sh) — reference implementation for search scoring, redaction, `check`, `rm`, and `capture`
+- [`skills/agent-kit/templates/tools/memory.sh`](../../../skills/agent-kit/templates/tools/memory.sh) — reference implementation for search scoring, redaction, `check`, `rm`, `capture`, and `backfill`
 - [`skills/agent-kit/templates/skills/memory-capture/SKILL.template.md`](../../../skills/agent-kit/templates/skills/memory-capture/SKILL.template.md) — orchestrator capture/distillation workflow
 - [`skills/agent-kit/templates/skills/feature/reference/memory-capture.md`](../../../skills/agent-kit/templates/skills/feature/reference/memory-capture.md) — session-summary distillation contract
 - [`skills/agent-kit/templates/skills/feature/SKILL.template.md`](../../../skills/agent-kit/templates/skills/feature/SKILL.template.md) — feature recall and archive hooks

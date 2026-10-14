@@ -1,6 +1,6 @@
 #!/usr/bin/env pwsh
 #Requires -Version 7.2
-# memory — add|index|search|show|redact|check|rm|capture
+# memory — add|index|search|show|redact|check|rm|capture|backfill
 # Twin: memory.sh (bash 3.2+) — behaviorally identical — any divergence is a bug.
 # Emitted single-copy to `_kit/memory.ps1`.
 #
@@ -17,6 +17,7 @@
 #   memory.ps1 check [--staged] [--root <dir>] [<path>…]
 #   memory.ps1 rm <id> [--root <dir>]
 #   memory.ps1 capture [--harness cursor|claude|codex|all] [--from <dir>] … [--root <dir>]
+#   backfill is bash-only — run bash _kit/memory.sh backfill (Windows: _kit\memory.cmd backfill)
 #
 # Exit codes: 0 ok · 2 usage/format · 3 gate failed · 4 missing root, file, id, or optional dependency · 5 quarantined.
 # Errors: one line on stderr prefixed `memory: `. Store path: `<root>/_memory/`.
@@ -104,7 +105,7 @@ function Strip-DoubleQuotes([string]$val) {
 
 function Get-UsageText {
   return @(
-    'usage: memory.sh <add|index|search|show|redact|check|rm|capture> [--root <dir>] ...'
+    'usage: memory.sh <add|index|search|show|redact|check|rm|capture|backfill> [--root <dir>] ...'
     '  add    --kind <k> --title <t> --body <path> [--source <s>] [--tags <list>] [--supersedes <list>] [--harness <h>]'
     '  index  [--root <dir>]'
     '  search <term>... [--kind <list>] [--limit <n>] [--include-superseded] [--engine grep|fts]'
@@ -113,6 +114,7 @@ function Get-UsageText {
     '  check  [--staged] [--root <dir>] [<path>…]'
     '  rm     <id> [--root <dir>]'
     '  capture [--harness cursor|claude|codex|all] [--from <dir>] [--idle-hours <n>] [--since <YYYY-MM-DD>] [--root <dir>]'
+    '  backfill [--plan|--apply] [--goals] [--research] [--escalations] [--only <name>] [--root <dir>]'
     'exit: 0 ok · 2 usage/format · 3 gate failed · 4 missing root/file/id/dependency · 5 quarantined'
   ) -join "`n"
 }
@@ -1424,7 +1426,7 @@ try {
   if ($args.Count -eq 0) { Show-UsageStderr; exit 2 }
   $sub = View ([string]$args[0])
   if ($sub -ceq '--help') { Show-UsageStdout; exit 0 }
-  if ([Array]::IndexOf(@('add', 'index', 'search', 'show', 'redact', 'check', 'rm', 'capture'), $sub) -lt 0) {
+  if ([Array]::IndexOf(@('add', 'index', 'search', 'show', 'redact', 'check', 'rm', 'capture', 'backfill'), $sub) -lt 0) {
     Show-UsageStderr
     Die 2 "unknown subcommand '$sub'"
   }
@@ -1440,6 +1442,7 @@ try {
     'check' { Invoke-BashOnlySub 'check' }
     'rm' { Invoke-BashOnlySub 'rm' }
     'capture' { Invoke-BashOnlySub 'capture' }
+    'backfill' { Invoke-BashOnlySub 'backfill' }
   }
 } finally {
   foreach ($p in $Script:TmpPaths) {

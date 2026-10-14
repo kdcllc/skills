@@ -175,7 +175,7 @@ exit codes.
 | `skills/auto-loop` + `_loop/` + `_goals/backlog.md` | Autonomous loop with structural guards (optional) |
 | `skills/agent-kit-models.map.md` | The model map — the only place model IDs live per install |
 | `_kit/log-spawn.sh` + `_kit/log-spawn.cmd` | Single-copy orchestration-log writer + Windows launcher (`spawn` / `outcome` / `note`) |
-| `_kit/memory.sh` + `_kit/memory.cmd` (+ `_kit/memory.ps1` for `loop.ps1`) | Single-copy memory store + Windows launcher (`add` / `index` / `search` / `show` / `redact` / `check` / `rm` / `capture`) |
+| `_kit/memory.sh` + `_kit/memory.cmd` (+ `_kit/memory.ps1` for `loop.ps1`) | Single-copy memory store + Windows launcher (`add` / `index` / `search` / `show` / `redact` / `check` / `rm` / `capture` / `backfill`) |
 | `_memory/` | Tracked immutable records (`records/`, `quarantine/`); gitignored derived `.index/` and `raw/` (redacted captures, ledgers, distillation drafts) |
 | `ORCHESTRATION.md` | The architecture doc, filled in for the project |
 | `orchestration-kit.manifest.json` | Kit version + file hashes + embedded `answers`, enabling clean upgrades |

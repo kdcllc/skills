@@ -86,6 +86,16 @@ and returns to evaluation — do not commit quarantined paths.
 Distill exactly one raw session file per orchestrator increment. No batching multiple
 sessions into one draft or one evaluator pass.
 
+## One-time transcript back-fill
+
+Legacy history (before routine capture): run `_kit/memory.sh capture` with no `--since`,
+then run the `memory-capture` skill session by session. `capture` skips most old
+transcripts as subagent runs (`memory: skipped … subagent`, ledgered — no raw file).
+Cost guidance: plan one
+implementer distill plus one evaluator per session; you may stop after any session because
+`_memory/raw/.distilled` records progress. Never batch multiple sessions into one distill
+or evaluator pass.
+
 ## Harness and source
 
 - `--harness` is the raw file's `harness` frontmatter (`cursor`, `claude`, `codex`); for a

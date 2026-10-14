@@ -127,9 +127,9 @@ with a **narrower** command — never dump the full suite here.
 Optional QA: after approval, capture evidence and launch `qa-evaluator`.
 
 **Archive:** per `reference/memory-protocol.md`, one `goal-summary` + 0–3
-`decision`/`pitfall` via `_kit/memory.sh add`, then `check` each added/quarantined path;
-quarantine → user; driver-dispatched slot → `<outbox>/memory/` proposals instead of
-`add`.
+`decision`/`pitfall` via `_kit/memory.sh add`, `check` each added/quarantined path, then
+log `ARCHIVED: …` (all ids); quarantine → user; driver-dispatched → `<outbox>/memory/`
+proposals only, no `ARCHIVED` note (`source: goal <g> (goal.md)` per protocol).
 
 Then read `goal.md`'s `phases:` block: `align_docs: false` skips Phase 6 (log "Phase 6
 skipped per goal.md"); `pull_request: false` skips Phase 7 likewise.

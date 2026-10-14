@@ -204,6 +204,7 @@ run_release_c_bash_only() {
     stub_chk='memory: '\''check'\'' is bash-only; run bash _kit/memory.sh check (Windows: _kit\memory.cmd check)'
     stub_rm='memory: '\''rm'\'' is bash-only; run bash _kit/memory.sh rm (Windows: _kit\memory.cmd rm)'
     stub_cap='memory: '\''capture'\'' is bash-only; run bash _kit/memory.sh capture (Windows: _kit\memory.cmd capture)'
+    stub_bf='memory: '\''backfill'\'' is bash-only; run bash _kit/memory.sh backfill (Windows: _kit\memory.cmd backfill)'
     out="$(pwsh -NoProfile -NonInteractive -File "$MEMORY_PS1" check 2>&1)"; rc=$?
     [[ "$rc" -eq 2 && "$out" == "$stub_chk" ]] && report PASS "[bash-only] (rc-pwsh-stub-check)" \
       || report FAIL "[bash-only] (rc-pwsh-stub-check)" "rc=$rc out=[$out]"
@@ -213,6 +214,9 @@ run_release_c_bash_only() {
     out="$(pwsh -NoProfile -NonInteractive -File "$MEMORY_PS1" capture 2>&1)"; rc=$?
     [[ "$rc" -eq 2 && "$out" == "$stub_cap" ]] && report PASS "[bash-only] (rc-pwsh-stub-capture)" \
       || report FAIL "[bash-only] (rc-pwsh-stub-capture)" "rc=$rc out=[$out]"
+    out="$(pwsh -NoProfile -NonInteractive -File "$MEMORY_PS1" backfill 2>&1)"; rc=$?
+    [[ "$rc" -eq 2 && "$out" == "$stub_bf" ]] && report PASS "[bash-only] (rc-pwsh-stub-backfill)" \
+      || report FAIL "[bash-only] (rc-pwsh-stub-backfill)" "rc=$rc out=[$out]"
   else
     report SKIP "[bash-only] (rc-pwsh-stub) pwsh absent"
   fi

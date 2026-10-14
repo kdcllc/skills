@@ -599,4 +599,34 @@ else
   report FAIL "C2: codex-only emit must not ship memory-capture skill" "rc=$c2_rc bad=$c2_bad"
 fi
 
+# --- D: Release D closed-signal wiring (emitted instance under B1_ROOT) ---
+check_d_emitted_protocol() { # path
+  grep -qF 'ARCHIVED:' "$1" || return 1
+  grep -qF 'ingested' "$1" || return 1
+  return 0
+}
+
+check_d_emitted_loop() { # path
+  grep -qF 'resolved:' "$1" || return 1
+  return 0
+}
+
+if [[ -n "${B1_ROOT:-}" ]] \
+  && [[ -f "$B1_ROOT/.cursor/skills/feature/reference/memory-protocol.md" ]] \
+  && [[ -f "$B1_ROOT/.cursor/skills/auto-loop/SKILL.md" ]] \
+  && check_d_emitted_protocol "$B1_ROOT/.cursor/skills/feature/reference/memory-protocol.md" \
+  && check_d_emitted_loop "$B1_ROOT/.cursor/skills/auto-loop/SKILL.md"; then
+  report PASS "D1: emitted memory-protocol ARCHIVED+ingested; auto-loop resolved:"
+else
+  report FAIL "D1: Release D closed-signal wiring in emitted instance"
+fi
+
+mktemp_dir d_mut
+cp "$B1_ROOT/.cursor/skills/feature/reference/memory-protocol.md" "$d_mut/memory-protocol.md"
+sed -i 's/ARCHIVED:/ARCHIVED_DISABLED:/' "$d_mut/memory-protocol.md"
+check_d_emitted_protocol "$B1_ROOT/.cursor/skills/feature/reference/memory-protocol.md" \
+  && ! check_d_emitted_protocol "$d_mut/memory-protocol.md" \
+  && report PASS "D1-mutation: ARCHIVED removal fails emitted protocol check" \
+  || report FAIL "D1-mutation: emitted protocol check on mutant copy"
+
 finish

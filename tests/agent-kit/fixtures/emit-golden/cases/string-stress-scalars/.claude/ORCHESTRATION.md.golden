@@ -732,6 +732,7 @@ flowchart TD
 | **Loop (manual)** | Feature recall once before Phase 2 in the iteration | Direct `_kit/memory.sh add`; new record paths in the story commit |
 | **Loop (dispatched)** | At `LOOP_WORKTREE=0`: feature recall once before Phase 2 in the slot; at `LOOP_WORKTREE=1`: empty recall (no `_kit/` in slot worktrees) | Proposals in `<outbox>/memory/*.md`; integrator **step 3b** at reap end |
 | **Capture** | Optional recall when distilling a session | `memory-capture` skill: `_kit/memory.sh capture` → scope confirm → distill → `add` → `check`; gitignored `_memory/raw/` |
+| **Back-fill** | Optional recall before a one-time legacy import | `_kit/memory.sh backfill --plan` (no writes), review output, then `--apply`; closed goals, research topics named with `--only`, and resolved escalations; closed signals — the kit writes the `ARCHIVED:` note and `_research/<topic>/ingested` marker; a human adds the escalation `resolved:` line inside the entry — see `_memory/README.md` (`backfill`, **Closed signals**); one-time transcript import via `memory-capture` (runbook: `.claude/skills/feature/reference/memory-capture.md`; Codex-only installs: run `capture` per `_memory/README.md` and distill from a Claude Code, Cursor or Copilot session) |
 
 Before committing memory records, run `_kit/memory.sh check <paths>` before committing, or
 `check --staged` for everything staged. Exit **3** means the gate failed (secret, hash/id mismatch,
@@ -797,7 +798,7 @@ _goals/<goal>/spawns/NN-context.md  # Context package sent to spawn #NN (verbati
 _goals/<goal>/spawns/NN-report.md   # Report returned by spawn #NN (verbatim)
 _goals/breaker-state.json       # Model circuit breaker state (runtime, gitignored)
 _kit/{log-spawn.sh,log-spawn.cmd}  # Single-copy tools: orchestration-log writer + Windows launcher
-_kit/{memory.sh,memory.ps1}  # Single-copy tools: memory store (add / index / search / show / redact / check / rm / capture)
+_kit/{memory.sh,memory.ps1}  # Single-copy tools: memory store (add / index / search / show / redact / check / rm / capture / backfill)
 _memory/records/ · _memory/quarantine/  # Tracked memory records (immutable, one per file) — see _memory/README.md
 _memory/.index/ · _memory/raw/  # Derived index / reserved transcripts (gitignored)
 _loop/{loop.sh,loop.ps1,breaker.sh,breaker.ps1,PROMPT.md}  # Headless loop driver (if enabled)
@@ -851,6 +852,8 @@ _kit/memory.sh search orchestration --kind decision,pitfall --limit 5
 _kit/memory.sh show 20261009T120000Z-a1b2c3d4
 _kit/memory.sh check --staged
 _kit/memory.sh capture --harness all --idle-hours 6
+_kit/memory.sh backfill --plan
+_kit/memory.sh backfill --apply --only my-research-topic --research
 ```
 
 ### Invoking Skills

@@ -29,6 +29,14 @@ neither this skill nor the reference — point users to `_memory/README.md` for
 `capture`/`check` only; distillation runs from a Claude Code, Cursor, or Copilot session
 in the same repo.
 
+## One-time transcript back-fill
+
+For a repo with long chat history (not routine capture): run `_kit/memory.sh capture` with
+no `--since` (all history), then distill **one session at a time** with this skill — never
+batch multiple sessions in one increment. Expect most transcripts to be `subagent` skips.
+Budget about one implementer + one evaluator spawn per session; stop anytime — the
+`_memory/raw/.distilled` ledger resumes on the next run.
+
 ## Workflow
 
 ### 1. Capture
