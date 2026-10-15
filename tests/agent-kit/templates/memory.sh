@@ -18,6 +18,10 @@ set -u
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$HERE/../../.." && pwd)"
+FIXTURE_TMPDIR="$(mktemp -d "${TMPDIR:-/tmp}/memory-suite.XXXXXX")" || exit 1
+export TMPDIR="$FIXTURE_TMPDIR"
+# shellcheck source=../lib/fixture-root.sh
+. "$HERE/../lib/fixture-root.sh"
 
 CANON_MEMORY_SH="$REPO_ROOT/skills/agent-kit/templates/tools/memory.sh"
 CANON_MEMORY_PS1="$REPO_ROOT/skills/agent-kit/templates/tools/memory.ps1"
@@ -60,6 +64,7 @@ cleanup() {
   [[ ${#CLEANUP[@]} -gt 0 ]] || return 0
   cd / 2>/dev/null || true
   for d in "${CLEANUP[@]}"; do rm -rf "$d"; done
+  rm -rf "$FIXTURE_TMPDIR"
 }
 trap cleanup EXIT
 
@@ -92,6 +97,21 @@ finish() { # final real-repo check, summary, exit (also used by fatal)
     report FAIL "(w) real-repo _memory/{records,quarantine,.index} changed during the run"
     diff <(printf '%s\n' "$REPO_MEM_BEFORE") <(printf '%s\n' "$after") | head -20 >&2
   fi
+  if ( assert_fixture_root "$REPO_ROOT" 2>/dev/null ); then
+    report FAIL "fixture-root guard rejects repository root"
+  else
+    report PASS "fixture-root guard rejects repository root"
+  fi
+  if ( assert_fixture_root "" 2>/dev/null ); then
+    report FAIL "fixture-root guard rejects empty root"
+  else
+    report PASS "fixture-root guard rejects empty root"
+  fi
+  if ( REPO_ROOT="$REPO_ROOT" FIXTURE_TMPDIR="$REPO_ROOT" . "$HERE/../lib/fixture-root.sh" 2>/dev/null ); then
+    report FAIL "fixture-root init fails closed when FIXTURE_TMPDIR is the repository root"
+  else
+    report PASS "fixture-root init fails closed when FIXTURE_TMPDIR is the repository root"
+  fi
   echo
   echo "PASS: $pass   FAIL: $fail   SKIP: $skip"
   [[ $fail -eq 0 ]]
@@ -106,9 +126,10 @@ fatal() { # <message> — suite-level abort: FAIL line, real-repo check, summary
 mktemp_dir() { # <out-var> — hard-fails the whole run on an empty/relative/non-dir result; never call in a $(...) (CLEANUP must persist)
   local _mv="${1:-}" _md
   [[ -n "$_mv" ]] || fatal "mktemp_dir: missing out-var"
-  _md="$(mktemp -d)" || _md=""
+  _md="$(mktemp -d "$FIXTURE_TMPDIR/dir.XXXXXX")" || _md=""
   [[ -n "$_md" && -d "$_md" ]] || fatal "mktemp -d returned [$_md]"
   case "$_md" in /*) ;; *) fatal "mktemp -d returned a relative path [$_md]" ;; esac
+  assert_fixture_root "$_md" || fatal "mktemp_dir: not a fixture root: $_md"
   CLEANUP+=("$_md")
   printf -v "$_mv" '%s' "$_md"
 }

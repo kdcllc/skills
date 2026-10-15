@@ -10,6 +10,8 @@
 #   (c) spawn/outcome #02 (200 / 0 bytes)       → io_est_tokens: 50 · running io: 85
 #   (d) note                                    → heading appended
 #   (e) exit codes 2 / 3 / 4 on the documented error paths
+#   (e4) spawn / outcome / note with explicit --root "" → exit 2, stderr names --root, no log file
+#   (e5) mutation: removing the empty-root check → not exit 2 (canonical exit 2)
 #   (e2) `héllo`+LF context (7 bytes / 6 chars)  → context_chars: 7 (bytes, not chars)
 #   (e3) log has no UTF-8 BOM and no CR
 #   (f) every success call prints exactly one stdout line
@@ -296,6 +298,56 @@ run_work_suite() {
   FALLBACK_LOG="$log2"
 }
 
+# empty --root guard (spawn / outcome / note); rc 0 guard holds, 1 guard missing
+assert_empty_root_sub() {
+  local sub="$1"; shift
+  local d rc out files_before files_after log
+  d="$(mktemp -d "$FIXTURE_TMPDIR/emptyroot.XXXXXX")" || return 2
+  assert_fixture_root "$d" || return 2
+  mkdir -p "$d/_memory/work/goals/demo/spawns"
+  head -c 10 /dev/zero | tr '\0' 'a' > "$d/_memory/work/goals/demo/spawns/01-context.md"
+  head -c 5 /dev/zero | tr '\0' 'b' > "$d/_memory/work/goals/demo/spawns/01-report.md"
+  log="$d/_memory/work/goals/demo/orchestration-log.md"
+  files_before="$(find "$d" -type f 2>/dev/null | wc -l | tr -d ' ')"
+  set +e
+  out="$( ( cd "$d" && bash "$BIN" "$sub" "$@" --root "" 2>&1 ) )"
+  rc=$?
+  files_after="$(find "$d" -type f 2>/dev/null | wc -l | tr -d ' ')"
+  if [[ "$rc" -eq 2 ]] && grep -qF -- '--root needs a directory' <<<"$out" \
+     && [[ "$files_before" -eq "$files_after" ]] && [[ ! -f "$log" ]]; then
+    return 0
+  fi
+  return 1
+}
+
+log_spawn_mut_empty_root() {
+  local canon_rc mut_rc d out mutsh changed
+  d="$(mktemp -d "$FIXTURE_TMPDIR/emptyrootmut.XXXXXX")" || return 2
+  assert_fixture_root "$d" || return 2
+  mkdir -p "$d/_memory/work/goals/x"
+  mutsh="$(mktemp "${TMPDIR:-/tmp}/logspawnmut.XXXXXX")"
+  sed '/die 2 "--root needs a directory"/d' "$CANON_SH" > "$mutsh"
+  chmod +x "$mutsh"
+  changed="$(diff -u "$CANON_SH" "$mutsh" 2>/dev/null | tail -n +3 | grep -c '^-' || true)"
+  if [[ "$changed" -ne 1 ]]; then
+    rm -f "$mutsh"
+    return 2
+  fi
+  if ! bash -n "$mutsh" 2>/dev/null; then
+    rm -f "$mutsh"
+    return 2
+  fi
+  set +e
+  out="$( ( cd "$d" && bash "$CANON_SH" note --goal x --text t --root "" 2>&1 ) )"
+  canon_rc=$?
+  out="$( ( cd "$d" && bash "$mutsh" note --goal x --text t --root "" 2>&1 ) )"
+  mut_rc=$?
+  rm -f "$mutsh"
+  [[ "$canon_rc" -eq 2 ]] || return 1
+  [[ "$mut_rc" -eq 4 ]] || return 1
+  return 0
+}
+
 # ---------------------------------------------------------------------------
 # Behavioral — bash twin
 # ---------------------------------------------------------------------------
@@ -304,6 +356,30 @@ if bash -n "$BIN" 2>/dev/null; then
 else
   report FAIL "bash -n $(basename "$BIN")"
 fi
+
+if assert_empty_root_sub spawn --goal demo --agent e --phase p --model-requested m \
+     --context _memory/work/goals/demo/spawns/01-context.md; then
+  report PASS "empty --root spawn → exit 2, stderr names --root, no orchestration-log.md"
+else
+  report FAIL "empty --root spawn guard"
+fi
+if assert_empty_root_sub outcome --goal demo --spawn 01 \
+     --report _memory/work/goals/demo/spawns/01-report.md --verdict PASS --model-reported m; then
+  report PASS "empty --root outcome → exit 2, stderr names --root, no orchestration-log.md"
+else
+  report FAIL "empty --root outcome guard"
+fi
+if assert_empty_root_sub note --goal demo --text hi; then
+  report PASS "empty --root note → exit 2, stderr names --root, no orchestration-log.md"
+else
+  report FAIL "empty --root note guard"
+fi
+if log_spawn_mut_empty_root; then
+  report PASS "mutation empty-root: canonical exit 2, mutant exit 4 (sed removed exactly 1 line)"
+else
+  report FAIL "mutation empty-root guard"
+fi
+
 run_suite bash bash "$BIN"
 run_work_suite bash bash "$BIN"
 

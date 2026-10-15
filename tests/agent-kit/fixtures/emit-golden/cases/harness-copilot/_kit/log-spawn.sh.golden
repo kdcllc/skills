@@ -36,14 +36,14 @@
 #   log-spawn.sh note    --goal <name> --text <text>
 #     Appends a blank line + `### <ts> — <text>`.
 #
-#   Common: [--root <path>] (repo root; default $PWD). Log path:
+#   Common: [--root <path>] (repo root; default $PWD; an explicit empty --root exits 2). Log path:
 #   <root>/_memory/work/goals/<goal>/orchestration-log.md — created when missing with the header
 #   `# Orchestration Log — <goal>` / blank / `Append-only spawn ledger. Running io_est_tokens
 #   (orchestrator I/O proxy, chars/4) and work_est_tokens (subagent self-reported footprint /4):
 #   see latest entry.` / blank / `---`.
 #
-#   Exit codes: 0 ok · 2 usage (unknown subcommand/flag, missing required flag, context
-#   basename not `NN-context.md`, --help/no args) · 3 ledger integrity (spawn with an NN
+#   Exit codes: 0 ok · 2 usage (unknown subcommand/flag, missing required flag, empty
+#   --root, context basename not `NN-context.md`, --help/no args) · 3 ledger integrity (spawn with an NN
 #   already present; outcome whose SPAWN #NN is missing or already has an OUTCOME) ·
 #   4 missing goal directory or context/report file.
 #   Check order is fixed: flags/basename (2) → paths (4) → integrity (3).
@@ -64,6 +64,7 @@ set -u
 usage() {
   cat <<'EOF'
 usage: log-spawn.sh <spawn|outcome|note> [--root <path>] <flags>
+  (--root must be non-empty when given; default when omitted is $PWD)
   spawn   --goal G --agent A --phase P --model-requested M --context _memory/work/goals/G/spawns/NN-context.md [--writes T] [--why T] [--expect T]
   outcome --goal G --spawn NN --report _memory/work/goals/G/spawns/NN-report.md --verdict V --model-reported M [--note T] [--work-chars C]
           (OUTCOME adds model_check: match|MISMATCH|unverified; MISMATCH → stderr warning, exit 0)
@@ -180,13 +181,14 @@ case "$sub" in
 esac
 
 root="$PWD"
+root_explicit=0
 goal="" agent="" phase="" model_requested="" context="" writes="" why="" expect=""
 spawn_nn="" report="" verdict="" model_reported="" note="" text="" work_chars=""
 
 need_val() { [ $# -ge 2 ] || die 2 "flag '$1' needs a value"; }
 while [ $# -gt 0 ]; do
   case "$1" in
-    --root)            need_val "$@"; root="$2"; shift 2 ;;
+    --root)            need_val "$@"; root_explicit=1; root="$2"; shift 2 ;;
     --goal)            need_val "$@"; goal="$2"; shift 2 ;;
     --agent)           need_val "$@"; agent="$2"; shift 2 ;;
     --phase)           need_val "$@"; phase="$2"; shift 2 ;;
@@ -205,6 +207,11 @@ while [ $# -gt 0 ]; do
     *) die 2 "unknown flag '$1' for '$sub'" ;;
   esac
 done
+
+if [ "$root_explicit" -eq 1 ] && [ -z "$root" ]; then
+  usage >&2
+  die 2 "--root needs a directory"
+fi
 
 require() { # <flag-name> <value>
   [ -n "$2" ] || die 2 "'$sub' requires $1"

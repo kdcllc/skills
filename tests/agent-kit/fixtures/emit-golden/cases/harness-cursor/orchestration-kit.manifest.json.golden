@@ -19,7 +19,7 @@
     "_memory/loop/backlog.md"
   ],
   "files": {
-    ".cursor/ORCHESTRATION.md": "89d670774f9f178a434b43e021899c6256b8d5045b162b34acc464c5b02630d1",
+    ".cursor/ORCHESTRATION.md": "6cdadac2879a2ad40a5109b9809fbc1192c145118c73d80fd98c818551fc95c2",
     ".cursor/agents/diagnostician.md": "2d5ae7b8ef9c19a5d2726acf62aeffb7c50cb33ccd2bf6af5ab697131756d1d1",
     ".cursor/agents/evaluator.md": "5b94080ee18563abd23339d780855fa7bc2a0367ff8597b02331f7277abd144b",
     ".cursor/agents/implementer.md": "4ed5521f114c5fee0227763cf86cb50c84831fcdc792e81506c47f05e5587027",
@@ -30,7 +30,7 @@
     ".cursor/skills/agent-kit-models.map.md": "fe1c5027ec590c6b65d6b7a3ec9d4d2526c45b2342a49ff02a715558da86649f",
     ".cursor/skills/align-docs/SKILL.md": "963bdf67fb5e1c293e1533d8a5cd9dd62c28d05463186ec2dabf9073ee168193",
     ".cursor/skills/auto-loop/SKILL.md": "c7c5a6e6b03430ca88e2ace070dd74ca0b3ee429c28eb8581442e487c02829c6",
-    ".cursor/skills/feature/SKILL.md": "88034e1dbd5326e1d5dee7bd67db9bbb2a6f08a796184a87620655c730a2ffec",
+    ".cursor/skills/feature/SKILL.md": "862a82c9caff2abcc84789680218715f95c9c75cb6e4012893772edf2c2c3a72",
     ".cursor/skills/feature/reference/continuation-ladder.md": "6a5f901dd432213fbffb5f4313207115e621c17a2c295cb71f7bcf2fe872d6e0",
     ".cursor/skills/feature/reference/memory-capture.md": "9cef97d7a882f3510d97a8fb2e4b870a8db7708df2c7196fba068269ff24db0b",
     ".cursor/skills/feature/reference/memory-protocol.md": "d8446ace1b0f71535d1a96bacacea33b0ec7acbbf08793cbdd685bf2356e7457",
@@ -46,7 +46,7 @@
     ".cursor/skills/task-criteria/SKILL.md": "b5b5f53f008ae57e41bcc2ace1cb312f2187360a42b556ac62d71bde4822f319",
     ".cursor/skills/test-ladder/SKILL.md": "b3023aa10ec84d82dea6a67646ffb7cca046eec80c5279474cb62fd53a255d0d",
     "_kit/log-spawn.cmd": "ae9541294a03f741311ff8bc0d5c6f9985d6947fb42f7aaeaf6613088e34bf7e",
-    "_kit/log-spawn.sh": "ed5f24b28b48effdae6caa8014ba8644a793ddfa3a52a5198af33fb0601c3fa0",
+    "_kit/log-spawn.sh": "5b288ff4db2274eb807e748b3abb2fce2f442148c378458f07198c4c5b262dd5",
     "_kit/memory.cmd": "ae9541294a03f741311ff8bc0d5c6f9985d6947fb42f7aaeaf6613088e34bf7e",
     "_kit/memory.ps1": "ab1972554d139c838c0908f78ac5619257faff4d24d6e2dbcb228ba8ceea63c6",
     "_kit/memory.sh": "9ee91e10d7207eb9f25b58e16c5b13ec54e09ef04f63155d3f682ff54d95023c",

@@ -280,6 +280,7 @@ These are user-visible behaviors enforced throughout all phases:
 | **Every fix is re-evaluated** | Fixes and revisions are **always** re-verified by an evaluator. No exception. |
 | **No phase advances without verdict** | Phase 4 tasks need evaluator **PASS**; Phase 5 needs **APPROVED**; Phase 3 needs **PASS** on the goal. |
 | **Max 3 cycles, then escalate** | As of v0.20.0, Phase 4 task execution continues through the continuation ladder (rungs 5→4→6) before escalation; Phase 3 and Phase 5 escalate after 3 cycles. |
+| **Repository safety** | As of agent-kit **[Unreleased]** (not yet tagged), before goals whose tasks move, rename, or delete user files the orchestrator takes a restorable backup and records where it is in the orchestration log. After every subagent returns, it compares `HEAD`, the current branch, and `git config --local` user entries with the values from before the spawn, and compares the changed-file set (`git status --porcelain`) with the task's write fence; anything unexpected stops the goal — log it, restore from git or the backup, and fix the cause before continuing. Canonical detail: [`skills/agent-kit/templates/ORCHESTRATION.md`](../../../skills/agent-kit/templates/ORCHESTRATION.md) (Repository safety). |
 
 ### Escalation format
 

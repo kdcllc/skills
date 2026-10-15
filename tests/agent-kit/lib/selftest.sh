@@ -4,6 +4,10 @@ set -u
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$HERE/../../.." && pwd)"
+FIXTURE_TMPDIR="$(mktemp -d "${TMPDIR:-/tmp}/selftest-base.XXXXXX")" || exit 1
+export TMPDIR="$FIXTURE_TMPDIR"
+# shellcheck source=fixture-root.sh
+. "$HERE/fixture-root.sh"
 
 echo "bash: $BASH_VERSION"
 
@@ -107,8 +111,9 @@ _bash4_scan "$HERE/parallel.sh"
 _bash4_scan "$HERE/emit-cache.sh"
 _bash4_scan "$REPO_ROOT/tests/agent-kit/run-all.sh"
 
-STUB_DIR="$(mktemp -d 2>/dev/null || mktemp -d -t selftest-stub)"
-SELFTEST_RM="$STUB_DIR"
+STUB_DIR="$(mktemp -d "$FIXTURE_TMPDIR/stub.XXXXXX")" || exit 1
+assert_fixture_root "$STUB_DIR" || exit 1
+SELFTEST_RM="$FIXTURE_TMPDIR"
 _selftest_exit_cleanup() {
   emit_cache_cleanup 2>/dev/null || true
   par_cleanup 2>/dev/null || true
@@ -693,12 +698,81 @@ fi
 
 AGENT_KIT_EMIT_CACHE="$CACHE_ROOT"
 EMIT_CACHE_USED=""
-COPYDEST="$(mktemp -d 2>/dev/null || mktemp -d -t copydest)"
+COPYDEST="$(mktemp -d "$FIXTURE_TMPDIR/copydest.XXXXXX")" || exit 1
+assert_fixture_root "$COPYDEST" || exit 1
 emit_cache_copy "$COPYDEST" "$ANSWERS_OK" || report FAIL "emit_cache_copy"
 if [ -f "$COPYDEST/stamp" ]; then
   report PASS "emit_cache_copy tree"
 else
   report FAIL "emit_cache_copy missing stamp"
+fi
+if ( _emit_cache_assert_writable_root "$REPO_ROOT" 2>/dev/null ); then
+  report FAIL "emit-cache writable-root probe accepted repository root"
+else
+  report PASS "emit-cache writable-root probe rejects repository root"
+fi
+
+# Guard-absent fallback in _emit_cache_assert_writable_root (callers that never sourced
+# fixture-root.sh): the cache-dir rule applies to every root. The control proves the guard really
+# is absent in the subshell and that a fixture root is still accepted, so the two negatives below
+# can only pass through the fallback's own refusal.
+if ( unset -f assert_fixture_root; ! type assert_fixture_root >/dev/null 2>&1 \
+  && _emit_cache_assert_writable_root "$COPYDEST" 2>/dev/null ); then
+  report PASS "emit-cache guard-absent fallback accepts a fixture root (control)"
+else
+  report FAIL "emit-cache guard-absent fallback accepts a fixture root (control)"
+fi
+if ( unset -f assert_fixture_root; _emit_cache_assert_writable_root "$REPO_ROOT" 2>/dev/null ); then
+  report FAIL "emit-cache guard-absent fallback rejects repository root"
+else
+  report PASS "emit-cache guard-absent fallback rejects repository root"
+fi
+if ( unset -f assert_fixture_root; _emit_cache_assert_writable_root "" 2>/dev/null ); then
+  report FAIL "emit-cache guard-absent fallback rejects empty root"
+else
+  report PASS "emit-cache guard-absent fallback rejects empty root"
+fi
+
+# Cache-dir rule (_emit_cache_assert_cache_dir): independent of the fixture-root guard.
+if ( _emit_cache_assert_cache_dir "" 2>/dev/null ); then
+  report FAIL "cache-dir rule rejects empty cache dir"
+else
+  report PASS "cache-dir rule rejects empty cache dir"
+fi
+if ( _emit_cache_assert_cache_dir "relative/cache" 2>/dev/null ); then
+  report FAIL "cache-dir rule rejects relative cache dir"
+else
+  report PASS "cache-dir rule rejects relative cache dir"
+fi
+if ( _emit_cache_assert_cache_dir "$REPO_ROOT" 2>/dev/null ); then
+  report FAIL "cache-dir rule rejects repository cache dir"
+else
+  report PASS "cache-dir rule rejects repository cache dir"
+fi
+if ( _emit_cache_assert_cache_dir "$REPO_ROOT/tests" 2>/dev/null ); then
+  report FAIL "cache-dir rule rejects in-repo cache dir"
+else
+  report PASS "cache-dir rule rejects in-repo cache dir"
+fi
+
+# Init-failure latch, run in a subshell with its cache under FIXTURE_TMPDIR (never under REPO_ROOT).
+# Init fails because the cache dir does not exist yet; the dir is then created, so only the latch
+# can still make emit_cache_root refuse. Without the latch the stub emit would succeed in the cache.
+_latch_rc=0
+_latch_out="$(
+  AGENT_KIT_EMIT_CACHE="$FIXTURE_TMPDIR/latch-cache"
+  _l_init=0
+  emit_cache_init 2>/dev/null || _l_init=$?
+  mkdir -p "$AGENT_KIT_EMIT_CACHE"
+  _l_after=0
+  emit_cache_root _bad "$ANSWERS_OK" >/dev/null 2>&1 || _l_after=$?
+  printf 'init=%s after=%s' "$_l_init" "$_l_after"
+  [ "$_l_init" -ne 0 ] && [ "$_l_after" -ne 0 ]
+)" || _latch_rc=$?
+if [ "$_latch_rc" -eq 0 ]; then
+  report PASS "emit-cache refuses operations after init failure"
+else
+  report FAIL "emit-cache init failure latch" "$_latch_out"
 fi
 
 SELFTEST_RM="$SELFTEST_RM $BAD_CACHE $CON_CACHE $VERIFY_CACHE $LOCK_GONE $COPYDEST"
@@ -706,6 +780,17 @@ emit_cache_cleanup
 par_cleanup
 _selftest_exit_cleanup
 trap - EXIT
+
+if ( assert_fixture_root "$REPO_ROOT" 2>/dev/null ); then
+  report FAIL "fixture-root guard rejects repository root"
+else
+  report PASS "fixture-root guard rejects repository root"
+fi
+if ( assert_fixture_root "" 2>/dev/null ); then
+  report FAIL "fixture-root guard rejects empty root"
+else
+  report PASS "fixture-root guard rejects empty root"
+fi
 
 echo "PASS: $pass FAIL: $fail SKIP: $skip"
 if [ "$fail" -gt 0 ]; then

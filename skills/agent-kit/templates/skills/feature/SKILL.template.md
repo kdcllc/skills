@@ -93,7 +93,7 @@ Launch `evaluator` with goal.md, all task files, Phase 1 Q&A, and
 `## Acceptance Criteria` once.
 
 - **PASS** → Phase 4. **NEEDS REVISION** → revise flagged items, re-evaluate (max 3).
-- **REJECT** → escalate. The ONLY exit to Phase 4 is evaluator PASS on the current revision.
+- **REJECT** → escalate; Phase 4 only after evaluator PASS on current revision.
 
 ## Phase 4 — Task execution (each task loops until PASS)
 
@@ -112,7 +112,7 @@ For each task in dependency order:
    **On cycle-3 exhaustion**, read `goal.md`'s `phases.ladder`: `escalate` (default, or
    key absent) → escalate with "Run the continuation ladder" as option 1 (log "ladder:
    escalate per goal.md"); `auto` → Read `reference/continuation-ladder.md` and follow
-   it. Every ladder fix attempt is re-evaluated; no exception.
+   it. Every ladder fix attempt is re-evaluated.
 
    **Fix-cycle model rotation**: cycle 1 re-runs normally; cycle 2 pins a **different
    model family** at comparable tier; cycle 3 pins **frontier tier** (model map). Log
@@ -156,7 +156,7 @@ artifact. Skip on the default branch (say so), if the user declines, or on
 ## Orchestration log (append-only spawn ledger)
 
 `_memory/work/goals/[goal]/orchestration-log.md` is written ONLY through `_kit/log-spawn.sh`
-(Windows outside Git Bash: `_kit\log-spawn.cmd`; Git for Windows required; same flags — see `--help` or ORCHESTRATION.md).
+(Windows outside Git Bash: `_kit\log-spawn.cmd`; Git for Windows required; same flags — ORCHESTRATION.md).
 **Before** each spawn: write the full context package to
 `_memory/work/goals/[goal]/spawns/NN-context.md` (NN = next free number), then
 `_kit/log-spawn.sh spawn --goal [goal] --agent [agent] --phase "…" --model-requested [id] --context [that file] [--writes --why --expect]`
@@ -205,8 +205,9 @@ requested: [resolved ID from the model map for this agent's tier] · tier: [fast
 
 ## Report integrity
 
-The verbatim report lives at `spawns/NN-report.md` — never edit or polish it; the log
-references it. Paraphrase only in your own summary.
+Verbatim report at `spawns/NN-report.md` — never edit; log references it. Paraphrase
+only in summary. Repository safety: ORCHESTRATION.md § Repository safety (backup;
+post-spawn HEAD/config/fence check).
 
 ## Escalation format
 

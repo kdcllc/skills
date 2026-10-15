@@ -1,11 +1,16 @@
 # Sourced from tests/agent-kit/templates/memory.sh (bash leg only).
 # Uses caller report, mktemp_dir, mktemp_root, MEMORY_SH, MEMORY_PS1, REPO_ROOT, CANON_MEMORY_SH.
 
+_mrc_assert() { assert_fixture_root "$1" || exit 1; }
+_mrc_git_at() { _mrc_assert "$1"; git -C "$1" "${@:2}"; }
+
 run_release_c_bash_only() {
   local R="" B="" T="" out="" rc=0 id="" p="" mut="" mutsh="" n=0
   mktemp_dir T
   mktemp_dir B
 
+  rc_assert() { _mrc_assert "$1"; }
+  rc_git_at() { _mrc_git_at "$@"; }
   rc_two_secret_hits() { # <check stdout> → 0 when exactly two secret failure lines
     [[ "$(grep -c 'check failed secret' <<<"$1")" -eq 2 ]]
   }
@@ -14,12 +19,14 @@ run_release_c_bash_only() {
     n=$((n + 1))
     R="$T/r$n"
     mkdir -p "$R"
-    git -C "$R" init -q
+    rc_assert "$R"
+    rc_git_at "$R" init -q
   }
 
-  rc_git() { git -C "$R" -c user.email=e@x -c user.name=n "$@"; }
+  rc_git() { rc_assert "$R"; git -C "$R" -c user.email=e@x -c user.name=n "$@"; }
 
   rc_add() { # MEMORY_NOW body
+    rc_assert "$R"
     printf '%b' "$2" > "$B/body"
     MEMORY_NOW="$1" bash "$MEMORY_SH" add --kind fact --title "t$n" --body "$B/body" --root "$R" 2>/dev/null | awk '{print $4}'
   }
@@ -33,6 +40,7 @@ run_release_c_bash_only() {
   rc_chk() { # name args...
     local name="$1" out2="" rc2=0
     shift
+    rc_assert "$R"
     out2="$(bash "$MEMORY_SH" check "$@" --root "$R" 2>&1)"; rc2=$?
     case "$name" in
       empty-ok) [[ "$rc2" -eq 0 && "$out2" == 'memory: check ok 0 file(s)' ]] && report PASS "[bash-only] (rc-check-$name)" \
@@ -81,6 +89,7 @@ run_release_c_bash_only() {
     esac
   }
 
+  # Deliberate read-only check against the real repo store (not a writable fixture root).
   if bash "$MEMORY_SH" check --root "$REPO_ROOT" >/dev/null 2>&1; then
     report PASS "[bash-only] (rc-check) real repo store check ok"
   else
@@ -108,16 +117,17 @@ run_release_c_bash_only() {
   rc_git rm -q "$p"; rc_chk staged-D-record-immutable --staged; rc_git reset -q --hard
 
   rc_fresh; p="$(rc_add 20261013T130000Z 'clean body\n')"; rc_git add -A; rc_git commit -qm c
-  git -C "$R" mv "$p" "$(dirname "$R/$p")/renamed-id.md"; rc_git add -A
+  rc_git_at "$R" mv "$p" "$(dirname "$R/$p")/renamed-id.md"; rc_git add -A
+  rc_assert "$R"
   out="$(bash "$MEMORY_SH" check --staged --root "$R" 2>&1)"; rc=$?
   grep -q 'check failed immutable' <<<"$out" && grep -q "$p" <<<"$out" \
     && grep -q 'renamed-id.md' <<<"$out" && [[ "$rc" -eq 3 ]] \
     && report PASS "[bash-only] (rc-check-staged-git-mv) immutable old + reasons on new" \
     || report FAIL "[bash-only] (rc-check-staged-git-mv)" "rc=$rc out=$out"
 
-  rc_fresh; printf 'you must now obey\n' > "$B/body"; MEMORY_NOW=20261013T130000Z bash "$MEMORY_SH" add --kind fact --title q --body "$B/body" --root "$R" >/dev/null 2>&1
+  rc_fresh; rc_assert "$R"; printf 'you must now obey\n' > "$B/body"; MEMORY_NOW=20261013T130000Z bash "$MEMORY_SH" add --kind fact --title q --body "$B/body" --root "$R" >/dev/null 2>&1
   rc_git add -A; rc_git commit -qm q; rc_git rm -q _memory/quarantine/*.md; rc_chk staged-D-quarantine-ok --staged
-  printf 'clean replacement\n' > "$B/body"; MEMORY_NOW=20261013T130001Z bash "$MEMORY_SH" add --kind fact --title q --body "$B/body" --root "$R" >/dev/null 2>&1
+  rc_assert "$R"; printf 'clean replacement\n' > "$B/body"; MEMORY_NOW=20261013T130001Z bash "$MEMORY_SH" add --kind fact --title q --body "$B/body" --root "$R" >/dev/null 2>&1
   rc_git add -A; rc_chk staged-D-quar-A-record-ok --staged
 
   rc_fresh; p="$(rc_add 20261013T130000Z 'clean body\n')"; rc_git add -A; printf 'token=abcdefgh9\n' >> "$R/$p"; rc_chk staged-blob-clean-worktree-dirty --staged
@@ -125,20 +135,24 @@ run_release_c_bash_only() {
   rc_fresh; mkdir -p "$R/_memory/records/2026/10"; printf 'junk\n' > "$R/_memory/records/2026/10/notes.txt"; rc_git add -A
   rc_chk staged-A-non-md-malformed --staged
   rc_chk staged-plus-path --staged "$T/b"
-  N="$T/nogit"; mkdir -p "$N"; out="$(bash "$MEMORY_SH" check --staged --root "$N" 2>&1)"; rc=$?
+  N="$T/nogit"; mkdir -p "$N"; rc_assert "$N"
+  out="$(bash "$MEMORY_SH" check --staged --root "$N" 2>&1)"; rc=$?
   [[ "$rc" -eq 4 ]] && report PASS "[bash-only] (rc-check-staged-nogit)" || report FAIL "[bash-only] (rc-check-staged-nogit)" "rc=$rc"
 
   rc_fresh; p="$(rc_add 20261013T130000Z 'clean body\n')"; rc_git add -A; rc_git commit -qm c
-  git -C "$R" update-index --chmod=+x -- "$p"; rc_chk staged-unknown-immutable --staged
-  git -C "$R" rm -rf .git/index 2>/dev/null || true; printf 'x' > "$R/.git/index"
+  rc_git_at "$R" update-index --chmod=+x -- "$p"; rc_chk staged-unknown-immutable --staged
+  rc_git_at "$R" rm -rf .git/index 2>/dev/null || true; printf 'x' > "$R/.git/index"
+  rc_assert "$R"
   out="$(bash "$MEMORY_SH" check --staged --root "$R" 2>&1)"; rc=$?
   [[ "$rc" -eq 4 && "$out" == *'git diff failed'* ]] && report PASS "[bash-only] (rc-check-staged-diff)" \
     || report FAIL "[bash-only] (rc-check-staged-diff)" "rc=$rc out=$out"
 
-  R0="$T/top"; mkdir -p "$R0/sub"; git -C "$R0" init -q; R="$R0/sub"; p="$(rc_add 20261013T130000Z 'clean body\n')"; git -C "$R0" add -A
+  R0="$T/top"; mkdir -p "$R0/sub"; rc_assert "$R0"; rc_git_at "$R0" init -q
+  R="$R0/sub"; rc_assert "$R"; p="$(rc_add 20261013T130000Z 'clean body\n')"; rc_git_at "$R0" add -A
   out="$(bash "$MEMORY_SH" check --staged --root "$R" 2>&1)"; rc=$?
   [[ "$rc" -eq 0 ]] && report PASS "[bash-only] (rc-check-subdir-staged-clean)" || report FAIL "[bash-only] (rc-check-subdir-staged-clean)" "rc=$rc"
-  p2="$(rc_add 20261013T130001Z 'other\n')"; printf 'token=abcdefgh9\n' >> "$R/$p2"; rc_fixsha "$R/$p2"; git -C "$R0" add -A
+  p2="$(rc_add 20261013T130001Z 'other\n')"; printf 'token=abcdefgh9\n' >> "$R/$p2"; rc_fixsha "$R/$p2"; rc_git_at "$R0" add -A
+  rc_assert "$R"
   out="$(bash "$MEMORY_SH" check --staged --root "$R" 2>&1)"; rc=$?
   [[ "$rc" -eq 3 && "$out" == *secret* ]] && report PASS "[bash-only] (rc-check-subdir-staged-secret)" \
     || report FAIL "[bash-only] (rc-check-subdir-staged-secret)" "rc=$rc out=$out"
@@ -156,6 +170,7 @@ run_release_c_bash_only() {
   p="$(rc_add 20261013T130010Z 'clean one\n')"
   p2="$(rc_add 20261013T130011Z 'clean two\n')"
   printf 'token=abcdefgh9\n' >> "$R/$p"
+  rc_assert "$R"
   out_one="$(bash "$MEMORY_SH" check "$R/$p" --root "$R" 2>&1)"; rc_one=$?
   if rc_two_secret_hits "$out_one"; then
     report FAIL "[bash-only] (rc-check-title-body-secret-proof-negative)" "one-hit control must not satisfy predicate"
@@ -165,6 +180,7 @@ run_release_c_bash_only() {
     report FAIL "[bash-only] (rc-check-title-body-secret-proof-negative)" "rc=$rc_one out=$out_one"
   fi
   printf 'token=abcdefgh9\n' >> "$R/$p2"
+  rc_assert "$R"
   out="$(bash "$MEMORY_SH" check "$R/$p" "$R/$p2" --root "$R" 2>&1)"; rc=$?
   if [[ "$rc" -eq 3 ]] && rc_two_secret_hits "$out"; then
     report PASS "[bash-only] (rc-check-title-body-secret-proof) two secret lines → predicate true"
@@ -172,7 +188,7 @@ run_release_c_bash_only() {
     report FAIL "[bash-only] (rc-check-title-body-secret-proof)" "rc=$rc out=$out"
   fi
 
-  rc_fresh; printf 'password=abcdefgh9\n' > "$B/red.md"
+  rc_fresh; rc_assert "$R"; printf 'password=abcdefgh9\n' > "$B/red.md"
   out="$(MEMORY_NOW=20261013T140002Z bash "$MEMORY_SH" add --kind fact --title 'token=abcdefgh12' --body "$B/red.md" --root "$R" 2>&1)"
   p="$(find "$R/_memory/records" -name '*.md' | tail -1)"
   grep -q 'memory: redacted' <<<"$out" && grep -q '\[REDACTED:secret\]' "$p" \
@@ -190,7 +206,8 @@ run_release_c_bash_only() {
   [[ ! -f "$R/$p" ]] && report PASS "[bash-only] (rc-rm) rm untracked ok" || report FAIL "[bash-only] (rc-rm) untracked"
   MEMORY_NOW=20261013T140001Z bash "$MEMORY_SH" add --kind fact --title tr --body "$B/body" --root "$R" >/dev/null 2>&1
   p="$(find "$R/_memory/records" -name '*.md' | head -1)"; id="$(basename "$p" .md)"
-  git -C "$R" add -A && git -C "$R" -c user.email=e@x -c user.name=n commit -qm x
+  rc_git_at "$R" add -A && rc_git_at "$R" -c user.email=e@x -c user.name=n commit -qm x
+  rc_assert "$R"
   bash "$MEMORY_SH" rm "$id" --root "$R" >/dev/null 2>&1; rc=$?
   [[ "$rc" -eq 2 ]] && report PASS "[bash-only] (rc-rm-tracked) tracked rm exit 2" \
     || report FAIL "[bash-only] (rc-rm-tracked)" "rc=$rc"
@@ -198,11 +215,13 @@ run_release_c_bash_only() {
   [[ "$rc" -eq 4 ]] && report PASS "[bash-only] (rc-rm-missing) missing rm exit 4" || report FAIL "[bash-only] (rc-rm-missing)" "rc=$rc"
   bash "$MEMORY_SH" rm notanid --root "$R" >/dev/null 2>&1; rc=$?
   [[ "$rc" -eq 2 ]] && report PASS "[bash-only] (rc-rm-invalid) invalid id exit 2" || report FAIL "[bash-only] (rc-rm-invalid)" "rc=$rc"
+  rc_assert "$N"
   bash "$MEMORY_SH" rm "$id" --root "$N" >/dev/null 2>&1; rc=$?
   [[ "$rc" -eq 4 ]] && report PASS "[bash-only] (rc-rm-nogit) non-git rm exit 4" || report FAIL "[bash-only] (rc-rm-nogit)" "rc=$rc"
 
   rc_fresh; p="$(rc_add 20261013T140002Z 'rm ls-files body\n')"; id="$(basename "$p" .md)"
-  git -C "$R" rm -rf .git/index 2>/dev/null || true; printf 'x' > "$R/.git/index"
+  rc_git_at "$R" rm -rf .git/index 2>/dev/null || true; printf 'x' > "$R/.git/index"
+  rc_assert "$R"
   err="$(bash "$MEMORY_SH" rm "$id" --root "$R" 2>&1 >/dev/null)"; rc=$?
   [[ "$rc" -eq 4 && "$err" == 'memory: rm: git ls-files failed' && -f "$R/$p" ]] \
     && report PASS "[bash-only] (rc-rm-lsfiles-fatal) corrupt index exit 4 keeps record" \
@@ -230,6 +249,31 @@ run_release_c_bash_only() {
     report SKIP "[bash-only] (rc-pwsh-stub) pwsh absent"
   fi
 
+  if ( assert_fixture_root "$REPO_ROOT" 2>/dev/null ); then
+    report FAIL "[bash-only] fixture-root guard rejects repository root"
+  else
+    report PASS "[bash-only] fixture-root guard rejects repository root"
+  fi
+  if ( assert_fixture_root "" 2>/dev/null ); then
+    report FAIL "[bash-only] fixture-root guard rejects empty root"
+  else
+    report PASS "[bash-only] fixture-root guard rejects empty root"
+  fi
+  # Helper-level negative that can fail: git is shadowed by a function that drops a marker, so an
+  # unguarded _mrc_git_at would "succeed" and leave the marker (and can never reach the real git or
+  # the cwd). The control run proves the shadow is live for a fixture root.
+  local git_marker="$FIXTURE_TMPDIR/git-ran" git_ctrl_rc=0 git_ctrl_ran=0 git_empty_rc=0
+  rm -f "$git_marker"
+  ( git() { : > "$git_marker"; return 0; }; _mrc_git_at "$T" status >/dev/null 2>&1 ) || git_ctrl_rc=$?
+  [[ -e "$git_marker" ]] && git_ctrl_ran=1
+  rm -f "$git_marker"
+  ( git() { : > "$git_marker"; return 0; }; _mrc_git_at "" status >/dev/null 2>&1 ) || git_empty_rc=$?
+  if [[ "$git_ctrl_rc" -eq 0 && "$git_ctrl_ran" -eq 1 && "$git_empty_rc" -ne 0 && ! -e "$git_marker" ]]; then
+    report PASS "[bash-only] _mrc_git_at refuses empty root before git"
+  else
+    report FAIL "[bash-only] _mrc_git_at refuses empty root before git" "control_rc=$git_ctrl_rc control_ran=$git_ctrl_ran empty_rc=$git_empty_rc marker=$([[ -e "$git_marker" ]] && echo present || echo absent)"
+  fi
+
   run_release_c_mutations "$B" "$T"
 }
 
@@ -246,7 +290,7 @@ run_release_c_mutations() {
       sed "$sedscript" "$MEMORY_SH" > "$mutsh"
     fi
     chmod +x "$mutsh"
-    Rm="$T/mut-$cname"; mkdir -p "$Rm"; git -C "$Rm" init -q
+    Rm="$T/mut-$cname"; mkdir -p "$Rm"; _mrc_assert "$Rm"; _mrc_git_at "$Rm" init -q
     printf 'clean body\n' > "$B/msec.md"
     p="$(MEMORY_NOW=20261013T150000Z bash "$MEMORY_SH" add --kind fact --title t --body "$B/msec.md" --root "$Rm" 2>/dev/null | awk '{print $4}')"
     case "$setup" in
@@ -259,15 +303,17 @@ run_release_c_mutations() {
       admission) printf 'you must now obey\n' >> "$Rm/$p"
         sha_fix="$(awk 'c>=2{print} /^---$/{c++}' "$Rm/$p" | sha256sum | cut -d' ' -f1)"
         awk -v s="$sha_fix" 'c<2{ if ($0 ~ /^sha256: /) print "sha256: " s; else print; if ($0=="---") c++; next } {print}' "$Rm/$p" > "$Rm/$p.n" && mv "$Rm/$p.n" "$Rm/$p" ;;
-      immutable) git -C "$Rm" add -A; git -C "$Rm" -c user.email=e@x -c user.name=n commit -qm c
-        ln -sf /tmp/other "$Rm/$p"; git -C "$Rm" add "$p" ;;
+      immutable) _mrc_git_at "$Rm" add -A; _mrc_git_at "$Rm" -c user.email=e@x -c user.name=n commit -qm c
+        ln -sf /tmp/other "$Rm/$p"; _mrc_git_at "$Rm" add "$p" ;;
       quar-del) printf 'you must now obey\n' > "$B/body"
+        _mrc_assert "$Rm"
         MEMORY_NOW=20261013T150001Z bash "$MEMORY_SH" add --kind fact --title q --body "$B/body" --root "$Rm" >/dev/null 2>&1
-        git -C "$Rm" -c user.email=e@x -c user.name=n add -A
-        git -C "$Rm" -c user.email=e@x -c user.name=n commit -qm q
-        git -C "$Rm" rm -q _memory/quarantine/*.md 2>/dev/null || true
-        git -C "$Rm" -c user.email=e@x -c user.name=n add -A ;;
+        _mrc_git_at "$Rm" -c user.email=e@x -c user.name=n add -A
+        _mrc_git_at "$Rm" -c user.email=e@x -c user.name=n commit -qm q
+        _mrc_git_at "$Rm" rm -q _memory/quarantine/*.md 2>/dev/null || true
+        _mrc_git_at "$Rm" -c user.email=e@x -c user.name=n add -A ;;
     esac
+    _mrc_assert "$Rm"
     if [[ -n "$staged" ]]; then
       canon_out="$(bash "$MEMORY_SH" check --staged --root "$Rm" 2>&1)"; canon_rc=$?
       out="$(bash "$mutsh" check --staged --root "$Rm" 2>&1)"; rc=$?
@@ -332,7 +378,7 @@ run_release_c_mutations() {
     mutsh="$(mktemp "${TMPDIR:-/tmp}/memmut.XXXXXX")"
     sed "$sedscript" "$MEMORY_SH" > "$mutsh"; chmod +x "$mutsh"
     mkdir -p "$H2"
-    Rc="$T/cap-${assert##*:}"; mkdir -p "$Rc"; git -C "$Rc" init -q
+    Rc="$T/cap-${assert##*:}"; mkdir -p "$Rc"; _mrc_assert "$Rc"; _mrc_git_at "$Rc" init -q
     S1="$(printf '%s' "$Rc" | sed 's/[^A-Za-z0-9]/-/g; s/^-//')"
     CU2="$H2/.cursor/projects/$S1/agent-transcripts"
     case "$cap_mode" in
@@ -340,15 +386,17 @@ run_release_c_mutations() {
       live) rc_cap_cursor "$CU2" c-live-mut hello live ;;
       out-of-range) rc_cap_cursor "$CU2" c-old-mut old old ;;
       unchanged) rc_cap_cursor "$CU2" c-same same idle
-        HOME="$H2" bash "$MEMORY_SH" capture --root "$Rc" --since 2026-01-01 --harness cursor >/dev/null 2>&1 ;;
+        _mrc_assert "$Rc"; HOME="$H2" bash "$MEMORY_SH" capture --root "$Rc" --since 2026-01-01 --harness cursor >/dev/null 2>&1 ;;
       unreadable) mkdir -p "$CU2/c-bad"
         printf '{{bad json\n' > "$CU2/c-bad/c-bad.jsonl"
         touch -t 202610010000 "$CU2/c-bad/c-bad.jsonl" ;;
     esac
     case "$cap_mode" in
-      live) canon_out="$(HOME="$H2" bash "$MEMORY_SH" capture --root "$Rc" --harness cursor 2>&1)"
+      live) _mrc_assert "$Rc"
+        canon_out="$(HOME="$H2" bash "$MEMORY_SH" capture --root "$Rc" --harness cursor 2>&1)"
         out="$(HOME="$H2" bash "$mutsh" capture --root "$Rc" --harness cursor 2>&1)" ;;
-      *) canon_out="$(HOME="$H2" bash "$MEMORY_SH" capture --root "$Rc" --since 2026-01-01 --harness cursor 2>&1)"
+      *) _mrc_assert "$Rc"
+        canon_out="$(HOME="$H2" bash "$MEMORY_SH" capture --root "$Rc" --since 2026-01-01 --harness cursor 2>&1)"
         out="$(HOME="$H2" bash "$mutsh" capture --root "$Rc" --since 2026-01-01 --harness cursor 2>&1)" ;;
     esac
     rm -f "$mutsh"

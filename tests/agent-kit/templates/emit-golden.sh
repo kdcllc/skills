@@ -26,13 +26,18 @@ done
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$HERE/../../.." && pwd)"
-cd "$REPO_ROOT" || exit 1
+FIXTURE_TMPDIR="$(mktemp -d "${TMPDIR:-/tmp}/emitgolden.XXXXXX")" || exit 1
+export TMPDIR="$FIXTURE_TMPDIR"
+# shellcheck source=../lib/fixture-root.sh
+. "$HERE/../lib/fixture-root.sh"
 
 . "$HERE/../lib/parallel.sh"
 
 EMIT_SH="${EMIT_SH:-$REPO_ROOT/skills/agent-kit/bin/emit.sh}"
+case "$EMIT_SH" in /*) ;; *) EMIT_SH="$REPO_ROOT/$EMIT_SH" ;; esac
 KIT="$REPO_ROOT/skills/agent-kit"
 FIXTURE_ROOT="${EMIT_GOLDEN_ROOT:-$REPO_ROOT/tests/agent-kit/fixtures/emit-golden}"
+case "$FIXTURE_ROOT" in /*) ;; *) FIXTURE_ROOT="$REPO_ROOT/$FIXTURE_ROOT" ;; esac
 
 PATH_FARM_DIRS=()
 PATH_NO_PWSH=""
@@ -63,7 +68,8 @@ build_path_no_pwsh() {
     fi
     [ -n "$entry" ] || continue
     if [ -x "$entry/pwsh" ] || [ -f "$entry/pwsh" ]; then
-      farm="$(mktemp -d)"
+      farm="$(mktemp -d "$FIXTURE_TMPDIR/pwf.XXXXXX")" || exit 1
+      assert_fixture_root "$farm" || exit 1
       PATH_FARM_DIRS+=("$farm")
       for f in "$entry"/*; do
         [ -e "$f" ] || continue
@@ -88,6 +94,7 @@ run_emit_capture() { # root file_stdout file_stderr file_rc extra-args...
   local root="$1" f_out="$2" f_err="$3" f_rc="$4"
   shift 4
   local rc
+  assert_fixture_root "$root" || exit 1
   init_path_no_pwsh
   PATH="$PATH_NO_PWSH" "$BASH" "$EMIT_SH" --root "$root" --kit "$KIT" "$@" \
     >"$f_out" 2>"$f_err"
@@ -296,7 +303,8 @@ run_case() { # name
     return 1
   fi
 
-  root="$(mktemp -d)"
+  root="$(mktemp -d "$FIXTURE_TMPDIR/case.XXXXXX")" || exit 1
+  assert_fixture_root "$root" || exit 1
   fo="$(mktemp)"; fe="$(mktemp)"; fr="$(mktemp)"
   run_case_emit "$name" "$root" "$fo" "$fe" "$fr" || {
     report_fail "$name" "emit invocation failed"
@@ -337,6 +345,7 @@ CASES=(
 _suite_cleanup() {
   cleanup_farms
   par_cleanup
+  rm -rf "$FIXTURE_TMPDIR"
 }
 trap _suite_cleanup EXIT
 
@@ -374,6 +383,42 @@ if [ ! -f "$FIXTURE_ROOT/cases/self/emit.exit-code.golden" ]; then
 fi
 
 init_path_no_pwsh
+
+if ( assert_fixture_root "$REPO_ROOT" 2>/dev/null ); then
+  report_fail "fixture-root guard rejects repository root"
+else
+  report_pass "fixture-root guard rejects repository root"
+fi
+if ( assert_fixture_root "" 2>/dev/null ); then
+  report_fail "fixture-root guard rejects empty root"
+else
+  report_pass "fixture-root guard rejects empty root"
+fi
+# Helper-level negative that can fail: EMIT_SH is an `exit 0` stub that drops a marker, so an
+# unguarded run_emit_capture would succeed and leave the marker. The control run proves the stub is live.
+_golden_probe_out="$(mktemp "$FIXTURE_TMPDIR/probe-out.XXXXXX")"
+_golden_probe_err="$(mktemp "$FIXTURE_TMPDIR/probe-err.XXXXXX")"
+_golden_probe_rc="$(mktemp "$FIXTURE_TMPDIR/probe-rc.XXXXXX")"
+_golden_stub="$FIXTURE_TMPDIR/emit-stub.sh"
+_golden_marker="$FIXTURE_TMPDIR/emit-stub-ran"
+printf '%s\n' ': > "$EMIT_STUB_MARKER"' 'exit 0' > "$_golden_stub"
+rm -f "$_golden_marker"
+_golden_ctrl_root="$(mktemp -d "$FIXTURE_TMPDIR/probe-root.XXXXXX")" || exit 1
+assert_fixture_root "$_golden_ctrl_root" || exit 1
+_golden_ctrl_rc=0
+( EMIT_STUB_MARKER="$_golden_marker" EMIT_SH="$_golden_stub" run_emit_capture "$_golden_ctrl_root" "$_golden_probe_out" "$_golden_probe_err" "$_golden_probe_rc" 2>/dev/null ) || _golden_ctrl_rc=$?
+_golden_ctrl_ran=0
+[ -e "$_golden_marker" ] && _golden_ctrl_ran=1
+rm -f "$_golden_marker"
+_golden_empty_rc=0
+( EMIT_STUB_MARKER="$_golden_marker" EMIT_SH="$_golden_stub" run_emit_capture "" "$_golden_probe_out" "$_golden_probe_err" "$_golden_probe_rc" 2>/dev/null ) || _golden_empty_rc=$?
+if [ "$_golden_ctrl_rc" -eq 0 ] && [ "$_golden_ctrl_ran" -eq 1 ] \
+  && [ "$_golden_empty_rc" -ne 0 ] && [ ! -e "$_golden_marker" ]; then
+  report_pass "run_emit_capture refuses empty root before emit"
+else
+  report_fail "run_emit_capture refuses empty root before emit" "control_rc=$_golden_ctrl_rc control_ran=$_golden_ctrl_ran empty_rc=$_golden_empty_rc marker=$([ -e "$_golden_marker" ] && echo present || echo absent)"
+fi
+rm -rf "$_golden_probe_out" "$_golden_probe_err" "$_golden_probe_rc" "$_golden_ctrl_root" "$_golden_stub"
 
 PAR_COUNTERS="pass fail"
 PAR_LISTS="FAILED_CASES"

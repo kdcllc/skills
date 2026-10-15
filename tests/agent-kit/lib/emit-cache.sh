@@ -11,6 +11,20 @@ EMIT_CACHE_FAILED_STAGING=""
 EMIT_CACHE_RC=""
 EMIT_CACHE_OUT=""
 EMIT_CACHE_ERR=""
+EMIT_CACHE_INIT_FAILED=0
+
+_emit_cache_fail_init() {
+  EMIT_CACHE_INIT_FAILED=1
+  return 1
+}
+
+_emit_cache_refuse_if_broken() {
+  if [ "${EMIT_CACHE_INIT_FAILED:-0}" -eq 1 ]; then
+    echo "emit-cache: init failed; refusing further cache operations" >&2
+    return 1
+  fi
+  return 0
+}
 
 _emit_cache_sha256() {
   if command -v sha256sum >/dev/null 2>&1; then
@@ -32,32 +46,143 @@ _emit_cache_file_hash() {
   fi
 }
 
+_emit_cache_resolve_dir() {
+  local p="${1-}"
+  [ -n "$p" ] || return 1
+  [ -d "$p" ] || return 1
+  (CDPATH='' cd -- "$p" >/dev/null 2>&1 && pwd -P)
+}
+
+_emit_cache_repo_root_abs() {
+  local rr="${REPO_ROOT:-}"
+  [ -n "$rr" ] || return 1
+  _emit_cache_resolve_dir "$rr"
+}
+
+# Writable emit/copy targets outside the shared cache: refuse empty, relative, repo paths.
+_emit_cache_assert_writable_root() {
+  local root="${1-}" abs repo_abs cache cache_abs
+  if [ -z "$root" ]; then
+    echo "emit-cache: empty root" >&2
+    return 1
+  fi
+  case "$root" in
+    /*) ;;
+    *)
+      echo "emit-cache: root is not an absolute path: $root" >&2
+      return 1
+      ;;
+  esac
+  if [ ! -d "$root" ]; then
+    echo "emit-cache: root is not an existing directory: $root" >&2
+    return 1
+  fi
+  cache="$(_emit_cache_dir 2>/dev/null)" || cache=""
+  if [ -n "$cache" ] && [ "$cache" != "off" ]; then
+    _emit_cache_assert_cache_dir "$cache" || return 1
+    cache_abs="$(_emit_cache_resolve_dir "$cache")" && [ -n "$cache_abs" ] || {
+      echo "emit-cache: cannot resolve cache dir: $cache" >&2
+      return 1
+    }
+    abs="$(_emit_cache_resolve_dir "$root")" && [ -n "$abs" ] || {
+      echo "emit-cache: cannot resolve root: $root" >&2
+      return 1
+    }
+    case "$abs" in
+      "$cache_abs" | "$cache_abs"/*) return 0 ;;
+    esac
+  fi
+  if type assert_fixture_root >/dev/null 2>&1; then
+    assert_fixture_root "$root"
+    return $?
+  fi
+  abs="$(_emit_cache_resolve_dir "$root")" && [ -n "$abs" ] || {
+    echo "emit-cache: cannot resolve root: $root" >&2
+    return 1
+  }
+  repo_abs="$(_emit_cache_repo_root_abs)" || {
+    echo "emit-cache: REPO_ROOT unset or not a directory" >&2
+    return 1
+  }
+  case "$abs" in
+    "$repo_abs" | "$repo_abs"/*)
+      echo "emit-cache: refused repository root: $abs" >&2
+      return 1
+      ;;
+  esac
+  return 0
+}
+
+# Shared/per-suite cache directory (may sit outside FIXTURE_TMPDIR, e.g. run-all log dir).
+_emit_cache_assert_cache_dir() {
+  local cache="${1-}" abs repo_abs
+  if [ -z "$cache" ]; then
+    echo "emit-cache: empty cache dir" >&2
+    return 1
+  fi
+  case "$cache" in
+    /*) ;;
+    *)
+      echo "emit-cache: cache dir is not an absolute path: $cache" >&2
+      return 1
+      ;;
+  esac
+  if [ ! -d "$cache" ]; then
+    echo "emit-cache: cache dir is not an existing directory: $cache" >&2
+    return 1
+  fi
+  abs="$(_emit_cache_resolve_dir "$cache")" && [ -n "$abs" ] || {
+    echo "emit-cache: cannot resolve cache dir: $cache" >&2
+    return 1
+  }
+  repo_abs="$(_emit_cache_repo_root_abs)" || {
+    echo "emit-cache: REPO_ROOT unset or not a directory" >&2
+    return 1
+  }
+  case "$abs" in
+    "$repo_abs" | "$repo_abs"/*)
+      echo "emit-cache: cache dir is the repository or under it: $abs" >&2
+      return 1
+      ;;
+  esac
+  return 0
+}
+
 emit_cache_init() {
+  EMIT_CACHE_INIT_FAILED=0
   if [ "${AGENT_KIT_EMIT_CACHE:-}" = "off" ]; then
-    if [ -z "${EMIT_CACHE_OFF_ROOT:-}" ] || [ ! -d "${EMIT_CACHE_OFF_ROOT:-}" ]; then
+    if [ -n "${EMIT_CACHE_OFF_ROOT:-}" ] && [ -d "${EMIT_CACHE_OFF_ROOT:-}" ]; then
+      _emit_cache_assert_writable_root "$EMIT_CACHE_OFF_ROOT" || { _emit_cache_fail_init; return 1; }
+    elif [ -z "${EMIT_CACHE_OFF_ROOT:-}" ] || [ ! -d "${EMIT_CACHE_OFF_ROOT:-}" ]; then
       EMIT_CACHE_OFF_ROOT="$(mktemp -d 2>/dev/null || mktemp -d -t emit-off-root)"
       EMIT_CACHE_WE_OWN=1
+      _emit_cache_assert_writable_root "$EMIT_CACHE_OFF_ROOT" || { _emit_cache_fail_init; return 1; }
     fi
     return 0
   fi
   if [ -n "${AGENT_KIT_EMIT_CACHE:-}" ]; then
+    _emit_cache_assert_cache_dir "$AGENT_KIT_EMIT_CACHE" || { _emit_cache_fail_init; return 1; }
     return 0
   fi
   if [ -n "${EMIT_CACHE_PRIVATE:-}" ] && [ -d "${EMIT_CACHE_PRIVATE:-}" ]; then
+    _emit_cache_assert_cache_dir "$EMIT_CACHE_PRIVATE" || { _emit_cache_fail_init; return 1; }
     export AGENT_KIT_EMIT_CACHE="$EMIT_CACHE_PRIVATE"
     return 0
   fi
   EMIT_CACHE_PRIVATE="$(mktemp -d 2>/dev/null || mktemp -d -t emit-cache)"
   EMIT_CACHE_WE_OWN=1
+  _emit_cache_assert_cache_dir "$EMIT_CACHE_PRIVATE" || { _emit_cache_fail_init; return 1; }
   export AGENT_KIT_EMIT_CACHE="$EMIT_CACHE_PRIVATE"
 }
 
 _emit_cache_dir() {
+  _emit_cache_refuse_if_broken || return 1
   if [ "${AGENT_KIT_EMIT_CACHE:-}" = "off" ]; then
     echo "off"
     return 0
   fi
   if [ -n "${AGENT_KIT_EMIT_CACHE:-}" ]; then
+    _emit_cache_assert_cache_dir "$AGENT_KIT_EMIT_CACHE" || return 1
     echo "$AGENT_KIT_EMIT_CACHE"
     return 0
   fi
@@ -168,6 +293,7 @@ _emit_cache_run_emit() {
   local out_path="$4"
   local err_path="$5"
   shift 5
+  _emit_cache_assert_writable_root "$root" || return 1
   mkdir -p "$root"
   local rc=0
   if "$BASH" "$EMIT_SH" --root "$root" --kit "$KIT" --answers "$answers" "$@" >"$out_path" 2>"$err_path"; then
@@ -184,8 +310,9 @@ _emit_cache_fill() {
   local answers="$2"
   shift 2
   local cache_root lock staging entry rc lock_wait=0
-  cache_root="$(_emit_cache_dir)"
-  mkdir -p "$cache_root"
+  _emit_cache_refuse_if_broken || return 1
+  cache_root="$(_emit_cache_dir)" || return 1
+  _emit_cache_assert_cache_dir "$cache_root" || return 1
   entry="$cache_root/entry-${key}"
   if [ -d "$entry/root" ]; then
     return 0
@@ -238,14 +365,18 @@ _emit_cache_used_keys_file() {
 }
 
 _emit_cache_note_used() {
-  local key="$1"
-  local f
+  local key="$1" cache_root f
+  _emit_cache_refuse_if_broken || return 1
   case " ${EMIT_CACHE_USED} " in
     *" ${key} "*) ;;
     *) EMIT_CACHE_USED="${EMIT_CACHE_USED} ${key}" ;;
   esac
-  f="$(_emit_cache_used_keys_file)" || return 0
-  mkdir -p "$(dirname "$f")"
+  cache_root="$(_emit_cache_dir)" || return 1
+  if [ "$cache_root" = "off" ]; then
+    return 0
+  fi
+  _emit_cache_assert_cache_dir "$cache_root" || return 1
+  f="$cache_root/.used-keys"
   if ! grep -qxF "$key" "$f" 2>/dev/null; then
     echo "$key" >>"$f"
   fi
@@ -255,15 +386,18 @@ emit_cache_root() {
   local var="$1"
   local answers="$2"
   shift 2
+  _emit_cache_refuse_if_broken || return 1
   _emit_cache_reject_args "$@" || return $?
   local cache_root key entry root rc
-  cache_root="$(_emit_cache_dir)"
+  cache_root="$(_emit_cache_dir)" || return 1
   if [ "$cache_root" = "off" ]; then
     local staging
     if [ -z "${EMIT_CACHE_OFF_ROOT:-}" ] || [ ! -d "${EMIT_CACHE_OFF_ROOT:-}" ]; then
-      emit_cache_init
+      emit_cache_init || return 1
     fi
+    _emit_cache_assert_writable_root "$EMIT_CACHE_OFF_ROOT" || return 1
     staging="$(mktemp -d "$EMIT_CACHE_OFF_ROOT/staging.XXXXXX" 2>/dev/null || mktemp -d -t emit-off-stg)"
+    _emit_cache_assert_writable_root "$staging" || return 1
     mkdir -p "$staging/root"
     rc="$(_emit_cache_run_emit "$staging/root" "$answers" "$staging/rc" "$staging/stdout" "$staging/stderr" "$@")"
     EMIT_CACHE_RC="$staging/rc"
@@ -304,6 +438,8 @@ emit_cache_copy() {
   local answers="$2"
   shift 2
   local src
+  _emit_cache_refuse_if_broken || return 1
+  _emit_cache_assert_writable_root "$dest" || return 1
   emit_cache_root src "$answers" "$@" || return $?
   rm -rf "$dest"
   mkdir -p "$dest"
@@ -312,10 +448,12 @@ emit_cache_copy() {
 
 emit_cache_verify() {
   local key entry cache_root f seen
-  cache_root="$(_emit_cache_dir)"
+  _emit_cache_refuse_if_broken || return 1
+  cache_root="$(_emit_cache_dir)" || return 1
   if [ "$cache_root" = "off" ]; then
     return 0
   fi
+  _emit_cache_assert_cache_dir "$cache_root" || return 1
   f="$cache_root/.used-keys"
   seen=""
   if [ -f "$f" ]; then

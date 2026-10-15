@@ -85,6 +85,21 @@ ON subagent invocation failure:
   NEVER substitute a different subagent type due to transient errors
 ```
 
+### Repository safety
+
+1. **Backup before destructive goals.** Before a goal whose tasks move, rename, or delete
+   user files (migrations, layout changes), take a restorable backup of the affected
+   paths — for example a tarball outside the repo or a throwaway branch — and record where it
+   is in the orchestration log.
+2. **Post-spawn repository check.** After every subagent returns, before trusting its
+   report, compare `HEAD`, the current branch, and `git config --local` user entries with
+   the values from before the spawn. Also compare the changed-file set
+   (`git status --porcelain`) with the task's write fence. Anything unexpected stops the
+   goal: log it, restore from git or the backup, and fix the cause before continuing.
+3. **Fixtures never touch the real repo.** Tests and fixtures must never act on the real
+   repository. Fixture roots live under a private temp directory, and explicitly empty path
+   arguments are rejected.
+
 ---
 
 ## Component Overview

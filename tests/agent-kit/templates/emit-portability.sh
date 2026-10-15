@@ -12,11 +12,15 @@ export EMIT_DATE=2026-09-03
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$HERE/../../.." && pwd)"
-cd "$REPO_ROOT" || exit 1
+FIXTURE_TMPDIR="$(mktemp -d "${TMPDIR:-/tmp}/emitport.XXXXXX")" || exit 1
+export TMPDIR="$FIXTURE_TMPDIR"
+# shellcheck source=../lib/fixture-root.sh
+. "$HERE/../lib/fixture-root.sh"
 
 . "$HERE/../lib/emit-cache.sh"
 
 EMIT_SH="${EMIT_SH:-$REPO_ROOT/skills/agent-kit/bin/emit.sh}"
+case "$EMIT_SH" in /*) ;; *) EMIT_SH="$REPO_ROOT/$EMIT_SH" ;; esac
 KIT="$REPO_ROOT/skills/agent-kit"
 FIXTURE="$REPO_ROOT/tests/agent-kit/fixtures/self-answers.json"
 EDGE_PROBE_JSON='{"zz":1,"ascii":"\b\f\/|\u007f|\u0000|\u001f|\"\\|\n\t\r","utf8":"\u00e9|\u20ac|\ud83c\udfad|\udc00x|\u0080|\u07ff|\u0800|\uffff|\ud800\udc00|\udbff\udfff","keys":{"":0,"a\tb":1,"\u00e9":2,"b":3,"B":4,"\ud83c\udfad":5},"empty":{"o":{},"a":[]},"nested":[{"k":[{"x":1,"w":[]},[]]},[[],{}],null,true,false],"nums":[-0,1.0,1e20,-1.5e-7,12345678901234567890,0.1,100,1E2,-0.0,1e1000]}'
@@ -47,14 +51,24 @@ _suite_cleanup() {
 }
 trap _suite_cleanup EXIT
 
-RUN_TMP="$(mktemp -d 2>/dev/null || mktemp -d -t ep-run)"
+RUN_TMP="$FIXTURE_TMPDIR"
 
 mktemp_root() {
-  mktemp -d "$RUN_TMP/root.XXXXXX"
+  local d
+  d="$(mktemp -d "$RUN_TMP/root.XXXXXX")" || exit 1
+  assert_fixture_root "$d" || exit 1
+  printf '%s' "$d"
 }
 
 mktemp_file() {
-  mktemp "$RUN_TMP/file.XXXXXX"
+  local f
+  f="$(mktemp "$RUN_TMP/file.XXXXXX")" || exit 1
+  printf '%s' "$f"
+}
+
+run_emit() {
+  assert_fixture_root "$1" || exit 1
+  "$BASH" "$EMIT_SH" --root "$1" --kit "$KIT" "${@:2}"
 }
 
 path_without() { # cmd...
@@ -74,7 +88,8 @@ path_without() { # cmd...
       if [ -e "$entry/$cmd" ] || [ -e "$entry/$cmd.exe" ]; then hit=1; fi
     done
     if [ "$hit" -eq 1 ]; then
-      farm="$(mktemp -d "$RUN_TMP/pwf.XXXXXX")"
+      farm="$(mktemp -d "$RUN_TMP/pwf.XXXXXX")" || exit 1
+      assert_fixture_root "$farm" || exit 1
       PATH_FARM_DIRS="${PATH_FARM_DIRS} ${farm}"
       for f in "$entry"/*; do
         [ -e "$f" ] || continue
@@ -165,7 +180,7 @@ case_t_json_edges() {
   head -n 1 "$FIXTURE" | grep -qx '{' || return 1
   EDGE_PROBE="$EDGE_PROBE_JSON" awk 'NR == 1 { print; print "  \"zzedge_probe\": " ENVIRON["EDGE_PROBE"] ","; next } { print }' "$FIXTURE" > "$ans"
   root="$(mktemp_root)"
-  "$BASH" "$EMIT_SH" --root "$root" --kit "$KIT" --answers "$ans" >/dev/null 2>&1 || return 1
+  run_emit "$root" --answers "$ans" >/dev/null 2>&1 || return 1
   got="$(sed -n '/^    "zzedge_probe": /,/^    }$/p' "$root/orchestration-kit.manifest.json")"
   want="$(edge_expected)"
   [ -n "$got" ] && [ "$got" = "$want" ]
@@ -198,7 +213,7 @@ case_upgrade_log_spawn_ps1_prune() {
   echo '@rem stale twin' > "$root/_kit/log-spawn.ps1"
   manifest_add_file_entry "$root/orchestration-kit.manifest.json" "_kit/log-spawn.ps1" "$root/_kit/log-spawn.ps1" || return 1
   rc=0
-  out="$("$BASH" "$EMIT_SH" --root "$root" --kit "$KIT" --force --upgrade 2>&1)" || rc=$?
+  out="$(run_emit "$root" --force --upgrade 2>&1)" || rc=$?
   [ "$rc" -eq 0 ] || return 1
   [ ! -f "$root/_kit/log-spawn.ps1" ] || return 1
   prune_n="$(printf '%s' "$out" | sed -n 's/.*pruned \([0-9][0-9]*\).*/\1/p' | head -1)"
@@ -210,7 +225,7 @@ emit_cache_init
 # jq hidden from PATH — direct emit (no cache; PATH is part of the emit environment)
 root="$(mktemp_root)"
 rc=0
-PATH="$(path_without jq)" "$BASH" "$EMIT_SH" --root "$root" --kit "$KIT" --answers "$FIXTURE" >/dev/null 2>&1 || rc=$?
+PATH="$(path_without jq)" run_emit "$root" --answers "$FIXTURE" >/dev/null 2>&1 || rc=$?
 if [ "$rc" -eq 0 ]; then
   report PASS "jq-hidden PATH: dogfood fixture emit succeeds"
 else
@@ -222,7 +237,7 @@ if ! command -v shasum >/dev/null 2>&1; then
   report SKIP "shasum-only PATH: emit succeeds" "shasum not installed"
 else
   root="$(mktemp_root)"
-  if PATH="$(path_without sha256sum)" "$BASH" "$EMIT_SH" --root "$root" --kit "$KIT" --answers "$FIXTURE" >/dev/null 2>&1; then
+  if PATH="$(path_without sha256sum)" run_emit "$root" --answers "$FIXTURE" >/dev/null 2>&1; then
     report PASS "shasum-only PATH: emit succeeds"
   else
     report FAIL "shasum-only PATH: emit succeeds"
@@ -232,7 +247,7 @@ fi
 # neither sha256 tool
 root="$(mktemp_root)"
 rc=0
-err="$(PATH="$(path_without sha256sum shasum)" "$BASH" "$EMIT_SH" --root "$root" --kit "$KIT" --answers "$FIXTURE" 2>&1 >/dev/null)" || rc=$?
+err="$(PATH="$(path_without sha256sum shasum)" run_emit "$root" --answers "$FIXTURE" 2>&1 >/dev/null)" || rc=$?
 if [ "$rc" -eq 2 ] && [[ "$err" == emit:* ]] && [[ "$err" == *sha256sum* ]] && [[ "$err" == *shasum* ]]; then
   report PASS "no sha256 tool on PATH: exit 2 with emit: message"
 else
@@ -265,13 +280,18 @@ case "${AGENT_KIT_DOCKER:-}" in
       report FAIL "bash:3.2 docker emit-golden.sh" "AGENT_KIT_DOCKER=1 but bash:3.2 image not available (docker pull bash:3.2)"
     else
       drc=0
-      git_common="$(git -C "$REPO_ROOT" rev-parse --git-common-dir 2>/dev/null || echo .git)"
-      git_common_abs="$(cd "$REPO_ROOT" && cd "$git_common" && pwd)"
-      repo_abs="$(cd "$REPO_ROOT" && pwd)"
-      docker_v=( -v "$repo_abs:/w" )
+      git_common="$(git -C "$REPO_ROOT_ABS" rev-parse --git-common-dir 2>/dev/null || echo .git)"
+      case "$git_common" in
+        /*) git_common_abs="$git_common" ;;
+        *) git_common_abs="$REPO_ROOT_ABS/$git_common" ;;
+      esac
+      if [ -d "$git_common_abs" ]; then
+        git_common_abs="$( (CDPATH='' cd -- "$git_common_abs" && pwd -P) )"
+      fi
+      docker_v=( -v "$REPO_ROOT_ABS:/w:ro" )
       safe_dirs=( "/w" )
-      if [ "$git_common_abs" != "$repo_abs" ] && [ -d "$git_common_abs" ]; then
-        docker_v+=( -v "$git_common_abs:$git_common_abs" )
+      if [ "$git_common_abs" != "$REPO_ROOT_ABS" ] && [ -d "$git_common_abs" ]; then
+        docker_v+=( -v "$git_common_abs:$git_common_abs:ro" )
         safe_dirs+=( "$git_common_abs" )
       fi
       safe_cfg=""
@@ -291,6 +311,37 @@ case "${AGENT_KIT_DOCKER:-}" in
     report FAIL "bash:3.2 docker emit-golden.sh" "AGENT_KIT_DOCKER must be 0 or 1"
     ;;
 esac
+
+if ( assert_fixture_root "$REPO_ROOT" 2>/dev/null ); then
+  report FAIL "fixture-root guard rejects repository root"
+else
+  report PASS "fixture-root guard rejects repository root"
+fi
+if ( assert_fixture_root "" 2>/dev/null ); then
+  report FAIL "fixture-root guard rejects empty root"
+else
+  report PASS "fixture-root guard rejects empty root"
+fi
+# Helper-level negative that can fail: EMIT_SH is an `exit 0` stub that drops a marker, so an
+# unguarded run_emit would succeed and leave the marker. The control run proves the stub is live.
+_emit_stub="$FIXTURE_TMPDIR/emit-stub.sh"
+_emit_marker="$FIXTURE_TMPDIR/emit-stub-ran"
+printf '%s\n' ': > "$EMIT_STUB_MARKER"' 'exit 0' > "$_emit_stub"
+rm -f "$_emit_marker"
+_emit_ctrl_root="$(mktemp_root)"
+_emit_ctrl_rc=0
+( EMIT_STUB_MARKER="$_emit_marker" EMIT_SH="$_emit_stub" run_emit "$_emit_ctrl_root" --answers "$FIXTURE" >/dev/null 2>&1 ) || _emit_ctrl_rc=$?
+_emit_ctrl_ran=0
+[ -e "$_emit_marker" ] && _emit_ctrl_ran=1
+rm -f "$_emit_marker"
+_emit_empty_rc=0
+( EMIT_STUB_MARKER="$_emit_marker" EMIT_SH="$_emit_stub" run_emit "" --answers "$FIXTURE" >/dev/null 2>&1 ) || _emit_empty_rc=$?
+if [ "$_emit_ctrl_rc" -eq 0 ] && [ "$_emit_ctrl_ran" -eq 1 ] \
+  && [ "$_emit_empty_rc" -ne 0 ] && [ ! -e "$_emit_marker" ]; then
+  report PASS "run_emit refuses empty root before emit"
+else
+  report FAIL "run_emit refuses empty root before emit" "control_rc=$_emit_ctrl_rc control_ran=$_emit_ctrl_ran empty_rc=$_emit_empty_rc marker=$([ -e "$_emit_marker" ] && echo present || echo absent)"
+fi
 
 echo "SUMMARY: pass=$pass fail=$fail skip=$skip"
 [ "$fail" -eq 0 ]

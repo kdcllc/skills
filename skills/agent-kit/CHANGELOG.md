@@ -20,6 +20,7 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 - **`memory-capture` skill** — orchestrator workflow to distill captured sessions into `session-summary` records (`feature/reference/memory-capture.md`).
 - **Windows `.cmd` launchers** — `bin/emit.cmd`, `_kit/memory.cmd`, and `_kit/log-spawn.cmd` invoke the sibling `.sh` through Git for Windows Bash; Git Bash discovery with optional `AGENT_KIT_BASH` override; exit 127 with an install message when no valid Bash is found ([reference/windows-launcher.md](reference/windows-launcher.md)).
 - **`emit-perf` maintainer suite** — `tests/agent-kit/templates/emit-perf.sh` runs structural guards against removed emitter fork patterns by default, each with an in-suite mutation proof; `EMIT_PERF=1` adds a median wall-clock check (`EMIT_PERF_MAX`, default 4.0 s) and, when strace works, a fork-budget check (`EMIT_PERF_MAX_FORKS`, default 589).
+- **ORCHESTRATION repository safety** — backup before goals that move or delete user files; after every subagent, compare `HEAD`, branch, `git config --local`, and the write fence against pre-spawn state — anything unexpected stops the goal for restore; fixture roots stay under a private temp directory and empty path arguments are rejected; the feature skill points to this section.
 
 ### Fixed
 
@@ -28,6 +29,7 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 - **Backfill escalations** — impossible `resolved:` calendar dates print `skip:bad-date`; bodies whose normalized redacted hash already exists under `records/` or `quarantine/` print `skip:archived` in both `--plan` and `--apply` (not `would-add` / duplicate-only on apply).
 - **Backfill research dates** — `**Date**:` values strip a trailing CR before parsing (CRLF reports keep their real id).
 - **`bin/emit.sh --root ""`** — an explicitly empty `--root` value now exits **2** with a usage message instead of silently emitting into the current directory.
+- **`_kit/log-spawn.sh --root ""`** — an explicitly empty `--root` value now exits **2** with a usage message instead of resolving paths against `/`.
 - **`bin/emit.sh` verify with `'` in `--root`** — when the root path contained an apostrophe, the `.ps1` parse check broke PowerShell quoting and reported every `.ps1` as `pwsh parse failed` (exit 5); paths are now passed safely and parse correctly.
 
 ### Removed
@@ -56,6 +58,7 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 - **`bin/emit.sh` emit speed** — one self-answers emit (claude-code + cursor) median real time 11.2 s → 2.4 s; process forks 3827 → 471 and `execve` 1277 → 193. Fork-free Bash 3.2 helpers replace `$(…)`/pipelines; each template is read once per run; IF/BOOTSTRAP/token passes run without subshells; one `pwsh` process covers all `.ps1` parse checks; sha256 is batched. Emitted bytes, messages, exit codes and flags are unchanged (except the apostrophe-in-`--root` fix under Fixed); byte identity was verified against the previous emitter on all golden cases plus pre-existing pointer files, CRLF, NUL-bearing files, and failing tools.
 - **Docker `bash:3.2` portability check** — `tests/agent-kit/templates/emit-portability.sh` skips by default with a message naming `AGENT_KIT_DOCKER=1`; with opt-in set, FAILs when docker or the `bash:3.2` image is unavailable or when the variable is not `0` or `1`. `.github/workflows/agent-kit.yml` pulls `bash:3.2` and runs the suite with `AGENT_KIT_DOCKER=1` (previously skipped in CI because the image was never pulled). `tests/agent-kit/run-all.sh` usage lists the variable.
 - **`emit-migrate` test suite** — independent cases run in parallel via `tests/agent-kit/lib/parallel.sh`; seven mutation checks that share identical canonical inputs reuse one canonical emit; labels, sed scripts and expected line counts unchanged; standalone run ~411 s → ~23 s with `AGENT_KIT_CASE_JOBS=4`. `run-all.sh` `PRIORITY` reordered by measured suite durations.
+- **Maintainer test hardening** — `emit-golden`, `emit-portability`, `memory-capture`, `memory-release-c`, and `emit-cache` assert every fixture root via `assert_fixture_root`; `templates/memory.sh` and `lib/selftest.sh` load the guard before creating fixtures; the emit cache directory must be absolute and outside the repository; the emit suites no longer `cd` to the repo root.
 
 ### Upgrade notes
 
