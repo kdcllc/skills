@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>YouTube Downloader</title>
+    <link rel="stylesheet" href="style.css" />
+    <!-- Required: /__bridge.js injects window.copilot Proxy for callbacks -->
+    <script src="/__bridge.js"></script>
+</head>
+<body>
+    <main class="container">
+        <header>
+            <h1>🎥 YouTube Downloader</h1>
+            <p class="subtitle">Download videos with format control and metadata extraction</p>
+        </header>
+
+        <section class="form-section">
+            <form id="download-form">
+                <div class="form-group">
+                    <label for="url-input">YouTube URL</label>
+                    <input
+                        type="url"
+                        id="url-input"
+                        placeholder="https://www.youtube.com/watch?v=..."
+                        required
+                    />
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="format-select">Format</label>
+                        <select id="format-select">
+                            <option value="best">Best (video + audio)</option>
+                            <option value="best-video">Best Video + Audio</option>
+                            <option value="audio">Audio (MP3)</option>
+                            <option value="audio-m4a">Audio (M4A)</option>
+                            <option value="audio-wav">Audio (WAV)</option>
+                            <option value="mp4">MP4 Video</option>
+                            <option value="mkv">MKV Video</option>
+                            <option value="360p">360p</option>
+                            <option value="720p">720p</option>
+                            <option value="1080p">1080p</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="metadata-checkbox">
+                            <input type="checkbox" id="metadata-checkbox" checked />
+                            Save Metadata
+                        </label>
+                        <small>Includes JSON info, thumbnail, auto-generated subtitles</small>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="output-path">Output Directory</label>
+                    <div class="input-with-button">
+                        <input type="text" id="output-path" placeholder="/path/to/downloads" required />
+                        <button type="button" id="browse-btn" class="btn-secondary">Browse</button>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="transcript-checkbox">
+                            <input type="checkbox" id="transcript-checkbox" />
+                            Convert Transcript
+                        </label>
+                        <small>Downloads English VTT subtitles and converts to transcript file</small>
+                    </div>
+
+                    <div class="form-group" id="transcript-options" style="display: none">
+                        <label for="transcript-output">Transcript Output</label>
+                        <select id="transcript-output">
+                            <option value="md">Markdown (.md)</option>
+                            <option value="txt">Text (.txt)</option>
+                        </select>
+                        <label for="transcript-only-checkbox" style="margin-top: 8px; display: inline-block">
+                            <input type="checkbox" id="transcript-only-checkbox" />
+                            Transcript-Only Mode
+                        </label>
+                        <label for="remove-timestamps-checkbox" style="margin-top: 8px; display: inline-block">
+                            <input type="checkbox" id="remove-timestamps-checkbox" checked />
+                            Remove Timestamps
+                        </label>
+                    </div>
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" id="download-btn" class="btn-primary">Download</button>
+                    <button type="button" id="cancel-btn" class="btn-secondary" disabled>Cancel</button>
+                </div>
+            </form>
+        </section>
+
+        <section class="progress-section" id="progress-section" style="display: none">
+            <div class="progress-bar-container">
+                <div class="progress-bar" id="progress-bar"></div>
+                <span id="progress-text">0%</span>
+            </div>
+            <div class="status-log">
+                <div id="status-log-content"></div>
+            </div>
+        </section>
+
+        <section class="result-section" id="result-section" style="display: none">
+            <div class="result" id="result-message"></div>
+            <button id="download-again-btn" class="btn-primary">Download Another</button>
+        </section>
+
+        <footer>
+            <small>Prerequisites: Python 3.10+, yt-dlp (install via <code>pip install yt-dlp</code>)</small>
+        </footer>
+    </main>
+
+    <script type="module" src="main.js"></script>
+</body>
+</html>
