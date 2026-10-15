@@ -9,7 +9,7 @@ inferred; U = unknown) — see that section; it is not 3-vote adversarial. This 
 moves fast — when an emitter hits behavior that contradicts this table, trust the
 live docs, emit accordingly, and update this file with a new verified-on date.
 **Headless-CLI usage row verified 2026-09-03** from live vendor docs.
-**Model-currency addendum 2026-10-08** ingested from `docs/agent-kit/research-model-currency-2026-10.md`
+**Model-currency addendum 2026-10-08** ingested from `_memory/research/model-currency-2026-10.md`
 §2 (⚠️ = primary source cited by that report, not 3-vote adversarial; ⚠️ (secondary) =
 community/secondary sources cited there).
 **Native memory/transcripts/hooks addendum 2026-10-08** — see that section; uses the
@@ -29,7 +29,7 @@ canonical templates are Claude-format:
   copies for anything model- or tools-critical. (Claude Code raw-tree fidelity for
   name/description empirically verified 2026-08-18, CLI-observed; tools partial — see
   Empirical validation)
-- **Kit policy (as of v0.19.0):** the Cursor emitter emits a fully **self-contained**
+- **Kit policy:** the Cursor emitter emits a fully **self-contained**
   `.cursor/` tree and does not rely on this cross-read — per-field fidelity of
   Claude-specific keys is undocumented, and **dual-install** behavior (both `.claude/`
   and `.cursor/` present) must not depend on `.claude/`'s presence. The FACTS above
@@ -43,8 +43,8 @@ canonical templates are Claude-format:
 | Agent definition | `.claude/agents/*.md`, YAML frontmatter ✅ | `.cursor/agents/` + reads `.claude/agents/` ✅ | `.github/agents/*.agent.md` (ex-`.chatmode.md`) + reads `.claude/agents` ✅ | `[agents.<name>]` tables in `config.toml` (`config_file`, `description`) 🔎 |
 | Skills | `.claude/skills/*/SKILL.md` ✅ | `.cursor/skills/` + reads `.claude/skills/`; `name`+`description` required; **no model key** ✅ | `.github/skills/*/SKILL.md` first-class (progressive disclosure, `/skill`, `disable-model-invocation`) ✅ 2026-08-20 | `skills.config` per-skill enablement 🔎 |
 | Fresh-context subagents | Yes; nesting depth via `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` (default flipped twice July 2026 — **pin explicitly**) ✅ | Yes; main→L1→L2 since 2.5 (cloud: L1 only) ✅ | Yes (`agent/runSubagent`, stateless); nesting off by default (`chat.subagents.allowInvocationsFromSubagents`, max 5) ✅ | Yes: `spawn_agent` et al., `features.multi_agent` stable, on by default 🔎 |
-| Per-agent model pin | frontmatter `model:` (alias/ID/`inherit`); env > tool param > frontmatter > parent ✅; **Anthropic models only** — alias resolution is provider-dependent (full IDs pin reproducibly) ⚠️ [code.claude.com/docs/en/model-config, docs/agent-kit/research-model-currency-2026-10.md §2] — addendum 2026-10-08 | frontmatter `model` incl. bracket params `[effort=…,context=…]` (e.g. `<model-id>[effort=high,context=300k]`); slug-suffix effort variants (e.g. `…-high`-shaped model IDs) also appear in Cursor's live model lists — both forms coexist; see the model map's guidance; up or down OK; **silent fallback** under restrictions — re-verified 2026-08-21 against cursor.com/docs/subagents ✅; bracket params are the documented frontmatter syntax ⚠️ [cursor.com/docs/subagents]; suffix slugs appear in listings ⚠️ (secondary) [docs/agent-kit/research-model-currency-2026-10.md §2]; unresolved subagent models **fall back to the parent's model** ⚠️ [docs/agent-kit/research-model-currency-2026-10.md §2 — Cursor staff, Aug 2026] (the docs page itself says only that Cursor "falls back to a compatible model" under admin blocks / plan limits); quoting the YAML value can trigger this ⚠️ (secondary) [docs/agent-kit/research-model-currency-2026-10.md §2] — addendum 2026-10-08 | frontmatter `model` (string or fallback array); **cannot exceed parent tier** — stronger refuses to run; cheaper-than-parent is valid; CLI rejects array form ✅ | `agents.default_subagent_model`, per-role `config_file`; spawn-time wins 🔎; standalone `.codex/agents/*.toml` custom agents are documented but **not used by this kit** ⚠️ [developers.openai.com/codex/config-reference, docs/agent-kit/research-model-currency-2026-10.md §2] — addendum 2026-10-08 |
-| Effort pin | `effort:` low→max on agents/skills/commands ✅ | `[effort=…]` bracket param (e.g. `[effort=high]`) — re-verified 2026-08-21 against cursor.com/docs/subagents, same scheme as the model-pin row above ✅ | — | `default_subagent_reasoning_effort` 🔎; values `low \| medium \| high \| xhigh \| max \| ultra` (model-dependent) ⚠️ [developers.openai.com/codex/config-reference, docs/agent-kit/research-model-currency-2026-10.md §2] — addendum 2026-10-08 |
+| Per-agent model pin | frontmatter `model:` (alias/ID/`inherit`); env > tool param > frontmatter > parent ✅; **Anthropic models only** — alias resolution is provider-dependent (full IDs pin reproducibly) ⚠️ [code.claude.com/docs/en/model-config, _memory/research/model-currency-2026-10.md §2] — addendum 2026-10-08 | frontmatter `model` incl. bracket params `[effort=…,context=…]` (e.g. `<model-id>[effort=high,context=300k]`); slug-suffix effort variants (e.g. `…-high`-shaped model IDs) also appear in Cursor's live model lists — both forms coexist; see the model map's guidance; up or down OK; **silent fallback** under restrictions — re-verified 2026-08-21 against cursor.com/docs/subagents ✅; bracket params are the documented frontmatter syntax ⚠️ [cursor.com/docs/subagents]; suffix slugs appear in listings ⚠️ (secondary) [_memory/research/model-currency-2026-10.md §2]; unresolved subagent models **fall back to the parent's model** ⚠️ [_memory/research/model-currency-2026-10.md §2 — Cursor staff, Aug 2026] (the docs page itself says only that Cursor "falls back to a compatible model" under admin blocks / plan limits); quoting the YAML value can trigger this ⚠️ (secondary) [_memory/research/model-currency-2026-10.md §2] — addendum 2026-10-08 | frontmatter `model` (string or fallback array); **cannot exceed parent tier** — stronger refuses to run; cheaper-than-parent is valid; CLI rejects array form ✅ | `agents.default_subagent_model`, per-role `config_file`; spawn-time wins 🔎; standalone `.codex/agents/*.toml` custom agents are documented but **not used by this kit** ⚠️ [developers.openai.com/codex/config-reference, _memory/research/model-currency-2026-10.md §2] — addendum 2026-10-08 |
+| Effort pin | `effort:` low→max on agents/skills/commands ✅ | `[effort=…]` bracket param (e.g. `[effort=high]`) — re-verified 2026-08-21 against cursor.com/docs/subagents, same scheme as the model-pin row above ✅ | — | `default_subagent_reasoning_effort` 🔎; values `low \| medium \| high \| xhigh \| max \| ultra` (model-dependent) ⚠️ [developers.openai.com/codex/config-reference, _memory/research/model-currency-2026-10.md §2] — addendum 2026-10-08 |
 | Rules/instructions | `CLAUDE.md`; reads `AGENTS.md` only when no `CLAUDE.md` / `.claude/CLAUDE.md` / `CLAUDE.local.md` exists in cwd or above (v2.1.277+) — a kit install's `CLAUDE.md` pointer suppresses it; import AGENTS.md from CLAUDE.md to load both ✅ (2026-10-08) | `.cursor/rules/*.mdc` only (plain `.md` ignored); keys `alwaysApply`/`description`/`globs`; native nested AGENTS.md ✅ | `.github/copilot-instructions.md`, `.github/instructions/` | AGENTS.md root-down concat, nearest-last-wins; **32 KiB cap** (`project_doc_max_bytes`); read once per session 🔎 |
 | Role controls | `tools: Agent(implementer, test-writer)` allowlists; skill `disable-model-invocation: true` drops the description from session-start context ✅ 2026-08-20 | description-driven or `/name`; L1 agents may need explicit "you MUST spawn" prompting; skill `disable-model-invocation: true` (same spelling) ✅ 2026-08-20 | `agents:` allowlist, `user-invocable: false` (agents *and* skills, different meaning), skill/agent `disable-model-invocation: true` ✅ | role `description` guides spawn 🔎 |
 | Unattended mode | headless `claude -p` ⚠️ | Cloud Agents (L1 only) ✅ | Copilot coding agent on issues ⚠️ | `approval_policy: never` + `sandbox_mode` 🔎 |
@@ -102,7 +102,7 @@ Session start injects skill **name + description only** (not bodies, not paramet
 schemas) on all three IDEs. Typical metadata ≈ 50–105 tokens/skill (description
 words × ~1.3) or ~100 tokens/skill per the Agent Skills spec community figure.
 Full sources and the kit skill-by-skill verdict:
-`docs/agent-kit/research-token-efficient-skills.md`.
+`_memory/research/token-efficient-skills.md`.
 
 | Capability | Claude Code | Cursor | Copilot (VS Code) |
 |---|---|---|---|
@@ -163,7 +163,7 @@ omits both keys (a sanctioned manifest deviation), leaving nothing to introspect
 even with working auth.
 
 Observed once (CLI-observed, n=1): with same-named `judge` (role renamed to
-evaluator in v0.18.0) agents in both `.github/agents` and `.claude/agents`, only the
+evaluator) agents in both `.github/agents` and `.claude/agents`, only the
 native one surfaced in the recognition reply; mechanism unconfirmed — reply-level
 dedup of same-named agents not excluded. Do not treat as a precedence rule.
 
@@ -186,13 +186,13 @@ code.claude.com/docs/en/{sub-agents,model-config,settings,skills} ·
 cursor.com/docs/{subagents,rules,skills} ·
 code.visualstudio.com/docs/{agent-customization/custom-agents,agents/run/subagents,copilot/copilot-customization,copilot/customization/prompt-files} ·
 developers.openai.com/codex/{config-reference,guides/agents-md} (redirects to
-learn.chatgpt.com) · full citations in `docs/agent-kit/research-multi-harness-upgrade.md` ·
+learn.chatgpt.com) · full citations in `_memory/research/multi-harness-upgrade.md` ·
 2026-08-20 context/invocation addendum:
-`docs/agent-kit/research-token-efficient-skills.md`.
+`_memory/research/token-efficient-skills.md`.
 
 ## Addendum 2026-10-08 — native memory, transcripts, hooks
 
-Ingested from `docs/agent-kit/research-agent-memory-store.md` § "Verified harness facts (2026-10-08)"
+Ingested from `_memory/research/agent-memory-store.md` § "Verified harness facts (2026-10-08)"
 and § "Load-bearing conclusions" item 1 (Cursor persistent agent stores). Marks follow
 **that report's** legend, which differs from this file's top legend: ✅ = verified against
 live official docs by the kit maintainers (✅ observed = local inspection); 🔎 = primary
@@ -209,6 +209,6 @@ it as secondhand or unconfirmed.
 | Cursor hooks receive `transcript_path` (null when transcripts are disabled) | ✅ | cursor.com/docs/agent/hooks |
 | Cursor cloud agents run project `.cursor/hooks.json` hooks for `stop`, `afterAgentResponse`, `subagentStop`, `preCompact`; not `sessionStart`, `sessionEnd`, MCP-execution hooks, or user-level `~/.cursor/hooks.json` | ✅ | cursor.com/docs/agent/hooks § Cloud agent support |
 | Cursor transcripts: `~/.cursor/projects/<slug>/agent-transcripts/` JSONL (format undocumented) | ✅ observed / 💬 format | local inspection; community parsers |
-| Cursor persistent agent stores: undocumented; mount locally on tmpfs (`/run/user/<uid>/cursor_agent_stores/…`); never a kit target | ✅ observed | docs/agent-kit/research-agent-memory-store.md § Load-bearing conclusions item 1 |
+| Cursor persistent agent stores: undocumented; mount locally on tmpfs (`/run/user/<uid>/cursor_agent_stores/…`); never a kit target | ✅ observed | _memory/research/agent-memory-store.md § Load-bearing conclusions item 1 |
 | Copilot Memory: preview since 2026-01-15, repo-scoped, 28-day unused expiry, no export API; VS Code memory tool local `/memories/` (preview) | 🔎 | docs.github.com, code.visualstudio.com (per report) |
 | Codex memories: `[features] memories = true`, `~/.codex/memories/`, per-user; hooks include `SessionEnd`, `Stop`, `PreCompact` | ⚠️ | developers.openai.com (secondhand per report) |

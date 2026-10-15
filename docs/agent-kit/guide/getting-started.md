@@ -2,7 +2,7 @@
 
 # Getting Started
 
-This guide walks from zero to a working orchestration install. The kit ships as one installable `agent-kit` skill under [`skills/agent-kit/`](../../../skills/agent-kit/) that **compiles** a single canonical template source into each AI coding harness's native format. After install, `/agent-kit` is the compile step — it detects your harness(es), inspects the repo, suggests skills.sh skills from what it found (Step 2b), interviews you for what it cannot infer, resolves templates, emits per harness, and writes a manifest for clean upgrades.
+This guide walks from zero to a working orchestration install. The kit ships as one installable `agent-kit` skill under [`skills/agent-kit/`](../../../skills/agent-kit/) that **compiles** a single canonical template source into each AI coding harness's native format. After install, `/agent-kit` is the compile step — it detects your harness(es), inspects the repo, suggests skills.sh skills from what it found (Step 2b), interviews you for what it cannot infer, resolves templates, emits per harness, and writes a manifest for clean upgrades. For a structural map of compile output, runtime folders, and trust boundaries, see [architecture.md](architecture.md).
 
 ## Install the agent-kit skill
 
@@ -27,8 +27,6 @@ Or copy the skill in manually from a clone (any harness dir works — the skill 
 cp -r skills/agent-kit  <your-project>/.claude/skills/     # Claude Code
 cp -r skills/agent-kit  <your-project>/.cursor/skills/     # Cursor
 ```
-
-**Upgrading from the private `setup` skill:** Follow the 1.0.0 **Upgrade notes** in the skill's [CHANGELOG.md](../../../skills/agent-kit/CHANGELOG.md) (install `agent-kit`, delete the old `skills/setup/` copies, re-emit with `--upgrade`).
 
 After any install path, open a session inside your project. The agent-kit skill lives in your harness's skills directory; invoke it with `/agent-kit` when you are ready to compile the full orchestration instance.
 
@@ -55,7 +53,7 @@ After any install path, open a session inside your project. The agent-kit skill 
    optional per-harness `fast` (fast-tier model ID; defaults to `light`) and
    `arbiter_same_family`; emit may print same-family arbiter warnings (still exit 0) and
    exits 3 when `best`, `fable`, or `claude-fable*` appears in a `loop_chain`.
-6. **Report** — read the summary line (`emit: written N · unchanged M · pruned P · seeds-kept S · warnings W · manifest orchestration-kit.manifest.json · kit <VERSION>`), delete the answers file (the manifest holds `answers`), and start with `/feature`.
+6. **Report** — read the summary line (`emit: written N · unchanged M · pruned P · seeds-kept S · migrated U · warnings W · manifest orchestration-kit.manifest.json · kit <VERSION>`), delete the answers file (the manifest holds `answers`), and start with `/feature`.
 
 ```mermaid
 flowchart TD
@@ -115,7 +113,7 @@ table (`bootstrap.domain-skill-rows`) and the feature skill's layer → skills m
 
 ## What `/agent-kit` emits per harness
 
-As of v0.27.0, per-harness translation (path mapping, frontmatter shape, pointer rules)
+Per-harness translation (path mapping, frontmatter shape, pointer rules)
 runs inside [`skills/agent-kit/bin/emit.sh`](../../../skills/agent-kit/bin/emit.sh) /
 [`emit.cmd`](../../../skills/agent-kit/bin/emit.cmd) — not in LLM prose. See
 [`skills/agent-kit/bin/README.md`](../../../skills/agent-kit/bin/README.md) for the full CLI contract.
@@ -137,7 +135,7 @@ Worked example — Copilot + Codex (`harnesses: ["copilot","codex"]`):
 (or `.github/skills/agent-kit`). Lands: `.github/agents/*.agent.md`,
 `.github/skills/<name>/SKILL.md`, `.codex/config.toml`, `AGENTS.md`.
 
-**Cursor self-contained tree (as of v0.19.0):** targeting Cursor emits a **self-contained** `.cursor/` tree — agents, skills, the architecture doc, the model map, and the pointer rule — with **no dependency on `.claude/`**. The Cursor emitter never reads or relies on an emitted `.claude/` tree; every file resolves `{{IDE_DIR}}` → `.cursor`. This matches the kit's canonical shipped behavior via [`skills/agent-kit/emitters/cursor.md`](../../../skills/agent-kit/emitters/cursor.md).
+**Cursor self-contained tree:** targeting Cursor emits a **self-contained** `.cursor/` tree — agents, skills, the architecture doc, the model map, and the pointer rule — with **no dependency on `.claude/`**. The Cursor emitter never reads or relies on an emitted `.claude/` tree; every file resolves `{{IDE_DIR}}` → `.cursor`. This matches the kit's canonical shipped behavior via [`skills/agent-kit/emitters/cursor.md`](../../../skills/agent-kit/emitters/cursor.md).
 
 **Claude Code** is the canonical format — the emit script writes resolved templates into `.claude/` with near-1:1 paths ([`claude-code.md`](../../../skills/agent-kit/emitters/claude-code.md) caveats).
 
@@ -153,19 +151,19 @@ agent `.github/agents/feature.agent.md` and as the full `.github/skills/feature/
 
 Every install also gets the single-copy `_kit/` tools — `_kit/log-spawn.sh` (Windows outside Git Bash: `_kit\log-spawn.cmd`), which the `feature` skill uses to append the per-goal orchestration log (context packages and reports are stored under `_memory/work/goals/<goal>/spawns/`). `_kit/memory.sh` (Windows outside Git Bash: `_kit\memory.cmd`) provides `add` / `index` / `search` / `show` / `redact` / `check` / `rm` / `capture` / `backfill`; `_kit/memory.ps1` remains a helper for `loop.ps1` with the same subcommands except **`check`**, **`rm`**, **`capture`**, and **`backfill`**, which print a bash-only pointer and exit **2**. Emit writes `_memory/README.md` and appends store lines to `.gitignore` and `.gitattributes`: every install adds `_kit/`, `_memory/.index/`, `_memory/raw/`, and `_memory/work/` to `.gitignore`, plus `_memory/** text eol=lf` and `*.cmd -text` to `.gitattributes`; loop installs also add `_memory/loop/breaker-state.json` to `.gitignore` and `_memory/loop/LEARNINGS.md merge=union`, `_memory/loop/ESCALATIONS.md merge=union`, `*.sh text eol=lf`, and `*.ps1 text eol=lf` to `.gitattributes`. Tracked by default: `_memory/README.md`, `records/`, `quarantine/`, and (when loop is enabled) `_memory/loop/` except `breaker-state.json`. Record files appear when `_kit/memory.* add` creates them; gitignored `raw/` holds redacted capture output and distillation drafts. The emitted **`memory-capture`** skill distills captured sessions into `session-summary` records (not emitted on Codex-only installs — see [memory.md](memory.md)). Memory **pointers** (search commands only, never record bodies): **Claude Code** — `## Memory` block with marker `<!-- orchestration-kit:memory-pointer -->` appended to `CLAUDE.md`; **GitHub Copilot** — the same block appended to `.github/copilot-instructions.md`; **OpenAI Codex** — the same block appended to root `AGENTS.md`; **Cursor** — one sentence in `.cursor/rules/orchestration.mdc` (no separate `## Memory` marker block). Operator guide: [memory.md](memory.md). When the autonomous loop is enabled, all harnesses share single-copy `_loop/` drivers (`loop.sh`, `loop.ps1`, breaker helpers, `PROMPT.md`) and a seed `_memory/loop/backlog.md` (create if missing; never overwrite). Loop driver details belong in [autonomous-loop.md](autonomous-loop.md).
 
-> **Instance note (this repo):** the kdcllc/skills repository dogfoods the kit. The emitted instance (`.claude/`, `.cursor/skills|agents|rules`, `.cursor/ORCHESTRATION.md`, `_kit/`, `_loop/`, `orchestration-kit.manifest.json`) is gitignored — not source of truth. **`_memory/records/`**, **`_memory/quarantine/`**, and **`_memory/README.md`** are tracked; **`_memory/work/`** and **`_memory/loop/`** are gitignored here (along with `_memory/.index/` and `_memory/raw/`), unlike a canonical loop install where `_memory/loop/` is tracked. Files under `records/` and `quarantine/` exist only after `_kit/memory.* add` writes them. Canonical content lives under `skills/agent-kit/templates/`; re-run `/agent-kit` after template edits to refresh the local instance.
+> **Instance note (this repo):** the kdcllc/skills repository dogfoods the kit. The emitted instance (`.claude/`, `.cursor/skills|agents|rules`, `.cursor/ORCHESTRATION.md`, `_kit/`, `_loop/`, `orchestration-kit.manifest.json`) is gitignored — not source of truth. **`_memory/records/`**, **`_memory/quarantine/`**, **`_memory/research/`**, and **`_memory/README.md`** are tracked; **`_memory/work/`** and **`_memory/loop/`** are gitignored here (along with `_memory/.index/` and `_memory/raw/`), unlike a canonical loop install where `_memory/loop/` is tracked. Files under `records/` and `quarantine/` exist only after `_kit/memory.* add` writes them. Canonical content lives under `skills/agent-kit/templates/`; re-run `/agent-kit` after template edits to refresh the local instance.
 
 ## The manifest and seed files
 
 `/agent-kit` writes `orchestration-kit.manifest.json` at the project root. The manifest records:
 
-- **`kitVersion`** — contents of `metadata.version` in [`skills/agent-kit/SKILL.md`](../../../skills/agent-kit/SKILL.md) at emit time (`1.0.0` as of this release)
+- **`kitVersion`** — contents of `metadata.version` in [`skills/agent-kit/SKILL.md`](../../../skills/agent-kit/SKILL.md) at emit time (for example `1.0.0`)
 - **`answers`** — snapshot of the answers file used at emit (enables `--upgrade` without re-interviewing)
 - **`files`** — map of every emitted path to its SHA-256 hash
 - **`seedFiles`** — paths that are seeds, not managed content (today `_memory/loop/backlog.md` when loop is enabled)
 - **`harnesses`**, **`options`**, **`installedAt`** — which harnesses were targeted and which optional features were enabled
 
-Re-running `/agent-kit` reads the manifest, diffs file hashes against the working tree to spot your local modifications, and re-emits with `bash .claude/skills/agent-kit/bin/emit.sh --upgrade` (or `.cursor/skills/agent-kit`, `.github/skills/agent-kit`; add `--answers` only when the interview changed). Pre-v0.27.0 installs have no embedded `answers` — run Steps 1–4 once, then `--answers … --upgrade`. Use `--dry-run` to preview; exit 4 lists blocked paths. Unmodified files update silently.
+Re-running `/agent-kit` reads the manifest, diffs file hashes against the working tree to spot your local modifications, and re-emits with `bash .claude/skills/agent-kit/bin/emit.sh --upgrade` (or `.cursor/skills/agent-kit`, `.github/skills/agent-kit`; add `--answers` only when the interview changed). Manifests from the private **`setup`** kit have no embedded `answers` snapshot — see [Upgrading from the private setup kit](#upgrading-from-the-private-setup-kit). Use `--dry-run` to preview; exit 4 lists blocked paths. Unmodified files update silently.
 
 **`seedFiles` semantics:** seeds are emitted **create-if-missing, never overwritten**. Their hash is recorded at emit time but drift is expected — it is never read as user modification and is exempt from the upgrade diff-confirm flow. When loop is enabled, the seed is `_memory/loop/backlog.md`; you own its content from first install onward.
 
@@ -182,6 +180,16 @@ With `/agent-kit` complete, your project has agents, skills, an architecture doc
 **Autonomous loop (sandbox first):** if you plan an unattended loop run, sandbox the environment before invoking the drivers. Start your first feature with `/feature`; start an unattended run (**sandboxed!**) with `_loop/loop.sh 10` (or `pwsh _loop/loop.ps1 10` — PowerShell 7+). Driver-owned dispatch, circuit breakers, slots/worktrees, and exit codes are covered in [autonomous-loop.md](autonomous-loop.md).
 
 **Contributors:** if you are editing canonical templates, emitters, or releasing a new kit version, follow [contributing.md](contributing.md) for the self-install dogfood loop and upgrade semantics.
+
+## Upgrading from the private setup kit
+
+The public skill is **`agent-kit`** from [kdcllc/skills](https://github.com/kdcllc/skills). Before 1.0.0, the same kit shipped privately as the skill **`setup`**. To move an existing project:
+
+1. **Install the new skill** — for example `npx skills add kdcllc/skills --skill agent-kit` (see [Install the agent-kit skill](#install-the-agent-kit-skill) above) and read the 1.0.0 upgrade notes in [`skills/agent-kit/CHANGELOG.md`](../../../skills/agent-kit/CHANGELOG.md).
+2. **Remove old copies** — delete every `skills/setup/` tree from harness skill directories (`.claude/skills/setup`, `.cursor/skills/setup`, `.github/skills/setup`, and similar).
+3. **Re-emit with `--upgrade`** — `bash .claude/skills/agent-kit/bin/emit.sh --upgrade` (or the path for your harness). If the manifest has no embedded `answers` snapshot, run `/agent-kit` Steps 1–4 once, then `bash …/bin/emit.sh --answers orchestration-kit.answers.json --upgrade`. Use `--dry-run` first; exit **4** lists user-modified paths — confirm with `--force` when intentional.
+
+**Layout migration:** `--upgrade` also moves legacy top-level **`_goals/`** and **`_research/`** into gitignored **`_memory/work/`** (`_goals/<goal>/` → `_memory/work/goals/<goal>/`; `_research/` → `_memory/work/research/`; loop files such as `_goals/backlog.md` → tracked `_memory/loop/`). Moved goal and research folders become untracked scratch; loop markdown stays tracked. The emit summary's **`migrated U`** count is non-zero when moves ran. After upgrading, run `_kit/memory.sh backfill --plan` to review import candidates. Full mapping, `--dry-run` / exit **4** / `--force` semantics, and teammate coordination warnings: [`skills/agent-kit/templates/memory/README.md`](../../../skills/agent-kit/templates/memory/README.md) § Upgrade migration.
 
 ## Sources
 

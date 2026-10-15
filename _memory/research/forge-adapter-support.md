@@ -1,21 +1,30 @@
+---
+title: "Research: Forge-Adapter Support for PR Delivery (Azure DevOps first)"
+topic: forge-adapter-support
+date: 2026-08-26
+status: shipped
+shipped_in: ["1.0.0"]
+goals: [forge-adapter-delivery]
+supersedes: []
+memory: [20260826T120005Z-8afeea66]
+---
+
 # Research: Forge-Adapter Support for PR Delivery (Azure DevOps first)
 
-**Date**: 2026-08-26 · **Method**: `research` skill — self-contained prompt
-(`_research/prompts/azure-devops-forge-support.md`) → external deep-research report
-(saved at `_research/azure-devops-forge-support/report.md`, scratch) → critical
-ingestion against the kit's codebase and primary sources. The `_research/` copy is
-scratch; **this promoted doc is canonical.**
+**Method**: `research` skill — self-contained prompt
+(`_memory/work/research/forge-adapter-support/prompt.md`) → external deep-research report
+(saved at `_memory/work/research/forge-adapter-support/report.md`, scratch) → critical
+ingestion against the kit's codebase and primary sources. Scratch lives under
+`_memory/work/research/`; **this brief is canonical.**
 
-**Status**: findings promoted 2026-08-26. Forge adapter shipped in kit 0.22.0
-(goal `forge-adapter-delivery`). The `setup-interview-hardening` follow-up
-(STORY-016) remains pending.
+The `setup-interview-hardening` follow-up (STORY-016) remains pending.
 
-**Trigger**: a v0.20.0 install field report from an Azure DevOps-hosted project. The
+**Trigger**: a pre-release install field report from an Azure DevOps-hosted project. The
 kit's Phase 7 delivery (`ship-pr`) is GitHub/`gh`-only, and the setup interview's
 instruction for non-GitHub repos ("delete Phase 7 from the emitted ORCHESTRATION.md")
 understates a fan-out of ~14 reference sites across four template files, leaving the
 emitted kit incoherent. All of the field report's codebase claims were verified against
-kit v0.20.0 and held. The report also raised two adjacent gaps this research verified:
+the kit at the time and held. The report also raised two adjacent gaps this research verified:
 single-family model rotation on Claude-only installs, and path-scoped rules not
 reaching subagents.
 

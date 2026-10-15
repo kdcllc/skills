@@ -410,16 +410,20 @@ routing and the evaluation criteria stay calibrated over time.
 For domain topics an external research agent must investigate without codebase access.
 
 ```
-Phase 1: Generate Research Prompt → _memory/work/research/prompts/[topic].md  (user copy-pastes out)
-Phase 2: Ingest Research Report   → _memory/work/research/[topic]/report.md
+Phase 1: Generate Research Prompt → _memory/work/research/[topic]/prompt.md  (user copy-pastes out)
+Phase 2: Ingest Research Report   → _memory/work/research/[topic]/report.md + review.md
+                                    → brief _memory/research/[topic].md + index _memory/research/README.md
 Phase 3: High-Level Plan          → Collaborative planning (Plan Mode)
 Phase 4: Low-Level Tasks          → _memory/work/goals/[goal-name]/ structure
 ```
 
 **Research locations:**
-- docs/agent-kit/research-multi-harness-upgrade.md — committed ground-truth reference. Cite as ground truth.
-- `_memory/work/research/` — gitignored working/scratch area for new prompts and raw reports. Promote durable
-  findings into docs/agent-kit/research-multi-harness-upgrade.md.
+- docs/agent-kit/research-multi-harness-upgrade.md — committed ground-truth reference. Cite as ground truth; only implemented facts are
+  promoted into it.
+- `_memory/research/` — tracked, orchestrator-owned curated briefs (`[topic].md`) and their status index
+  (`README.md`).
+- `_memory/work/research/` — gitignored scratch per topic: prompt, raw report, recalled memory, review,
+  `ingested` marker.
 
 The output of Phase 4 (`_memory/work/goals/[goal-name]/`) enters the `feature` skill at Phase 3 (goal evaluation) — it must PASS the evaluator before Phase 4 execution begins.
 
@@ -533,7 +537,7 @@ Three subcommands (`--help` lists every flag):
   subagent's spend — and `work_est_tokens` W comes from the Footprint `files_read`
   line (W = C/4; `n/a` if missing/malformed — flag to the evaluator; `--work-chars C`
   overrides). `running io` / `running work` are the previous totals plus T / W
-  (`running io` falls back to pre-v0.26 `running total`; W=`n/a` adds 0).
+  (`running io` falls back to the `running total` field of logs written by the private setup kit before 0.26; W=`n/a` adds 0).
 - **Everything else** — `note --goal G --text "…"` appends `### <ts> — …` for phase
   completions, ladder transitions (with the rung name), guard trips, and skips (e.g.
   Phase 6/7 declined via `goal.md`'s `phases:` block).
@@ -728,9 +732,10 @@ drifting run early. Headless entry point: `_loop/loop.sh [max-iterations]` (bash
 ## Memory
 
 **One tree.** **`_memory/`** holds immutable searchable records (`records/`,
-`quarantine/`), gitignored in-flight goal and research work (`work/goals/`,
-`work/research/`), and tracked loop state (`loop/` — backlog, `LEARNINGS.md`,
-`ESCALATIONS.md`, archive). Always-loaded files point at search commands; they never
+`quarantine/`), tracked research briefs and their index (`research/` — mutable,
+orchestrator-owned, not records), gitignored in-flight goal and research work
+(`work/goals/`, `work/research/`), and tracked loop state (`loop/` — backlog,
+`LEARNINGS.md`, `ESCALATIONS.md`, archive). Always-loaded files point at search commands; they never
 inline record bodies.
 
 ```mermaid
@@ -805,7 +810,7 @@ installs have no kit skills tree (no protocol copy on disk).
 │   │
 │   ├── research/ # Research → Plan
 │   │   ├── SKILL.md
-│   │   └── templates/{research-prompt.md,research-report.md}
+│   │   └── templates/{research-prompt.md,research-report.md,research-brief.md,research-index.md}
 │   │
 │   ├── goal-criteria/SKILL.md         # Goal evaluation criteria
 │   ├── task-criteria/SKILL.md         # Task evaluation criteria
@@ -825,7 +830,8 @@ _memory/loop/breaker-state.json       # Model circuit breaker state (runtime, gi
 _kit/{log-spawn.sh,log-spawn.cmd}  # Single-copy tools: orchestration-log writer + Windows launcher
 _kit/{memory.sh,memory.ps1}  # Single-copy tools: memory store (add / index / search / show / redact / check / rm / capture / backfill)
 _memory/records/ · _memory/quarantine/  # Tracked memory records (immutable, one per file) — see _memory/README.md
-_memory/work/                   # Gitignored in-flight goal and research scratch — see _memory/README.md
+_memory/research/               # Tracked research briefs (<topic>.md) + README.md status index (orchestrator-owned)
+_memory/work/                   # Gitignored in-flight goal and research scratch (research: work/research/<topic>/) — see _memory/README.md
 _memory/loop/                   # Tracked loop ledgers and archive (breaker-state.json gitignored)
 _memory/.index/ · _memory/raw/  # Derived index; capture output, ledgers and drafts (gitignored)
 _loop/{loop.sh,loop.ps1,breaker.sh,breaker.ps1,PROMPT.md}  # Headless loop driver (if enabled)

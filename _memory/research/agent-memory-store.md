@@ -1,16 +1,22 @@
+---
+title: "Persistent, cross-harness memory store"
+topic: agent-memory-store
+date: 2026-10-08
+status: shipped
+shipped_in: ["1.0.0"]
+goals: [memory-store-a-core, memory-store-b-wiring, memory-store-c-capture, memory-store-d-backfill]
+supersedes: []
+memory: [20261008T120006Z-b10ad6b8]
+---
+
 # Persistent, cross-harness memory store
 
-**Date**: 2026-10-08 · **Status**: research ingested; direction agreed; Release A
-(`memory-store-a-core`) shipped in kit v0.30.0; Release B (`memory-store-b-wiring`)
-**shipped in agent-kit v1.0.0** (folded into the 1.0.0 release); Release C
-(`memory-store-c-capture`) **implemented** (agent-kit **[Unreleased]** — redaction, commit
-gate, transcript capture, `memory-capture` skill; not yet tagged). Release D
-(`memory-store-d-backfill`) **implemented** (agent-kit **[Unreleased]** — deterministic `backfill`, closed signals; not yet tagged). **Method**: external deep-research report ingested against
-kit ground truth, with the load-bearing harness claims spot-verified against live vendor
-docs on 2026-10-08. Full scratch report and ingestion review:
-`_research/agent-memory-store/report.md` (gitignored).
+**Method**: external deep-research report ingested against kit ground truth, with the
+load-bearing harness claims spot-verified against live vendor docs on 2026-10-08. Full
+scratch report and ingestion review:
+`_memory/work/research/agent-memory-store/report.md` (gitignored).
 
-**Verification legend** (same as `research-multi-harness-upgrade.md`): ✅ = verified
+**Verification legend** (same as `multi-harness-upgrade.md`): ✅ = verified
 against live official docs by the kit maintainers · 🔎 = primary source cited by the
 report, not re-verified · 💬 = community/secondary · ⚠️ = report flagged it as
 secondhand or unconfirmed.
@@ -19,15 +25,15 @@ secondhand or unconfirmed.
 
 ## Problem
 
-The kit records feature history as files (`_goals/`, `_research/`, spawn
+The kit records feature history as files (`_goals/`, the former top-level research scratch folder, spawn
 context/report pairs, `LEARNINGS.md`), and captures no chat history at all. In emitted
-installs `_goals/` is tracked in git. In the kit repo itself, `_goals/` and `_research/`
+installs `_goals/` is tracked in git. In the kit repo itself, `_goals/` and the former top-level research scratch folder
 are gitignored (they are part of the self-install instance), so about two months of
 history (3.9 MB, ~425 files) exists on one machine only. No mechanism lets a new session
 search past decisions, rejected alternatives or learnings.
 
 Requirements (user, 2026-10-08): ship it as a kit feature for every install. It
-**augments** `_goals/` and `_research/` and does not replace them. It must give
+**augments** `_goals/` and the former top-level research scratch folder and does not replace them. It must give
 cross-session recall, survive across machines, be team-shareable, work in all four
 harnesses, be searchable, capture chat history, and work offline.
 
@@ -51,8 +57,9 @@ harnesses, be searchable, capture chat history, and work offline.
      not used.
    - Derived state (`_memory/.index/`) and raw transcripts (`_memory/raw/`) are
      gitignored.
-   - Rationale: the kit's own single-writer and compaction analysis in
-     `design-parallel-dispatch.md` §6.2–6.3, plus beads abandoning a shared JSONL in git
+   - Rationale: the kit's own single-writer and compaction analysis in the former
+     parallel-dispatch design study (§6.2–6.3; deleted — see the research index's
+     Formerly table), plus beads abandoning a shared JSONL in git
      for Dolt. 💬
 3. **Git resolves offline versus sync and sharing.** Everything works against the local
    clone, and sync is a plain `git pull` / `git push` when the network is available. The
@@ -100,7 +107,7 @@ harnesses, be searchable, capture chat history, and work offline.
 
 | Question | Decision |
 |---|---|
-| Kit repo's own memory | Track `_memory/` on `master`. `_goals/` and `_research/` stay gitignored. Records must therefore be self-sufficient: `source` paths are provenance, never required reading |
+| Kit repo's own memory | Track `_memory/` on `master`. `_goals/` and the former top-level research scratch folder stay gitignored. Records must therefore be self-sufficient: `source` paths are provenance, never required reading |
 | Transcript capture in v1 | Post-hoc scanners plus orchestrator-written session summaries. Hooks come in a later goal |
 | Search in v1 | Keyword (manifest + `rg`), with optional SQLite FTS5 auto-detected. qmd later |
 | Delivery | A sequence of small goals (below) |
@@ -117,10 +124,10 @@ Codebase conventions the design must follow (from the ingestion review):
 
 | Goal | Scope |
 |---|---|
-| `memory-store-a-core` | Record schema (`_memory/README.md`). `_kit/memory.sh` / `.ps1` twins with `add` (schema validation, id, dedupe, admission screen → quarantine), `index`, `search`, `show`. Emitter + setup wiring and gitignore lines. Harness-matrix corrections. Tests |
+| `memory-store-a-core` | **Shipped in 1.0.0.** Record schema (`_memory/README.md`). `_kit/memory.sh` / `.ps1` twins with `add` (schema validation, id, dedupe, admission screen → quarantine), `index`, `search`, `show`. Emitter + setup wiring and gitignore lines. Harness-matrix corrections. Tests |
 | `memory-store-b-wiring` | **Shipped (v1.0.0).** Feature-skill read protocol (≤ 5 records, DATA fence (citations — each fence entry carries id, source, and commit)) and archive triggers (goal close, research ingest). Pointer blocks in each harness's always-loaded file (Cursor: one `.mdc` sentence). Loop integrator materialises outbox proposals and archives `LEARNINGS`/`ESCALATIONS` lines at integrate time (not shipped — see deviations). Evaluator auto-fail plus tripwire: "kit agent sets Claude `memory:`". **Shipped deviations:** separate `## Memory` pointer block (Claude Code / Copilot / Codex) (not merged into the orchestration pointer); `LEARNINGS`/`ESCALATIONS` not auto-archived as records. |
-| `memory-store-c-capture` | **Implemented (Unreleased).** Secret redaction twins plus opt-in pre-commit gate (`check`; never installed by the kit). `check`, `rm`, and `capture` are bash-only — the PowerShell twin prints a pointer and exits **2**. Post-hoc transcript scanners (Claude Code, Cursor, Codex) into gitignored `_memory/raw/`. Orchestrator-driven distillation via the `memory-capture` skill into `session-summary` records. Copilot falls back to orchestrator-written summaries. **Shipped deviations:** no `claude` → `claude-code` harness rename; loop integrator step 3b unchanged (no `check` there). Capture hooks follow as a later goal |
-| `memory-store-d-backfill` | **Implemented (Unreleased).** Deterministic `memory.sh backfill --plan\|--apply` (bash-only) of closed goals (`goal-summary`), opted-in research (`research-ingest`, `--only`), and resolved escalations (`decision`); closed signals the kit now writes (ARCHIVED note, `ingested` marker, `resolved:` line). Transcript back-fill is a documented one-time runbook (`capture` + `memory-capture`), not automated. **Shipped deviations:** back-fill is a product feature for user installs (this repo was back-filled by hand); learnings are not back-filled (no closed signal); research needs `--only` for legacy topics; goal-level decisions are not extracted separately (only resolved escalations become `decision` records). |
+| `memory-store-c-capture` | **Shipped in 1.0.0.** Secret redaction twins plus opt-in pre-commit gate (`check`; never installed by the kit). `check`, `rm`, and `capture` are bash-only — the PowerShell twin prints a pointer and exits **2**. Post-hoc transcript scanners (Claude Code, Cursor, Codex) into gitignored `_memory/raw/`. Orchestrator-driven distillation via the `memory-capture` skill into `session-summary` records. Copilot falls back to orchestrator-written summaries. **Shipped deviations:** no `claude` → `claude-code` harness rename; loop integrator step 3b unchanged (no `check` there). Capture hooks follow as a later goal |
+| `memory-store-d-backfill` | **Shipped in 1.0.0.** Deterministic `memory.sh backfill --plan\|--apply` (bash-only) of closed goals (`goal-summary`), opted-in research (`research-ingest`, `--only`), and resolved escalations (`decision`); closed signals the kit now writes (ARCHIVED note, `ingested` marker, `resolved:` line). Transcript back-fill is a documented one-time runbook (`capture` + `memory-capture`), not automated. **Shipped deviations:** back-fill is a product feature for user installs (this repo was back-filled by hand); learnings are not back-filled (no closed signal); research needs `--only` for legacy topics; goal-level decisions are not extracted separately (only resolved escalations become `decision` records). |
 
 ## Open questions
 

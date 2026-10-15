@@ -1197,8 +1197,8 @@ _loop_fill_slot() {
     # Loud preflight (cycle-3 correction): BOTH probes are built from the SAME
     # resolved worktree-path variable ($wt) just passed to `git worktree add`
     # above — never a second hardcoded literal. The second probe is a
-    # DIRECTORY test on .cursor, deliberately NOT a skill-FILE path: as of
-    # kit v0.19.0 each harness tree may carry its own skills (the Cursor
+    # DIRECTORY test on .cursor, deliberately NOT a skill-FILE path: each
+    # harness tree may carry its own skills (the Cursor
     # emitter is self-contained), so a single skill-file path can't cover
     # every install shape. .cursor in these single-copy loop drivers
     # resolves to the PRIMARY harness's dir, and a directory probe stays

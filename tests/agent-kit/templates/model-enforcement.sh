@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Regression guard for the token-efficiency-a-policy goal (v0.24.0): locks ## Model
+# Regression guard for the token-efficiency-a-policy goal: locks ## Model
 # sections, self-reported model lines, PASS (with notes) / severity minor, ladder
 # phases, align_docs default, models.map spawn naming, task tier defaults, loop
 # ladder:auto, align-docs small-change fold, and minimum kit VERSION. Tracked,
@@ -465,17 +465,17 @@ else
 fi
 
 # ===========================================================================
-# (k) skills/agent-kit/SKILL.md metadata.version >= 0.24.0 (semver, not hardcoded equality).
+# (k) skills/agent-kit/SKILL.md metadata.version is valid semver ≥ 1.0.0.
 # ===========================================================================
 if [[ ! -f "$VERSION_FILE" ]]; then
-  report FAIL "(k) skills/agent-kit/SKILL.md metadata.version >= 0.24.0" "VERSION file missing"
+  report FAIL "(k) skills/agent-kit/SKILL.md metadata.version is valid semver ≥ 1.0.0" "VERSION file missing"
 else
   kit_ver="$(kit_version "$VERSION_FILE")"
   if [[ "$kit_ver" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] \
-     && printf '%s\n' "0.24.0" "$kit_ver" | sort -C -V; then
-    report PASS "(k) skills/agent-kit/SKILL.md metadata.version >= 0.24.0 ($kit_ver)"
+     && printf '%s\n' "1.0.0" "$kit_ver" | sort -C -V; then
+    report PASS "(k) skills/agent-kit/SKILL.md metadata.version is valid semver ≥ 1.0.0 ($kit_ver)"
   else
-    report FAIL "(k) skills/agent-kit/SKILL.md metadata.version >= 0.24.0" "contents: '${kit_ver:-<empty>}'"
+    report FAIL "(k) skills/agent-kit/SKILL.md metadata.version is valid semver ≥ 1.0.0" "contents: '${kit_ver:-<empty>}'"
   fi
 fi
 

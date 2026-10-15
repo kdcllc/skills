@@ -1,4 +1,4 @@
-**Who this is for / What you'll learn:** Kit **users** running non-trivial features through `/feature`, and **contributors** who need to understand what the orchestrator actually does phase by phase. You will learn the seven-phase lifecycle — alignment through pull request — including acceptance criteria at planning (validated at Phase 3), optional gated Phases 6/7, per-gate verdict vocabulary, fix-cycle model rotation, the Phase 4 continuation ladder on cycle-3 exhaustion (as of v0.20.0), proxy token logging in the orchestration log, escalation exits, and orchestrator iron rules. For verdict rubrics and criteria depth see [evaluation-system.md](evaluation-system.md); for who gets spawned and model tiers see [agents-and-models.md](agents-and-models.md). To choose `/feature` over other modes, start with [decision-guide.md](decision-guide.md).
+**Who this is for / What you'll learn:** Kit **users** running non-trivial features through `/feature`, and **contributors** who need to understand what the orchestrator actually does phase by phase. You will learn the seven-phase lifecycle — alignment through pull request — including acceptance criteria at planning (validated at Phase 3), optional gated Phases 6/7, per-gate verdict vocabulary, fix-cycle model rotation, the Phase 4 continuation ladder on cycle-3 exhaustion, proxy token logging in the orchestration log, escalation exits, and orchestrator iron rules. For verdict rubrics and criteria depth see [evaluation-system.md](evaluation-system.md); for who gets spawned and model tiers see [agents-and-models.md](agents-and-models.md). To choose `/feature` over other modes, start with [decision-guide.md](decision-guide.md).
 
 # Feature workflow (`/feature`)
 
@@ -66,6 +66,43 @@ flowchart TD
     P7 --> Done
     P7 --> P7Skip
     P7Skip --> Done
+```
+
+When Phase 4 fix cycles exhaust without **PASS**, the continuation ladder runs before terminal escalation when `phases.ladder` is `auto` (rung 5 only when all three verdicts flagged the same failing item); bypass-class verdicts escalate immediately from any cycle. When `phases.ladder` is `escalate`, cycle 3 goes to the user with the ladder offered as an option.
+
+```mermaid
+stateDiagram-v2
+    [*] --> TaskOpen
+    TaskOpen --> Cycle1: dispatch implementer
+    Cycle1 --> Eval1: evaluate
+    Eval1 --> TaskDone: PASS
+    Eval1 --> Cycle2: NEEDS FIXES cycle 1
+    Cycle2 --> Eval2: evaluate
+    Eval2 --> TaskDone: PASS
+    Eval2 --> Cycle3: NEEDS FIXES cycle 2
+    Cycle3 --> Eval3: evaluate
+    Eval3 --> TaskDone: PASS
+    Eval3 --> Human: cycle 3 ladder escalate
+    Eval3 --> LadderEntry: cycle 3 ladder auto
+    Eval1 --> EscalateBypass: destructive / security / infra
+    Eval2 --> EscalateBypass: destructive / security / infra
+    Eval3 --> EscalateBypass: destructive / security / infra
+    LadderEntry --> Rung5: unanimous same failing item
+    LadderEntry --> Rung4: else skip to diagnosis
+    Rung5 --> Rung4: criteria-sound
+    Rung5 --> Human: criteria-defective or disagreement
+    Rung4 --> Rung6: signature match + split recommended
+    Rung4 --> Human: signature match, no split
+    Rung4 --> DiagAttempt: no signature match
+    DiagAttempt --> ReEval4: re-evaluate
+    ReEval4 --> TaskDone: PASS
+    ReEval4 --> Rung6: failure and split recommended
+    ReEval4 --> Human: failure, no split (or repeated failure signature)
+    Rung6 --> TaskDone: all subtasks PASS
+    Rung6 --> Human: budget exhausted
+    EscalateBypass --> Human
+    TaskDone --> [*]
+    Human --> [*]
 ```
 
 Each gate uses its **own** verdict vocabulary — never collapsed:
@@ -179,7 +216,7 @@ For each task in dependency order:
 
 ### Bypass at detection
 
-Any verdict tagged `destructive`, `security`, or `infra` stops all cycles immediately and escalates — from cycle 1, not only after exhaustion (as of v0.20.0). Full taxonomy in [evaluation-system.md](evaluation-system.md).
+Any verdict tagged `destructive`, `security`, or `infra` stops all cycles immediately and escalates — from cycle 1, not only after exhaustion. Full taxonomy in [evaluation-system.md](evaluation-system.md).
 
 ### Continuation ladder (on cycle-3 exhaustion, when `phases.ladder: auto`)
 
@@ -206,7 +243,7 @@ The headless loop inherits this ladder because each iteration runs this skill; t
 
 ### Fix-cycle model rotation
 
-As of v0.19.0, retries rotate models to escape self-review blindness:
+Retries rotate models to escape self-review blindness:
 
 | Cycle | Model choice |
 |-------|--------------|
@@ -279,8 +316,8 @@ These are user-visible behaviors enforced throughout all phases:
 | **Never edit product code** | The orchestrating session coordinates only — context packages, spawns, verdicts, decisions. Spawning `terminal` for Quality Checks is coordination, not implementation. |
 | **Every fix is re-evaluated** | Fixes and revisions are **always** re-verified by an evaluator. No exception. |
 | **No phase advances without verdict** | Phase 4 tasks need evaluator **PASS**; Phase 5 needs **APPROVED**; Phase 3 needs **PASS** on the goal. |
-| **Max 3 cycles, then escalate** | As of v0.20.0, Phase 4 task execution continues through the continuation ladder (rungs 5→4→6) before escalation; Phase 3 and Phase 5 escalate after 3 cycles. |
-| **Repository safety** | As of agent-kit **[Unreleased]** (not yet tagged), before goals whose tasks move, rename, or delete user files the orchestrator takes a restorable backup and records where it is in the orchestration log. After every subagent returns, it compares `HEAD`, the current branch, and `git config --local` user entries with the values from before the spawn, and compares the changed-file set (`git status --porcelain`) with the task's write fence; anything unexpected stops the goal — log it, restore from git or the backup, and fix the cause before continuing. Canonical detail: [`skills/agent-kit/templates/ORCHESTRATION.md`](../../../skills/agent-kit/templates/ORCHESTRATION.md) (Repository safety). |
+| **Max 3 cycles, then escalate** | Phase 4 task execution continues through the continuation ladder (rungs 5→4→6) before escalation when `phases.ladder` is `auto`; Phase 3 and Phase 5 escalate after 3 cycles. |
+| **Repository safety** | Before goals whose tasks move, rename, or delete user files the orchestrator takes a restorable backup and records where it is in the orchestration log. After every subagent returns, it compares `HEAD`, the current branch, and `git config --local` user entries with the values from before the spawn, and compares the changed-file set (`git status --porcelain`) with the task's write fence; anything unexpected stops the goal — log it, restore from git or the backup, and fix the cause before continuing. Canonical detail: [`skills/agent-kit/templates/ORCHESTRATION.md`](../../../skills/agent-kit/templates/ORCHESTRATION.md) (Repository safety). |
 
 ### Escalation format
 
@@ -300,7 +337,7 @@ For `criteria-defective` escalations (rung 5 arbitration), the defective criteri
 
 ## Orchestration log
 
-Path: `_memory/work/goals/[goal-name]/orchestration-log.md` — an **append-only spawn ledger**. As of v0.25.0 the orchestrator never hand-writes it: every entry goes through the emitted tool `_kit/log-spawn.sh` (Windows outside Git Bash: `_kit\log-spawn.cmd`; canonical source [`skills/agent-kit/templates/tools/log-spawn.sh`](../../../skills/agent-kit/templates/tools/log-spawn.sh)). As of v0.26.0 the header's running `io_est_tokens` / `work_est_tokens` totals read "see latest entry" because the script only appends.
+Path: `_memory/work/goals/[goal-name]/orchestration-log.md` — an **append-only spawn ledger**. The orchestrator never hand-writes it: every entry goes through the emitted tool `_kit/log-spawn.sh` (Windows outside Git Bash: `_kit\log-spawn.cmd`; canonical source [`skills/agent-kit/templates/tools/log-spawn.sh`](../../../skills/agent-kit/templates/tools/log-spawn.sh)). The header's running `io_est_tokens` / `work_est_tokens` totals read "see latest entry" because the script only appends.
 
 **File, then script.** The flow for every spawn is:
 
@@ -323,7 +360,7 @@ Path: `_memory/work/goals/[goal-name]/orchestration-log.md` — an **append-only
 
    Entry shape: `- OUTCOME [#03]: PASS · model reported: <…> · model_check: <match|MISMATCH|unverified> · report: <path> · report_chars: <R> · io_est_tokens: <T> · work_read_chars: <C|n/a> · work_est_tokens: <W|n/a> · running io: <X> · running work: <Y>` where `io_est_tokens` = (`context_chars` + `report_chars`) / 4 — orchestrator I/O proxy (chars/4), not the subagent's spend — and `work_est_tokens` comes from the agent report's **`### Footprint`** block (`files_read: N (~C chars)`; W = C/4, or `n/a` if missing). `model requested` is recorded before launch, `model reported` after return.
 
-   As of v0.29.0, `model_check` compares provider **families** (not exact IDs) for the SPAWN `model requested:` id and `--model-reported`: `match` (both known, same family), `MISMATCH` (both known, different — one stderr line `log-spawn: MODEL-FAMILY-MISMATCH requested=<id> reported=<text>`, exit 0), or `unverified` (either side unknown/`inherit`/empty). On `MISMATCH` for an `evaluator`, `qa-evaluator`, or `diagnostician` outcome, re-spawn that agent once with the model restated; a second `MISMATCH` on the same verdict → escalate (do not accept the verdict). Worker spawns (`implementer`, `test-writer`, `terminal`): log and continue. `unverified`: logged only.
+   `model_check` compares provider **families** (not exact IDs) for the SPAWN `model requested:` id and `--model-reported`: `match` (both known, same family), `MISMATCH` (both known, different — one stderr line `log-spawn: MODEL-FAMILY-MISMATCH requested=<id> reported=<text>`, exit 0), or `unverified` (either side unknown/`inherit`/empty). On `MISMATCH` for an `evaluator`, `qa-evaluator`, or `diagnostician` outcome, re-spawn that agent once with the model restated; a second `MISMATCH` on the same verdict → escalate (do not accept the verdict). Worker spawns (`implementer`, `test-writer`, `terminal`): log and continue. `unverified`: logged only. Logs from the private **`setup`** kit may still show a single `running total` field until re-emitted.
 4. Everything else — phase completions, continuation-ladder transitions (with the **rung name**), guard trips, and phase skips (e.g. Phase 6/7 declined via `goal.md`'s `phases:` block) — is a `note`: `_kit/log-spawn.sh note --goal my-goal --text "Phase 4 complete"`.
 
 **Exit codes:** 0 ok · 2 usage error (unknown flag/subcommand, missing required flag, context file not named `NN-context.md`) · 3 ledger integrity (duplicate `SPAWN [#NN]`, `outcome` without its `SPAWN`, or a second `OUTCOME [#NN]`) · 4 missing goal directory or artifact file.
@@ -352,79 +389,31 @@ You are not expected to spawn subagents or run Quality Checks — those are orch
 
 ---
 
-## Condensed annotated walkthrough: `loop-ps1-slot-interpolation-fix`
+## Condensed annotated walkthrough: `test-suite-speed`
 
-The following condenses a **real** goal from `_goals/loop-ps1-slot-interpolation-fix/` (historical goal folder from before the `_memory/work/goals/` layout; not in this repo). Those files were **local run artifacts** — the quotes below are evidence snapshots, not tracked source files. Delivery was a **local merge**, not a PR.
+The following condenses a **real** 1.0-era goal under `_memory/work/goals/test-suite-speed/` (gitignored local run artifacts in this repo — paths are cited as code text, not links). Phase 6 and Phase 7 were skipped (`align_docs: false`, `pull_request: false`).
 
-### Phase 1 — Alignment
+### Problem and tasks
 
-> **Parallel development** (explicit user choice): task 01 runs in an isolated git worktree on its own branch (`fix/loop-ps1-slot-interpolation`, based on HEAD `15e7f18`); tasks 01 and 02 execute concurrently.
+> The agent-kit suite (`bash tests/agent-kit/run-all.sh`) takes about 8 minutes on the maintainer's 32-core Linux machine (measured 2026-10-14: 7m58s, `wall 465s`). Almost all of that time traces back to `skills/agent-kit/bin/emit.sh`, which takes about 12 s per run of the self-answers fixture on an idle machine. `tests/agent-kit/templates/emit-migrate.sh` makes about 36 of those runs back to back (415 s, the critical path). …
 
-> **Delivery**: no PR. After the final audit, the orchestrator merges the branch into `master` locally per the Delivery Procedure below.
-
-The user chose parallel worktrees to avoid clobbering an in-flight v0.19.0 feature and declined a GitHub PR in favor of a local merge after audit.
-
-### Phase 2 — Goal creation
-
-> Created goal.md, 01-canonical-slot-fix.md, 02-checks-regression-tripwire.md.
-
-> Write-set disjointness verified: 01 = {skills/agent-kit/templates/loop/loop.ps1 (branch-side)}; 02 = {.claude/checks.sh, .claude/checks.ps1, orchestration-kit.manifest.json} — no intersection, depends_on both [].
-
-Two parallel tasks with disjoint fences: canonical template fix in an isolated worktree, instance checks twins in the main tree.
+Six tasks in dependency order: `04-docker-optin` → `01-emit-forks` → `02-emit-pipeline` → `03-emit-migrate-parallel` → `05-tests` → `06-changelog` — pure performance refactor with byte-identical emit output.
 
 ### Phase 3 — Goal evaluation
 
-> Verdict: NEEDS REVISION, 3/5 (model self-reported: Claude Opus 5).
+> OUTCOME [#01]: NEEDS REVISION … OUTCOME [#03]: PASS … Phase 3 complete: goal evaluator PASS at cycle 3.
 
-Cycle 1 flagged five required revisions: (1) closer/parallel contradiction; (2) task-02 reads of task-01-owned file without an edge; (3) task 01 reading list unreachable in worktree; (4) best-of-n-runner dispatch undocumented vs owner: implementer; (5) delivery procedure unverifiable. After two revision rounds:
+Three evaluator cycles; the only exit to Phase 4 was **PASS** after revising acceptance criteria (for example a blocker about `git checkout` wiping an uncommitted task rewrite).
 
-> Verdict: PASS, 4/5 (model self-reported: Claude Opus 5). Phase 3 COMPLETE.
+### Phase 4 — Task execution (excerpt)
 
-Three cycles used; the only exit to Phase 4 was evaluator **PASS**.
+> OUTCOME [#06]: PASS (with notes) … Task 04 PASS; minor: CI comment placement above pull step (carry to Phase 5 audit)
 
-### Phase 4 — Task execution
+Task 04 (`AGENT_KIT_DOCKER` gate) passed with notes; the orchestrator spawned **`terminal`** first because the evaluator is read-only, then **`evaluator`** with attached command output — the standard Phase 4 evidence pattern.
 
-> *(Historical note: this v0.19.0-era run used a since-removed pre-implementation sign-off step; v0.23.0+ dispatches directly from task files with Acceptance Criteria validated at Phase 3.)*
+### Outcome
 
-> Pre-dispatch sign-off complete for both tasks: 01 rev 0 (worker+evaluator true), 02 rev 1 (worker+evaluator true).
-
-Pre-dispatch sign-off ran before parallel dispatch — task 01's proposal was orchestrator-drafted under the trivial-task provision; implementation ran via best-of-n-runner carrying the implementer role (+4/−4). Task 02's test-writer needed one revision round.
-
-> Task 01 (best-of-n-runner ⇒ implementer role): COMPLETE. ACTUAL branch name: `fix/loop-ps1-slot-interpolation` … --stat = 1 file, +4/−4
-
-> Task 01: PASS 5/5 … Task 02: PASS 5/5
-
-Both tasks passed on cycle 1/3 with no fix cycles needed.
-
-### Phase 5 — Final audit
-
-> APPROVED, 5/5 (model: Claude Opus 5). PHASE 5 AUDIT COMPLETE.
-
-> `bash .claude/checks.sh` → exit 1. … exactly one FAIL, verbatim: `FAIL: J: kitVersion==VERSION join — VERSION=0.19.0 kitVersion=0.18.0`.
-
-Quality Checks ran via `terminal` spawn (rung 3). The auditor ruled the suite green-except-J-kitVersion — a pre-existing mismatch from a concurrent feature, not this goal's work.
-
-### Phase 6 — Align docs
-
-> Doc greps: zero tracked docs mention $Slot/slot interpolation; checks.sh
-  mentions are skills/agent-kit/SKILL.md:278 (twin pattern — still accurate) and
-  docs/agent-kit/design-parallel-dispatch.md (… annotate-only territory, no substance drift).
-
-> Per-doc edit list: EMPTY — "no change, already accurate" for every bucket
-  in the surface map (… no harness-capability finding for the research docs
-  or matrix).
-
-> Plan PASS 5/5; doc audit APPROVED 5/5 … PHASE 6 COMPLETE — zero doc edits, no-op independently challenged and confirmed
-
-No tracked docs mentioned the fixed `$Slot:` strings; the empty edit list was evaluator-challenged and approved.
-
-### Phase 7 — Pull request (skipped)
-
-> Phase 7 SKIPPED by explicit user decision (no PR; local merge delivered).
-
-> master: 15e7f18 → 81cd293 (fix) → 5825729 (merge). 2 ahead of origin/master; NOT pushed (no push without user instruction).
-
-Delivery instead followed the goal's Delivery Procedure: merge commit `5825729` on `master` with byte-identical pre/post digests. **No PR was created** — that is the real outcome of this run.
+Shipped on `migrate/agent-kit` (local commit, no PR, no push) per archived goal-summary **`20261015T092947Z-e0dacf8b`**: `run-all` wall **465 s → 123 s** (7m58s → 2m06s); median self-answers **`emit.sh`** **11.2 s → 2.4 s**; emitted output byte-identical except one accepted fix (an apostrophe in `--root` no longer reports false `.ps1` parse failures); parallel **`emit-migrate.sh`** and opt-in Docker **`bash:3.2`** (`AGENT_KIT_DOCKER=1`) checks landed as planned.
 
 ---
 
@@ -444,5 +433,6 @@ Delivery instead followed the goal's Delivery Procedure: merge commit `5825729` 
 - [`skills/agent-kit/templates/skills/ship-pr/SKILL.template.md`](../../../skills/agent-kit/templates/skills/ship-pr/SKILL.template.md) — Phase 7 workflow
 - [`skills/agent-kit/templates/ORCHESTRATION.md`](../../../skills/agent-kit/templates/ORCHESTRATION.md) — architecture invariants, retry limits, continuation ladder, escalation format
 - [`skills/agent-kit/templates/models.map.md`](../../../skills/agent-kit/templates/models.map.md) — continuation-ladder model pins
-- `_goals/loop-ps1-slot-interpolation-fix/goal.md` — exemplar goal (historical path; pre-`_memory/work/goals/` layout)
-- `_goals/loop-ps1-slot-interpolation-fix/orchestration-log.md` — exemplar orchestration log (same historical layout)
+- `_memory/work/goals/test-suite-speed/goal.md` — exemplar goal problem and task table (gitignored scratch)
+- `_memory/work/goals/test-suite-speed/orchestration-log.md` — exemplar spawn ledger (gitignored scratch)
+- `_memory/records/2026/10/20261015T092947Z-e0dacf8b.md` — archived goal-summary outcome for this walkthrough

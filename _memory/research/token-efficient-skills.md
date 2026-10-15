@@ -1,15 +1,23 @@
+---
+title: "Token-efficient skills, instructions hygiene, and cheaper command execution"
+topic: token-efficient-skills
+date: 2026-08-20
+status: shipped
+shipped_in: ["1.0.0"]
+goals: [invocation-flag-hygiene, feature-skill-slimming]
+supersedes: []
+memory: [20260820T120017Z-cb1bb1ce]
+---
+
 # Token-efficient skills, instructions hygiene, and cheaper command execution
 
-**Date**: 2026-08-20 · **Status**: the P0 invocation flags and the P1 `terminal`
-agent are shipped — vehicle `_goals/invocation-flag-hygiene/`. **Feeds**: a
-still-future `_goals/` for the quiet-command `/agent-kit` interview, `reference/`
-demotion, Copilot inline-legacy cleanup, and always-on pointer hygiene (none of
-those shipped here).
+**Feeds (not shipped here):** quiet-command `/agent-kit` interview, `reference/`
+demotion, Copilot inline-legacy cleanup, always-on pointer hygiene.
 
 **Method**: external deep-research report ingested against kit ground truth
-(`skills/agent-kit/reference/harness-matrix.md`, `docs/agent-kit/research-multi-harness-upgrade.md`
+(`skills/agent-kit/reference/harness-matrix.md`, `multi-harness-upgrade.md`
 §1.3, `emitters/copilot.md`, canonical templates). Full scratch report:
-`_research/token-efficient-skills-and-instructions/report.md` (gitignored). Seed
+`_memory/work/research/token-efficient-skills/report.md` (gitignored). Seed
 articles:
 
 - [Maximizing the value of your Claude Code sessions](https://claude.com/blog/maximizing-the-value-of-your-claude-code-sessions)
@@ -19,7 +27,7 @@ articles:
 Harness capability cells from this work live in
 `skills/agent-kit/reference/harness-matrix.md` (2026-08-20 addendum). That table is
 source of truth for emitters; this file is the product verdict and backlog.
-`_goals/invocation-flag-hygiene/` owns the status line, skill-verdicts, backlog
+goal `invocation-flag-hygiene` owns the status line, skill-verdicts, backlog
 rows, and terminal-agent-spec section below that it changed.
 
 ---
@@ -31,7 +39,7 @@ rows, and terminal-agent-spec section below that it changed.
    raw description size.
 2. `disable-model-invocation: true` is the same key on Claude Code, Cursor, and
    Copilot skills. Seven of the kit's nine skills now set it, shipped by
-   `_goals/invocation-flag-hygiene/`; `feature` and `research` stay
+   goal `invocation-flag-hygiene`; `feature` and `research` stay
    auto-invocable by design.
 3. Copilot `.github/skills/*/SKILL.md` is first-class. Inlining skill bodies into
    agents is a legacy fallback, not the current default we should keep using.
@@ -49,8 +57,8 @@ rows, and terminal-agent-spec section below that it changed.
 
 | Skill | Verdict | First implementation move |
 |-------|---------|---------------------------|
-| `feature` | Keep auto-skill; later split thin SKILL.md + reference | Tighten description — **Shipped** (`_goals/feature-skill-slimming/`) |
-| `research` | Keep auto-skill | Tighten description — **Shipped** (`_goals/feature-skill-slimming/`) |
+| `feature` | Keep auto-skill; later split thin SKILL.md + reference | Tighten description — **Shipped** (goal `feature-skill-slimming`) |
+| `research` | Keep auto-skill | Tighten description — **Shipped** (goal `feature-skill-slimming`) |
 | `align-docs` | Manual | `disable-model-invocation: true`; keep `/align-docs` |
 | `ship-pr` | Manual | `disable-model-invocation: true`; keep `/ship-pr` |
 | `auto-loop` | Loop-driver only | `disable-model-invocation: true` |
@@ -59,7 +67,7 @@ rows, and terminal-agent-spec section below that it changed.
 
 **Flag in place for all seven** (`align-docs`, `ship-pr`, `auto-loop`,
 `test-ladder`, `goal-criteria`, `task-criteria`, `qa-criteria`) — shipped by
-`_goals/invocation-flag-hygiene/`. Open question 2 (below) resolved: stop at
+goal `invocation-flag-hygiene`. Open question 2 (below) resolved: stop at
 the flag; the `reference/` demotion in the "First implementation move" column
 above was **not** taken in this goal.
 
@@ -72,7 +80,7 @@ auto-invocation).
 
 ## Terminal agent (shipped)
 
-Shipped by `_goals/invocation-flag-hygiene/` on Claude Code, Cursor, and
+Shipped by goal `invocation-flag-hygiene` on Claude Code, Cursor, and
 Copilot as first-class agents, plus a Codex `[agents.terminal]` registration
 so the glob-copied `terminal.md` is not dangling. Canonical Claude source:
 `templates/agents/terminal.md`.
@@ -115,18 +123,18 @@ inline `ORCHESTRATION.md` (659 lines). Change `feature/SKILL.md` from “its
 invariants are binding” (whole-doc required reading) to “read the section for
 the current phase.”
 
-## Prioritized backlog (P0/P1-terminal/P2-test-guard shipped by `_goals/invocation-flag-hygiene/`)
+## Prioritized backlog (P0/P1-terminal/P2-test-guard shipped by goal `invocation-flag-hygiene`)
 
 | Pri | Change | Effect | Status |
 |-----|--------|--------|--------|
-| P0 | `disable-model-invocation: true` on `auto-loop`, `align-docs`, `ship-pr`, `*-criteria` | Session-start metadata + auto-fire gone for six skills | **Shipped** — `_goals/invocation-flag-hygiene/` |
-| P0 | Single load path for `test-ladder` and criteria (flag first; `reference/` demotion optional follow-up) | Stops double-loading | **Shipped** (flag only — `reference/` demotion not taken) — `_goals/invocation-flag-hygiene/` |
-| P1 | Emit `terminal` agent on all three harnesses; spawn rules in ORCHESTRATION.md | Command output leaves the frontier context | **Shipped by this goal** — `_goals/invocation-flag-hygiene/` |
+| P0 | `disable-model-invocation: true` on `auto-loop`, `align-docs`, `ship-pr`, `*-criteria` | Session-start metadata + auto-fire gone for six skills | **Shipped** — goal `invocation-flag-hygiene` |
+| P0 | Single load path for `test-ladder` and criteria (flag first; `reference/` demotion optional follow-up) | Stops double-loading | **Shipped** (flag only — `reference/` demotion not taken) — goal `invocation-flag-hygiene` |
+| P1 | Emit `terminal` agent on all three harnesses; spawn rules in ORCHESTRATION.md | Command output leaves the frontier context | **Shipped by this goal** — goal `invocation-flag-hygiene` |
 | P1 | `/agent-kit` interview: quiet form of targeted/full test commands | No invented flags | Not this goal |
 | P1 | Copilot emitter: `.github/skills/` default; inline = legacy-only | Stops body duplication in agents | Not this goal |
-| P1 | Always-on + “binding” language hygiene | Stops whole-architecture pull into `/feature` | **Shipped** — `_goals/feature-skill-slimming/` |
-| P2 | Split `feature` (181) / `auto-loop` (208) SKILL.md | Smaller per-turn body once invoked | **Shipped** (feature ladder → `reference/continuation-ladder.md`; template skills → `SKILL.template.md`) — `_goals/feature-skill-slimming/` |
-| P2 | Test guard: fail if criteria/`auto-loop` are auto-invocable | Regression lock | **Shipped by this goal** — `_goals/invocation-flag-hygiene/` |
+| P1 | Always-on + “binding” language hygiene | Stops whole-architecture pull into `/feature` | **Shipped** — goal `feature-skill-slimming` |
+| P2 | Split `feature` (181) / `auto-loop` (208) SKILL.md | Smaller per-turn body once invoked | **Shipped** (feature ladder → `reference/continuation-ladder.md`; template skills → `SKILL.template.md`) — goal `feature-skill-slimming` |
+| P2 | Test guard: fail if criteria/`auto-loop` are auto-invocable | Regression lock | **Shipped by this goal** — goal `invocation-flag-hygiene` |
 | P2 | Setup-report MCP / `/context` warning | User education; kit does not emit MCP | Not this goal |
 | P2 | Path-scoped lane rules (Copilot `applyTo`, Cursor `globs`, Claude `paths:`) | Test/docs/PR rules stay out of unrelated sessions | Not this goal |
 
@@ -137,7 +145,7 @@ criteria or architecture into always-on files; merge skills into one mega-skill;
 auto-invoke a pile of domain skills; fold the loop into a long-lived chat; give
 `terminal` edit tools.
 
-## Open questions (1–3 resolved by `_goals/invocation-flag-hygiene/`; 4 still open)
+## Open questions (1–3 resolved by goal `invocation-flag-hygiene`; 4 still open)
 
 1. Enable Copilot nested subagents as kit default, or leave it an installer
    choice? **Resolved: not a kit default.** Nesting

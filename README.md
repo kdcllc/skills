@@ -106,7 +106,7 @@ scripts/validate-skills.sh         # repo, frontmatter, and version checks (also
 scripts/checks/                    # skill-specific content guards, run by validate-skills.sh
 scripts/release-skill.sh           # release one skill: bump, commit, tag <skill>/vX.Y.Z
 scripts/agent-kit/                 # agent-kit dogfood installer (self-install.sh)
-docs/agent-kit/                    # agent-kit developer guide and research studies (not shipped)
+docs/agent-kit/                    # agent-kit developer guide (research briefs: _memory/research/) (not shipped)
 tests/agent-kit/                   # agent-kit test suites; run-all.sh runs everything
 _memory/                           # agent-kit memory store for this repo (immutable records)
 ```

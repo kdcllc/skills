@@ -4,7 +4,7 @@
 
 The autonomous loop is **optional**. It drives unattended runs: the loop driver (`_loop/loop.sh` or `_loop/loop.ps1`) repeatedly dispatches the `auto-loop` skill with fresh context until the run budget is exhausted or a structural guard stops the run. **SAFETY: run inside a sandbox** (worktree/container) with minimal credentials. The drivers never push and never bypass permission prompts by themselves — the same sandbox warning appears in the skill [README](../../../skills/agent-kit/README.md) and the loop driver header.
 
-As of **v0.19.0**, this guide describes **canonical shipped behavior** — what `/agent-kit` emits from `skills/agent-kit/templates/loop/` into your project's `_loop/` tree. In **this kit repo**, the emitted instance is gitignored and `_memory/loop/` is not tracked, so live runs here stay serial on the main tree; `LOOP_WORKTREE=1` requires a **tracked** `_memory/loop/backlog.md` (and harness directory) in the install, which is labeled explicitly wherever it matters below.
+This guide describes **canonical shipped behavior** — what `/agent-kit` emits from `skills/agent-kit/templates/loop/` into your project's `_loop/` tree. In **this kit repo**, the emitted instance is gitignored and `_memory/loop/` is not tracked, so live runs here stay serial on the main tree; `LOOP_WORKTREE=1` requires a **tracked** `_memory/loop/backlog.md` (and harness directory) in the install, which is labeled explicitly wherever it matters below.
 
 ## What a run is
 
@@ -50,7 +50,7 @@ flowchart TD
 
 **Iteration in main tree or worktree.** At `LOOP_WORKTREE=0` (default), every slot runs in the main checkout. At `LOOP_WORKTREE=1`, each slot gets its own git worktree under `.loop-worktrees/` after a tracked-instance preflight.
 
-**Evaluation-gated commit.** The iteration follows `/feature` Phases 2–6 with the story's acceptance criteria replacing Phase 1 alignment. Phase 7 (`pull_request`) is deferred to the end of the whole run — the loop never pushes during per-story iterations. A commit lands only on evaluator PASS (or APPROVED for audits) plus green test-ladder rungs 1–2; rung 3 runs per story after that story's Phase 5 audit. Details of verdicts and the ladder live in [evaluation-system.md](evaluation-system.md). As of v0.20.0, iterations inherit Phase 4's continuation ladder (rungs 5→4→6 on fix-cycle exhaustion, before terminal escalation) because each iteration runs the phased flow; the drivers' per-story attempt cap and circuit breakers stay the unchanged outer backstop. Ladder mechanics are documented in [feature-workflow.md](feature-workflow.md).
+**Evaluation-gated commit.** The iteration follows `/feature` Phases 2–6 with the story's acceptance criteria replacing Phase 1 alignment. Phase 7 (`pull_request`) is deferred to the end of the whole run — the loop never pushes during per-story iterations. A commit lands only on evaluator PASS (or APPROVED for audits) plus green test-ladder rungs 1–2; rung 3 runs per story after that story's Phase 5 audit. Details of verdicts and the ladder live in [evaluation-system.md](evaluation-system.md). Iterations inherit Phase 4's continuation ladder (rungs 5→4→6 on fix-cycle exhaustion, before terminal escalation) because each iteration runs the phased flow; the drivers' per-story attempt cap and circuit breakers stay the unchanged outer backstop. Ladder mechanics are documented in [feature-workflow.md](feature-workflow.md).
 
 **Phase 6/7 and ladder controls** — the loop cannot ask questions, so flags are read from story backlog frontmatter and run configuration only (same naming as `goal.md`'s `phases:` block):
 
@@ -66,9 +66,9 @@ flowchart TD
 
 These guards are **structural** — enforced by `loop.sh` / `loop.ps1` and the `auto-loop` skill, not optional prose. They mirror the canonical guard table in [`skills/agent-kit/templates/ORCHESTRATION.md`](../../../skills/agent-kit/templates/ORCHESTRATION.md).
 
-| Guard | Driver behavior (as of v0.19.0) |
+| Guard | Driver behavior |
 |-------|----------------------------------|
-| **Protected paths** | The loop may not modify `_loop/`, kit agents/skills, `orchestration-kit.manifest.json`, or `.gitattributes`. As of **v1.0.0**, **`_memory/records/`** and **`_memory/quarantine/`** are integrator-only in driver-dispatched mode (no story may declare `_memory/records/` or `_memory/quarantine/` in `writes:`; manual iterations may update `_memory/loop/backlog.md`). A protected-path violation reverts the iteration and **stops the run immediately** (exit **4**); other running slots are killed. |
+| **Protected paths** | The loop may not modify `_loop/`, kit agents/skills, `orchestration-kit.manifest.json`, or `.gitattributes`. **`_memory/records/`** and **`_memory/quarantine/`** are integrator-only in driver-dispatched mode (no story may declare `_memory/records/` or `_memory/quarantine/` in `writes:`; manual iterations may update `_memory/loop/backlog.md`). A protected-path violation reverts the iteration and **stops the run immediately** (exit **4**); other running slots are killed. |
 | **Circuit breaker (CB1 / CB2)** | **Per slot:** retire after **3 consecutive no-commit reaps** (CB1) or **5 identical failure signatures** (CB2). The run **continues** while other slots remain active. When **every slot is retired**, the run stops — exit **3** if any retirement was signature-based (CB2), else exit **2**. |
 | **Model breaker** | CLOSED/OPEN/HALF-OPEN on anchored rate-limit detection; 600s cooldown, 2 successes to close; falls down the loop model chain. OPEN sleeps instead of hammering; rate-limited passes are CB1-exempt. State: `_memory/loop/breaker-state.json` (gitignored). |
 | **Memory size gates** | After integrate, the driver **detects** breaches and prints a deferral — it never compacts or archives. Thresholds match the guard table: `_memory/loop/LEARNINGS.md` ≥ **15 KB** (compact) and `_memory/loop/ESCALATIONS.md` ≥ **20 KB** (archive resolved entries) — an entry is resolved when it carries a `- resolved: YYYY-MM-DD <decision>` line; archived entries go to `_memory/loop/archive/ESCALATIONS-<YYYY-MM>.md`, where `memory.sh backfill --escalations` can turn them into `decision` records. Compaction and archival happen in a **manual** `auto-loop` iteration only; driver-dispatched slots never run these gates. |
@@ -113,7 +113,7 @@ This note fires **only** when `LOOP_SLOTS>1` was explicitly set — not on every
 
 ### `LOOP_USAGE_FORMAT` and `LOOP_USAGE_LOG`
 
-As of **v0.26.0**, both drivers capture real per-iteration token usage from the headless CLI when the format is active. Resolved once at startup from `LOOP_USAGE_FORMAT`:
+Both drivers capture real per-iteration token usage from the headless CLI when the format is active. Resolved once at startup from `LOOP_USAGE_FORMAT`:
 
 | Value | Meaning |
 |-------|---------|
@@ -141,7 +141,33 @@ These proxy fields in the orchestration log (`io_est_tokens`, `work_est_tokens`)
 
 Loop-created goals always set **`ladder: auto`** in `goal.md`'s `phases:` block (alongside `align_docs` and `pull_request`) so cycle-3 exhaustion runs the continuation ladder unattended. Interactive `/feature` goals default to `ladder: escalate` instead.
 
-For parallel-dispatch design rationale (slot accounting, worktree lifecycle, write-set admission, integrator), see [Parallel dispatch design](../design-parallel-dispatch.md).
+Driver-owned dispatch, slot worktrees, write-set admission, and integrator merge semantics are covered in this guide and [architecture.md](architecture.md).
+
+The following sequence shows one driver-dispatched iteration from dispatch through integrator step 3b (memory proposals).
+
+```mermaid
+sequenceDiagram
+    participant D as loop driver (integrator)
+    participant W as slot worktree
+    participant A as auto-loop agent
+
+    D->>D: select story + write-set admission
+    D->>W: dispatch prompt + outbox path
+    W->>A: fresh CLI session
+    A->>D: iteration result + outbox files
+    D->>D: reap + ITERATION verdict check
+    D->>D: step 2 backlog passes/blocked fields
+    D->>D: step 3 append LEARNINGS/ESCALATIONS
+    D->>D: CB0 protected-path check
+    alt clean integration
+        D->>D: merge branch (step disposal)
+        D->>D: step 3b memory add + chore(memory) commit
+    else quarantine-lite
+        D->>D: retain branch + marker
+        Note over D: step 3b skipped (slot not integrated)
+    end
+    Note over D: step 3b never changes backlog, exit code, or breakers
+```
 
 **Memory in the loop:** Manual iterations call `_kit/memory.sh add` in the story commit. Driver-dispatched slots write `<outbox>/memory/*.md` proposals instead; the integrator **step 3b** at reap end materializes them (after CB0, with path-limited `chore(memory): …` commits when records land). Failures are `!!!` lines only and never change exit codes. Full rules: [memory.md](memory.md).
 
@@ -207,7 +233,7 @@ At run end, review commits on the branch and run **`ship-pr`** (Phase 7) once to
 | When to choose the loop | [decision-guide.md](decision-guide.md) |
 | Evaluator PASS, acceptance criteria, test ladder | [evaluation-system.md](evaluation-system.md) |
 | Install and first `/agent-kit` | [getting-started.md](getting-started.md) |
-| Parallel-dispatch design depth | [design-parallel-dispatch.md](../design-parallel-dispatch.md) |
+| Architecture map (dispatch + integrator) | [architecture.md](architecture.md) |
 
 ## Sources
 
@@ -219,4 +245,4 @@ At run end, review commits on the branch and run **`ship-pr`** (Phase 7) once to
 - [`skills/agent-kit/templates/loop/backlog.md`](../../../skills/agent-kit/templates/loop/backlog.md) — canonical backlog story format
 - [`skills/agent-kit/templates/ORCHESTRATION.md`](../../../skills/agent-kit/templates/ORCHESTRATION.md) — autonomous loop guard table
 - [`README.md`](../../../skills/agent-kit/README.md) — loop feature summary, sandbox warning, knob overview
-- [`docs/agent-kit/design-parallel-dispatch.md`](../design-parallel-dispatch.md) — bounded-concurrency dispatch design (Status block and shipped sections)
+- [`docs/agent-kit/guide/architecture.md`](architecture.md) — loop dispatch, worktrees, integrator step 3b

@@ -20,7 +20,7 @@ Every gate has its **own** verdict set. Never collapse them into one triple.
 | **Align-docs plan evaluation** | Phase 6.3 — doc edit plan | **PASS**, **NEEDS REVISION**, **REJECT** | [`align-docs/SKILL.template.md`](../../../skills/agent-kit/templates/skills/align-docs/SKILL.template.md) |
 | **Doc audit** | Phase 6.5 — whole doc change set | **APPROVED**, **ISSUES** | [`align-docs/SKILL.template.md`](../../../skills/agent-kit/templates/skills/align-docs/SKILL.template.md) |
 | **QA gate** (optional behavioral) | After Phase 5 approval, user-facing surfaces | **PASS**, **ISSUES FOUND**, **REJECT** | [`qa-criteria/SKILL.template.md`](../../../skills/agent-kit/templates/skills/qa-criteria/SKILL.template.md) |
-| **Arbitration (rung 5)** | Phase 4 continuation ladder — orchestrator-invoked on unanimous same-item failure across fix cycles 1–3 (as of v0.20.0) | **criteria-sound**, **criteria-defective** (never PASS/NEEDS FIXES/REJECT) | [`agents/evaluator.md`](../../../skills/agent-kit/templates/agents/evaluator.md) § Arbitration mode |
+| **Arbitration (rung 5)** | Phase 4 continuation ladder — orchestrator-invoked on unanimous same-item failure across fix cycles 1–3 | **criteria-sound**, **criteria-defective** (never PASS/NEEDS FIXES/REJECT) | [`agents/evaluator.md`](../../../skills/agent-kit/templates/agents/evaluator.md) § Arbitration mode |
 
 ### Source precedence: `ISSUES` vs `ISSUES FOUND`
 
@@ -28,7 +28,7 @@ The Phase 5 final audit unhappy path is **ISSUES** — not `ISSUES FOUND`. **`IS
 
 The canonical [`ORCHESTRATION.md`](../../../skills/agent-kit/templates/ORCHESTRATION.md) progress-checklist placeholder `[APPROVED/ISSUES FOUND]` (workflow state tracking) is **not** final-audit vocabulary. The lifecycle diagram in that file correctly shows **APPROVED** / **ISSUES** for Phase 5. On apparent conflict, the feature skill and criteria skills win.
 
-## Failure-class taxonomy (as of v0.20.0)
+## Failure-class taxonomy
 
 Every non-PASS task verdict carries `failure_class:` from this closed set ([`task-criteria/SKILL.template.md`](../../../skills/agent-kit/templates/skills/task-criteria/SKILL.template.md) § Failure-class taxonomy, [`agents/evaluator.md`](../../../skills/agent-kit/templates/agents/evaluator.md) § Verdict format): `implementation` (default) · `criteria-defect` · `destructive` · `security` · `infra`.
 
@@ -40,13 +40,35 @@ Every non-PASS task verdict carries `failure_class:` from this closed set ([`tas
 
 **Bypass consequence:** tagging `destructive`, `security`, or `infra` stops **all** retrying immediately — any cycle, not only after fix-cycle exhaustion — and escalates to the human. The evaluator tags at detection; it does not wait for the ladder to run out of attempts.
 
-## Arbitration mode (rung 5, as of v0.20.0)
+Non-**PASS** task verdicts route by `failure_class` as follows.
+
+```mermaid
+flowchart TD
+    Verdict["Task verdict not PASS"]
+    Class{"failure_class"}
+    Impl["implementation\nfix cycle + re-evaluate"]
+    Crit["criteria-defect\nrung 5 or human escalation"]
+    Dest["destructive\nimmediate human escalation"]
+    Sec["security\nimmediate human escalation"]
+    Infra["infra\nimmediate human escalation"]
+    Reject["REJECT\nimmediate human escalation"]
+
+    Verdict --> Class
+    Class -->|"implementation (default)"| Impl
+    Class -->|"criteria-defect"| Crit
+    Class -->|"destructive"| Dest
+    Class -->|"security"| Sec
+    Class -->|"infra"| Infra
+    Verdict --> Reject
+```
+
+## Arbitration mode (rung 5)
 
 Orchestrator-invoked only — the evaluator does not self-trigger this mode ([`agents/evaluator.md`](../../../skills/agent-kit/templates/agents/evaluator.md) § Arbitration mode).
 
 **Trigger** — unanimous same-item failure across fix cycles 1–3: every evaluator flagged the same required-fix item and it still fails after three implement→evaluate cycles.
 
-**Model** — `{{MODEL_FRONTIER_ALT_FAMILY}}` (frontier tier, different family from the primary evaluator when reachable). As of v0.29.0, when no different-family frontier model is reachable on the harness, setup may pin the same family with `arbiter_same_family: true` in the answers file (emit otherwise warns); the model map then labels the rung-5 row [`same-family arbiter (reduced independence)`](../../../skills/agent-kit/templates/models.map.md) and the arbiter's verdict header states `same-family arbiter`. Per the kit's Cursor silent-fallback caveat, the arbiter states in its verdict which model actually produced it ([`agents/evaluator.md`](../../../skills/agent-kit/templates/agents/evaluator.md) § Arbitration mode).
+**Model** — `{{MODEL_FRONTIER_ALT_FAMILY}}` (frontier tier, different family from the primary evaluator when reachable). When no different-family frontier model is reachable on the harness, setup may pin the same family with `arbiter_same_family: true` in the answers file (emit otherwise warns); the model map then labels the rung-5 row [`same-family arbiter (reduced independence)`](../../../skills/agent-kit/templates/models.map.md) and the arbiter's verdict header states `same-family arbiter`. Per the kit's Cursor silent-fallback caveat, the arbiter states in its verdict which model actually produced it ([`agents/evaluator.md`](../../../skills/agent-kit/templates/agents/evaluator.md) § Arbitration mode).
 
 **Scope** — evaluates the **criteria**, never the code. Reads no diffs and scores no implementation. Execute-before-score does not apply; arbiter evidence is acceptance-criterion citation only.
 
@@ -79,7 +101,7 @@ Dimensions in each criteria skill are **gates, not averages** — one failing di
 
 Sources: [`goal-criteria/SKILL.template.md`](../../../skills/agent-kit/templates/skills/goal-criteria/SKILL.template.md), [`task-criteria/SKILL.template.md`](../../../skills/agent-kit/templates/skills/task-criteria/SKILL.template.md), [`qa-criteria/SKILL.template.md`](../../../skills/agent-kit/templates/skills/qa-criteria/SKILL.template.md).
 
-## Memory protocol tripwire (as of v1.0.0)
+## Memory protocol tripwire
 
 Task evaluation **instant REJECT**s on memory-protocol violations ([`task-criteria/SKILL.template.md`](../../../skills/agent-kit/templates/skills/task-criteria/SKILL.template.md) § Auto-fail triggers, [`memory.md`](memory.md)):
 
@@ -113,11 +135,11 @@ Task evaluation applies the ladder per requirement ([`task-criteria/SKILL.templa
 
 ### Execute before you score
 
-Evaluators must **run** targeted tests and commands before writing a verdict. Reading the report or diff alone is insufficient. When the harness runs the evaluator **read-only** (shell refused, or `readonly: true` in the emitted evaluator agent), use **orchestrator-supplied verbatim evidence** — each acceptance criterion's command plus its output — mark those items in **What I verified** as **orchestrator evidence**, and treat any criterion with **no** evidence as an issue, never a pass ([`agents/evaluator.md`](../../../skills/agent-kit/templates/agents/evaluator.md)). The feature orchestrator **first** spawns **`terminal`** per acceptance-criterion command (Phase 5 final audit: the audit's commands) and attaches the output before launching the evaluator ([`feature/SKILL.template.md`](../../../skills/agent-kit/templates/skills/feature/SKILL.template.md) Phase 4 step 3, Phase 5). Otherwise, if **What I verified** shows no execution evidence (a command you ran plus its output), the verdict is invalid. As of v0.20.0, arbitration mode is the exception: no code is under review, so execute-before-score does not apply; arbiter evidence is acceptance-criterion citation only ([`agents/evaluator.md`](../../../skills/agent-kit/templates/agents/evaluator.md) § Arbitration mode).
+Evaluators must **run** targeted tests and commands before writing a verdict. Reading the report or diff alone is insufficient. When the harness runs the evaluator **read-only** (shell refused, or `readonly: true` in the emitted evaluator agent), use **orchestrator-supplied verbatim evidence** — each acceptance criterion's command plus its output — mark those items in **What I verified** as **orchestrator evidence**, and treat any criterion with **no** evidence as an issue, never a pass ([`agents/evaluator.md`](../../../skills/agent-kit/templates/agents/evaluator.md)). The feature orchestrator **first** spawns **`terminal`** per acceptance-criterion command (Phase 5 final audit: the audit's commands) and attaches the output before launching the evaluator ([`feature/SKILL.template.md`](../../../skills/agent-kit/templates/skills/feature/SKILL.template.md) Phase 4 step 3, Phase 5). Otherwise, if **What I verified** shows no execution evidence (a command you ran plus its output), the verdict is invalid. Arbitration mode is the exception: no code is under review, so execute-before-score does not apply; arbiter evidence is acceptance-criterion citation only ([`agents/evaluator.md`](../../../skills/agent-kit/templates/agents/evaluator.md) § Arbitration mode).
 
-### Calibration exemplars (as of v0.19.0)
+### Calibration exemplars
 
-Introduced in kit v0.18.0, the evaluator agent file includes two **illustrative shape** exemplars — not verbatim scripts to copy:
+The evaluator agent file includes two **illustrative shape** exemplars — not verbatim scripts to copy:
 
 1. **NEEDS FIXES exemplar** — resists the "talk-yourself-into-a-PASS" pattern: an edge-case failure is found, the temptation is to soften it, but the issue stays in the Issues found list and the verdict remains **NEEDS FIXES**.
 2. **PASS exemplar** — every requirement maps to a proving command; each is **✅ Verified** with the command shown.
@@ -138,7 +160,7 @@ A DA finding forces **NEEDS REVISION** **only** when it reveals an **unaddressed
 
 ## Acceptance criteria at planning (Phase 2 → validated Phase 3)
 
-As of v0.23.0, every task file carries an `## Acceptance Criteria` section at Phase 2 — each criterion includes a verification method (command output, test, live interaction, etc.). The Phase 3 goal evaluator validates these once for all tasks before any implementation dispatch ([`feature/SKILL.template.md`](../../../skills/agent-kit/templates/skills/feature/SKILL.template.md) Phases 2–3, [`goal-criteria/SKILL.template.md`](../../../skills/agent-kit/templates/skills/goal-criteria/SKILL.template.md)). There is no separate pre-implementation sign-off gate: the task file (including its Acceptance Criteria) is the testable scope source for Phase 4 workers and evaluators.
+Every task file carries an `## Acceptance Criteria` section at Phase 2 — each criterion includes a verification method (command output, test, live interaction, etc.). The Phase 3 goal evaluator validates these once for all tasks before any implementation dispatch ([`feature/SKILL.template.md`](../../../skills/agent-kit/templates/skills/feature/SKILL.template.md) Phases 2–3, [`goal-criteria/SKILL.template.md`](../../../skills/agent-kit/templates/skills/goal-criteria/SKILL.template.md)). There is no separate pre-implementation sign-off gate: the task file (including its Acceptance Criteria) is the testable scope source for Phase 4 workers and evaluators.
 
 Task evaluation verifies every acceptance criterion is addressed ([`task-criteria/SKILL.template.md`](../../../skills/agent-kit/templates/skills/task-criteria/SKILL.template.md)).
 
@@ -194,7 +216,7 @@ Any violation of the seven checks is **NEEDS REVISION**. A missing ownership blo
 
 Goal evaluation also applies scope discipline from [`goal-criteria/SKILL.template.md`](../../../skills/agent-kit/templates/skills/goal-criteria/SKILL.template.md) §4 (out-of-scope section, no smuggled refactoring, no contradiction with constraints or ground truth).
 
-**Canonical template leak check** ([`goal-criteria/SKILL.template.md`](../../../skills/agent-kit/templates/skills/goal-criteria/SKILL.template.md) § Canonical template leak check): when a task's `writes` include paths the project distributes as reusable templates (for example a canonical `templates/` tree), flag **NEEDS REVISION** if its requirements or proposed content copy **this repository's own** goal slugs from `_memory/work/goals/` (or legacy `_goals/` / `_goals/archive/` in older projects), memory record ids (`YYYYMMDDTHHMMSSZ-<hex>`), or verbatim memory record titles from `_memory/records/` into those templates — templates must stay generic. Clearly labeled placeholder samples in a task requirement are not a leak (informational note only, not **NEEDS REVISION**).
+**Canonical template leak check** ([`goal-criteria/SKILL.template.md`](../../../skills/agent-kit/templates/skills/goal-criteria/SKILL.template.md) § Canonical template leak check): when a task's `writes` include paths the project distributes as reusable templates (for example a canonical `templates/` tree), flag **NEEDS REVISION** if its requirements or proposed content copy **this repository's own** goal slugs from `_memory/work/goals/` (or the pre-`_memory/` goal folders of upgraded installs), memory record ids (`YYYYMMDDTHHMMSSZ-<hex>`), or verbatim memory record titles from `_memory/records/` into those templates — templates must stay generic. Clearly labeled placeholder samples in a task requirement are not a leak (informational note only, not **NEEDS REVISION**).
 
 ## Staged test ladder
 
@@ -232,7 +254,7 @@ A spawned `terminal` is **not** a designated closer task — the carve-out requi
 
 ## Evaluation loop (produce → evaluate → fix)
 
-Around each unit of work (goal, task, audit), the same loop applies. Max **3 cycles** before escalation — as of v0.20.0, Phase 4 task execution enters the **continuation ladder** (rungs 5→4→6) on exhaustion before terminal escalation ([`ORCHESTRATION.md`](../../../skills/agent-kit/templates/ORCHESTRATION.md) § Continuation ladder); a bypass-class verdict (`destructive`, `security`, or `infra`) stops all retrying at detection from any cycle. All other loops (goal evaluation, final audit, align-docs) still escalate directly after 3 cycles. See [feature-workflow.md](feature-workflow.md) for rung mechanics.
+Around each unit of work (goal, task, audit), the same loop applies. Max **3 cycles** before escalation — Phase 4 task execution enters the **continuation ladder** (rungs 5→4→6) on exhaustion before terminal escalation when `phases.ladder` is `auto` ([`ORCHESTRATION.md`](../../../skills/agent-kit/templates/ORCHESTRATION.md) § Continuation ladder); a bypass-class verdict (`destructive`, `security`, or `infra`) stops all retrying at detection from any cycle. All other loops (goal evaluation, final audit, align-docs) still escalate directly after 3 cycles. See [feature-workflow.md](feature-workflow.md) for rung mechanics.
 
 ```mermaid
 flowchart TD
@@ -276,7 +298,7 @@ Fixes and revisions are **always** re-evaluated — there is no exception ([`fea
 
 ## Orchestration log (append-only audit trail)
 
-Each goal maintains `_memory/work/goals/[goal-name]/orchestration-log.md` ([`feature/SKILL.template.md`](../../../skills/agent-kit/templates/skills/feature/SKILL.template.md) § Orchestration log). As of v0.25.0 it is written only by the emitted `_kit/log-spawn.sh` (Windows outside Git Bash: `_kit\log-spawn.cmd`; canonical source [`templates/tools/log-spawn.sh`](../../../skills/agent-kit/templates/tools/log-spawn.sh)); as of v0.26.0 the header's running `io_est_tokens` / `work_est_tokens` totals say "see latest entry".
+Each goal maintains `_memory/work/goals/[goal-name]/orchestration-log.md` ([`feature/SKILL.template.md`](../../../skills/agent-kit/templates/skills/feature/SKILL.template.md) § Orchestration log). It is written only by the emitted `_kit/log-spawn.sh` (Windows outside Git Bash: `_kit\log-spawn.cmd`; canonical source [`templates/tools/log-spawn.sh`](../../../skills/agent-kit/templates/tools/log-spawn.sh)); the header's running `io_est_tokens` / `work_est_tokens` totals say "see latest entry".
 
 **Artifacts are the verbatim record.** Every context package is saved to `_memory/work/goals/[goal]/spawns/NN-context.md` before launch and every report to `spawns/NN-report.md` after return — unedited. The log references those files rather than quoting them, so an auditor reads exactly what the agent read and wrote. Agents end every report with a **`### Footprint`** block — `files_read: N (~C chars)` and `commands_run: N` as the last non-blank lines inside the report fence ([`agents/evaluator.md`](../../../skills/agent-kit/templates/agents/evaluator.md)).
 
@@ -284,14 +306,14 @@ Each goal maintains `_memory/work/goals/[goal-name]/orchestration-log.md` ([`fea
 
 **Outcome-after** (`outcome`) — appends `- OUTCOME [#NN]: <verdict> · model reported: <…> · model_check: <match|MISMATCH|unverified> · report: <path> · report_chars: <R> · io_est_tokens: <T> · work_read_chars: <C|n/a> · work_est_tokens: <W|n/a> · running io: <X> · running work: <Y>`. `[#NN]` links each OUTCOME to its SPAWN; the script refuses an outcome without a matching SPAWN or a second outcome for the same NN (exit 3).
 
-As of v0.29.0, `model_check` compares provider **families** (not exact IDs) for the SPAWN `model requested:` id and `--model-reported`: `match` (both known, same family), `MISMATCH` (both known, different — one stderr line `log-spawn: MODEL-FAMILY-MISMATCH requested=<id> reported=<text>`, exit 0), or `unverified` (either side unknown/`inherit`/empty). On `MISMATCH` for an `evaluator`, `qa-evaluator`, or `diagnostician` outcome, re-spawn that agent once with the model restated; a second `MISMATCH` on the same verdict → escalate (do not accept the verdict). Worker spawns (`implementer`, `test-writer`, `terminal`): log and continue. `unverified`: logged only.
+`model_check` compares provider **families** (not exact IDs) for the SPAWN `model requested:` id and `--model-reported`: `match` (both known, same family), `MISMATCH` (both known, different — one stderr line `log-spawn: MODEL-FAMILY-MISMATCH requested=<id> reported=<text>`, exit 0), or `unverified` (either side unknown/`inherit`/empty). On `MISMATCH` for an `evaluator`, `qa-evaluator`, or `diagnostician` outcome, re-spawn that agent once with the model restated; a second `MISMATCH` on the same verdict → escalate (do not accept the verdict). Worker spawns (`implementer`, `test-writer`, `terminal`): log and continue. `unverified`: logged only.
 
 | Field | Meaning |
 |-------|---------|
 | `model_check` | Family comparison for SPAWN `model requested:` vs `--model-reported`: `match` / `MISMATCH` / `unverified`; on `MISMATCH` the script prints one stderr warning and still exits 0 — orchestrator policy above |
 | `io_est_tokens` T | (`context_chars` + `report_chars`) / 4 — **orchestrator I/O proxy** (chars/4), not the subagent's spend |
 | `work_read_chars` / `work_est_tokens` W | Parsed from the Footprint `files_read: N (~C chars)` line (W = C/4); **`n/a`** when the line is absent or malformed — a report-format defect for the evaluator, not a ledger error. Optional `--work-chars C` overrides parsing |
-| `running io` / `running work` | Previous totals plus T / W (`running io` falls back to pre-v0.26 `running total` when no `running io` exists; W=`n/a` adds 0) |
+| `running io` / `running work` | Previous totals plus T / W (`running io` falls back to legacy `running total` when no `running io` exists; W=`n/a` adds 0) |
 
 Neither proxy field is billed usage — only the loop driver's `usage:` line (when `LOOP_USAGE_FORMAT` is active) records real token counts from the headless CLI. Never write placeholder pending lines (`"Outcome: (pending)"`, `"TBD"`) — a SPAWN with no OUTCOME yet **is** the pending state.
 

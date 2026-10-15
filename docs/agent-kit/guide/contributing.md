@@ -2,7 +2,7 @@
 
 # Contributing to the Kit
 
-The kit keeps **one canonical template source** under `skills/agent-kit/` and compiles it per harness via `/agent-kit`. Contributors, as of v0.19.0, edit that canonical side only; the emitted instance in this repo is gitignored and never source of truth. User-side install and compile mechanics live in [getting-started.md](getting-started.md); harness research ground truth lives in [../research-multi-harness-upgrade.md](../research-multi-harness-upgrade.md); the full install story is in the skill's [README.md](../../../skills/agent-kit/README.md).
+The kit keeps **one canonical template source** under `skills/agent-kit/` and compiles it per harness via `/agent-kit`. Contributors edit that canonical side only; the emitted instance in this repo is gitignored and never source of truth. User-side install and compile mechanics live in [getting-started.md](getting-started.md); structural maps live in [architecture.md](architecture.md); harness research ground truth lives in [`_memory/research/multi-harness-upgrade.md`](../../../_memory/research/multi-harness-upgrade.md); the docs hub is [`docs/agent-kit/README.md`](../README.md). The full install story is in the skill's [README.md](../../../skills/agent-kit/README.md).
 
 ## Repo anatomy: three layers
 
@@ -12,21 +12,38 @@ The kit lives in the multi-skill [kdcllc/skills](https://github.com/kdcllc/skill
 |-------|------|----------------------------------|
 | **CANONICAL** | Source of truth — what `/agent-kit` reads and compiles | `skills/agent-kit/templates/` (Claude Code format), `skills/agent-kit/bin/` (`emit.sh` + `emit.cmd` (Windows launcher) — deterministic emit), `skills/agent-kit/emitters/` (per-harness caveats), `skills/agent-kit/reference/` (`harness-matrix.md`, `bootstrap-ids.md`), `metadata.version` in `skills/agent-kit/SKILL.md` (kit version written into each install's manifest) |
 | **INSTANCE** | Emitted by `/agent-kit` and self-install in **this repo only** — gitignored, re-runnable, never committed | Entire `.claude/`; **partial** `.cursor/` only — `.cursor/skills/`, `.cursor/agents/`, `.cursor/rules/`, `.cursor/ORCHESTRATION.md` (the rest of `.cursor/` is **not** gitignored); `.agents/skills/` (self-install `--symlink` canonical tree); `.loop-worktrees/` (loop driver scratch); `_kit/`, `_loop/`, `_memory/work/`, `_memory/loop/`, `_memory/.index/`, `_memory/raw/`; `orchestration-kit.manifest.json`. Tracked memory: `_memory/README.md`, `_memory/records/`, `_memory/quarantine/` |
-| **MAINTAINER (tracked, not shipped)** | Tooling and documentation for kit contributors; lives outside the skill folder so it never reaches installs | `skills/agent-kit/README.md` and `CHANGELOG.md` (ship with the skill), `docs/agent-kit/` (this guide suite, research studies, the architecture **pointer** `ORCHESTRATION.md`), `tests/agent-kit/` (checks, guards, harness, `fixtures/self-answers.json`), `scripts/agent-kit/` (`self-install.sh`), `scripts/checks/agent-kit.sh` (fast guard run by `scripts/validate-skills.sh`) |
+| **MAINTAINER (tracked, not shipped)** | Tooling and documentation for kit contributors; lives outside the skill folder so it never reaches installs | `skills/agent-kit/README.md` and `CHANGELOG.md` (ship with the skill), `docs/agent-kit/` (this guide suite and the hub `README.md`) plus `_memory/research/` (research briefs and index), `tests/agent-kit/` (checks, guards, harness, `fixtures/self-answers.json`), `scripts/agent-kit/` (`self-install.sh`), `scripts/checks/agent-kit.sh` (fast guard run by `scripts/validate-skills.sh`) |
 
 **Instance-specific note:** In consumer projects, `/agent-kit` emits into harness-native directories (`.claude/`, `.cursor/`, `.github/`, `.codex/`, root `ORCHESTRATION.md`, etc.) per the emitters. This repo dogfoods the kit: its `.gitignore` lists the instance paths above so local dogfood output never reaches git, and `scripts/validate-skills.sh` rejects agent skill directories only when they contain tracked files.
 
-### docs/agent-kit/ORCHESTRATION.md is a pointer
+### docs/agent-kit hub
 
-The tracked [`docs/agent-kit/ORCHESTRATION.md`](../ORCHESTRATION.md) is **not** the architecture source. It states:
-
-> Edit the template in the skill's `templates/` directory only; this file is just a pointer.
-
-The canonical architecture template lives at [`skills/agent-kit/templates/ORCHESTRATION.md`](../../../skills/agent-kit/templates/ORCHESTRATION.md). `/agent-kit` compiles it into each harness's native location (for example `.claude/ORCHESTRATION.md` or `.cursor/ORCHESTRATION.md` as of v0.19.0). Never edit emitted instance copies when changing kit behavior — edit templates and re-run `/agent-kit` locally to refresh the instance.
+The tracked [`docs/agent-kit/README.md`](../README.md) is the maintainer-facing **hub** for this guide suite, research brief index links, and pointers into canonical kit sources. The canonical architecture template lives at [`skills/agent-kit/templates/ORCHESTRATION.md`](../../../skills/agent-kit/templates/ORCHESTRATION.md); `/agent-kit` compiles it into each harness's native location (for example `.claude/ORCHESTRATION.md` or `.cursor/ORCHESTRATION.md`). Never edit emitted instance copies when changing kit behavior — edit templates and re-run `/agent-kit` locally to refresh the instance.
 
 ## The dogfood loop
 
 When you change canonical kit content, exercise the full path before committing tracked files:
+
+Canonical sources, the dogfood emitter, gitignored runtime instance, and guard tests form one loop.
+
+```mermaid
+flowchart TD
+    Canon["Canonical sources\nskills/agent-kit/templates/\nbin/emit.sh · emitters/ · reference/"]
+    SelfInstall["bash scripts/agent-kit/self-install.sh\ncopy skill + emit from fixture"]
+    Instance["Gitignored instance\n.claude/ · .cursor/ · _kit/ · _loop/"]
+    TemplateGuards["tests/agent-kit/templates/*.sh\nstructural locks on templates + emit"]
+    LoopHarness["tests/agent-kit/loop-harness/run.sh\nloop driver + self-install behavior"]
+    Commit["Commit canonical paths + tracked docs only"]
+
+    Canon --> SelfInstall
+    SelfInstall --> Instance
+    Instance --> LoopHarness
+    Canon --> TemplateGuards
+    TemplateGuards --> Commit
+    LoopHarness --> Commit
+```
+
+Day-to-day contributor flow:
 
 ```mermaid
 flowchart TD
@@ -53,7 +70,7 @@ If you also changed emitter mappings or `skills/agent-kit/SKILL.md`, include tho
 
 ### What it copies
 
-As of v1.0.0 it installs only `skills/agent-kit/` — the other skills in kdcllc/skills would also land in `.cursor/skills/`, where their `.claude/` references fail emit verify and checks M/N. Nested paths like `skills/agent-kit/templates/skills/feature/SKILL.md` are not skills. Destinations:
+Self-install copies only `skills/agent-kit/` — the other skills in kdcllc/skills would also land in `.cursor/skills/`, where their `.claude/` references fail emit verify and checks M/N. Nested paths like `skills/agent-kit/templates/skills/feature/SKILL.md` are not skills. Destinations:
 
 | Mode | Destinations |
 |------|----------------|
@@ -84,7 +101,7 @@ Nothing the self-install script writes reaches git — all destination paths are
 
 ## Editing templates
 
-All canonical orchestration content lives under [`skills/agent-kit/templates/`](../../../skills/agent-kit/templates/) in Claude Code format. As of v0.27.0, `skills/agent-kit/bin/emit.*` resolves and translates templates deterministically.
+All canonical orchestration content lives under [`skills/agent-kit/templates/`](../../../skills/agent-kit/templates/) in Claude Code format. `skills/agent-kit/bin/emit.*` resolves and translates templates deterministically.
 
 ### Template grammar (authoring)
 
@@ -111,7 +128,7 @@ When live vendor docs contradict the harness matrix, trust the live docs for emi
 
 ## Emitters (caveats only)
 
-As of v0.27.0, per-harness translation runs in [`skills/agent-kit/bin/emit.sh`](../../../skills/agent-kit/bin/emit.sh) /
+Per-harness translation runs in [`skills/agent-kit/bin/emit.sh`](../../../skills/agent-kit/bin/emit.sh) /
 [`emit.cmd`](../../../skills/agent-kit/bin/emit.cmd). Emitter files under
 [`skills/agent-kit/emitters/`](../../../skills/agent-kit/emitters/) hold **caveats only** — live
 model-list check URLs, silent-fallback warnings, and similar harness friction — not
@@ -125,24 +142,24 @@ translation tables. Full CLI contract: [`skills/agent-kit/bin/README.md`](../../
 | [`codex.md`](../../../skills/agent-kit/emitters/codex.md) | OpenAI Codex (`AGENTS.md` + `.codex/`) | Role config in TOML; `AGENTS.md` size cap |
 
 When you change a canonical template file, update `bin/emit.*` if translation paths
-change — emitters no longer carry Emit tables. The Cursor emitter, as of v0.19.0, is
+change — emitters no longer carry Emit tables. The Cursor emitter is
 order-independent relative to Claude Code (self-contained emission).
 
 ## Version, manifest, and upgrades
 
 ### Version and releases
 
-As of v1.0.0, `metadata.version` in [`skills/agent-kit/SKILL.md`](../../../skills/agent-kit/SKILL.md) holds the kit version; `bin/emit.*` reads it from there (the old `VERSION` file is gone). Never edit it by hand. Write the change under `## [Unreleased]` in [`skills/agent-kit/CHANGELOG.md`](../../../skills/agent-kit/CHANGELOG.md), merge, then release with `bash scripts/release-skill.sh agent-kit X.Y.Z` from the repository root — it bumps `metadata.version`, promotes the changelog section, validates, commits, and tags `agent-kit/vX.Y.Z`. Changes confined to `docs/agent-kit/`, `tests/agent-kit/`, or `scripts/` ship nothing to users and need no release.
+`metadata.version` in [`skills/agent-kit/SKILL.md`](../../../skills/agent-kit/SKILL.md) holds the kit version; `bin/emit.*` reads it from there (the old `VERSION` file is gone). Never edit it by hand. Write the change under `## [Unreleased]` in [`skills/agent-kit/CHANGELOG.md`](../../../skills/agent-kit/CHANGELOG.md), merge, then release with `bash scripts/release-skill.sh agent-kit X.Y.Z` from the repository root — it bumps `metadata.version`, promotes the changelog section, validates, commits, and tags `agent-kit/vX.Y.Z`. Changes confined to `docs/agent-kit/`, `tests/agent-kit/`, or `scripts/` ship nothing to users and need no release.
 
 ### Manifest shape
 
-`/agent-kit` writes `orchestration-kit.manifest.json` at the project root. The manifest, as of v0.19.0, records:
+`/agent-kit` writes `orchestration-kit.manifest.json` at the project root. The manifest records:
 
-- `kit` (`agent-kit` as of v1.0.0), `kitVersion` (from `metadata.version`), `installedAt`, `harnesses`, `options`
+- `kit` (`agent-kit`), `kitVersion` (from `metadata.version`), `installedAt`, `harnesses`, `options`
 - `files`: map of emitted path → SHA-256 hash
 - `seedFiles`: paths created-if-missing, never overwritten on upgrade
 
-As of v0.27.0, it also records `answers` (snapshot of the answers file used at emit),
+It also records `answers` (snapshot of the answers file used at emit),
 `primary` (primary harness id), and flat `options` flags (`"forge": "<detected>"` plus
 optional `forgeHost`; see [`skills/agent-kit/SKILL.md`](../../../skills/agent-kit/SKILL.md) Upgrading).
 
@@ -153,13 +170,13 @@ In this repo the manifest is gitignored (instance layer). See the live example s
 For installed projects (including dogfood in this repo):
 
 1. **Re-pull** the kit — for example `npx skills add kdcllc/skills --skill agent-kit` again, or `npx agent-skills-cli update` (run `npx agent-skills-cli check` first to see installed skills).
-2. **Re-emit** — `bash .claude/skills/agent-kit/bin/emit.sh --upgrade` (or `.cursor/skills/agent-kit`, `.github/skills/agent-kit`; answers come from the manifest; add `--answers` only when the interview changed). Pre-v0.27.0 installs have no embedded `answers` — run `/agent-kit` Steps 1–4 once, then `--answers … --upgrade`. Exit 4 lists user-modified files; confirm with `--force`. Use `--dry-run` to preview.
+2. **Re-emit** — `bash .claude/skills/agent-kit/bin/emit.sh --upgrade` (or `.cursor/skills/agent-kit`, `.github/skills/agent-kit`; answers come from the manifest; add `--answers` only when the interview changed). Manifests from the private **`setup`** kit have no embedded `answers` snapshot — see [getting-started.md](getting-started.md) § Upgrading from the private setup kit. Exit 4 lists user-modified files; confirm with `--force`. Use `--dry-run` to preview.
 
 **Hash diff protects local modifications:** Unmodified emitted files update silently; modified files require confirmation before overwrite.
 
-**`seedFiles` semantics (as of v0.27.0):** When loop is enabled, the manifest lists `_memory/loop/backlog.md` in `seedFiles` only (not in `files`). Seeds are created only when missing, never overwritten on upgrade, and are exempt from the hash-diff overwrite flow.
+**`seedFiles` semantics:** When loop is enabled, the manifest lists `_memory/loop/backlog.md` in `seedFiles` only (not in `files`). Seeds are created only when missing, never overwritten on upgrade, and are exempt from the hash-diff overwrite flow.
 
-**Stale-file pruning (as of v0.19.0):** After regeneration, paths in the old manifest but absent from the new emit set are deleted if unmodified, or reported for manual removal if the user edited them.
+**Stale-file pruning:** After regeneration, paths in the old manifest but absent from the new emit set are deleted if unmodified, or reported for manual removal if the user edited them.
 
 ## Running tests
 
@@ -171,22 +188,47 @@ Contributors should run the tracked harnesses before committing canonical change
 bash tests/agent-kit/loop-harness/run.sh
 ```
 
-This is the tracked **behavioral** test suite (test-ladder rung 3 territory — run manually or via `tests/agent-kit/run-all.sh`). Coverage, as of v0.19.0 per the script header, includes:
+This is the tracked **behavioral** test suite (test-ladder rung 3 territory — run manually or via `tests/agent-kit/run-all.sh`). Coverage per the script header includes:
 
 - **Breaker state machine** — canonical `breaker.sh` assertions with injected timestamps (no wall-clock reads)
 - **Rate-limit detection** — live `detect_rate_limit` extracted from canonical `loop.sh`
 - **Re-emitted instance stub** — end-to-end `_loop/loop.sh` run inside a throwaway repo when `_loop/` exists in this repo
 - **Structural guards** — PowerShell parity, emitter/SKILL text coverage, SIGPIPE regressions, checks J/K mutation proofs, and related story additions
 - **Self-install block** — runs **without** requiring `_loop/`: exercises `scripts/agent-kit/self-install.sh` (copy mode, overwrite, `--force`, `--dry-run`, `--symlink`, rollback, `.gitignore` dest-lines, and related assertions)
-- **Memory integrator step 3b** (as of v1.0.0) — assertions 136–141
+- **Memory integrator step 3b** — assertions 136–141
 
 When `_loop/` is absent (fresh clone before `/agent-kit`), loop-instance assertions are skipped in aggregate — self-install assertions still run.
 
 ### Standalone template guards
 
-Tracked structural guards live under `tests/agent-kit/templates/` — [`cursor-isolation.sh`](../../../tests/agent-kit/templates/cursor-isolation.sh), [`invocation-flags.sh`](../../../tests/agent-kit/templates/invocation-flags.sh), [`escalation-ladder.sh`](../../../tests/agent-kit/templates/escalation-ladder.sh) (added with the v0.20.0 continuation-ladder goal), [`template-currency.sh`](../../../tests/agent-kit/templates/template-currency.sh) (added with the v0.21.0 template-currency goal; locks the six template-currency claims — research handoff at Phase 3, escalation **Ladder** line, closer-task rung-3 carve-out, loop dispatch/exit-funnel/merge-gate — with SKIP-when-absent instance-mirror assertions), [`skill-slimming.sh`](../../../tests/agent-kit/templates/skill-slimming.sh), [`forge-adapter.sh`](../../../tests/agent-kit/templates/forge-adapter.sh), [`model-enforcement.sh`](../../../tests/agent-kit/templates/model-enforcement.sh) (v0.24.0 policy strings), [`model-currency.sh`](../../../tests/agent-kit/templates/model-currency.sh) (v0.29.0: fast tier, arbiter warnings, loop denylist, upgrade compatibility, template text, dogfood pins), [`log-spawn.sh`](../../../tests/agent-kit/templates/log-spawn.sh) (v0.25.0: runs the canonical `log-spawn.sh` against a mktemp fixture — entries, measured fields, io/work running totals (v0.26.0: Footprint ingestion, `--work-chars`, pre-v0.26 fallback), exit codes, the `_kit/log-spawn.sh` + `.cmd` emit wiring (the retired `log-spawn.ps1` must not appear); v0.29.0: OUTCOME `model_check`), [`memory.sh`](../../../tests/agent-kit/templates/memory.sh) (v0.30.0+: runs the canonical `memory` twins against a mktemp fixture — add/index/search/show, grep default and optional FTS re-rank, admission quarantine exit 5, Release C **redact** / **check** / **rm** / **capture** coverage with bash, pwsh, and parity legs for redaction cases; **check** / **rm** / **capture** exercised via bash-only helpers in [`tests/agent-kit/lib/memory-release-c.sh`](../../../tests/agent-kit/lib/memory-release-c.sh) with pwsh legs asserting bash-only stubs exit **2**; twin redaction cases in [`tests/agent-kit/lib/memory-redaction-behavioral.sh`](../../../tests/agent-kit/lib/memory-redaction-behavioral.sh) — plus `_memory/` emit wiring), [`memory-capture.sh`](../../../tests/agent-kit/templates/memory-capture.sh) (Release C: synthetic transcript fixtures for `capture`), [`memory-wiring.sh`](../../../tests/agent-kit/templates/memory-wiring.sh) (v1.0.0: memory wiring — templates, emitter pointer blocks, memory-capture emission, mutation-proven), [`emit-determinism.sh`](../../../tests/agent-kit/templates/emit-determinism.sh) (v0.27.0: byte-identical re-emit; Unreleased: portability (Bash 3.2, POSIX `awk`, no `jq`)), [`emit-golden.sh`](../../../tests/agent-kit/templates/emit-golden.sh) (Unreleased: byte-compares a golden corpus for `bin/emit.sh`; intended changes need `bash tests/agent-kit/templates/emit-golden.sh --update` plus a reviewed diff), [`emit-portability.sh`](../../../tests/agent-kit/templates/emit-portability.sh) (Unreleased: `emit.sh` portability — jq-free PATH, sha256 tools, Bash 3.2 docker, JSON edges; `AGENT_KIT_DOCKER=1` opt-in runs the bash:3.2 docker emit-golden check, default skips it; opt-in set but docker/image missing → FAIL; CI pulls `bash:3.2` and sets `AGENT_KIT_DOCKER=1` before the full suite), [`emit-migrate.sh`](../../../tests/agent-kit/templates/emit-migrate.sh) (Unreleased: guard for `bin/emit.sh` legacy layout migration (`--upgrade` path); fixtures under a private TMPDIR; runs cases in parallel via [`tests/agent-kit/lib/parallel.sh`](../../../tests/agent-kit/lib/parallel.sh) — `AGENT_KIT_CASE_JOBS`), [`emit-perf.sh`](../../../tests/agent-kit/templates/emit-perf.sh) (Unreleased: default = structural checks + in-suite mutation proofs (no timing, no strace); `EMIT_PERF=1` adds three timed self-answers emits (median vs `EMIT_PERF_MAX`, default 4.0) and, when strace works, a fork budget (`EMIT_PERF_MAX_FORKS`, default 589)), [`legacy-paths.sh`](../../../tests/agent-kit/templates/legacy-paths.sh) (Unreleased: kit sources must not reintroduce legacy `_goals`/`_research` tokens outside an allow-list), [`memory-backfill.sh`](../../../tests/agent-kit/templates/memory-backfill.sh) (Unreleased: `memory.sh backfill` (Release D), synthetic fixtures), and [`windows-launcher.sh`](../../../tests/agent-kit/templates/windows-launcher.sh) (Unreleased: Windows `.cmd` launchers; static checks everywhere, behavior checks only under Git Bash on Windows, otherwise SKIP). The escalation-ladder guard locks the Phase 4 continuation-ladder subsection, failure-class taxonomy identity across canonical templates, diagnostician template and dual-instance emission wiring, and `{{MODEL_FRONTIER_ALT_FAMILY}}` documentation. Run any guard directly with `bash tests/agent-kit/templates/<name>.sh`; they are not invoked by `tests/agent-kit/loop-harness/run.sh`.
+Tracked structural guards live under `tests/agent-kit/templates/`. Each script locks a specific layer:
 
-**Suite authors (agent-kit [Unreleased]):** A script that creates fixtures, runs emit, or runs git against a project root must set `REPO_ROOT` to the repository's absolute path, allocate a private `FIXTURE_TMPDIR` under `mktemp -d`, source [`tests/agent-kit/lib/fixture-root.sh`](../../../tests/agent-kit/lib/fixture-root.sh), and call `assert_fixture_root <dir>` before every write into a directory. Resolve canonical paths from `REPO_ROOT` (for example `$REPO_ROOT/skills/agent-kit/bin/emit.sh`); do not `cd` to the repository root for fixture work. Sourcing the library exits unless both inputs are non-empty absolute paths to existing directories and `FIXTURE_TMPDIR` is not `/`, not the repository root, not under it, and not an ancestor of it; `assert_fixture_root` additionally refuses empty or missing paths, the repository root or anything under it, and any directory outside `FIXTURE_TMPDIR`. Emit suites may also source [`tests/agent-kit/lib/emit-cache.sh`](../../../tests/agent-kit/lib/emit-cache.sh): a shared cache directory may sit outside `FIXTURE_TMPDIR` (for example a run-all log dir), but `_emit_cache_assert_cache_dir` requires the cache directory to be non-empty, absolute, and existing, and must not be the repository or anywhere under it.
+| Guard | What it locks |
+|-------|----------------|
+| [`cursor-isolation.sh`](../../../tests/agent-kit/templates/cursor-isolation.sh) | No `.claude/` literals under canonical templates; Cursor self-contained emission |
+| [`invocation-flags.sh`](../../../tests/agent-kit/templates/invocation-flags.sh) | Seven `disable-model-invocation: true` skill flags plus `terminal` agent wiring (frontmatter, models map, test-ladder, ORCHESTRATION, emitters, Codex registration) |
+| [`escalation-ladder.sh`](../../../tests/agent-kit/templates/escalation-ladder.sh) | Phase 4 continuation-ladder prose, failure-class taxonomy alignment, diagnostician wiring, `{{MODEL_FRONTIER_ALT_FAMILY}}` docs |
+| [`template-currency.sh`](../../../tests/agent-kit/templates/template-currency.sh) | Six shipped template claims (research handoff at Phase 3, escalation **Ladder** line, closer-task rung-3 carve-out, loop dispatch/exit/merge gates) plus optional instance mirrors |
+| [`skill-slimming.sh`](../../../tests/agent-kit/templates/skill-slimming.sh) | Feature skill template byte budget |
+| [`forge-adapter.sh`](../../../tests/agent-kit/templates/forge-adapter.sh) | Ship-PR / forge adapter strings |
+| [`model-enforcement.sh`](../../../tests/agent-kit/templates/model-enforcement.sh) | Model tier policy strings in templates and agents |
+| [`model-currency.sh`](../../../tests/agent-kit/templates/model-currency.sh) | Fast tier, arbiter warnings, loop model denylist, upgrade compatibility, dogfood pins |
+| [`log-spawn.sh`](../../../tests/agent-kit/templates/log-spawn.sh) | Canonical `log-spawn.sh` ledger behavior, Footprint ingestion, OUTCOME `model_check`, `_kit/log-spawn.*` emit wiring |
+| [`memory.sh`](../../../tests/agent-kit/templates/memory.sh) | Memory CLI twins, redact/check/rm/capture, quarantine, `_memory/` emit wiring; helpers [`memory-release-c.sh`](../../../tests/agent-kit/lib/memory-release-c.sh) and [`memory-redaction-behavioral.sh`](../../../tests/agent-kit/lib/memory-redaction-behavioral.sh); pwsh legs assert bash-only stubs exit **2** |
+| [`memory-capture.sh`](../../../tests/agent-kit/templates/memory-capture.sh) | Synthetic transcript fixtures for `capture` |
+| [`memory-wiring.sh`](../../../tests/agent-kit/templates/memory-wiring.sh) | Memory pointer blocks, memory-capture emission, mutation proofs |
+| [`emit-determinism.sh`](../../../tests/agent-kit/templates/emit-determinism.sh) | Byte-identical re-emit and Bash 3.2 / jq-free portability |
+| [`emit-golden.sh`](../../../tests/agent-kit/templates/emit-golden.sh) | Golden corpus for `bin/emit.sh` (use `--update` only with reviewed diff) |
+| [`emit-portability.sh`](../../../tests/agent-kit/templates/emit-portability.sh) | sha256 tools, JSON edges; Docker `bash:3.2` emit-golden leg **skips by default**, `AGENT_KIT_DOCKER=1` opts in and **FAILs** when docker or the `bash:3.2` image is missing; CI pulls `bash:3.2` and sets the opt-in |
+| [`emit-migrate.sh`](../../../tests/agent-kit/templates/emit-migrate.sh) | Legacy layout migration on `--upgrade` (private fixtures; cases run in parallel via [`parallel.sh`](../../../tests/agent-kit/lib/parallel.sh) / `AGENT_KIT_CASE_JOBS`) |
+| [`emit-perf.sh`](../../../tests/agent-kit/templates/emit-perf.sh) | Default: structural checks + in-suite mutation proofs (no timing); `EMIT_PERF=1` adds three timed self-answers emits (median vs `EMIT_PERF_MAX`, default **4.0**) and optional strace fork budget (`EMIT_PERF_MAX_FORKS`, default **589**) |
+| [`legacy-paths.sh`](../../../tests/agent-kit/templates/legacy-paths.sh) | No stray legacy `_goals` / `_research` tokens outside the allow-list |
+| [`memory-backfill.sh`](../../../tests/agent-kit/templates/memory-backfill.sh) | `memory.sh backfill` plan/apply semantics |
+| [`windows-launcher.sh`](../../../tests/agent-kit/templates/windows-launcher.sh) | Windows `.cmd` launcher static checks everywhere; behavior checks only under Git Bash on Windows, otherwise **SKIP** |
+
+Run any guard with `bash tests/agent-kit/templates/<name>.sh`; they are not invoked by `tests/agent-kit/loop-harness/run.sh`.
+
+**Suite authors:** A script that creates fixtures, runs emit, or runs git against a project root must set `REPO_ROOT` to the repository's absolute path, allocate a private `FIXTURE_TMPDIR` under `mktemp -d`, source [`tests/agent-kit/lib/fixture-root.sh`](../../../tests/agent-kit/lib/fixture-root.sh), and call `assert_fixture_root <dir>` before every write into a directory. Resolve canonical paths from `REPO_ROOT` (for example `$REPO_ROOT/skills/agent-kit/bin/emit.sh`); do not `cd` to the repository root for fixture work. Sourcing the library exits unless both inputs are non-empty absolute paths to existing directories and `FIXTURE_TMPDIR` is not `/`, not the repository root, not under it, and not an ancestor of it; `assert_fixture_root` additionally refuses empty or missing paths, the repository root or anything under it, and any directory outside `FIXTURE_TMPDIR`. Emit suites may also source [`tests/agent-kit/lib/emit-cache.sh`](../../../tests/agent-kit/lib/emit-cache.sh): a shared cache directory may sit outside `FIXTURE_TMPDIR` (for example a run-all log dir), but `_emit_cache_assert_cache_dir` requires the cache directory to be non-empty, absolute, and existing, and must not be the repository or anywhere under it.
 
 ### Everything at once
 
@@ -207,7 +249,7 @@ Added by the developer-guide-docs goal: validates the finished `docs/agent-kit/g
 
 ## Documentation conventions
 
-If you add or revise guide content under `docs/agent-kit/guide/`, follow the frozen conventions in [README.md](README.md): Mermaid rules (core types only, `flowchart TD` default, no init directives, quoted punctuation labels), relative file-level cross-links resolved from the linking file's directory, opener blocks, Sources sections, version anchoring (version-sensitive kit-behavior claims anchored at the kit version where the behavior shipped — for example "as of v0.19.0" or "as of v0.20.0"), and canonical-vs-instance labeling.
+If you add or revise guide content under `docs/agent-kit/guide/`, follow the frozen conventions in [README.md](README.md): Mermaid rules (core types only, `flowchart TD` default, no init directives, quoted punctuation labels), relative file-level cross-links resolved from the linking file's directory, opener blocks, Sources sections, present-tense 1.0.0 facts (no pre-1.0 version history in user-facing prose), and canonical-vs-instance labeling.
 
 Install and user-side usage topics belong in [getting-started.md](getting-started.md), not here.
 
@@ -231,13 +273,13 @@ Install and user-side usage topics belong in [getting-started.md](getting-starte
 | Bash 3.2 Docker check | `docker pull bash:3.2`, then `AGENT_KIT_DOCKER=1 bash tests/agent-kit/templates/emit-portability.sh` |
 | Emitter speed guard | `EMIT_PERF=1 bash tests/agent-kit/templates/emit-perf.sh` |
 | Release | `bash scripts/release-skill.sh agent-kit X.Y.Z` |
-| Harness research ground truth | [../research-multi-harness-upgrade.md](../research-multi-harness-upgrade.md) |
+| Harness research ground truth | [`_memory/research/multi-harness-upgrade.md`](../../../_memory/research/multi-harness-upgrade.md) |
 
 ## Sources
 
 - [`docs/agent-kit/guide/README.md`](README.md) — frozen document map, Mermaid/link/opener conventions, glossary
 - [`skills/agent-kit/README.md`](../../../skills/agent-kit/README.md) — install, generated files, upgrading, editing templates
-- [`docs/agent-kit/ORCHESTRATION.md`](../ORCHESTRATION.md) — architecture pointer and v0.18.0–v0.21.0 capability summary
+- [`docs/agent-kit/README.md`](../README.md) — maintainer docs hub
 - [`.gitignore`](../../../.gitignore) — instance paths gitignored in this repo
 - [`skills/agent-kit/SKILL.md`](../../../skills/agent-kit/SKILL.md) — `/agent-kit` workflow, placeholder reference, manifest and upgrade semantics
 - [`skills/agent-kit/bin/README.md`](../../../skills/agent-kit/bin/README.md) — emitter CLI contract (flags, exit codes, determinism)

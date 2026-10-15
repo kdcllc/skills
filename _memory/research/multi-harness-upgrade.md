@@ -1,6 +1,17 @@
+---
+title: "Research Report & Upgrade Plan: Multi-Harness Orchestration Kit"
+topic: multi-harness-upgrade
+date: 2026-08-18
+status: shipped
+shipped_in: ["1.0.0"]
+goals: [story-001-harness-validation]
+supersedes: []
+memory: [20260818T120015Z-cf35e99f]
+---
+
 # Research Report & Upgrade Plan: Multi-Harness Orchestration Kit
 
-**Date**: 2026-08-18 · **Method**: deep-research workflow (5 search angles, 25 sources
+**Method**: deep-research workflow (5 search angles, 25 sources
 fetched, 119 claims extracted, 25 adversarially verified by 3-vote panels: 24 confirmed,
 1 refuted) plus manual spot-verification of Codex claims against live official docs.
 
@@ -13,40 +24,36 @@ fully autonomous feature-by-feature loop.
 panel · 🔎 = primary source, spot-verified manually against live docs · ⚠️ = primary
 source, unverified · 💬 = blog/secondary, unverified.
 
-> **See also**: [research-harness-design-upgrade.md](research-harness-design-upgrade.md)
-> (2026-08-21) — Anthropic 2025–26 harness-design study driving the
-> `judge` → `evaluator` rename, per-task contracts, and evaluator hardening (shipped
-> v0.18.0: phases 0–2); live QA, frontend-design routing, and the simplification policy
-> follow as separate goals.
+> **See also**: [evaluation-system.md](../../docs/agent-kit/guide/evaluation-system.md) — evaluator rename, contracts, and hardening (shipped in 1.0.0).
 >
-> **See also**: [research-forge-adapter-support.md](research-forge-adapter-support.md)
+> **See also**: [forge-adapter-support.md](forge-adapter-support.md)
 > (2026-08-26) — forge-adapter study for Phase 7 delivery (Azure DevOps via
 > `az repos pr`, GitLab via `glab`, no-forge hand-over fallback), multi-remote
-> default-branch resolution, plus verification of the v0.20.0 install-feedback claims
-> (single-family model rotation, path-scoped rules vs subagents). Implementation
-> pending.
+> default-branch resolution, plus verification of the pre-release install-feedback claims
+> (single-family model rotation, path-scoped rules vs subagents). Forge adapter shipped
+> in 1.0.0 — see [forge-adapter-support.md](forge-adapter-support.md).
 >
-> **See also**: [research-model-currency-2026-10.md](research-model-currency-2026-10.md)
+> **See also**: [model-currency-2026-10.md](model-currency-2026-10.md)
 > (2026-10-08) — model-currency audit of every model-map slot (Opus 5.5 frontier on
 > Claude Code and Cursor, Haiku 5.5 fast tier), Cursor bracket-param effort syntax,
 > Claude Code's lack of cross-provider models, and Apr–Oct 2026 harness-native
 > orchestration features. Fast tier, same-family arbiter warnings, loop usage-credit
-> guard, `model_check`, and setup pin-verification shipped in kit v0.29.0; the
+> guard, `model_check`, and setup pin-verification shipped in kit 1.0.0; the
 > external-CLI arbiter adapter, native `.codex/agents/*.toml` agents, post-merge
-> integration rung, and native review gates are out of scope for v0.29.0.
+> integration rung, and native review gates are out of scope for 1.0.0.
 >
-> **See also**: [research-agent-memory-store.md](research-agent-memory-store.md)
+> **See also**: [agent-memory-store.md](agent-memory-store.md)
 > (2026-10-08) — persistent cross-harness memory store: git-tracked `_memory/` with one
 > immutable record per file, `_kit/memory.*` twins, keyword + optional FTS5 search,
 > orchestrator-only reads under a DATA fence. Corrects the Claude Code AGENTS.md fact
-> (read only when no CLAUDE.md exists). Release A shipped in v0.30.0; B–D pending.
+> (read only when no CLAUDE.md exists). Releases A–D shipped in 1.0.0.
 >
-> **See also**: [research-runtime-language.md](research-runtime-language.md)
+> **See also**: [runtime-language.md](runtime-language.md)
 > (2026-10-12) — runtime-language study for the kit's scripts: no harness guarantees
 > `node` or `python3`, the PowerShell twins require pwsh 7 that fresh Windows lacks, and
 > `emit.sh` needs Bash 4+ that stock macOS lacks. Recommends Bash as the single source of
 > truth behind a Git Bash launcher on Windows, retiring the `.ps1` twins group by group.
-> Partly implemented (agent-kit [Unreleased]): `bin/emit.ps1` and emitted `_kit/log-spawn.ps1`
+> Partly implemented (agent-kit 1.0.0): `bin/emit.ps1` and emitted `_kit/log-spawn.ps1`
 > are retired behind `.cmd` launchers; the maintainer `.ps1` twins are removed in favor of
 > `self-install.sh`; `loop.ps1` and `_kit/memory.ps1` remain.
 
@@ -229,7 +236,7 @@ none panel-verified ⚠️:
 
 ---
 
-## Part 2 — Upgrade Plan (approved 2026-08-18; phases A–C implemented in kit v0.2.0, D partially — local validation only; harness validation and E pending)
+## Part 2 — Upgrade Plan (approved 2026-08-18; phases A–C shipped in kit 1.0.0; Phase D validation ran as CLI-scoped probes only — see `skills/agent-kit/reference/harness-matrix.md` § Empirical validation; Phase E is met by publishing from kdcllc/skills)
 
 ### Design decisions
 
@@ -304,10 +311,10 @@ skills/agent-kit/
 └── (root) README.md             # EDIT: four-harness install matrix + loop quickstart
 ```
 
-> **Superseded (2026-08-22):** As of kit v0.19.0, the Cursor emitter emits a fully
+> **Superseded (2026-08-22):** As of kit 1.0.0, the Cursor emitter emits a fully
 > self-contained `.cursor/` tree (skills, ORCHESTRATION.md, model map, agents) and no
 > longer relies on the native cross-read; see `skills/agent-kit/reference/harness-matrix.md`'s
-> "Kit policy (as of v0.19.0)" note and `skills/agent-kit/emitters/cursor.md`.
+> **Kit policy:** note and `skills/agent-kit/emitters/cursor.md`.
 
 ### Sequencing
 

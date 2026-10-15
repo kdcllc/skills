@@ -1,8 +1,19 @@
+---
+title: "Research: Model Currency per Role + Orchestration Developments (Oct 2026)"
+topic: model-currency-2026-10
+date: 2026-10-08
+status: shipped
+shipped_in: ["1.0.0"]
+recheck_by: 2026-11-08
+goals: [model-currency-v0-29]
+supersedes: []
+memory: [20261008T120007Z-01ee7555]
+---
+
 # Research: Model Currency per Role + Orchestration Developments (Oct 2026)
 
-**Date**: 2026-10-08 · **Kit version audited**: 0.28.0 · **Re-check by**: 2026-11-08 ·
 **Method**: external deep-research report
-(`_research/model-currency-and-orchestration-trends/report.md`) plus an orchestrator
+(`_memory/work/research/model-currency-2026-10/report.md`) plus an orchestrator
 ingest review against the codebase and local CLIs.
 
 **Legend**: ✅ documented (official vendor source) · 📊 measured (vendor-run unless noted)

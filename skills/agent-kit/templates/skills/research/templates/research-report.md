@@ -1,6 +1,6 @@
 # Research Report: [topic]
 
-**Date**: [date] · **Source prompt**: `_memory/work/research/prompts/[topic].md`
+**Date**: [date] · **Source prompt**: `_memory/work/research/[topic]/prompt.md`
 
 ## Summary of Findings
 
@@ -21,4 +21,6 @@
 
 ## Promotion Checklist
 
-- [ ] Durable findings promoted into {{GROUND_TRUTH_DOC}}
+- [ ] Brief written to `_memory/research/[topic].md`
+- [ ] Index row updated in `_memory/research/README.md`
+- [ ] Implemented facts promoted into {{GROUND_TRUTH_DOC}}

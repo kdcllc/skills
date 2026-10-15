@@ -115,6 +115,12 @@ After every path from this archive passes `check` (under `records/` or `quaranti
 log one closed marker listing **all** ids `add` wrote (including quarantined):
 `_kit/log-spawn.sh note --goal <g> --text "ARCHIVED: <id> [<id>…]"` (space-separated).
 
+After the records are added, for each `_memory/research/*.md` brief whose `goals:` lists
+this goal, set `status: shipped` and update that topic's row in
+`_memory/research/README.md`. Worker tasks never write `_memory/research/`; the
+orchestrator owns it. Driver-dispatched loop slots never edit `_memory/research/` either:
+brief status updates happen only in an interactive feature archive.
+
 Records stay **uncommitted** with the goal's other changes for human review. Corrections
 to an untracked record: `_kit/memory.sh rm <full-id>`, fix the draft, re-`add`. Committed
 records: a new record with `--supersedes <id>`; never edit an existing record file.
@@ -122,11 +128,13 @@ records: a new record with `--supersedes <id>`; never edit an existing record fi
 ## Archive (research)
 
 After the Phase 2 ingestion review, archive one `research-ingest` record summarizing the
-report. Source label: `research <topic> (report.md)` unless a tracked copy exists (cite
-the tracked path). Same `add` invocation and exit handling as feature archive (including
-`check` on added paths and on quarantined paths when exit 5). Then write
-`_memory/work/research/<topic>/ingested`: line 1 = UTC `YYYY-MM-DDTHH:MM:SSZ`, line 2 = the record
-id(s) from this archive separated by spaces.
+report. Source label: the brief path `_memory/research/<topic>.md`, written in Phase 2
+before the archive. It is a valid source label even though the brief is committed
+together with the record: it is tracked content of the same change. Add the new id to
+the brief's `memory:` list. Same `add` invocation and exit handling as feature archive
+(including `check` on added paths and on quarantined paths when exit 5). Then write
+`_memory/work/research/<topic>/ingested`: line 1 = UTC `YYYY-MM-DDTHH:MM:SSZ`, line 2 =
+the record id(s) from this archive separated by spaces.
 
 ## Back-fill
 

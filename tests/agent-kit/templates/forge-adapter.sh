@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Regression guard for the forge-adapter-delivery goal (v0.22.0): locks the four-branch
+# Regression guard for the forge-adapter-delivery goal: locks the four-branch
 # ship-pr create commands and never-executes hand-over, the canonical ORCHESTRATION
 # Forge-adapter taxonomy and remote-precedence chain, recursive absence of
 # `delete Phase 7` under skills/agent-kit/templates/, setup SKILL manifest forge/forgeHost

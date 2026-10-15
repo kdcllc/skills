@@ -27,9 +27,9 @@ TEMPLATES="$REPO_ROOT/skills/agent-kit/templates"
 EMITTERS="$REPO_ROOT/skills/agent-kit/emitters"
 EMIT_SH="$REPO_ROOT/skills/agent-kit/bin/emit.sh"
 SETUP_SKILL_MD="$REPO_ROOT/skills/agent-kit/SKILL.md"
-RESEARCH_DOC="$REPO_ROOT/docs/agent-kit/research-token-efficient-skills.md"
+RESEARCH_DOC="$REPO_ROOT/_memory/research/token-efficient-skills.md"
 ROOT_README="$REPO_ROOT/skills/agent-kit/README.md"
-ROOT_ORCHESTRATION="$REPO_ROOT/docs/agent-kit/ORCHESTRATION.md"
+ROOT_ORCHESTRATION="$REPO_ROOT/docs/agent-kit/README.md"
 
 fail_count=0
 pass_count=0

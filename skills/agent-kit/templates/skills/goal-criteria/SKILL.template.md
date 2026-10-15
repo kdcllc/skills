@@ -69,6 +69,10 @@ Scoping clauses (apply before scoring the seven):
   listed in the `align-docs` skill's documentation surface map** — that map bounds the
   exemption; it does not widen to "any doc". All of these sit OUTSIDE the task
   write-set union: coverage and single-owner apply to task-owned product files only.
+  Research briefs and their index under `_memory/research/` are orchestrator-owned too:
+  a task whose `writes:` includes `_memory/research/` is NEEDS REVISION — unless
+  `goal.md` explicitly records a one-time migration exception for that task (a goal
+  that moves existing studies into the folder).
 - **Missing ownership block.** A task file with no ownership block is NEEDS REVISION —
   fail closed, since an undeclared write-set is not an empty one. The remedy is to
   author the block from the task template and re-evaluate; it is not a decomposition
@@ -90,14 +94,7 @@ Phase 3 for all tasks before any implementation dispatch.
 
 ### Evaluation depth (`eval_depth`)
 
-**Applicability**: this check applies only to goals created on or after kit v0.18.0 —
-the version that introduced per-task contracts and `eval_depth`. A goal already in
-flight when these templates landed is exempt: the absence of `eval_depth` there is
-informational only, never a NEEDS REVISION cause. Treat a goal as v0.18.0+ when its
-task files use the current `templates/task.md` ownership-contract shape (the one
-carrying `eval_depth`); older task files predate the field by construction.
-
-For v0.18.0+ goals: every task file declares `eval_depth: full` or `eval_depth: light`.
+Every task file declares `eval_depth: full` or `eval_depth: light`.
 The default is `light`. `full` is REQUIRED (with the reason stated in the task file)
 when the task is a contract/scaffold task, has interface consumers (a later task
 builds on its output as an interface — tasks that merely mirror, document, or test

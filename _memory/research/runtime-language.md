@@ -1,8 +1,19 @@
+---
+title: "Research: Runtime Language for Kit Scripts (Bash + PowerShell Twins vs. Node, Python, Binary)"
+topic: runtime-language
+date: 2026-10-12
+status: shipped
+shipped_in: ["1.0.0"]
+recheck_by: 2027-04-12
+goals: [runtime-bash-single-source]
+supersedes: []
+memory: [20261012T112437Z-81273d7a]
+---
+
 # Research: Runtime Language for Kit Scripts (Bash + PowerShell Twins vs. Node, Python, Binary)
 
-**Date**: 2026-10-12 · **Kit version audited**: 1.0.0 · **Re-check by**: 2027-04-12 ·
 **Method**: external deep-research report
-(`_research/runtime-language/report.md`) plus an orchestrator ingest review against
+(`_memory/work/research/runtime-language/report.md`) plus an orchestrator ingest review against
 `skills/agent-kit/`.
 
 **Legend**: ✅ documented (official vendor source) · 🔬 verified in this repo on

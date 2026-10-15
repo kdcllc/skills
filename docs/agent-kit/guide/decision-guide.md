@@ -4,7 +4,7 @@
 
 ## Four ways to work
 
-The kit ships three orchestrated workflows plus the option to edit without invoking any of them. All orchestrated paths share the same architecture: an orchestrator coordinates, fresh-context workers execute, and skeptical evaluators gate progression. As of v0.23.0, the canonical behavior is what `skills/agent-kit/templates/` emits via `/agent-kit`; this document compares modes only — mechanics of each workflow live in the linked guides below.
+The kit ships three orchestrated workflows plus the option to edit without invoking any of them. All orchestrated paths share the same architecture: an orchestrator coordinates, fresh-context workers execute, and skeptical evaluators gate progression. Canonical behavior is what `skills/agent-kit/templates/` emits via `/agent-kit`; this document compares modes only — mechanics of each workflow live in the linked guides below.
 
 | Mode | When to choose it | Deep dive |
 |------|-------------------|-----------|
@@ -56,7 +56,7 @@ flowchart TD
 | **Human involvement** | You edit and verify in one session; no orchestrator phases | Orchestrator asks structured alignment questions (incl. Phase 6/7 intent); you confirm understanding and approve decision gates, PR draft, and escalations | Same human gates as `/feature`, plus collaborative planning after the external report is ingested | Minimal per-iteration involvement; backlog stories pre-specify acceptance criteria; human ships one PR at run end when loop-level `pull_request` is enabled |
 | **Context freshness** | Single continuous session — context accumulates | Fresh-context subagents per task and evaluation; orchestrator retains session history | Same fresh-context model as `/feature`; research report is a durable artifact before coding | One story, one fresh context per iteration; all state lives in files and git |
 | **Verification guarantees** | Whatever checks you run yourself — no evaluator PASS requirement | Evaluator PASS (or APPROVED for audits) required before every phase advance; acceptance criteria validated at Phase 3; fixes always re-evaluated | Research report reviewed critically before goal creation; then full evaluator gates through `/feature` | Evaluator PASS + green ladder rungs before each story commit; same re-evaluate invariants as `/feature` Phases 2–6 |
-| **Artifacts produced** | Git diff only | `_memory/work/goals/<name>/` (goal, tasks, orchestration log); optional QA evidence | `_memory/work/research/prompts/`, `_memory/work/research/<topic>/report.md`, then `_memory/work/goals/<name>/` | `_memory/loop/backlog.md` entries, per-story commits, `_memory/loop/LEARNINGS.md`, `_memory/loop/ESCALATIONS.md` on failure |
+| **Artifacts produced** | Git diff only | `_memory/work/goals/<name>/` (goal, tasks, orchestration log); optional QA evidence | `_memory/work/research/<topic>/prompt.md`, `_memory/work/research/<topic>/report.md`, curated brief at `_memory/research/<topic>.md`, then `_memory/work/goals/<name>/` | `_memory/loop/backlog.md` entries, per-story commits, `_memory/loop/LEARNINGS.md`, `_memory/loop/ESCALATIONS.md` on failure |
 | **Typical work size** | One file or a few lines; verifiable immediately | Multi-task features spanning layers; needs decomposition and acceptance criteria at planning | Features whose design depends on external facts, APIs, or standards not yet verified | Many small stories, each sized to one context window and one commit |
 | **Failure mode when misused** | Shipping unreviewed changes to complex behavior; skipping tests on non-trivial edits | Running `/feature` for a typo — heavy process, wasted evaluator cycles | Skipping research and coding against unverified external claims — confident fabrication | Running the loop on ambiguous stories — blocked iterations, wasted evaluator cycles |
 
@@ -68,7 +68,7 @@ The `/research` workflow exists to produce a **verifiable report before goal cre
 
 For the full prompt/report/ingestion flow, see [research-workflow.md](research-workflow.md).
 
-**Real example:** [Multi-harness upgrade research](../research-multi-harness-upgrade.md) grounded harness capability claims — model tiers, fallback behavior, Copilot and Cursor caveats — before those patterns were adopted into the canonical templates. That report is the kind of durable evidence `/research` is meant to produce; durable findings promote into the project's ground-truth reference while `_memory/work/research/` stays gitignored scratch.
+**Real example:** [Multi-harness upgrade research](../../../_memory/research/multi-harness-upgrade.md) grounded harness capability claims — model tiers, fallback behavior, Copilot and Cursor caveats — before those patterns were adopted into the canonical templates. That brief is the kind of durable evidence `/research` is meant to produce; curated briefs live in tracked `_memory/research/` while `_memory/work/research/` stays gitignored scratch.
 
 ## Worked scenarios
 
@@ -140,5 +140,5 @@ Claims in this document trace to these canonical files (paths relative to `docs/
 - [`../../skills/agent-kit/templates/skills/research/SKILL.template.md`](../../../skills/agent-kit/templates/skills/research/SKILL.template.md) — `/research` purpose (external-domain investigation before implementation), report → goal handoff at feature Phase 3
 - [`../../skills/agent-kit/templates/loop/SKILL.template.md`](../../../skills/agent-kit/templates/loop/SKILL.template.md) — one story per iteration, backlog selection, ambiguous-story blocking, feature Phases 2–6 substitution
 - [`../../skills/agent-kit/templates/ORCHESTRATION.md`](../../../skills/agent-kit/templates/ORCHESTRATION.md) — architecture: fresh context, evaluator gates, autonomous loop guards, mandatory re-evaluate invariants
-- [`../../README.md`](../../../skills/agent-kit/README.md) — kit overview, feature list phrasing, workflow summaries as of v0.23.0
-- [`../research-multi-harness-upgrade.md`](../research-multi-harness-upgrade.md) — example research artifact grounding external harness claims
+- [`../../README.md`](../../../skills/agent-kit/README.md) — kit overview, feature list phrasing, workflow summaries
+- [`../../../_memory/research/multi-harness-upgrade.md`](../../../_memory/research/multi-harness-upgrade.md) — example research brief grounding external harness claims

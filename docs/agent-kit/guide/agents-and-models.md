@@ -2,7 +2,7 @@
 
 # Agents and Model Configuration
 
-The kit uses **three model tiers**: **coordination and verification** on the **frontier** tier, **checklist-driven execution** on the **light** tier, and **single-command runs** on the **fast** tier (`terminal`). One orchestrating main session prepares context, makes decisions, and spawns subagents — it never implements tasks itself. Every spawn passes its model explicitly (the model map's resolved ID for the agent's tier); each agent report starts with **`**Model (self-reported)**: ...`**. Six specialized subagents handle implementation, testing, command execution, evaluation, and post-exhaustion diagnosis. Model IDs, fallback chains, and fix-cycle rotation are configured in a single template file that `/agent-kit` resolves per harness.
+The kit uses **three model tiers**: **coordination and verification** on the **frontier** tier, **checklist-driven execution** on the **light** tier, and **single-command runs** on the **fast** tier (`terminal`). One orchestrating main session prepares context, makes decisions, and spawns subagents — it never implements tasks itself. Every spawn passes its model explicitly (the model map's resolved ID for the agent's tier); each agent report starts with **`**Model (self-reported)**: ...`**. Six specialized subagents handle implementation, testing, command execution, evaluation, and post-exhaustion diagnosis. Model IDs, fallback chains, and fix-cycle rotation are configured in a single template file that `/agent-kit` resolves per harness. See [architecture.md](architecture.md) for how tiers fit the spawn lifecycle.
 
 ## The six subagents at a glance
 
@@ -19,7 +19,7 @@ The sections below quote or paraphrase the canonical agent templates under [`ski
 
 ## Report Footprint (all six agents)
 
-As of **v0.26.0**, every agent completion report ends with a machine-readable **`### Footprint`** block — the last non-blank lines inside the report fence:
+Every agent completion report ends with a machine-readable **`### Footprint`** block — the last non-blank lines inside the report fence:
 
 ```markdown
 ### Footprint
@@ -46,7 +46,7 @@ commands_run: <N>
 - Talk itself into a PASS after finding an issue (identified issues must appear in the verdict).
 - Treat unverified claims as verified.
 
-As of v0.20.0, the evaluator also has an orchestrator-invoked **arbitration mode** (continuation-ladder rung 5, pinned to `{{MODEL_FRONTIER_ALT_FAMILY}}`) that reviews criteria rather than code — semantics in [evaluation-system.md](evaluation-system.md).
+The evaluator also has an orchestrator-invoked **arbitration mode** (continuation-ladder rung 5, pinned to `{{MODEL_FRONTIER_ALT_FAMILY}}`) that reviews criteria rather than code — semantics in [evaluation-system.md](evaluation-system.md).
 
 Evaluation criteria — verdict vocabulary, confidence ladder, anti-fabrication rules, auto-fail triggers — are owned by [evaluation-system.md](evaluation-system.md), not repeated here.
 
@@ -118,7 +118,7 @@ The terminal is the **shell-output shield**: noisy test runs, builds, and git op
 
 ## Diagnostician
 
-**Role:** Fresh-context root-cause analyst spawned at continuation-ladder rung 4 after three implement→evaluate fix cycles exhaust without a PASS (as of v0.20.0).
+**Role:** Fresh-context root-cause analyst spawned at continuation-ladder rung 4 after three implement→evaluate fix cycles exhaust without a PASS.
 
 **Inputs:** The task file (including its `## Acceptance Criteria` section), all three fix-cycle histories (implementer reports + evaluator verdicts), and pointers to the current code.
 
@@ -220,6 +220,24 @@ Additional rules from the map:
 
 The autonomous loop has its own light-tier chain resolving `{{LOOP_MODEL_CHAIN}}` when the loop is installed — same omit-the-pin rule at the end.
 
+Per-tier fallback chains resolve at spawn time as follows.
+
+```mermaid
+flowchart TD
+    Spawn["Spawn names tier model ID"]
+    Frontier["frontier chain\nprimary → same-family prev → strongest standard → harness default"]
+    Light["light chain\nprimary → alternate light → harness default"]
+    Fast["fast chain\nfast → light → harness default"]
+    Rule["Never fall back UP a tier\n(fast → light allowed)"]
+
+    Spawn --> Frontier
+    Spawn --> Light
+    Spawn --> Fast
+    Frontier --> Rule
+    Light --> Rule
+    Fast --> Rule
+```
+
 ### Never fall back UP a tier
 
 A **light** role must never silently land on a **frontier** model. A **frontier** role never degrades below the standard rung of its chain. This is the **never fall back UP** rule — it prevents cost surprises (light work on frontier models) and quality surprises (frontier verification on downgraded models). One carve-out: **fast → light** is allowed, because light is `terminal`'s baseline tier when an install omits `fast`.
@@ -236,7 +254,7 @@ After evaluator rejections, rotate the implementer's model — a model blind to 
 
 The workflow context for when fix cycles fire is in [feature-workflow.md](feature-workflow.md).
 
-### After cycle 3 — continuation ladder pins (as of v0.20.0)
+### After cycle 3 — continuation ladder pins
 
 When fix cycles 1–3 exhaust, the continuation ladder applies these pins:
 
@@ -247,7 +265,7 @@ When fix cycles 1–3 exhaust, the continuation ladder applies these pins:
 
 `{{MODEL_ALT_FAMILY}}` (light tier) is never reused for arbitration.
 
-**Same-family arbiter (as of v0.29.0).** When no different-family frontier model is reachable on a harness, answers may set `frontier_alt_family` equal to `frontier` with `arbiter_same_family: true`; emit otherwise prints a warning (counted in emit warnings, stderr, exit 0). The rung-5 row is then labelled **same-family arbiter (reduced independence)** in the model map, and the arbiter's verdict header states `same-family arbiter`. Reusing the fix-cycle-2 alternate (`alt_family`) for arbitration stays forbidden — when `frontier_alt_family` equals `alt_family` (and differs from `frontier`), emit warns even with the flag. When all three IDs are equal and the flag is set, emit is silent.
+**Same-family arbiter.** When no different-family frontier model is reachable on a harness, answers may set `frontier_alt_family` equal to `frontier` with `arbiter_same_family: true`; emit otherwise prints a warning (counted in emit warnings, stderr, exit 0). The rung-5 row is then labelled **same-family arbiter (reduced independence)** in the model map, and the arbiter's verdict header states `same-family arbiter`. Reusing the fix-cycle-2 alternate (`alt_family`) for arbitration stays forbidden — when `frontier_alt_family` equals `alt_family` (and differs from `frontier`), emit warns even with the flag. When all three IDs are equal and the flag is set, emit is silent.
 
 ### Cost-ceiling policy
 
@@ -271,7 +289,7 @@ Practical implication: on Copilot, your orchestrating session is the frontier an
 
 Under team-admin or plan restrictions, or when a resolved model ID is unknown or stale (rotated-out or misspelled name), Cursor **substitutes a compatible model without erroring** (unresolved subagent models may fall back to the parent's model). A typo'd or stale ID in the map fails quietly downstream instead of at resolution time. Bracket params (`<model-id>[effort=high]`) are the documented frontmatter form; slug-suffix effort variants appear in pickers and listings — use the form verified for the account at emit time. YAML `model:` values are emitted **unquoted**; quoting can trigger silent fallback to the parent model. When `agent models` prints no models, use the IDE's Settings → Models / subagent model picker.
 
-Evaluators should state their expected model in the prompt and report **which model actually produced the verdict** so silent substitution is visible in the audit trail. As of v0.29.0, orchestration-log OUTCOME lines include **`model_check: match|MISMATCH|unverified`** after `model reported:` — family-level comparison that surfaces substitution even when the harness stays silent (`MISMATCH` also prints a stderr warning; exit 0). See [evaluation-system.md](evaluation-system.md) for the re-spawn policy on verification agents.
+Evaluators should state their expected model in the prompt and report **which model actually produced the verdict** so silent substitution is visible in the audit trail. Orchestration-log OUTCOME lines include **`model_check: match|MISMATCH|unverified`** after `model reported:` — family-level comparison that surfaces substitution even when the harness stays silent (`MISMATCH` also prints a stderr warning; exit 0). See [evaluation-system.md](evaluation-system.md) for the re-spawn policy on verification agents.
 
 ### Cursor live model list (emit-time check)
 

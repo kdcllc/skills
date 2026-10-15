@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Regression guard for the autonomous-escalation-ladder goal (v0.20.0): locks in the
+# Regression guard for the autonomous-escalation-ladder goal: locks in the
 # Phase 4 continuation-ladder subsection, failure-class taxonomy identity across
 # canonical templates, diagnostician template + dual-instance emission, tools-line
 # hygiene, hardcoded-model-ID absence, per-emitter diagnostician wiring,
@@ -9,7 +9,7 @@
 # — checks the canonical templates/ source tree, root docs, and emitted instance
 # paths directly (no network, no LLM, no `_loop/` required).
 #
-# Copy this repo's `tests/` + `skills/` + `docs/` + `README.md` + `ORCHESTRATION.md`
+# Copy this repo's `tests/` + `skills/` + `docs/` + `_memory/research/` + `README.md`
 # subtree into a mktemp dir, mutate a file under test, then run the COPIED script:
 # HERE and REPO_ROOT resolve relative to this script's own location, so the copy
 # checks the mutated copy, not the live repo.
@@ -41,8 +41,8 @@ EMITTERS="$REPO_ROOT/skills/agent-kit/emitters"
 EMIT_SH="$REPO_ROOT/skills/agent-kit/bin/emit.sh"
 VERSION_FILE="$REPO_ROOT/skills/agent-kit/SKILL.md"
 ROOT_README="$REPO_ROOT/skills/agent-kit/README.md"
-ROOT_ORCHESTRATION="$REPO_ROOT/docs/agent-kit/ORCHESTRATION.md"
-RESEARCH_DOC="$REPO_ROOT/docs/agent-kit/research-autonomous-escalation.md"
+ROOT_ORCHESTRATION="$REPO_ROOT/docs/agent-kit/README.md"
+RESEARCH_DOC="$REPO_ROOT/_memory/research/autonomous-escalation.md"
 EMITTED_ORCH="$REPO_ROOT/.claude/ORCHESTRATION.md"
 EMITTED_DIAG_CLAUDE="$REPO_ROOT/.claude/agents/diagnostician.md"
 EMITTED_DIAG_CURSOR="$REPO_ROOT/.cursor/agents/diagnostician.md"
@@ -351,25 +351,25 @@ else
 fi
 
 # ===========================================================================
-# 11. Research doc exists, linked from README and root ORCHESTRATION, ladder pointer.
+# 11. Research doc exists, linked from skill README and docs hub, ladder pointer.
 # ===========================================================================
 check11_ok=1
 if [[ ! -f "$RESEARCH_DOC" ]]; then
   check11_ok=0
 fi
-if ! grep -qF 'research-autonomous-escalation.md' "$ROOT_README" 2>/dev/null; then
+if ! grep -qF '_memory/research/autonomous-escalation.md' "$ROOT_README" 2>/dev/null; then
   check11_ok=0
 fi
-if ! grep -qF 'research-autonomous-escalation.md' "$ROOT_ORCHESTRATION" 2>/dev/null; then
+if ! grep -qF 'autonomous-escalation.md' "$ROOT_ORCHESTRATION" 2>/dev/null; then
   check11_ok=0
 fi
 if ! grep -qi 'continuation ladder' "$ROOT_ORCHESTRATION" 2>/dev/null; then
   check11_ok=0
 fi
 if [[ $check11_ok -eq 1 ]]; then
-  report PASS "research doc exists, linked from README and root ORCHESTRATION, ladder pointer"
+  report PASS "research doc exists, linked from skill README and docs hub, ladder pointer"
 else
-  report FAIL "research doc exists, linked from README and root ORCHESTRATION, ladder pointer"
+  report FAIL "research doc exists, linked from skill README and docs hub, ladder pointer"
 fi
 
 # ===========================================================================

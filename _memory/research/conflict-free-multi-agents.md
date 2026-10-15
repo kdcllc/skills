@@ -1,3 +1,14 @@
+---
+title: "Designing Conflict-Free Multi-Agent Software Development: Architecture-Level Prevention Over Merge-Level Repair"
+topic: conflict-free-multi-agents
+date: 2026-08-19
+status: shipped
+shipped_in: ["1.0.0"]
+goals: [story-008-ownership-contracts]
+supersedes: []
+memory: [20260819T120006Z-0acb6ce0]
+---
+
 # Designing Conflict-Free Multi-Agent Software Development: Architecture-Level Prevention Over Merge-Level Repair
 
 ## TL;DR

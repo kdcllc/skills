@@ -11,7 +11,7 @@
 #   --no-install     Skip scripts/agent-kit/self-install.sh (use the current instance).
 #   -j N               Run up to N suites in parallel (default: CPU count capped at 8).
 #   --only SUBSTR      Run suites whose path contains SUBSTR (repeatable).
-#   --quick            Run a fast subset (see usage(): checks, docs-link-check, template-currency, …).
+#   --quick            Run a fast subset (see usage(): checks, docs-link-check, research-docs-check, …).
 #
 # Environment:
 #   AGENT_KIT_TEST_JOBS   Same as -j (command line wins).
@@ -60,9 +60,9 @@ Options:
   --no-install   Skip scripts/agent-kit/self-install.sh (use the current instance).
   -j N           Run up to N suites in parallel (default: CPU count capped at 8).
   --only SUBSTR  Run suites whose path contains SUBSTR (repeatable).
-  --quick        Fast subset: checks.sh, docs-link-check.sh, template-currency.sh,
-                 skill-slimming.sh, model-enforcement.sh, forge-adapter.sh,
-                 invocation-flags.sh, escalation-ladder.sh.
+  --quick        Fast subset: checks.sh, docs-link-check.sh, research-docs-check.sh,
+                 template-currency.sh, skill-slimming.sh, model-enforcement.sh,
+                 forge-adapter.sh, invocation-flags.sh, escalation-ladder.sh.
 
 Environment:
   AGENT_KIT_TEST_JOBS   Same as -j (command line wins).
@@ -177,6 +177,7 @@ PRIORITY=(
 QUICK_SUITES=(
   tests/agent-kit/checks.sh
   tests/agent-kit/docs-link-check.sh
+  tests/agent-kit/research-docs-check.sh
   tests/agent-kit/templates/template-currency.sh
   tests/agent-kit/templates/skill-slimming.sh
   tests/agent-kit/templates/model-enforcement.sh
@@ -190,6 +191,7 @@ _build_default_suites() {
   out+=(
     tests/agent-kit/checks.sh
     tests/agent-kit/docs-link-check.sh
+    tests/agent-kit/research-docs-check.sh
     tests/agent-kit/lib/selftest.sh
   )
   local t

@@ -37,7 +37,7 @@ HARNESS_MATRIX="$REPO_ROOT/skills/agent-kit/reference/harness-matrix.md"
 MODELS_MAP="$REPO_ROOT/skills/agent-kit/templates/models.map.md"
 VERSION_FILE="$REPO_ROOT/skills/agent-kit/SKILL.md"
 ROOT_README="$REPO_ROOT/skills/agent-kit/README.md"
-ROOT_ORCHESTRATION="$REPO_ROOT/docs/agent-kit/ORCHESTRATION.md"
+ROOT_ORCHESTRATION="$REPO_ROOT/docs/agent-kit/README.md"
 EMIT_SH="$REPO_ROOT/skills/agent-kit/bin/emit.sh"
 EMIT_README="$REPO_ROOT/skills/agent-kit/bin/README.md"
 
@@ -228,18 +228,18 @@ else
 fi
 
 # ===========================================================================
-# 6. skills/agent-kit/reference/harness-matrix.md -- v0.19.0 policy, non-contradictory
+# 6. skills/agent-kit/reference/harness-matrix.md -- Kit policy, non-contradictory
 #    Cursor cells. The Cursor column is located via the capability table's own
 #    header row (matching the field whose trimmed text is exactly "Cursor"), never
 #    via a hardcoded field index or a whole-line grep -- a whole-line date grep
 #    could pass on a date sitting in a different harness's cell.
 # ===========================================================================
 
-# 6a. v0.19.0 self-containment policy note exists.
-if grep -qF 'Kit policy (as of v0.19.0)' "$HARNESS_MATRIX" 2>/dev/null; then
-  report PASS "harness-matrix.md: v0.19.0 self-containment policy note present"
+# 6a. self-containment policy note exists.
+if grep -qF 'Kit policy:' "$HARNESS_MATRIX" 2>/dev/null; then
+  report PASS "harness-matrix.md: self-containment Kit policy: note present"
 else
-  report FAIL "harness-matrix.md: v0.19.0 self-containment policy note present"
+  report FAIL "harness-matrix.md: self-containment Kit policy: note present"
 fi
 
 # 6b. Both the Cursor model-pin cell and the Cursor effort-pin cell carry a
@@ -323,9 +323,9 @@ fi
 
 # 7c. Root ORCHESTRATION.md mentions self-contained (pointer, not version history).
 if grep -qF 'self-contained' "$ROOT_ORCHESTRATION" 2>/dev/null; then
-  report PASS "ORCHESTRATION.md: mentions self-contained"
+  report PASS "docs hub: mentions self-contained"
 else
-  report FAIL "ORCHESTRATION.md: mentions self-contained"
+  report FAIL "docs hub: mentions self-contained"
 fi
 
 # 7d. skills/agent-kit/SKILL.md metadata.version semver, README Kit version line, instance VERSIONs (SKIP if absent).

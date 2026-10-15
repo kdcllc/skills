@@ -1,6 +1,17 @@
+---
+title: "Ideas Gleaned from bradygaster/squad"
+topic: squad-ideas
+date: 2026-08-18
+status: shipped
+shipped_in: ["1.0.0"]
+goals: []
+supersedes: []
+memory: [20260818T120016Z-a58843d4]
+---
+
 # Ideas Gleaned from bradygaster/squad
 
-**Date**: 2026-08-18 · **Method**: full-repo primary-source study (shallow clone @ `1e09d9c`,
+**Method**: full-repo primary-source study (shallow clone @ `1e09d9c`,
 three parallel readers over docs/concepts, `templates/` orchestration mechanics, and
 `.copilot/skills/` + engine code). All citations are paths in the squad repo.
 
@@ -124,8 +135,8 @@ appendix **unedited** — "The Coordinator may not rewrite raw agent outputs"
   predictive breaker on the last 10 samples) if we ever run parallel loops.
 - **WIP-limited self-refilling dispatch**: `available-slots = max(0, 3 - active PRs)`,
   refill on merge (`workflows/squad.md`) — the pattern for parallelizing our loop
-  beyond one story at a time. *(Shipped through STORY-010 (v0.11.0) + STORY-011
-  (v0.12.0) per `docs/agent-kit/design-parallel-dispatch.md`.)*
+  beyond one story at a time. *(Shipped through STORY-010 + STORY-011 in 1.0.0; see
+  [autonomous-loop.md](../../docs/agent-kit/guide/autonomous-loop.md).)*
 - **Judge-timeout semantics**: Rai's "timeout ⇒ 🟡 Unknown, never silently approve"
   with a 5-second budget — relevant if we ever bound judge latency.
 - **Skill confidence/source frontmatter + reskill compaction** (extraction thresholds:
@@ -156,7 +167,7 @@ appendix **unedited** — "The Coordinator may not rewrite raw agent outputs"
 
 ---
 
-## Adoption plan (approved and applied 2026-08-18 — kit v0.4.0)
+## Adoption plan (approved and applied 2026-08-18; shipped in 1.0.0)
 
 | # | Change | Files touched |
 |---|--------|---------------|
@@ -171,4 +182,4 @@ appendix **unedited** — "The Coordinator may not rewrite raw agent outputs"
 | A9 | Append-only orchestration log per goal | `feature/SKILL.md` |
 | A10 | Raw-outputs-verbatim + literal CURRENT_DATETIME in context packages | `feature/SKILL.md` |
 
-All ten applied; kit version bumped to 0.4.0.
+All ten applied; shipped in 1.0.0.

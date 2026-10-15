@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Regression guard for model-currency goal (kit v0.29.0): fast tier, arbiter warnings,
+# Regression guard for model-currency goal: fast tier, arbiter warnings,
 # loop denylist, upgrade compatibility, log-spawn model_check, template/guidance text,
 # dogfood pins. Tracked, self-install-independent — no network, no LLM.
 #

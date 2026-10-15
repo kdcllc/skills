@@ -32,7 +32,7 @@
     ".codex/agents/test-writer.md": "fd310b91980bae2cbe0230156ccb4d9f771291423816c3d224d6ec16582b79b2",
     ".codex/agents/test-writer.toml": "4092fe6c250c290e8ca3b43ef5998904f0965247e5aff3d837d486395d06241b",
     ".codex/config.toml": "52eed364237d0eb7475b8e1beb571842cd14d1fd526854b4ca9ecb8b828c1042",
-    "ORCHESTRATION.md": "acdccd67d61f38fda6f9ced9356c9dd10d418dddda1ff0c83298e772cbade448",
+    "ORCHESTRATION.md": "7383c3c0e4d988e1f10caf706847afb4070779b8f95e7ed4d89d0b0e26514f9d",
     "_kit/log-spawn.cmd": "ae9541294a03f741311ff8bc0d5c6f9985d6947fb42f7aaeaf6613088e34bf7e",
     "_kit/log-spawn.sh": "5b288ff4db2274eb807e748b3abb2fce2f442148c378458f07198c4c5b262dd5",
     "_kit/memory.cmd": "ae9541294a03f741311ff8bc0d5c6f9985d6947fb42f7aaeaf6613088e34bf7e",
@@ -41,9 +41,9 @@
     "_loop/PROMPT.md": "fdce88d9b733e1018c13ba9fdec03e4cd0a83f5c3ba85e84f87d728b96c0d250",
     "_loop/breaker.ps1": "aca26dccdd9110c7da79aef8d2369401fec4b07d98e8fe3d19eaa9f4e6c47750",
     "_loop/breaker.sh": "92d762f93a3a76db1f8176f454c4ad401f65b5449a8bd8bbbd0c690344a6c686",
-    "_loop/loop.ps1": "ec4b99307220df3b1df49bf6ff01e06851c4a7de00ccbfe6b9a9a1e40f86a919",
-    "_loop/loop.sh": "7b8df9f4ebd6ad6e58fee94c0ab75bcdb44502d8fa2a268d23c68c9fad45af4b",
-    "_memory/README.md": "0d85940ee115e7f629b54c06d1d9d58401257e82fbc5ec1cfb83e8efddcccb95"
+    "_loop/loop.ps1": "3c70e1e2f42cf485c5f60c0997cdd84e6174de7ba7014c2cf51c6cc7885e8723",
+    "_loop/loop.sh": "93e4c5a968b1620f3ca15f8f34d5139d1a5e262f5a8cb818911eae54338c1db1",
+    "_memory/README.md": "591cb77f6a1293fd6fa39c93ab258549f6dc58af900de99b2b00e6d5bd7dedd4"
   },
   "answers": {
     "bootstrap": {

@@ -26,6 +26,7 @@ readonly REPO_BLOB_URL="https://github.com/kdcllc/skills/blob/master/"
 # Frozen inventory of suite documents under docs/agent-kit/guide/
 readonly -a EXPECTED_SUITE=(
   README.md
+  architecture.md
   getting-started.md
   decision-guide.md
   feature-workflow.md

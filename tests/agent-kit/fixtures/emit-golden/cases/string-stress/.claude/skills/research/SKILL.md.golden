@@ -14,22 +14,30 @@ access**. You coordinate four phases; the output feeds `feature` Phase 4.
 `.claude/skills/feature/reference/memory-protocol.md`; write ids or `none` to
 `_memory/work/research/<topic>/recalled-memory.md` (avoid re-researching settled questions).
 
-Write `_memory/work/research/prompts/[topic].md` from `templates/research-prompt.md`. The prompt must
+Write `_memory/work/research/<topic>/prompt.md` from `templates/research-prompt.md`. The prompt must
 be self-contained (the researcher cannot see this repo): include the relevant facts from
 docs/agent-kit/research-multi-harness-upgrade.md and the domain skill, the exact questions to answer, and the
 required report structure. The user copy-pastes it to their external research tool.
 
 ## Phase 2 — Ingest the report
 
-Save the returned report as `_memory/work/research/[topic]/report.md` (structure per
+Save the returned report as `_memory/work/research/<topic>/report.md` (structure per
 `templates/research-report.md`). Read it critically: flag claims that contradict
-docs/agent-kit/research-multi-harness-upgrade.md or the codebase, and list open questions back to the user.
-Promote durable findings into docs/agent-kit/research-multi-harness-upgrade.md; `_memory/work/research/` stays scratch.
+docs/agent-kit/research-multi-harness-upgrade.md or the codebase, and list open questions back to the user. Write
+that ingestion review to `_memory/work/research/<topic>/review.md`.
+
+**Promote:** write the curated brief `_memory/research/<topic>.md` from
+`templates/research-brief.md` (`status: ingested`), then add or update the topic's row in
+`_memory/research/README.md` (create it from `templates/research-index.md` only when
+missing, replacing the sample row with this first real row). Only implemented facts go
+into docs/agent-kit/research-multi-harness-upgrade.md; `_memory/work/research/` stays scratch. Briefs are tracked and
+orchestrator-owned — worker tasks never write `_memory/research/`.
 
 **Archive:** one `research-ingest` after ingestion review per
-`.claude/skills/feature/reference/memory-protocol.md`; run `_kit/memory.sh check` on
-each path `add` writes (or quarantines), then write `_memory/work/research/<topic>/ingested` per
-protocol before commit.
+`.claude/skills/feature/reference/memory-protocol.md`, with `--source` set to the brief
+path `_memory/research/<topic>.md`; add the new id to the brief's `memory:` list. Run
+`_kit/memory.sh check` on each path `add` writes (or quarantines), then write
+`_memory/work/research/<topic>/ingested` per protocol before commit.
 
 ## Phase 3 — High-level plan
 
@@ -41,5 +49,7 @@ tradeoffs, chosen direction, affected layers (lane/a	lane\b).
 Create `_memory/work/goals/[goal-name]/` using the `feature` skill's `goal.md`/`task.md`
 templates; copy Phase 1 picks (or `none`) from `recalled-memory.md` into the goal's
 `## Recalled memory` and log the note per
-`.claude/skills/feature/reference/memory-protocol.md`. Hand off: the goal enters
+`.claude/skills/feature/reference/memory-protocol.md`. Append the goal name to the
+brief's `goals:` list (set `status: adopted` when it was `ingested`, and mirror the status
+in its index row). Hand off: the goal enters
 `feature` at Phase 3 (goal evaluation) — it still must PASS the evaluator before execution.

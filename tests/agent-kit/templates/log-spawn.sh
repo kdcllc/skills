@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Guard: the `log-spawn` orchestration-log writer twins (kit v0.26.0).
+# Guard: the `log-spawn` orchestration-log writer twins.
 #
 # Behavioral section — runs the CANONICAL skills/agent-kit/templates/tools/log-spawn.sh
 # (override with LOG_SPAWN_BIN=<path> for mutation testing) from a mktemp cwd holding

@@ -903,8 +903,8 @@ run_memory_followup_cases() {
     pwsh -NoProfile -NonInteractive -File "$MEMORY_PS1" index --root "$bs_p" >"$B/out_p" 2>"$B/err_p"
     pwsh_n="$(followup_index_n "$(cat "$B/out_p")")"
     if [[ "$pwsh_n" = 0 && "$bash_n" = 1 ]]; then
-      report SKIP "[followup] (byte-backslash-idx) pwsh twin index parity" "pre-existing pwsh limitation since v0.30.0: --root paths containing backslash index 0 records while bash indexes 1"
-      report SKIP "[followup] (byte-backslash-search) pwsh twin search parity" "pre-existing pwsh limitation since v0.30.0: --root paths containing backslash index 0 records while bash indexes 1"
+      report SKIP "[followup] (byte-backslash-idx) pwsh twin index parity" "pre-existing pwsh limitation: --root paths containing backslash index 0 records while bash indexes 1"
+      report SKIP "[followup] (byte-backslash-search) pwsh twin search parity" "pre-existing pwsh limitation: --root paths containing backslash index 0 records while bash indexes 1"
     elif [[ "$pwsh_n" != "$bash_n" ]] || ! cmp -s "$B/out_p" "$B/bs_idx_b.out"; then
       report FAIL "[followup] (byte-backslash-idx) pwsh/bash index mismatch" "bash_n=$bash_n pwsh_n=$pwsh_n"
     else

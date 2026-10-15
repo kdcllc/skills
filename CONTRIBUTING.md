@@ -54,7 +54,7 @@ bash scripts/agent-kit/self-install.sh
 
 It copies `skills/agent-kit/` into `.claude/skills/` and `.cursor/skills/`, then emits agents, skills, `ORCHESTRATION.md`, `_kit/`, and `_loop/` from [tests/agent-kit/fixtures/self-answers.json](tests/agent-kit/fixtures/self-answers.json). Everything it writes is gitignored; `scripts/validate-skills.sh` only rejects agent skill folders that contain tracked files. Re-run it after editing anything under `skills/agent-kit/templates/` or `skills/agent-kit/bin/`, and never edit the emitted copies. `_memory/` is the exception: its records are tracked and immutable.
 
-Kit-specific maintainer material lives outside the skill folder so it never ships: the developer guide and research studies in [docs/agent-kit/](docs/agent-kit/guide/README.md) (start with [contributing.md](docs/agent-kit/guide/contributing.md)), and the test suites in [tests/agent-kit/](tests/agent-kit/). `scripts/checks/agent-kit.sh` runs the fast instance-free checks inside the validator; run the full suite before opening a pull request that touches `skills/agent-kit/`:
+Kit-specific maintainer material lives outside the skill folder so it never ships: the developer guide in [docs/agent-kit/](docs/agent-kit/guide/README.md) (start with [contributing.md](docs/agent-kit/guide/contributing.md)), research briefs in `_memory/research/`, and the test suites in [tests/agent-kit/](tests/agent-kit/). `scripts/checks/agent-kit.sh` runs the fast instance-free checks inside the validator; run the full suite before opening a pull request that touches `skills/agent-kit/`:
 
 ```bash
 bash tests/agent-kit/run-all.sh

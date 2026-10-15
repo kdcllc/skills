@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Regression guard for the feature-skill-slimming goal (v0.24.0): locks template
+# Regression guard for the feature-skill-slimming goal: locks template
 # skill discovery rename (SKILL.template.md only under templates/), acceptance
 # criteria in task templates, contract.md absence, goal.md phases gating, token
 # proxy log fields, and canonical feature skill byte budget. Tracked,

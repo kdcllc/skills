@@ -355,12 +355,35 @@ does run it (skipping installed skills).
 `bash $SETUP/bin/emit.sh --upgrade` (answers come from the manifest; add
 `--answers` only when the interview changed). Exit 4 lists user-modified files
 and upgrade target conflicts; show the user, then `--force` if they confirm.
-`--dry-run` prints planned actions (including `migrate <src> -> <dst>` for legacy
-layout moves) and still exits 4 when any path is blocked.
+`--dry-run` prints planned actions and still exits 4 when any path is blocked.
+
+Prune: kit-owned paths in the previous manifest that are not in the new emit set
+are deleted when unchanged, else kept and warned; seeds are never pruned.
+
+Emit warns for a reused or unacknowledged same-family arbiter (fix:
+set `arbiter_same_family: true` or pick a different arbiter) and exits 3 for
+`best`/`fable` in a loop chain (fix: replace the entry).
+
+On every re-run, re-detect the forge from the current remotes. If detection agrees
+with the manifest, refresh silently. If it disagrees (remote migrated, e.g.
+GitHub → Azure DevOps), surface both values and ask — never silently flip, never
+keep a stale value unmentioned.
+
+Paths listed in `seedFiles` are outside the overwrite flow: create a seed if it is
+missing, otherwise leave it exactly as it is.
+
+### Upgrading from the private setup kit
+
+For projects that previously used the private `setup` skill: re-add with
+`npx skills add kdcllc/skills --skill agent-kit`, delete old `setup` compiler copies
+under each harness's `skills/` tree, then re-emit with `--upgrade` as above. Installs
+from the private `setup` kit before 0.27.0 have no embedded `answers` — run Steps 1–4
+once, then `--answers … --upgrade`.
 
 **Legacy layout migration:** when `_goals/` or `_research/` still exist, emit moves
 them into `_memory/loop/` (loop files) and `_memory/work/` (goal and research scratch)
-before writing kit files — `git mv` when tracked, plain `mv` otherwise. Previously
+before writing kit files — `git mv` when tracked, plain `mv` otherwise. `--dry-run`
+prints planned actions including `migrate <src> -> <dst>` for these moves. Previously
 tracked goal/research trees and `breaker-state.json` are untracked afterward
 (`git rm --cached`; files stay on disk). Loop markdown stays tracked. Retired kit
 `.gitattributes` / `.gitignore` lines (`_goals/*/orchestration-log.md merge=union`,
@@ -369,7 +392,8 @@ tracked goal/research trees and `breaker-state.json` are untracked afterward
 If a target path already exists, emit exits 4 before moving anything unless
 `--force` (conflicting sources stay put with a warning; nothing is overwritten).
 A second upgrade with nothing left to move reports `migrated 0`. After a move, stderr
-prints a hint to run `_kit/memory.sh backfill --plan`.
+prints a hint to run `_kit/memory.sh backfill --plan`. See `_memory/README.md` §
+Upgrade migration.
 
 **Warnings after layout migration:**
 
@@ -379,20 +403,5 @@ prints a hint to run `_kit/memory.sh backfill --plan`.
   teammates' working trees on pull — teammates should upgrade locally first, or the
   team should back-fill and coordinate before committing the layout change.
 
-Prune: kit-owned paths in the previous manifest that are not in the new emit set
-are deleted when unchanged, else kept and warned; seeds are never pruned.
-
-pre-v0.27.0 installs have no `answers` — run Steps 1–4 once, then `--answers … --upgrade`.
-
-On every re-run, re-detect the forge from the current remotes. If detection agrees
-with the manifest, refresh silently. If it disagrees (remote migrated, e.g.
-GitHub → Azure DevOps), surface both values and ask — never silently flip, never
-keep a stale value unmentioned.
-
-Paths listed in `seedFiles` are outside the overwrite flow: create a seed if it is
-missing, otherwise leave it exactly as it is. Manifests from older kits may still
-list `_goals/backlog.md` as a seed; that path is treated as a seed, not foreign.
-
-From v0.29.0, emit warns for a reused or unacknowledged same-family arbiter (fix:
-set `arbiter_same_family: true` or pick a different arbiter) and exits 3 for
-`best`/`fable` in a loop chain (fix: replace the entry).
+Manifests from older kits may still list `_goals/backlog.md` as a seed; that path is
+treated as a seed, not foreign.

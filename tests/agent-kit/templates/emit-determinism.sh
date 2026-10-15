@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Guard: skills/agent-kit/bin/emit.sh determinism (goal D-8, kit v0.27.0) and portability
+# Guard: skills/agent-kit/bin/emit.sh determinism (goal D-8) and portability
 # (runtime-bash-single-source: Bash 3.2, POSIX awk, no jq).
 #
 # Behavioral cases run in mktemp roots only — never emit into the live repo.

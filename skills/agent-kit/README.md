@@ -55,7 +55,7 @@ Optional: start an unattended run (sandboxed!) with `_loop/loop.sh 10` or
   [CHANGELOG.md](CHANGELOG.md); mechanics are in
   [evaluation-system.md](https://github.com/kdcllc/skills/blob/master/docs/agent-kit/guide/evaluation-system.md).
   The research behind the continuation ladder is
-  [research-autonomous-escalation.md](https://github.com/kdcllc/skills/blob/master/docs/agent-kit/research-autonomous-escalation.md).
+  [autonomous-escalation.md](https://github.com/kdcllc/skills/blob/master/_memory/research/autonomous-escalation.md).
 - A **staged test ladder** (`test-ladder`): new tests → impacted tests mid-cycle; full
   suites at cycle end — in a goal's designated closer task when it has one, and in the
   orchestrator's Phase 5 Quality Checks.
@@ -70,7 +70,7 @@ Optional: start an unattended run (sandboxed!) with `_loop/loop.sh 10` or
   interview, one answers file and one script command compile canonical templates into
   every targeted harness — same inputs yield byte-identical output; upgrades re-emit
   from manifest-embedded `answers`.
-- A **git-tracked memory store** (`_memory/` + `_kit/memory.sh` and `_kit\memory.cmd` on Windows; `_kit/memory.ps1` remains a helper for `loop.ps1` until loop twins retire): orchestrator recall before planning, archive at goal close, searchable immutable records, DATA fence for workers, loop integrator proposals — as of v1.0.0. See [memory.md](https://github.com/kdcllc/skills/blob/master/docs/agent-kit/guide/memory.md).
+- A **git-tracked memory store** (`_memory/` + `_kit/memory.sh` and `_kit\memory.cmd` on Windows; `_kit/memory.ps1` remains a helper for `loop.ps1` until loop twins retire): orchestrator recall before planning, archive at goal close, searchable immutable records, DATA fence for workers, loop integrator proposals. See [memory.md](https://github.com/kdcllc/skills/blob/master/docs/agent-kit/guide/memory.md).
 
 ## Documentation
 
@@ -78,6 +78,7 @@ Developer guide: [docs/agent-kit/guide/README.md](https://github.com/kdcllc/skil
 
 | Guide | Description |
 |-------|-------------|
+| [architecture.md](https://github.com/kdcllc/skills/blob/master/docs/agent-kit/guide/architecture.md) | How the kit is built: components, emit pipeline, folder ownership, state machines |
 | [getting-started.md](https://github.com/kdcllc/skills/blob/master/docs/agent-kit/guide/getting-started.md) | Install paths, `/agent-kit` compile flow, greenfield gate, multi-harness emission, manifest basics |
 | [decision-guide.md](https://github.com/kdcllc/skills/blob/master/docs/agent-kit/guide/decision-guide.md) | Choosing direct edit, `/feature`, `/research` → `/feature`, or autonomous loop; flowchart, mode comparison, anti-patterns |
 | [feature-workflow.md](https://github.com/kdcllc/skills/blob/master/docs/agent-kit/guide/feature-workflow.md) | Seven phases in depth, acceptance criteria at planning, optional Phases 6/7, fix-cycle rotation, escalation, orchestration log, condensed worked example |
@@ -99,7 +100,7 @@ Developer guide: [docs/agent-kit/guide/README.md](https://github.com/kdcllc/skil
 | `reference/` | `harness-matrix.md` (verified harness facts) and `bootstrap-ids.md` (answers-file id table) |
 | `CHANGELOG.md` | Version history; 1.0.0 rolls up the 0.x releases from before the move to kdcllc/skills |
 
-Maintainer material lives in the [kdcllc/skills](https://github.com/kdcllc/skills) repository, outside this folder, so it never ships with the skill: the developer guide and research studies under `docs/agent-kit/`, the test suites under `tests/agent-kit/`, and the dogfood installer under `scripts/agent-kit/`.
+Maintainer material lives in the [kdcllc/skills](https://github.com/kdcllc/skills) repository, outside this folder, so it never ships with the skill: the developer guide under `docs/agent-kit/`, research briefs under `_memory/research/`, the test suites under `tests/agent-kit/`, and the dogfood installer under `scripts/agent-kit/`.
 
 ## Install into a project
 
@@ -202,17 +203,15 @@ including fallback chains (never fall back *up* a tier, with a fast→light carv
 because light is terminal's baseline when `fast` is omitted), the fix-cycle rotation
 table, and the cost-ceiling policy. The research behind the split — including the
 Copilot cost-ceiling and Cursor silent-fallback caveats — is in
-[research-multi-harness-upgrade.md](https://github.com/kdcllc/skills/blob/master/docs/agent-kit/research-multi-harness-upgrade.md).
+[multi-harness-upgrade.md](https://github.com/kdcllc/skills/blob/master/_memory/research/multi-harness-upgrade.md).
 Re-run `/agent-kit` when providers rotate model names.
 
 ## Upgrading an installed project
 
 1. **Re-pull the kit** with whichever CLI you installed with:
    `npx skills add kdcllc/skills --skill agent-kit` again, or `npx agent-skills-cli update`.
-   Coming from the private `setup` skill (the kit's name before 1.0.0)? Read the 1.0.0
-   **Upgrade notes** in [CHANGELOG.md](CHANGELOG.md) first.
 2. **Re-emit from the manifest** — answers are embedded in
-   `orchestration-kit.manifest.json` as of v0.27.0:
+   `orchestration-kit.manifest.json`:
 
    ```bash
    bash .claude/skills/agent-kit/bin/emit.sh --upgrade
@@ -220,16 +219,31 @@ Re-run `/agent-kit` when providers rotate model names.
    # (Cursor: .cursor/skills/agent-kit; Copilot: .github/skills/agent-kit)
    ```
 
-   Pre-v0.27.0 installs have no embedded `answers` — run `/agent-kit` Steps 1–4 once to
-   create an answers file, then `--answers … --upgrade`. Exit code 4 lists
-   user-modified files; confirm with `--force`. Use `--dry-run` to preview planned
-   actions (including `migrate` lines when `_goals/` or `_research/` remain).
-   Seed files like `_memory/loop/backlog.md` are never overwritten. Legacy installs
-   move into `_memory/` on upgrade (`git mv` when tracked); goal/research scratch is
-   untracked afterward — see `_memory/README.md` and run `_kit/memory.sh backfill --plan`.
+   Exit code 4 lists user-modified files; confirm with `--force`. Use `--dry-run` to
+   preview planned actions. Seed files like `_memory/loop/backlog.md` are never
+   overwritten.
 
 Manifest semantics, seed files, and stale-file pruning are documented in
 [contributing.md](https://github.com/kdcllc/skills/blob/master/docs/agent-kit/guide/contributing.md).
+
+### Upgrading from the private setup kit
+
+Coming from the private `setup` skill (the kit's name before 1.0.0)? Read the 1.0.0
+**Upgrade notes** in [CHANGELOG.md](CHANGELOG.md), then:
+
+- Re-add from [kdcllc/skills](https://github.com/kdcllc/skills) with
+  `npx skills add kdcllc/skills --skill agent-kit` and delete old `setup` compiler
+  copies (`.claude/skills/setup/`, `.cursor/skills/setup/`, `.github/skills/setup/`,
+  or `.agents/skills/setup/`, whichever exist).
+- Re-emit with `--upgrade` as above. Installs from the private `setup` kit before 0.27.0
+  have no embedded `answers` in the manifest — run `/agent-kit` Steps 1–4 once to
+  create an answers file, then `--answers … --upgrade`.
+- Legacy layout: when `_goals/` or `_research/` remain, `--upgrade` moves them into
+  `_memory/` before writing kit files (`git mv` when tracked); `--dry-run` lists
+  `migrate` lines. Goal/research scratch is untracked afterward — see
+  `_memory/README.md` § Upgrade migration and run `_kit/memory.sh backfill --plan`.
+  Commit the `_memory/loop/` move before relying on `LOOP_WORKTREE=1`; coordinate with
+  teammates before committing goal/research untracking.
 
 ## Editing the templates
 

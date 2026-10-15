@@ -1,17 +1,21 @@
+---
+title: "Research: Autonomous Fix-Cycle Escalation (continuation ladder)"
+topic: autonomous-escalation
+date: 2026-08-24
+status: shipped
+shipped_in: ["1.0.0"]
+goals: [autonomous-escalation-ladder]
+supersedes: []
+memory: [20260824T120004Z-46bf9116]
+---
+
 # Research: Autonomous Fix-Cycle Escalation (continuation ladder)
 
-**Date**: 2026-08-24 · **Method**: `research` skill — self-contained prompt
-(`_research/prompts/autonomous-fix-cycle-escalation.md`) → external deep-research report
-(saved at `_research/autonomous-fix-cycle-escalation/report.md`, scratch) → critical
-ingestion against primary sources cited in the report. The `_research/` copy is scratch;
-**this promoted doc is canonical.**
-
-**Status**: findings promoted 2026-08-24. v0.20.0 shipped the Phase 4 **continuation
-ladder** (rungs 5→4→6), the `diagnostician` subagent, evaluator arbitration, a closed
-failure-class taxonomy with always-escalate bypass classes, and hard guards — all
-expressible as markdown policy + model pins with **no driver change** to the loop
-drivers. **Deferred** rungs (high-effort pin, best-of-N) and per-task token/cost budgets are not enforceable
-in this kit (out of scope).
+**Method**: `research` skill — self-contained prompt
+(`_memory/work/research/autonomous-escalation/prompt.md`) → external deep-research report
+(saved at `_memory/work/research/autonomous-escalation/report.md`, scratch) → critical
+ingestion against primary sources cited in the report. Scratch lives under
+`_memory/work/research/`; **this brief is canonical.**
 
 **Trigger**: After three implement→evaluate fix cycles with model rotation, the kit
 previously escalated to a human. Research asked whether bounded, strategy-changing
@@ -85,7 +89,7 @@ not enforceable in this kit): step count + wall-clock timeout + token limits "co
 of runaway scenarios"; consecutive-identical-failure detection;
 failure-signature matching.
 
-**What v0.20.0 shipped (markdown policy — no driver change):**
+**What 1.0.0 shipped (markdown policy — no driver change):**
 
 - At most **3 additional implementation attempts** after cycle 3, summed across rungs 4
   and 6.
@@ -140,7 +144,7 @@ retry loops.
 
 ---
 
-## Part 2 — What the kit adopted (v0.20.0)
+## Part 2 — What the kit adopted (1.0.0)
 
 Shipped behavior lives in the canonical template source. After `/agent-kit`, the emitted
 `ORCHESTRATION.md` and agent files carry the ladder.
@@ -180,7 +184,7 @@ Canonical prose: [`skills/agent-kit/templates/ORCHESTRATION.md`](../../skills/ag
 | Continuation ladder policy | [`skills/agent-kit/templates/ORCHESTRATION.md`](../../skills/agent-kit/templates/ORCHESTRATION.md) | Rungs 5→4→6, guards, taxonomy |
 | `diagnostician` agent | [`skills/agent-kit/templates/agents/diagnostician.md`](../../skills/agent-kit/templates/agents/diagnostician.md) | Root-cause analysis, no code writes |
 | Evaluator arbitration | [`skills/agent-kit/templates/agents/evaluator.md`](../../skills/agent-kit/templates/agents/evaluator.md) | Second-opinion / criteria-defect detection |
-| Phase 4 orchestration | [`skills/agent-kit/templates/skills/feature/SKILL.md`](../../skills/agent-kit/templates/skills/feature/SKILL.md) | Ladder dispatch after cycle 3 |
+| Phase 4 orchestration | [`skills/agent-kit/templates/skills/feature/SKILL.template.md`](../../skills/agent-kit/templates/skills/feature/SKILL.template.md) | Ladder dispatch after cycle 3 |
 | Model tiers | [`skills/agent-kit/templates/models.map.md`](../../skills/agent-kit/templates/models.map.md) | `diagnostician` on frontier tier |
 
 **Failure-class taxonomy (closed set):** `implementation` (default) · `criteria-defect` ·
@@ -188,7 +192,7 @@ Canonical prose: [`skills/agent-kit/templates/ORCHESTRATION.md`](../../skills/ag
 
 ### 2.3 Report-critique corrections (ground truth)
 
-The external report (`_research/autonomous-fix-cycle-escalation/report.md`) recommended
+The external report (`_memory/work/research/autonomous-escalation/report.md`) recommended
 items the kit **explicitly rejected or deferred**:
 
 1. **Per-task token/cost budgets are NOT enforceable in this kit.** No harness exposes
@@ -199,7 +203,7 @@ items the kit **explicitly rejected or deferred**:
    attempts require N writers on overlapping paths; the kit's driver-owned dispatch and
    write-set admission design admit one writer per file. Best-of-N is **deferred** — no
    procedure defined.
-3. **Arbitration complements the v0.18.0 contract gate**, not a parallel criteria
+3. **Arbitration complements the 1.0.0 contract gate**, not a parallel criteria
    mechanism. The arbiter reviews the **signed contract** and unanimous-failure context;
    it does not replace per-task contracts or add a second criteria source.
 
@@ -235,7 +239,8 @@ Primary (from the external report; arXiv anchors verified present):
 - [Oversight Has a Capacity](https://arxiv.org/abs/2606.08919) (arXiv:2606.08919)
 - OWASP Top 10 for Agentic Applications 2026 (OWASP GenAI Security Project, Dec 2025)
 
-Scratch report: [`_research/autonomous-fix-cycle-escalation/report.md`](../../_research/autonomous-fix-cycle-escalation/report.md)
+Scratch report: `_memory/work/research/autonomous-escalation/report.md`
 
-Related kit ground truth: [research-harness-design-upgrade.md](research-harness-design-upgrade.md) ·
-[research-multi-harness-upgrade.md](research-multi-harness-upgrade.md)
+Related kit ground truth: [evaluation-system.md](../../docs/agent-kit/guide/evaluation-system.md) ·
+[autonomous-loop.md](../../docs/agent-kit/guide/autonomous-loop.md) ·
+[multi-harness-upgrade.md](multi-harness-upgrade.md)
