@@ -299,7 +299,7 @@ For `criteria-defective` escalations (rung 5 arbitration), the defective criteri
 
 ## Orchestration log
 
-Path: `_memory/work/goals/[goal-name]/orchestration-log.md` — an **append-only spawn ledger**. As of v0.25.0 the orchestrator never hand-writes it: every entry goes through the emitted tool `_kit/log-spawn.sh` (or `pwsh _kit/log-spawn.ps1` on Windows — same flags, byte-identical output; canonical source [`skills/agent-kit/templates/tools/log-spawn.sh`](../../../skills/agent-kit/templates/tools/log-spawn.sh)). As of v0.26.0 the header's running `io_est_tokens` / `work_est_tokens` totals read "see latest entry" because the script only appends.
+Path: `_memory/work/goals/[goal-name]/orchestration-log.md` — an **append-only spawn ledger**. As of v0.25.0 the orchestrator never hand-writes it: every entry goes through the emitted tool `_kit/log-spawn.sh` (Windows outside Git Bash: `_kit\log-spawn.cmd`; canonical source [`skills/agent-kit/templates/tools/log-spawn.sh`](../../../skills/agent-kit/templates/tools/log-spawn.sh)). As of v0.26.0 the header's running `io_est_tokens` / `work_est_tokens` totals read "see latest entry" because the script only appends.
 
 **File, then script.** The flow for every spawn is:
 

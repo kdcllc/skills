@@ -10,9 +10,9 @@ The kit lives in the multi-skill [kdcllc/skills](https://github.com/kdcllc/skill
 
 | Layer | Role | Key paths (tracked unless noted) |
 |-------|------|----------------------------------|
-| **CANONICAL** | Source of truth — what `/agent-kit` reads and compiles | `skills/agent-kit/templates/` (Claude Code format), `skills/agent-kit/bin/` (`emit.sh` + `emit.ps1` — deterministic emit), `skills/agent-kit/emitters/` (per-harness caveats), `skills/agent-kit/reference/` (`harness-matrix.md`, `bootstrap-ids.md`), `metadata.version` in `skills/agent-kit/SKILL.md` (kit version written into each install's manifest) |
+| **CANONICAL** | Source of truth — what `/agent-kit` reads and compiles | `skills/agent-kit/templates/` (Claude Code format), `skills/agent-kit/bin/` (`emit.sh` + `emit.cmd` (Windows launcher) — deterministic emit), `skills/agent-kit/emitters/` (per-harness caveats), `skills/agent-kit/reference/` (`harness-matrix.md`, `bootstrap-ids.md`), `metadata.version` in `skills/agent-kit/SKILL.md` (kit version written into each install's manifest) |
 | **INSTANCE** | Emitted by `/agent-kit` and self-install in **this repo only** — gitignored, re-runnable, never committed | Entire `.claude/`; **partial** `.cursor/` only — `.cursor/skills/`, `.cursor/agents/`, `.cursor/rules/`, `.cursor/ORCHESTRATION.md` (the rest of `.cursor/` is **not** gitignored); `.agents/skills/` (self-install `--symlink` canonical tree); `.loop-worktrees/` (loop driver scratch); `_kit/`, `_loop/`, `_memory/work/`, `_memory/loop/`, `_memory/.index/`, `_memory/raw/`; `orchestration-kit.manifest.json`. Tracked memory: `_memory/README.md`, `_memory/records/`, `_memory/quarantine/` |
-| **MAINTAINER (tracked, not shipped)** | Tooling and documentation for kit contributors; lives outside the skill folder so it never reaches installs | `skills/agent-kit/README.md` and `CHANGELOG.md` (ship with the skill), `docs/agent-kit/` (this guide suite, research studies, the architecture **pointer** `ORCHESTRATION.md`), `tests/agent-kit/` (checks, guards, harness, `fixtures/self-answers.json`), `scripts/agent-kit/` (self-install twins), `scripts/checks/agent-kit.sh` (fast guard run by `scripts/validate-skills.sh`) |
+| **MAINTAINER (tracked, not shipped)** | Tooling and documentation for kit contributors; lives outside the skill folder so it never reaches installs | `skills/agent-kit/README.md` and `CHANGELOG.md` (ship with the skill), `docs/agent-kit/` (this guide suite, research studies, the architecture **pointer** `ORCHESTRATION.md`), `tests/agent-kit/` (checks, guards, harness, `fixtures/self-answers.json`), `scripts/agent-kit/` (`self-install.sh`), `scripts/checks/agent-kit.sh` (fast guard run by `scripts/validate-skills.sh`) |
 
 **Instance-specific note:** In consumer projects, `/agent-kit` emits into harness-native directories (`.claude/`, `.cursor/`, `.github/`, `.codex/`, root `ORCHESTRATION.md`, etc.) per the emitters. This repo dogfoods the kit: its `.gitignore` lists the instance paths above so local dogfood output never reaches git, and `scripts/validate-skills.sh` rejects agent skill directories only when they contain tracked files.
 
@@ -47,13 +47,13 @@ flowchart TD
 
 If you also changed emitter mappings or `skills/agent-kit/SKILL.md`, include those tracked paths in the commit. Record kit behavior changes under `## [Unreleased]` in `skills/agent-kit/CHANGELOG.md` (see [Version, manifest, and upgrades](#version-manifest-and-upgrades)).
 
-## Self-install scripts
+## Self-install script
 
 [`scripts/agent-kit/self-install.sh`](../../../scripts/agent-kit/self-install.sh) is a **kit-repo-only** first-mile helper with defaults, guards, and exit codes documented below.
 
-### What they copy
+### What it copies
 
-As of v1.0.0 they install only `skills/agent-kit/` — the other skills in kdcllc/skills would also land in `.cursor/skills/`, where their `.claude/` references fail emit verify and checks M/N. Nested paths like `skills/agent-kit/templates/skills/feature/SKILL.md` are not skills. Destinations:
+As of v1.0.0 it installs only `skills/agent-kit/` — the other skills in kdcllc/skills would also land in `.cursor/skills/`, where their `.claude/` references fail emit verify and checks M/N. Nested paths like `skills/agent-kit/templates/skills/feature/SKILL.md` are not skills. Destinations:
 
 | Mode | Destinations |
 |------|----------------|
@@ -64,12 +64,6 @@ Run from repo root:
 
 ```bash
 bash scripts/agent-kit/self-install.sh
-```
-
-On Windows or when the `.ps1` lacks execute permission (PowerShell 7+):
-
-```powershell
-pwsh -NoProfile -File scripts/agent-kit/self-install.ps1
 ```
 
 ### Flags
@@ -86,7 +80,7 @@ pwsh -NoProfile -File scripts/agent-kit/self-install.ps1
 
 After copying skills, self-install runs `skills/agent-kit/bin/emit.sh --answers tests/agent-kit/fixtures/self-answers.json` unless `--no-emit`. That produces the full gitignored instance (agents, loop drivers, manifest, project-specific resolved content) with zero LLM involvement. Consumer projects still use `/agent-kit` Steps 1–6 in a session; self-install is kit-repo dogfood only.
 
-Nothing the self-install scripts write reaches git — all destination paths are listed in [`.gitignore`](../../../.gitignore).
+Nothing the self-install script writes reaches git — all destination paths are listed in [`.gitignore`](../../../.gitignore).
 
 ## Editing templates
 
@@ -108,8 +102,8 @@ The full placeholder reference table lives in [`skills/agent-kit/SKILL.md`](../.
 | Concern | Location |
 |---------|----------|
 | Canonical prose and structure | `skills/agent-kit/templates/` |
-| Harness-agnostic tool twins (`log-spawn.sh` / `log-spawn.ps1`, `memory.sh` / `memory.ps1`; no tokens) | `skills/agent-kit/templates/tools/` — emitted single-copy to `_kit/log-spawn.sh` / `_kit/log-spawn.ps1` and `_kit/memory.sh` / `_kit/memory.ps1` (`_kit/` is gitignored in this repo; `_memory/records/` and `_memory/quarantine/` are tracked; `_memory/work/` and `_memory/loop/` are gitignored here) |
-| Per-harness translation (frontmatter shape, path mapping, pointer rules) | `skills/agent-kit/bin/emit.sh` / `emit.ps1` — see [`bin/README.md`](../../../skills/agent-kit/bin/README.md) |
+| Harness-agnostic tool twins (`log-spawn.sh`, `memory.sh` / `memory.ps1`, and the `bash-launcher.cmd` Windows launcher; no tokens) | `skills/agent-kit/templates/tools/` — emitted single-copy to `_kit/log-spawn.sh`, `_kit/memory.sh` / `_kit/memory.ps1`, and `bash-launcher.cmd` copied to `_kit/log-spawn.cmd` and `_kit/memory.cmd` (`_kit/` is gitignored in this repo; `_memory/records/` and `_memory/quarantine/` are tracked; `_memory/work/` and `_memory/loop/` are gitignored here) |
+| Per-harness translation (frontmatter shape, path mapping, pointer rules) | `skills/agent-kit/bin/emit.sh` — see [`bin/README.md`](../../../skills/agent-kit/bin/README.md) |
 | Harness caveats (live model-check URLs, silent-fallback warnings) | `skills/agent-kit/emitters/` |
 | Verified harness capabilities and friction points | `skills/agent-kit/reference/harness-matrix.md` |
 
@@ -183,14 +177,14 @@ This is the tracked **behavioral** test suite (test-ladder rung 3 territory — 
 - **Rate-limit detection** — live `detect_rate_limit` extracted from canonical `loop.sh`
 - **Re-emitted instance stub** — end-to-end `_loop/loop.sh` run inside a throwaway repo when `_loop/` exists in this repo
 - **Structural guards** — PowerShell parity, emitter/SKILL text coverage, SIGPIPE regressions, checks J/K mutation proofs, and related story additions
-- **Self-install block** — runs **without** requiring `_loop/`: exercises `scripts/agent-kit/self-install.sh` and `self-install.ps1` (copy mode, overwrite, `--force`, `--dry-run`, `--symlink`, rollback, `.gitignore` dest-lines, bash/ps1 parity, and related assertions)
+- **Self-install block** — runs **without** requiring `_loop/`: exercises `scripts/agent-kit/self-install.sh` (copy mode, overwrite, `--force`, `--dry-run`, `--symlink`, rollback, `.gitignore` dest-lines, and related assertions)
 - **Memory integrator step 3b** (as of v1.0.0) — assertions 136–141
 
 When `_loop/` is absent (fresh clone before `/agent-kit`), loop-instance assertions are skipped in aggregate — self-install assertions still run.
 
 ### Standalone template guards
 
-Tracked structural guards live under `tests/agent-kit/templates/` — [`cursor-isolation.sh`](../../../tests/agent-kit/templates/cursor-isolation.sh), [`invocation-flags.sh`](../../../tests/agent-kit/templates/invocation-flags.sh), [`escalation-ladder.sh`](../../../tests/agent-kit/templates/escalation-ladder.sh) (added with the v0.20.0 continuation-ladder goal), [`template-currency.sh`](../../../tests/agent-kit/templates/template-currency.sh) (added with the v0.21.0 template-currency goal; locks the six template-currency claims — research handoff at Phase 3, escalation **Ladder** line, closer-task rung-3 carve-out, loop dispatch/exit-funnel/merge-gate — with SKIP-when-absent instance-mirror assertions), [`skill-slimming.sh`](../../../tests/agent-kit/templates/skill-slimming.sh), [`forge-adapter.sh`](../../../tests/agent-kit/templates/forge-adapter.sh), [`model-enforcement.sh`](../../../tests/agent-kit/templates/model-enforcement.sh) (v0.24.0 policy strings), [`model-currency.sh`](../../../tests/agent-kit/templates/model-currency.sh) (v0.29.0: fast tier, arbiter warnings, loop denylist, upgrade compatibility, template text, dogfood pins), [`log-spawn.sh`](../../../tests/agent-kit/templates/log-spawn.sh) (v0.25.0: runs the canonical `log-spawn` twins against a mktemp fixture — entries, measured fields, io/work running totals (v0.26.0: Footprint ingestion, `--work-chars`, pre-v0.26 fallback), exit codes, twin parity when `pwsh` is present — plus the `_kit/` emit wiring; v0.29.0: OUTCOME `model_check`), [`memory.sh`](../../../tests/agent-kit/templates/memory.sh) (v0.30.0+: runs the canonical `memory` twins against a mktemp fixture — add/index/search/show, grep default and optional FTS re-rank, admission quarantine exit 5, Release C **redact** / **check** / **rm** / **capture** coverage with bash, pwsh, and parity legs for redaction cases; **check** / **rm** / **capture** exercised via bash-only helpers in [`tests/agent-kit/lib/memory-release-c.sh`](../../../tests/agent-kit/lib/memory-release-c.sh) with pwsh legs asserting bash-only stubs exit **2**; twin redaction cases in [`tests/agent-kit/lib/memory-redaction-behavioral.sh`](../../../tests/agent-kit/lib/memory-redaction-behavioral.sh) — plus `_memory/` emit wiring), [`memory-capture.sh`](../../../tests/agent-kit/templates/memory-capture.sh) (Release C: synthetic transcript fixtures for `capture`), [`memory-wiring.sh`](../../../tests/agent-kit/templates/memory-wiring.sh) (v1.0.0: memory wiring — templates, emitter pointer blocks, memory-capture emission, mutation-proven), and `tests/agent-kit/templates/emit-determinism.sh` (v0.27.0: byte-identical re-emit and twin parity when `pwsh` is present). The escalation-ladder guard locks the Phase 4 continuation-ladder subsection, failure-class taxonomy identity across canonical templates, diagnostician template and dual-instance emission wiring, and `{{MODEL_FRONTIER_ALT_FAMILY}}` documentation. Run any guard directly with `bash tests/agent-kit/templates/<name>.sh`; they are not invoked by `tests/agent-kit/loop-harness/run.sh`.
+Tracked structural guards live under `tests/agent-kit/templates/` — [`cursor-isolation.sh`](../../../tests/agent-kit/templates/cursor-isolation.sh), [`invocation-flags.sh`](../../../tests/agent-kit/templates/invocation-flags.sh), [`escalation-ladder.sh`](../../../tests/agent-kit/templates/escalation-ladder.sh) (added with the v0.20.0 continuation-ladder goal), [`template-currency.sh`](../../../tests/agent-kit/templates/template-currency.sh) (added with the v0.21.0 template-currency goal; locks the six template-currency claims — research handoff at Phase 3, escalation **Ladder** line, closer-task rung-3 carve-out, loop dispatch/exit-funnel/merge-gate — with SKIP-when-absent instance-mirror assertions), [`skill-slimming.sh`](../../../tests/agent-kit/templates/skill-slimming.sh), [`forge-adapter.sh`](../../../tests/agent-kit/templates/forge-adapter.sh), [`model-enforcement.sh`](../../../tests/agent-kit/templates/model-enforcement.sh) (v0.24.0 policy strings), [`model-currency.sh`](../../../tests/agent-kit/templates/model-currency.sh) (v0.29.0: fast tier, arbiter warnings, loop denylist, upgrade compatibility, template text, dogfood pins), [`log-spawn.sh`](../../../tests/agent-kit/templates/log-spawn.sh) (v0.25.0: runs the canonical `log-spawn.sh` against a mktemp fixture — entries, measured fields, io/work running totals (v0.26.0: Footprint ingestion, `--work-chars`, pre-v0.26 fallback), exit codes, the `_kit/log-spawn.sh` + `.cmd` emit wiring (the retired `log-spawn.ps1` must not appear); v0.29.0: OUTCOME `model_check`), [`memory.sh`](../../../tests/agent-kit/templates/memory.sh) (v0.30.0+: runs the canonical `memory` twins against a mktemp fixture — add/index/search/show, grep default and optional FTS re-rank, admission quarantine exit 5, Release C **redact** / **check** / **rm** / **capture** coverage with bash, pwsh, and parity legs for redaction cases; **check** / **rm** / **capture** exercised via bash-only helpers in [`tests/agent-kit/lib/memory-release-c.sh`](../../../tests/agent-kit/lib/memory-release-c.sh) with pwsh legs asserting bash-only stubs exit **2**; twin redaction cases in [`tests/agent-kit/lib/memory-redaction-behavioral.sh`](../../../tests/agent-kit/lib/memory-redaction-behavioral.sh) — plus `_memory/` emit wiring), [`memory-capture.sh`](../../../tests/agent-kit/templates/memory-capture.sh) (Release C: synthetic transcript fixtures for `capture`), [`memory-wiring.sh`](../../../tests/agent-kit/templates/memory-wiring.sh) (v1.0.0: memory wiring — templates, emitter pointer blocks, memory-capture emission, mutation-proven), [`emit-determinism.sh`](../../../tests/agent-kit/templates/emit-determinism.sh) (v0.27.0: byte-identical re-emit; Unreleased: portability (Bash 3.2, POSIX `awk`, no `jq`)), [`emit-golden.sh`](../../../tests/agent-kit/templates/emit-golden.sh) (Unreleased: byte-compares a golden corpus for `bin/emit.sh`; intended changes need `bash tests/agent-kit/templates/emit-golden.sh --update` plus a reviewed diff), [`emit-portability.sh`](../../../tests/agent-kit/templates/emit-portability.sh) (Unreleased: `emit.sh` portability — jq-free PATH, sha256 tools, Bash 3.2 docker, JSON edges; `AGENT_KIT_DOCKER=1` opt-in runs the bash:3.2 docker emit-golden check, default skips it; opt-in set but docker/image missing → FAIL; CI pulls `bash:3.2` and sets `AGENT_KIT_DOCKER=1` before the full suite), [`emit-migrate.sh`](../../../tests/agent-kit/templates/emit-migrate.sh) (Unreleased: guard for `bin/emit.sh` legacy layout migration (`--upgrade` path); fixtures under a private TMPDIR; runs cases in parallel via [`tests/agent-kit/lib/parallel.sh`](../../../tests/agent-kit/lib/parallel.sh) — `AGENT_KIT_CASE_JOBS`), [`emit-perf.sh`](../../../tests/agent-kit/templates/emit-perf.sh) (Unreleased: default = structural checks + in-suite mutation proofs (no timing, no strace); `EMIT_PERF=1` adds three timed self-answers emits (median vs `EMIT_PERF_MAX`, default 4.0) and, when strace works, a fork budget (`EMIT_PERF_MAX_FORKS`, default 589)), [`legacy-paths.sh`](../../../tests/agent-kit/templates/legacy-paths.sh) (Unreleased: kit sources must not reintroduce legacy `_goals`/`_research` tokens outside an allow-list), [`memory-backfill.sh`](../../../tests/agent-kit/templates/memory-backfill.sh) (Unreleased: `memory.sh backfill` (Release D), synthetic fixtures), and [`windows-launcher.sh`](../../../tests/agent-kit/templates/windows-launcher.sh) (Unreleased: Windows `.cmd` launchers; static checks everywhere, behavior checks only under Git Bash on Windows, otherwise SKIP). The escalation-ladder guard locks the Phase 4 continuation-ladder subsection, failure-class taxonomy identity across canonical templates, diagnostician template and dual-instance emission wiring, and `{{MODEL_FRONTIER_ALT_FAMILY}}` documentation. Run any guard directly with `bash tests/agent-kit/templates/<name>.sh`; they are not invoked by `tests/agent-kit/loop-harness/run.sh`.
 
 ### Everything at once
 
@@ -199,7 +193,7 @@ bash scripts/validate-skills.sh     # repo layout, frontmatter, versions, plus s
 bash tests/agent-kit/run-all.sh      # self-install, then checks.sh, every guard, the docs checker, and the harness
 ```
 
-`scripts/checks/agent-kit.sh` runs only the checks that need no emitted instance (it emits into temp roots), so it is safe inside the validator and in CI. `run-all.sh` refreshes the gitignored instance first.
+`scripts/checks/agent-kit.sh` runs only the checks that need no emitted instance (it emits into temp roots), so it is safe inside the validator and in CI. `run-all.sh` refreshes the gitignored instance first. Options: `--quick`, `--only SUBSTR` (repeatable), `-j N`, `--no-install`; environment `AGENT_KIT_CASE_JOBS`, `AGENT_KIT_DOCKER`.
 
 ### Documentation suite checker
 
@@ -231,6 +225,9 @@ Install and user-side usage topics belong in [getting-started.md](getting-starte
 | Structural template guards | `bash tests/agent-kit/templates/escalation-ladder.sh` (and siblings) |
 | Guide suite integrity | `bash tests/agent-kit/docs-link-check.sh` |
 | Full kit suite | `bash tests/agent-kit/run-all.sh` |
+| Fast subset of the kit suite | `bash tests/agent-kit/run-all.sh --quick` |
+| Bash 3.2 Docker check | `docker pull bash:3.2`, then `AGENT_KIT_DOCKER=1 bash tests/agent-kit/templates/emit-portability.sh` |
+| Emitter speed guard | `EMIT_PERF=1 bash tests/agent-kit/templates/emit-perf.sh` |
 | Release | `bash scripts/release-skill.sh agent-kit X.Y.Z` |
 | Harness research ground truth | [../research-multi-harness-upgrade.md](../research-multi-harness-upgrade.md) |
 
@@ -250,4 +247,6 @@ Install and user-side usage topics belong in [getting-started.md](getting-starte
 - [`skills/agent-kit/reference/harness-matrix.md`](../../../skills/agent-kit/reference/harness-matrix.md) — verified per-harness capability ledger
 - [`scripts/agent-kit/self-install.sh`](../../../scripts/agent-kit/self-install.sh) — bash self-install flags and copy/symlink logic
 - [`tests/agent-kit/loop-harness/run.sh`](../../../tests/agent-kit/loop-harness/run.sh) — behavioral harness header and coverage scope
+- [`tests/agent-kit/run-all.sh`](../../../tests/agent-kit/run-all.sh) — full kit suite driver (options, env, timing summary)
+- [`.github/workflows/agent-kit.yml`](../../../.github/workflows/agent-kit.yml) — CI agent-kit workflow (bash:3.2 pull, `AGENT_KIT_DOCKER`)
 - `orchestration-kit.manifest.json` — manifest shape and `seedFiles` (instance file; gitignored in this repo)

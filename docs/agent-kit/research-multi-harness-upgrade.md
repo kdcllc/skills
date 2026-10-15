@@ -46,7 +46,9 @@ source, unverified · 💬 = blog/secondary, unverified.
 > `node` or `python3`, the PowerShell twins require pwsh 7 that fresh Windows lacks, and
 > `emit.sh` needs Bash 4+ that stock macOS lacks. Recommends Bash as the single source of
 > truth behind a Git Bash launcher on Windows, retiring the `.ps1` twins group by group.
-> Implementation pending.
+> Partly implemented (agent-kit [Unreleased]): `bin/emit.ps1` and emitted `_kit/log-spawn.ps1`
+> are retired behind `.cmd` launchers; the maintainer `.ps1` twins are removed in favor of
+> `self-install.sh`; `loop.ps1` and `_kit/memory.ps1` remain.
 
 ---
 

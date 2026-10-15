@@ -98,9 +98,9 @@ Definitions trace to the kit's canonical sources. Version references use v0.20.0
 | Term | Definition |
 |------|------------|
 | **Kit** | The AI Orchestration Kit: a portable orchestrator/worker/evaluator multi-agent system packaged as one installable `agent-kit` skill that compiles a single canonical template source into each harness's native format. |
-| **Harness** | An AI coding environment the kit targets: Claude Code, Cursor, GitHub Copilot (VS Code), or OpenAI Codex. `/agent-kit` detects target harnesses; `skills/agent-kit/bin/emit.sh` / `emit.ps1` emits resolved templates per harness. |
+| **Harness** | An AI coding environment the kit targets: Claude Code, Cursor, GitHub Copilot (VS Code), or OpenAI Codex. `/agent-kit` detects target harnesses; `skills/agent-kit/bin/emit.sh` emits resolved templates per harness. |
 | **Canonical templates** | The single source tree under `skills/agent-kit/templates/` (Claude Code format). All project-specific content is resolved here before emission; edits belong in templates, not in emitted instance files. |
-| **Emitter** | A caveats-only note per harness under `skills/agent-kit/emitters/` (for example `cursor.md`, `claude-code.md`); the translation rules themselves live in `skills/agent-kit/bin/emit.sh` / `emit.ps1`. |
+| **Emitter** | A caveats-only note per harness under `skills/agent-kit/emitters/` (for example `cursor.md`, `claude-code.md`); the translation rules themselves live in `skills/agent-kit/bin/emit.sh`. |
 | **Instance (emitted install)** | The generated orchestration tree `/agent-kit` writes into a target project — agents, skills, `ORCHESTRATION.md`, optional `_loop/`, and `orchestration-kit.manifest.json`. In this repo the instance is gitignored and is not source of truth. |
 | **Orchestrator** | The main session (feature or research coordinator) that prepares context, makes decisions, and spawns subagents — it coordinates and never executes implementation itself. |
 | **Worker (implementer / test-writer)** | Fresh-context subagents on the light model tier that execute tasks: `implementer` for implementation and fixes, `test-writer` for outcome-verifying tests with external services mocked. |

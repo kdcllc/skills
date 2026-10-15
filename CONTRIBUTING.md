@@ -50,7 +50,6 @@ This repo dogfoods the [agent-kit](skills/agent-kit/README.md) skill: feature wo
 
 ```bash
 bash scripts/agent-kit/self-install.sh
-# or: pwsh -NoProfile -File scripts/agent-kit/self-install.ps1
 ```
 
 It copies `skills/agent-kit/` into `.claude/skills/` and `.cursor/skills/`, then emits agents, skills, `ORCHESTRATION.md`, `_kit/`, and `_loop/` from [tests/agent-kit/fixtures/self-answers.json](tests/agent-kit/fixtures/self-answers.json). Everything it writes is gitignored; `scripts/validate-skills.sh` only rejects agent skill folders that contain tracked files. Re-run it after editing anything under `skills/agent-kit/templates/` or `skills/agent-kit/bin/`, and never edit the emitted copies. `_memory/` is the exception: its records are tracked and immutable.

@@ -276,7 +276,7 @@ Fixes and revisions are **always** re-evaluated — there is no exception ([`fea
 
 ## Orchestration log (append-only audit trail)
 
-Each goal maintains `_memory/work/goals/[goal-name]/orchestration-log.md` ([`feature/SKILL.template.md`](../../../skills/agent-kit/templates/skills/feature/SKILL.template.md) § Orchestration log). As of v0.25.0 it is written only by the emitted `_kit/log-spawn.sh` / `_kit/log-spawn.ps1` twins ([`templates/tools/log-spawn.sh`](../../../skills/agent-kit/templates/tools/log-spawn.sh)); as of v0.26.0 the header's running `io_est_tokens` / `work_est_tokens` totals say "see latest entry".
+Each goal maintains `_memory/work/goals/[goal-name]/orchestration-log.md` ([`feature/SKILL.template.md`](../../../skills/agent-kit/templates/skills/feature/SKILL.template.md) § Orchestration log). As of v0.25.0 it is written only by the emitted `_kit/log-spawn.sh` (Windows outside Git Bash: `_kit\log-spawn.cmd`; canonical source [`templates/tools/log-spawn.sh`](../../../skills/agent-kit/templates/tools/log-spawn.sh)); as of v0.26.0 the header's running `io_est_tokens` / `work_est_tokens` totals say "see latest entry".
 
 **Artifacts are the verbatim record.** Every context package is saved to `_memory/work/goals/[goal]/spawns/NN-context.md` before launch and every report to `spawns/NN-report.md` after return — unedited. The log references those files rather than quoting them, so an auditor reads exactly what the agent read and wrote. Agents end every report with a **`### Footprint`** block — `files_read: N (~C chars)` and `commands_run: N` as the last non-blank lines inside the report fence ([`agents/evaluator.md`](../../../skills/agent-kit/templates/agents/evaluator.md)).
 
