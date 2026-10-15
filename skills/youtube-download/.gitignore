@@ -1,0 +1,15 @@
+node_modules/
+package-lock.json
+*.pyc
+__pycache__/
+.DS_Store
+*.log
+downloads/*
+downloads-auth/*
+assets/content/dist/
+.env
+.venv
+venv/
+env/
+bin/yt-dlp*
+bin/yt-dlp.exe

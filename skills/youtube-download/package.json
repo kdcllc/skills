@@ -1,0 +1,25 @@
+{
+  "name": "youtube-download",
+  "version": "1.0.0",
+  "description": "Download YouTube videos via Copilot CLI with format control and metadata extraction",
+  "type": "module",
+  "main": "extension.mjs",
+  "scripts": {
+    "dev": "node extension.mjs"
+  },
+  "dependencies": {
+    "@github/copilot-sdk": "*",
+    "@webviewjs/webview": "*",
+    "ws": "*"
+  },
+  "devDependencies": {},
+  "keywords": [
+    "youtube",
+    "download",
+    "video",
+    "audio",
+    "copilot"
+  ],
+  "author": "kdcllc",
+  "license": "MIT"
+}

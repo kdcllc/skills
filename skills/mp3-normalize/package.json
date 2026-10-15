@@ -1,0 +1,16 @@
+{
+  "name": "mp3-normalize",
+  "version": "1.0.0",
+  "description": "Normalize or equalize MP3 files using mp3gain — lossless, no re-encoding",
+  "type": "module",
+  "main": "extension.mjs",
+  "scripts": { "dev": "node extension.mjs" },
+  "dependencies": {
+    "@github/copilot-sdk": "*",
+    "@webviewjs/webview": "*",
+    "ws": "*"
+  },
+  "keywords": ["mp3", "normalize", "equalize", "gain", "audio", "copilot"],
+  "author": "kdcllc",
+  "license": "MIT"
+}

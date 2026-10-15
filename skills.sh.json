@@ -31,6 +31,11 @@
       "title": "Skill authoring",
       "description": "Tools for maintaining multi-skill repositories: per-skill versions, changelogs, and releases.",
       "skills": ["skill-versioning"]
+    },
+    {
+      "title": "Media",
+      "description": "YouTube downloads and transcripts, lossless MP3 loudness normalization; Copilot CLI extensions.",
+      "skills": ["youtube-download", "mp3-normalize"]
     }
   ]
 }

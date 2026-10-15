@@ -7,6 +7,7 @@ skills-lock.json
 node_modules/
 __pycache__/
 .env*
+!skills/*/.env.example
 .DS_Store
 
 # --- agent-kit dogfood instance — NEVER commit. ---

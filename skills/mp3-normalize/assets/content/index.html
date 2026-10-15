@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MP3 Normalize</title>
+    <link rel="stylesheet" href="style.css" />
+    <!-- Required: /__bridge.js injects window.copilot Proxy for callbacks -->
+    <script src="/__bridge.js"></script>
+</head>
+<body>
+    <main class="container">
+        <header>
+            <h1>🎵 MP3 Normalize</h1>
+            <p class="subtitle">Lossless volume normalization — originals are never modified</p>
+        </header>
+
+        <section class="form-section" id="form-section">
+            <form id="normalize-form">
+                <div class="form-group">
+                    <label for="source-dir">Source Folder</label>
+                    <input
+                        type="text"
+                        id="source-dir"
+                        placeholder="/home/user/Music/Album"
+                        required
+                        autocomplete="off"
+                    />
+                    <small>MP3 files in this folder will be copied to a <code>normalized/</code> subfolder</small>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label>Normalization Mode</label>
+                        <div class="radio-group">
+                            <label class="radio-label">
+                                <input type="radio" name="mode" value="track" checked />
+                                Track
+                                <small>Each file normalized independently</small>
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="mode" value="album" />
+                                Album
+                                <small>All files normalized together, preserving relative loudness</small>
+                            </label>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="target-db">Target Level (dB)</label>
+                        <div class="db-input-row">
+                            <input
+                                type="number"
+                                id="target-db"
+                                value="89"
+                                min="70"
+                                max="105"
+                                step="1"
+                            />
+                            <span class="db-unit">dB</span>
+                        </div>
+                        <small>mp3gain default is 89 dB. Higher = louder.</small>
+                    </div>
+                </div>
+
+                <div class="form-actions">
+                    <button type="submit" id="start-btn" class="btn-primary">Normalize</button>
+                    <button type="button" id="cancel-btn" class="btn-secondary" disabled>Cancel</button>
+                </div>
+            </form>
+        </section>
+
+        <section class="progress-section" id="progress-section" style="display: none">
+            <div class="progress-header">
+                <span id="progress-label">Starting...</span>
+                <span id="progress-pct">0%</span>
+            </div>
+            <div class="progress-bar-container">
+                <div class="progress-bar" id="progress-bar"></div>
+            </div>
+            <div class="status-log">
+                <div id="log-content"></div>
+            </div>
+        </section>
+
+        <section class="result-section" id="result-section" style="display: none">
+            <div class="result" id="result-message"></div>
+            <button id="normalize-again-btn" class="btn-primary">Normalize Another Folder</button>
+        </section>
+
+        <footer>
+            <small>Powered by <code>mp3gain</code> — lossless gain adjustment, zero quality loss</small>
+        </footer>
+    </main>
+
+    <script type="module" src="main.js"></script>
+</body>
+</html>
