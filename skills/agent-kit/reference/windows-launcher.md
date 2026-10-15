@@ -79,4 +79,4 @@ agent-kit: Git Bash not found - install Git for Windows from https://git-scm.com
 - Store committed `.cmd` files with CRLF bytes; root `.gitattributes` includes `*.cmd -text`
   so git does not normalize line endings on checkout.
 - Copy `.cmd` launchers with a byte-preserving copy (`cp`, `Copy-Item -AsByteStream`, or
-  equivalent). Do not read them through `read_file_raw` or other CR-stripping paths.
+  equivalent). Do not read them through `read_file_raw_into` or other CR-stripping paths.

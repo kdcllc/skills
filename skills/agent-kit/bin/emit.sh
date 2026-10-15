@@ -553,11 +553,53 @@ jt_parse() { # <json text> → table on stdout; non-zero when not valid JSON
   printf '%s' "$1" | awk "$JSON_AWK_PARSE_PROG"
 }
 
-jt_q() { # <table> <mode> [key-or-index ...]  (modes: type rawe truthy istrue len keys elems pairs)
-  local _t="$1" _m="$2" _p="" _s
+_jt_q_strip_trailing_nls_into() { # <var> text — mimic $(…) trailing-newline removal
+  local _v="$1" s="$2"
+  while [ -n "$s" ] && [ "${s: -1}" = $'\n' ]; do
+    s="${s%$'\n'}"
+  done
+  printf -v "$_v" '%s' "$s"
+}
+
+_jt_q_core() { # <table> <mode> [key-or-index ...] → JTQ_OUT
+  local _t="$1" _m="$2" _p="" _s _key _out
   shift 2
   for _s in "$@"; do _p="$_p$J_US$_s"; done
-  printf '%s\n' "$_t" | JT_MODE="$_m" JT_PATH="$_p" JT_PRETTY=0 JT_SORT=0 JT_TOPFIX=0 awk "$JSON_AWK_TOOL_PROG"
+  if [ "$_t" = "$ANSWERS" ]; then
+    _key="ANSWERS${J_US}${_m}${J_US}${_p}"
+    if map_get JTQ "$_key"; then
+      _jt_q_strip_trailing_nls_into JTQ_OUT "$MV"
+      return
+    fi
+  elif [ "$_t" = "$OLD_TABLE" ]; then
+    _key="OLD_TABLE${J_US}${_m}${J_US}${_p}"
+    if map_get JTQ "$_key"; then
+      _jt_q_strip_trailing_nls_into JTQ_OUT "$MV"
+      return
+    fi
+  fi
+  _out="$(printf '%s\n' "$_t" | JT_MODE="$_m" JT_PATH="$_p" JT_PRETTY=0 JT_SORT=0 JT_TOPFIX=0 awk "$JSON_AWK_TOOL_PROG")"
+  _jt_q_strip_trailing_nls_into _out "$_out"
+  if [ "$_t" = "$ANSWERS" ]; then
+    _key="ANSWERS${J_US}${_m}${J_US}${_p}"
+    map_set JTQ "$_key" "$_out"
+  elif [ "$_t" = "$OLD_TABLE" ]; then
+    _key="OLD_TABLE${J_US}${_m}${J_US}${_p}"
+    map_set JTQ "$_key" "$_out"
+  fi
+  JTQ_OUT="$_out"
+}
+
+jt_q() { # <table> <mode> [key-or-index ...]  (modes: type rawe truthy istrue len keys elems pairs)
+  _jt_q_core "$@"
+  printf '%s' "$JTQ_OUT"
+}
+
+jt_q_into() { # <var> <table> <mode> [key-or-index ...]
+  local _v="$1"
+  shift
+  _jt_q_core "$@"
+  printf -v "$_v" '%s' "$JTQ_OUT"
 }
 
 jt_sub() { # <table> <from-path> <to-path> → re-rooted subtree lines (paths as US-joined, leading US)
@@ -581,28 +623,75 @@ j_enc() { # raw string → JE (table segment/value encoding)
 # ---------------------------------------------------------------------------
 # helpers
 # ---------------------------------------------------------------------------
-index_of() { # hay needle → index or -1
-  local hay="$1" needle="$2" rest
+index_of_into() { # <var> hay needle — byte offset or -1
+  local _v="$1" hay="$2" needle="$3" rest _idx
   rest="${hay%%"$needle"*}"
   if [ "$rest" = "$hay" ]; then
-    printf '%s' '-1'
+    _idx=-1
   else
-    printf '%s' "${#rest}"
+    _idx=${#rest}
   fi
+  printf -v "$_v" '%s' "$_idx"
 }
 
-read_file_raw() { # path → stdout (LF, no CR, trailing bytes preserved)
-  local data
-  data="$(cat -- "$1"; printf x)"
-  data="${data%x}"
+# awk END{print NR}: 0 when empty; else newline count (+1 if no trailing NL).
+line_count_into() {
+  local _v="$1" s="$2" stripped nl nr
+  if [ -z "$s" ]; then
+    printf -v "$_v" '%s' '0'
+    return
+  fi
+  stripped="${s//$'\n'/}"
+  nl=$((${#s} - ${#stripped}))
+  if [ "${s:${#s}-1:1}" = $'\n' ]; then
+    nr=$nl
+  else
+    nr=$((nl + 1))
+  fi
+  printf -v "$_v" '%s' "$nr"
+}
+
+read_file_raw_into() { # <var> path — LF, no CR, trailing bytes preserved
+  local _v="$1" data
+  read_bytes_into data "$2"
   data="${data//$'\r'/}"
-  printf '%s' "$data"
+  printf -v "$_v" '%s' "$data"
+}
+
+# read_file_raw_into, then strip all trailing newlines (command-substitution semantics).
+read_file_raw_captured_into() {
+  local _v="$1" _raw
+  read_file_raw_into _raw "$2"
+  _jt_q_strip_trailing_nls_into "$_v" "$_raw"
+}
+
+tpl_bytes_into() { # <var> abs-path — uses map TPLCAP (cleared at load with other maps)
+  local _v="$1" _path="$2" _raw
+  if map_get TPLCAP "$_path"; then
+    printf -v "$_v" '%s' "$MV"
+    return
+  fi
+  read_bytes_into _raw "$_path"
+  map_set TPLCAP "$_path" "$_raw"
+  printf -v "$_v" '%s' "$_raw"
+}
+
+tpl_captured_into() { # <var> abs-path — CRs dropped, trailing newlines stripped
+  local _v="$1" _cap
+  tpl_bytes_into _cap "$2"
+  _cap="${_cap//$'\r'/}"
+  _jt_q_strip_trailing_nls_into "$_v" "$_cap"
 }
 
 read_bytes_into() { # <var> <path> — exact bytes (CR and trailing newlines kept) into $var
-  local _d
-  _d="$(cat -- "$2"; printf x)"
-  printf -v "$1" '%s' "${_d%x}"
+  local _v="$1" _path="$2" _data=""
+  # read -d '' succeeds only on a NUL; NUL-bearing or unreadable files keep $(cat) semantics.
+  if [ -r "$_path" ] && [ ! -d "$_path" ] && ! IFS= read -r -d '' _data < "$_path"; then
+    printf -v "$_v" '%s' "$_data"
+    return 0
+  fi
+  _data="$(cat -- "$_path"; printf x)"
+  printf -v "$_v" '%s' "${_data%x}"
 }
 
 capture_stdout() { # "$@" → CAP_OUT (trailing bytes from stdout preserved; $(…) would drop a final NL)
@@ -610,12 +699,69 @@ capture_stdout() { # "$@" → CAP_OUT (trailing bytes from stdout preserved; $(�
   CAP_OUT="${CAP_OUT%x}"
 }
 
-sha256_str() {
-  printf '%s' "$1" | $SHA256_CMD | awk '{print $1}'
+sha256_digest_field() { # stdin line → first field (hash)
+  local h
+  IFS= read -r h || h=""
+  h="${h%% *}"
+  printf '%s' "$h"
 }
 
-sha256_file() {
-  $SHA256_CMD < "$1" | awk '{print $1}'
+sha256_str_into() {
+  local _v="$1" h
+  h="$(printf '%s' "$2" | $SHA256_CMD | sha256_digest_field)"
+  printf -v "$_v" '%s' "$h"
+}
+
+sha256_file_into() {
+  local _v="$1" h
+  h="$($SHA256_CMD < "$2" | sha256_digest_field)"
+  printf -v "$_v" '%s' "$h"
+}
+
+sha256_emit_contents_batch() { # EMIT keys → NEWF path→hash (one $SHA256_CMD when possible)
+  local tmpdir="" f i=0 p line h out=""
+  map_clear HBATCH
+  tmpdir="$(mktemp -d 2>/dev/null)" || tmpdir=""
+  if [ -n "$tmpdir" ] && [ -d "$tmpdir" ]; then
+    for p in "$@"; do
+      [ -z "$p" ] && continue
+      map_get EMIT "$p"
+      printf -v f '%s/%06d' "$tmpdir" "$i"
+      if ! { printf '%s' "$MV" > "$f"; } 2>/dev/null; then
+        break
+      fi
+      map_set HBATCH "$f" "$p"
+      i=$((i + 1))
+    done
+    if [ "$i" -gt 0 ]; then
+      out="$($SHA256_CMD "$tmpdir"/* 2>/dev/null)" || out=""
+    fi
+    rm -rf "$tmpdir"
+  fi
+  while IFS= read -r line || [ -n "$line" ]; do
+    [ -z "$line" ] && continue
+    case "$line" in
+      \\*) continue ;; # sha256sum escaped path prefix
+    esac
+    h="${line%% *}"
+    f="${line#*  }"
+    if ! map_get HBATCH "$f"; then
+      f="${line##* }"
+      map_get HBATCH "$f" || continue
+    fi
+    map_set NEWF "$MV" "$h"
+  done <<EOF
+$out
+EOF
+  map_clear HBATCH
+  for p in "$@"; do
+    local _hash
+    [ -z "$p" ] && continue
+    map_has NEWF "$p" && continue
+    map_get EMIT "$p"
+    sha256_str_into _hash "$MV"
+    map_set NEWF "$p" "$_hash"
+  done
 }
 
 rel_tpl() { # abs path under TPL → path relative to templates/
@@ -623,13 +769,12 @@ rel_tpl() { # abs path under TPL → path relative to templates/
   printf '%s' "${p#"$TPL"/}"
 }
 
-ensure_trailing_nl() { # stdin/arg via nameref-like printf
-  local s="$1"
+ensure_trailing_nl_into() {
+  local _v="$1" s="$2"
   if [ -n "$s" ] && [ "${s: -1}" != $'\n' ]; then
-    printf '%s\n' "$s"
-  else
-    printf '%s' "$s"
+    s+=$'\n'
   fi
+  printf -v "$_v" '%s' "$s"
 }
 
 # ---------------------------------------------------------------------------
@@ -761,12 +906,19 @@ map_clear UNKF   # IF-flag name → last "file:line" seen
 
 record_syntax() { SYNTAX_ERRS+=("$1"); }
 
-scan_if_syntax() { # file rel
-  local file="$1" rel="$2" content line n=0
+scan_if_syntax_content() { # content rel
+  local content="$1" rel="$2" line n=0
   local -a st_spec=() st_line=()
-  content="$(read_file_raw "$file")"
+  case "$content" in
+    *'<!-- IF '*|*'<!-- ENDIF '*) ;;
+    *) return 0 ;;
+  esac
   while IFS= read -r line || [ -n "$line" ]; do
     n=$((n + 1))
+    case "$line" in
+      *'<!--'*) ;;
+      *) continue ;;
+    esac
     if parse_if_line "$line"; then
       local name="${MK_SPEC#!}"
       if ! known_flag "$name"; then
@@ -788,20 +940,34 @@ scan_if_syntax() { # file rel
         fi
       fi
     fi
-  done < <(printf '%s' "$content")
+  done <<EOF
+$content
+EOF
   local i
   for ((i = 0; i < ${#st_spec[@]}; i++)); do
     record_syntax "$rel:${st_line[$i]}: unmatched IF '${st_spec[$i]}'"
   done
 }
 
-resolve_if() { # content rel → stdout
-  local content="$1"
-  local line n=0 keep=1
+resolve_if_into() { # <var> content rel
+  local _v="$1" _input="$2" _rel="$3" line n=0 keep=1 joined="" i
   local -a st_spec=() st_keep=()
   local -a out=()
+  case "$_input" in
+    *'<!-- IF '*|*'<!-- ENDIF '*) ;;
+    *) _jt_q_strip_trailing_nls_into "$_v" "$_input"; return 0 ;;
+  esac
   while IFS= read -r line || [ -n "$line" ]; do
     n=$((n + 1))
+    case "$line" in
+      *'<!--'*) ;;
+      *)
+        if [ "$keep" -eq 1 ]; then
+          out+=("$line")
+        fi
+        continue
+        ;;
+    esac
     if parse_if_line "$line"; then
       local name="${MK_SPEC#!}"
       if [ "$MK_KIND" = IF ]; then
@@ -827,11 +993,18 @@ resolve_if() { # content rel → stdout
     if [ "$keep" -eq 1 ]; then
       out+=("$line")
     fi
-  done < <(printf '%s' "$content")
+  done <<EOF
+$_input
+EOF
   if [ ${#out[@]} -eq 0 ]; then
+    printf -v "$_v" '%s' ""
     return 0
   fi
-  printf '%s\n' "${out[@]}"
+  for ((i = 0; i < ${#out[@]}; i++)); do
+    joined+="${out[$i]}"$'\n'
+  done
+  _jt_q_strip_trailing_nls_into joined "$joined"
+  printf -v "$_v" '%s' "$joined"
 }
 
 # ---------------------------------------------------------------------------
@@ -841,9 +1014,8 @@ map_clear BSV    # BOOTSTRAP id → answer value (present only if the key is in 
 map_clear BSP    # BOOTSTRAP id → first rel path it appears in
 MISSING_BOOTSTRAP=()
 
-collapse_join() {
-  local left="$1" right="$2"
-  local trail=0 lead=0
+collapse_join_into() {
+  local _v="$1" left="$2" right="$3" trail=0 lead=0
   while [ -n "$left" ] && [ "${left: -1}" = $'\n' ]; do
     left="${left%$'\n'}"
     trail=$((trail + 1))
@@ -853,30 +1025,34 @@ collapse_join() {
     lead=$((lead + 1))
   done
   if [ -z "$left" ]; then
-    printf '%s' "$right"
+    printf -v "$_v" '%s' "$right"
     return
   fi
   if [ -z "$right" ]; then
-    printf '%s\n' "$left"
+    printf -v "$_v" '%s\n' "$left"
     return
   fi
   if [ $((trail + lead)) -ge 2 ]; then
-    printf '%s\n\n%s' "$left" "$right"
+    printf -v "$_v" '%s\n\n%s' "$left" "$right"
   else
-    printf '%s\n%s' "$left" "$right"
+    printf -v "$_v" '%s\n%s' "$left" "$right"
   fi
 }
 
 # Find BOOTSTRAP comments in $1. For each, invoke callback-style via collecting
 # arrays: BS_START BS_END BS_ID BS_LINE BS_WHOLE
 find_bootstrap() {
-  local text="$1"
+  local text="$1" rel="${2:-?}" quiet="${3:-}"
   BS_START=() BS_END=() BS_ID=() BS_LINE=() BS_WHOLE=()
-  local pos=0 needle='<!-- BOOTSTRAP['
+  case "$text" in
+    *'<!-- BOOTSTRAP['*) ;;
+    *) return 0 ;;
+  esac
+  local pos=0 needle='<!-- BOOTSTRAP[' ln_pos=0 ln_nl=0 seg segs
   while true; do
     local hay="${text:pos}"
     local idx
-    idx="$(index_of "$hay" "$needle")"
+    index_of_into idx "$hay" "$needle"
     if [ "$idx" -lt 0 ]; then
       break
     fi
@@ -890,12 +1066,14 @@ find_bootstrap() {
     local open_len=${#BASH_REMATCH[0]}
     local rest="${text:abs+open_len}"
     local close
-    close="$(index_of "$rest" '-->')"
+    index_of_into close "$rest" '-->'
     if [ "$close" -lt 0 ]; then
-      local pre="${text:0:abs}"
-      local lineno
-      lineno="$(printf '%s' "$pre" | awk 'END{print NR}')"
-      record_syntax "${2:-?}:$lineno: unclosed BOOTSTRAP[$id]"
+      if [ "$quiet" != quiet ]; then
+        local pre="${text:0:abs}"
+        local lineno
+        line_count_into lineno "$pre"
+        record_syntax "$rel:$lineno: unclosed BOOTSTRAP[$id]"
+      fi
       break
     fi
     local comment_end=$((abs + open_len + close + 3))
@@ -918,7 +1096,7 @@ find_bootstrap() {
         whole=1
       elif [[ "$tail" =~ ^[[:space:]]*$'\n' ]] || [[ "$tail" =~ ^[[:space:]]*$ ]]; then
         local nl
-        nl="$(index_of "$tail" $'\n')"
+        index_of_into nl "$tail" $'\n'
         if [ "$nl" -ge 0 ]; then
           region_end=$((comment_end + nl + 1))
         else
@@ -928,8 +1106,17 @@ find_bootstrap() {
       fi
     fi
     local lineno
-    lineno="$(printf '%s' "${text:0:abs}" | awk 'END{print NR}')"
-    [ -z "$lineno" ] && lineno=1
+    seg="${text:ln_pos:abs-ln_pos}"
+    segs="${seg//$'\n'/}"
+    ln_nl=$((ln_nl + ${#seg} - ${#segs}))
+    ln_pos=$abs
+    if [ "$abs" -eq 0 ]; then
+      lineno=0
+    elif [ "${text:abs-1:1}" = $'\n' ]; then
+      lineno=$ln_nl
+    else
+      lineno=$((ln_nl + 1))
+    fi
     BS_START+=("$region_start")
     BS_END+=("$region_end")
     BS_ID+=("$id")
@@ -939,33 +1126,16 @@ find_bootstrap() {
   done
 }
 
-scan_bootstrap_ids_in() { # file rel
-  local file="$1" rel="$2" content
-  content="$(read_file_raw "$file")"
-  find_bootstrap "$content" "$rel"
-  local i id
-  for ((i = 0; i < ${#BS_ID[@]}; i++)); do
-    id="${BS_ID[$i]}"
-    case "$id" in
-      kit-*) continue ;;
-    esac
-    if ! map_has BSP "$id"; then
-      map_set BSP "$id" "$rel"
-    fi
-  done
-}
-
-bootstrap_apply() { # content rel mode(strip|apply) → stdout
-  local text="$1" rel="$2" mode="$3"
-  find_bootstrap "$text" "$rel"
+_bootstrap_apply_with_bs_into() { # <var> content rel mode(strip|apply) — uses BS_* from find_bootstrap
+  local _v="$1" _text="$2" rel="$3" mode="$4"
   if [ ${#BS_ID[@]} -eq 0 ]; then
-    printf '%s' "$text"
+    printf -v "$_v" '%s' "$_text"
     return
   fi
   local i
   for (( i=${#BS_ID[@]}-1; i>=0; i-- )); do
     local id="${BS_ID[$i]}" start="${BS_START[$i]}" end="${BS_END[$i]}" whole="${BS_WHOLE[$i]}"
-    local left="${text:0:start}" right="${text:end}"
+    local left="${_text:0:start}" right="${_text:end}"
     local repl=""
     local do_delete=1
     if [ "$mode" = apply ]; then
@@ -987,19 +1157,19 @@ bootstrap_apply() { # content rel mode(strip|apply) → stdout
     fi
     if [ "$do_delete" -eq 1 ]; then
       if [ "$whole" -eq 1 ]; then
-        text="$(collapse_join "$left" "$right")"
+        collapse_join_into _text "$left" "$right"
       else
-        text="${left}${right}"
+        _text="${left}${right}"
       fi
     else
-      if [ "$whole" -eq 1 ] && [ "$end" -gt 0 ] && [ "${text:end-1:1}" = $'\n' ]; then
-        text="${left}${repl}"$'\n'"${right}"
+      if [ "$whole" -eq 1 ] && [ "$end" -gt 0 ] && [ "${_text:end-1:1}" = $'\n' ]; then
+        _text="${left}${repl}"$'\n'"${right}"
       else
-        text="${left}${repl}${right}"
+        _text="${left}${repl}${right}"
       fi
     fi
   done
-  printf '%s' "$text"
+  printf -v "$_v" '%s' "$_text"
 }
 
 # ---------------------------------------------------------------------------
@@ -1020,33 +1190,32 @@ RESOLVED=""
 
 add_problem() { PROBLEMS+=("$1"); }
 
-replace_tokens() { # content → stdout
-  local text="$1" name needle changed=1 i
+replace_tokens_into() { # <var> content
+  local _v="$1" _text="$2" name needle changed=1 i
   while [ "$changed" -eq 1 ]; do
     changed=0
     for ((i = 0; i < ${#TOKENS_N[@]}; i++)); do
       name="${TOKENS_N[$i]}"
       needle="${LB}${LB}${name}${RB}${RB}"
-      if [[ "$text" == *"$needle"* ]]; then
-        text="${text//"$needle"/${TOKENS_V[$i]}}"
+      if [[ "$_text" == *"$needle"* ]]; then
+        _text="${_text//"$needle"/${TOKENS_V[$i]}}"
         changed=1
       fi
     done
   done
-  printf '%s' "$text"
+  printf -v "$_v" '%s' "$_text"
 }
 
 scan_unresolved_tokens() { # content rel
-  local text rel tmp tok
-  text="$1"
-  rel="$2"
-  tmp="$text"
+  local tmp="$1" rel="$2" tok m off
   while [[ "$tmp" =~ \{\{([A-Z_]+)\}\} ]]; do
     tok="${BASH_REMATCH[1]}"
+    m="${BASH_REMATCH[0]}"
     if ! map_has TOKENS "$tok"; then
       add_problem "token '$tok' has no value in $rel"
     fi
-    tmp="${tmp#*"${BASH_REMATCH[0]}"}"
+    off="${tmp%%"$m"*}"
+    tmp="${tmp:${#off}+${#m}}"
   done
 }
 
@@ -1060,16 +1229,17 @@ split_fm() { # content → sets FM_INNER BODY_AFTER; return 1 if no fm
   fi
   local rest="${content:4}"
   local close
-  close="$(index_of "$rest" $'\n---')"
+  index_of_into close "$rest" $'\n---'
   [ "$close" -ge 0 ] || return 1
   FM_INNER="${rest:0:close}"
   BODY_AFTER="${rest:close+4}" # starts at whatever follows \n---
   return 0
 }
 
-filter_fm_lines() { # inner role mode → stdout inner (no wrapping ---)
-  local inner="$1" role="$2" mode="$3"
-  local line out="" seen_user=0
+filter_fm_lines_into() { # <var> inner role mode — result has trailing newlines stripped (command-substitution semantics)
+  local _v="$1" inner="$2" role="$3" mode="$4"
+  local line out="" seen_user=0 src="${inner%$'\n'}"
+  if [ -n "$inner" ]; then
   while IFS= read -r line || [ -n "$line" ]; do
     case "$mode" in
       cursor-agent)
@@ -1118,7 +1288,10 @@ filter_fm_lines() { # inner role mode → stdout inner (no wrapping ---)
         ;;
       *) out+="$line"$'\n' ;;
     esac
-  done < <(printf '%s' "$inner")
+  done <<EOF
+$src
+EOF
+  fi
   if [ "$mode" = copilot-agent ] && [ "$seen_user" -eq 0 ]; then
     out+="user-invocable: false"$'\n'
   fi
@@ -1131,48 +1304,69 @@ filter_fm_lines() { # inner role mode → stdout inner (no wrapping ---)
     out+="agents: [implementer, test-writer, evaluator, qa-evaluator, terminal, diagnostician]"$'\n'
     out+="tools: ['agent']"$'\n'
   fi
-  printf '%s' "$out"
+  _jt_q_strip_trailing_nls_into "$_v" "$out"
 }
 
-wrap_fm() { # inner body → stdout
-  local inner="$1" body="$2"
-  # inner from command subst has trailing newlines stripped; restore the
-  # newline that closes the last frontmatter line before the closing fence.
-  printf -- '---\n%s\n---%s' "$inner" "$body"
+wrap_fm_into() { # <var> inner body
+  local _v="$1" inner="$2" body="$3"
+  printf -v "$_v" -- '---\n%s\n---%s' "$inner" "$body"
 }
 
-translate_cursor_agent() {
-  local role="$1" content="$2"
-  split_fm "$content" || { printf '%s' "$content"; return; }
-  wrap_fm "$(filter_fm_lines "$FM_INNER" "$role" cursor-agent)" "$BODY_AFTER"
+translate_cursor_agent_into() { # <var> role content
+  local _v="$1" role="$2" _c="$3" _inner
+  if ! split_fm "$_c"; then
+    _jt_q_strip_trailing_nls_into "$_v" "$_c"
+    return
+  fi
+  filter_fm_lines_into _inner "$FM_INNER" "$role" cursor-agent
+  wrap_fm_into "$_v" "$_inner" "$BODY_AFTER"
+  _jt_q_strip_trailing_nls_into "$_v" "${!_v}"
 }
 
-translate_cursor_skill() {
-  local content="$1"
-  split_fm "$content" || { printf '%s' "$content"; return; }
-  wrap_fm "$(filter_fm_lines "$FM_INNER" "" cursor-skill)" "$BODY_AFTER"
+translate_cursor_skill_into() { # <var> content
+  local _v="$1" _c="$2" _inner
+  if ! split_fm "$_c"; then
+    _jt_q_strip_trailing_nls_into "$_v" "$_c"
+    return
+  fi
+  filter_fm_lines_into _inner "$FM_INNER" "" cursor-skill
+  wrap_fm_into "$_v" "$_inner" "$BODY_AFTER"
+  _jt_q_strip_trailing_nls_into "$_v" "${!_v}"
 }
 
-translate_copilot_agent() {
-  local role="$1" content="$2"
-  split_fm "$content" || { printf '%s' "$content"; return; }
-  wrap_fm "$(filter_fm_lines "$FM_INNER" "$role" copilot-agent)" "$BODY_AFTER"
+translate_copilot_agent_into() { # <var> role content
+  local _v="$1" role="$2" _c="$3" _inner
+  if ! split_fm "$_c"; then
+    _jt_q_strip_trailing_nls_into "$_v" "$_c"
+    return
+  fi
+  filter_fm_lines_into _inner "$FM_INNER" "$role" copilot-agent
+  wrap_fm_into "$_v" "$_inner" "$BODY_AFTER"
+  _jt_q_strip_trailing_nls_into "$_v" "${!_v}"
 }
 
-translate_copilot_feature() {
-  local content="$1"
-  split_fm "$content" || { printf '%s' "$content"; return; }
-  wrap_fm "$(filter_fm_lines "$FM_INNER" feature copilot-feature)" "$BODY_AFTER"
+translate_copilot_feature_into() { # <var> content
+  local _v="$1" _c="$2" _inner
+  if ! split_fm "$_c"; then
+    _jt_q_strip_trailing_nls_into "$_v" "$_c"
+    return
+  fi
+  filter_fm_lines_into _inner "$FM_INNER" feature copilot-feature
+  wrap_fm_into "$_v" "$_inner" "$BODY_AFTER"
+  _jt_q_strip_trailing_nls_into "$_v" "${!_v}"
 }
 
-strip_frontmatter() {
-  local content="$1"
-  split_fm "$content" || { printf '%s' "$content"; return; }
-  local body="$BODY_AFTER"
+strip_frontmatter_into() { # <var> content
+  local _v="$1" _c="$2" body
+  if ! split_fm "$_c"; then
+    _jt_q_strip_trailing_nls_into "$_v" "$_c"
+    return
+  fi
+  body="$BODY_AFTER"
   while [ "${body:0:1}" = $'\n' ]; do
     body="${body:1}"
   done
-  printf '%s' "$body"
+  _jt_q_strip_trailing_nls_into "$_v" "$body"
 }
 
 # ---------------------------------------------------------------------------
@@ -1186,6 +1380,23 @@ ide_dir_for() {
     codex)       printf '%s' '.codex' ;;
     *) die 3 "unknown harness '$1'" ;;
   esac
+}
+
+ide_dir_for_into() {
+  local _v="$1"
+  case "$2" in
+    claude-code) printf -v "$_v" '%s' '.claude' ;;
+    cursor)      printf -v "$_v" '%s' '.cursor' ;;
+    copilot)     printf -v "$_v" '%s' '.github' ;;
+    codex)       printf -v "$_v" '%s' '.codex' ;;
+    *) die 3 "unknown harness '$2'" ;;
+  esac
+}
+
+mkdir_p_parent() { # file path — parent directory when path has a slash
+  local _mpp="$1" _mpd
+  _mpd="${_mpp%/*}"
+  [ "$_mpd" != "$_mpp" ] && mkdir -p "$_mpd"
 }
 
 harness_suffix() {
@@ -1213,7 +1424,7 @@ load_kit_skills() {
   KIT_SKILLS=()
   while IFS= read -r d; do
     [ -z "$d" ] && continue
-    KIT_SKILLS+=("$(basename "$d")")
+    KIT_SKILLS+=("${d##*/}")
   done < <(LC_ALL=C find "$TPL/skills" -mindepth 1 -maxdepth 1 -type d | LC_ALL=C sort)
   local has_al=0 s
   for s in ${KIT_SKILLS[@]+"${KIT_SKILLS[@]}"}; do
@@ -1342,8 +1553,10 @@ config_file = "agents/diagnostician.toml"
 EOF
 }
 
-codex_role_toml() { # model-id
-  printf 'model = "%s"\n' "$1"
+codex_role_toml_into() { # <var> model-id
+  local _v="$1"
+  printf -v "$_v" 'model = "%s"\n' "$2"
+  _jt_q_strip_trailing_nls_into "$_v" "${!_v}"
 }
 
 settings_json_min() {
@@ -1360,6 +1573,7 @@ EOF
 # emit-set
 # ---------------------------------------------------------------------------
 map_clear EMIT     # emit-set: relpath → file bytes
+map_clear TPLCAP   # abs template path → raw bytes
 WARNINGS=0
 WARN_LINES=()
 bump_warn() { WARNINGS=$((WARNINGS + 1)); }
@@ -1381,7 +1595,13 @@ set_want_flags() {
   flag_set want_copilot false
   flag_set want_codex false
   for h in ${HARNESSES[@]+"${HARNESSES[@]}"}; do
-    s="$(harness_suffix "$h")"
+    case "$h" in
+      claude-code) s=claude ;;
+      cursor) s=cursor ;;
+      copilot) s=copilot ;;
+      codex) s=codex ;;
+      *) die 3 "unknown harness '$h'" ;;
+    esac
     flag_set "want_$s" true
   done
 }
@@ -1392,12 +1612,22 @@ set_is_flags() { # harness or empty (all false)
   flag_set is_copilot false
   flag_set is_codex false
   if [ -n "${1:-}" ]; then
-    flag_set "is_$(harness_suffix "$1")" true
+    case "$1" in
+      claude-code) flag_set is_claude true ;;
+      cursor) flag_set is_cursor true ;;
+      copilot) flag_set is_copilot true ;;
+      codex) flag_set is_codex true ;;
+      *) die 3 "unknown harness '$1'" ;;
+    esac
   fi
 }
 
 ans_model() { # harness field → raw value; empty when false/null/missing
   jt_q "$ANSWERS" rawe models "$1" "$2"
+}
+
+ans_model_into() { # <var> harness field
+  jt_q_into "$1" "$ANSWERS" rawe models "$2" "$3"
 }
 
 # Usage-credit loop-chain denylist (sole pinned literal set; glob patterns, ordinal match).
@@ -1413,28 +1643,28 @@ loop_chain_entry_bills_usage_credits() {
 
 resolve_model_fast() { # harness → stdout: fast ID or empty if unset
   local h="$1" v
-  v="$(ans_model "$h" fast)"
+  ans_model_into v "$h" fast
   if [ -n "$v" ]; then
     printf '%s' "$v"
     return 0
   fi
-  v="$(ans_model "$h" light)"
+  ans_model_into v "$h" light
   if [ -n "$v" ]; then
     printf '%s' "$v"
   fi
 }
 
 validate_models_contract() {
-  local h="$1" lc entry rest ty
-  ty="$(jt_q "$ANSWERS" type models "$h" fast)"
+  local h="$1" lc entry rest ty arb
+  jt_q_into ty "$ANSWERS" type models "$h" fast
   if [ "$ty" != missing ] && [ "$ty" != string ]; then
     add_problem "models.$h.fast must be a string"
   fi
-  ty="$(jt_q "$ANSWERS" type models "$h" arbiter_same_family)"
+  jt_q_into ty "$ANSWERS" type models "$h" arbiter_same_family
   if [ "$ty" != missing ] && [ "$ty" != boolean ]; then
     add_problem "models.$h.arbiter_same_family must be a boolean"
   fi
-  lc="$(ans_model "$h" loop_chain)"
+  ans_model_into lc "$h" loop_chain
   [ -z "$lc" ] && return 0
   rest="$lc"
   while [ -n "$rest" ]; do
@@ -1452,13 +1682,14 @@ validate_models_contract() {
 }
 
 warn_models_arbiter() {
-  local h="$1" frontier alt fam
-  fam="$(ans_model "$h" frontier_alt_family)"
+  local h="$1" frontier alt fam arb
+  ans_model_into fam "$h" frontier_alt_family
   [ -z "$fam" ] && return 0
-  frontier="$(ans_model "$h" frontier)"
-  alt="$(ans_model "$h" alt_family)"
+  ans_model_into frontier "$h" frontier
+  ans_model_into alt "$h" alt_family
   if [ "$fam" = "$frontier" ]; then
-    if [ "$(jt_q "$ANSWERS" istrue models "$h" arbiter_same_family)" != true ]; then
+    jt_q_into arb "$ANSWERS" istrue models "$h" arbiter_same_family
+    if [ "$arb" != true ]; then
       record_warn_line "warning: models.$h.frontier_alt_family equals frontier; set arbiter_same_family: true to accept a same-family arbiter"
     fi
     return 0
@@ -1470,26 +1701,34 @@ warn_models_arbiter() {
 
 load_global_tokens() {
   map_clear TOKENS
-  local k v pn
-  pn="$(jt_q "$ANSWERS" rawe tokens PROJECT_NAME)"
+  local k v pn rest ty
+  jt_q_into pn "$ANSWERS" rawe tokens PROJECT_NAME
   if [ -z "$pn" ]; then
-    pn="$(jt_q "$ANSWERS" rawe projectName)"
+    jt_q_into pn "$ANSWERS" rawe projectName
   fi
   [ -n "$pn" ] && map_set TOKENS PROJECT_NAME "$pn"
-  while IFS= read -r k; do
+  while IFS= read -r k || [ -n "$k" ]; do
     [ -z "$k" ] && continue
-    v="$(jt_q "$ANSWERS" rawe tokens "$k")"
+    jt_q_into v "$ANSWERS" rawe tokens "$k"
     map_set TOKENS "$k" "$v"
   done < <(jt_q "$ANSWERS" keys tokens)
   [ -n "$pn" ] && map_set TOKENS PROJECT_NAME "$pn"
   local h pre
   for h in ${HARNESSES[@]+"${HARNESSES[@]}"}; do
-    pre="$(harness_prefix "$h")"
-    v="$(ans_model "$h" frontier)"; [ -n "$v" ] && map_set TOKENS "${pre}_MODEL_FRONTIER" "$v"
-    v="$(ans_model "$h" light)";    [ -n "$v" ] && map_set TOKENS "${pre}_MODEL_LIGHT" "$v"
-    v="$(resolve_model_fast "$h")"; [ -n "$v" ] && map_set TOKENS "${pre}_MODEL_FAST" "$v"
+    case "$h" in
+      claude-code) pre=CLAUDE ;;
+      cursor) pre=CURSOR ;;
+      copilot) pre=COPILOT ;;
+      codex) pre=CODEX ;;
+      *) die 3 "unknown harness '$h'" ;;
+    esac
+    ans_model_into v "$h" frontier; [ -n "$v" ] && map_set TOKENS "${pre}_MODEL_FRONTIER" "$v"
+    ans_model_into v "$h" light;    [ -n "$v" ] && map_set TOKENS "${pre}_MODEL_LIGHT" "$v"
+    capture_stdout resolve_model_fast "$h"
+    v="$CAP_OUT"
+    [ -n "$v" ] && map_set TOKENS "${pre}_MODEL_FAST" "$v"
   done
-  v="$(ans_model "$PRIMARY" loop_chain)"
+  ans_model_into v "$PRIMARY" loop_chain
   map_set TOKENS LOOP_MODEL_CHAIN "$v"
 }
 
@@ -1504,21 +1743,26 @@ tok_put() { # <name> <value> — set when non-empty, else remove
 set_harness_tokens() { # harness
   local h="$1" v
   map_set TOKENS IDE_DIR "$(ide_dir_for "$h")"
-  v="$(ans_model "$h" frontier)"; tok_put MODEL_FRONTIER "$v"
-  v="$(ans_model "$h" light)"; tok_put MODEL_LIGHT "$v"
-  v="$(ans_model "$h" alt_family)"; tok_put MODEL_ALT_FAMILY "$v"
-  v="$(ans_model "$h" frontier_alt_family)"; tok_put MODEL_FRONTIER_ALT_FAMILY "$v"
-  v="$(resolve_model_fast "$h")"; tok_put MODEL_FAST "$v"
+  ans_model_into v "$h" frontier; tok_put MODEL_FRONTIER "$v"
+  ans_model_into v "$h" light; tok_put MODEL_LIGHT "$v"
+  ans_model_into v "$h" alt_family; tok_put MODEL_ALT_FAMILY "$v"
+  ans_model_into v "$h" frontier_alt_family; tok_put MODEL_FRONTIER_ALT_FAMILY "$v"
+  capture_stdout resolve_model_fast "$h"
+  tok_put MODEL_FAST "$CAP_OUT"
 }
 
 resolve_template() { # abs-src rel → sets RESOLVED (IF → BOOTSTRAP → tokens)
   local src="$1" rel="$2" content stripped
-  content="$(read_file_raw "$src")"
-  content="$(resolve_if "$content" "$rel")"
-  stripped="$(bootstrap_apply "$content" "$rel" strip)"
+  tpl_captured_into content "$src"
+  resolve_if_into content "$content" "$rel"
+  find_bootstrap "$content" "$rel" quiet
+  _bootstrap_apply_with_bs_into stripped "$content" "$rel" strip
+  _jt_q_strip_trailing_nls_into stripped "$stripped"
   scan_unresolved_tokens "$stripped" "$rel"
-  content="$(bootstrap_apply "$content" "$rel" apply)"
-  content="$(replace_tokens "$content")"
+  _bootstrap_apply_with_bs_into content "$content" "$rel" apply
+  _jt_q_strip_trailing_nls_into content "$content"
+  replace_tokens_into content "$content"
+  _jt_q_strip_trailing_nls_into content "$content"
   RESOLVED="$content"
 }
 
@@ -1535,61 +1779,73 @@ copy_skill_tree() { # name dest_prefix translate_mode(claude|cursor|copilot)
   local src_root="$TPL/skills/$name"
   [ -d "$src_root" ] || return 0
   local f rel dest content
-  while IFS= read -r f; do
-    [ -z "$f" ] && continue
+  for f in ${TPL_FILES[@]+"${TPL_FILES[@]}"}; do
+    case "$f" in
+      "$src_root"/*) ;;
+      *) continue ;;
+    esac
     rel="${f#"$src_root"/}"
     dest="$rel"
-    if [ "$(basename "$rel")" = SKILL.template.md ]; then
-      dest="$(dirname "$rel")"
-      [ "$dest" = . ] && dest="SKILL.md" || dest="$dest/SKILL.md"
+    if [ "${rel##*/}" = SKILL.template.md ]; then
+      if [[ "$rel" == */* ]]; then
+        dest="${rel%/*}/SKILL.md"
+      else
+        dest=SKILL.md
+      fi
     fi
     resolve_template "$f" "skills/$name/$rel"
     content="$RESOLVED"
-    if [ "$(basename "$dest")" = SKILL.md ]; then
+    if [ "${dest##*/}" = SKILL.md ]; then
       case "$mode" in
-        cursor) content="$(translate_cursor_skill "$content")" ;;
+        cursor) translate_cursor_skill_into content "$content" ;;
       esac
     fi
     put_emit "$dest_prefix/$dest" "$content"
-  done < <(LC_ALL=C find "$src_root" -type f | LC_ALL=C sort)
+  done
 }
 
 emit_agents() { # harness
-  local h="$1" dest_dir role src content
-  dest_dir="$(ide_dir_for "$h")/agents"
-  local f
-  while IFS= read -r f; do
-    [ -z "$f" ] && continue
-    role="$(basename "$f" .md)"
-    resolve_template "$f" "agents/$(basename "$f")"
+  local h="$1" dest_dir role src content ide_d
+  ide_dir_for_into ide_d "$h"
+  dest_dir="$ide_d/agents"
+  local f role content mid
+  for f in ${TPL_FILES[@]+"${TPL_FILES[@]}"}; do
+    [ "${f%/*}" = "$TPL/agents" ] || continue
+    case "$f" in *.md) ;; *) continue ;; esac
+    role="${f##*/}"
+    role="${role%.md}"
+    resolve_template "$f" "agents/${f##*/}"
     content="$RESOLVED"
     case "$h" in
       claude-code)
         put_emit "$dest_dir/$role.md" "$content"
         ;;
       cursor)
-        put_emit "$dest_dir/$role.md" "$(translate_cursor_agent "$role" "$content")"
+        translate_cursor_agent_into content "$role" "$content"
+        put_emit "$dest_dir/$role.md" "$content"
         ;;
       copilot)
-        put_emit ".github/agents/${role}.agent.md" "$(translate_copilot_agent "$role" "$content")"
+        translate_copilot_agent_into content "$role" "$content"
+        put_emit ".github/agents/${role}.agent.md" "$content"
         ;;
       codex)
-        put_emit ".codex/agents/${role}.md" "$(strip_frontmatter "$content")"
-        local mid
+        strip_frontmatter_into content "$content"
+        put_emit ".codex/agents/${role}.md" "$content"
         case "$role" in
           evaluator|qa-evaluator|diagnostician) tok_must MODEL_FRONTIER; mid="$MV" ;;
           terminal) tok_or MODEL_FAST "" ; mid="$MV"; [ -n "$mid" ] || { tok_or MODEL_LIGHT ""; mid="$MV"; } ;;
           *) tok_must MODEL_LIGHT; mid="$MV" ;;
         esac
-        put_emit ".codex/agents/${role}.toml" "$(codex_role_toml "$mid")"
+        codex_role_toml_into content "$mid"
+        put_emit ".codex/agents/${role}.toml" "$content"
         ;;
     esac
-  done < <(LC_ALL=C find "$TPL/agents" -maxdepth 1 -type f -name '*.md' | LC_ALL=C sort)
+  done
 }
 
 emit_skills_for() { # harness
   local h="$1" ide mode name
-  ide="$(ide_dir_for "$h")"
+  ide_dir_for_into ide "$h"
   case "$h" in
     claude-code) mode=claude ;;
     cursor)      mode=cursor ;;
@@ -1599,7 +1855,7 @@ emit_skills_for() { # harness
   local d
   while IFS= read -r d; do
     [ -z "$d" ] && continue
-    name="$(basename "$d")"
+    name="${d##*/}"
     if [ "$name" = research ] && ! flag_is research; then
       continue
     fi
@@ -1611,7 +1867,8 @@ emit_skills_for() { # harness
       local content
       resolve_template "$src" "skills/feature/SKILL.template.md"
       content="$RESOLVED"
-      put_emit ".github/agents/feature.agent.md" "$(translate_copilot_feature "$content")"
+      translate_copilot_feature_into content "$content"
+      put_emit ".github/agents/feature.agent.md" "$content"
     fi
     copy_skill_tree "$name" "$ide/skills/$name" "$mode"
   done < <(LC_ALL=C find "$TPL/skills" -mindepth 1 -maxdepth 1 -type d | LC_ALL=C sort)
@@ -1622,7 +1879,7 @@ emit_skills_for() { # harness
       resolve_template "$src" "loop/SKILL.template.md"
       content="$RESOLVED"
       if [ "$mode" = cursor ]; then
-        content="$(translate_cursor_skill "$content")"
+        translate_cursor_skill_into content "$content"
       fi
       put_emit "$ide/skills/auto-loop/SKILL.md" "$content"
     fi
@@ -1642,7 +1899,8 @@ emit_orchestration() { # harness (skip root-shared if not writer)
   content="$RESOLVED"
   case "$h" in
     claude-code|cursor)
-      dest="$(ide_dir_for "$h")/ORCHESTRATION.md"
+      ide_dir_for_into dest "$h"
+      dest="$dest/ORCHESTRATION.md"
       put_emit "$dest" "$content"
       ;;
     copilot|codex)
@@ -1674,9 +1932,9 @@ emit_single_copy() {
     fi
   done
   # Windows launchers: byte copies of the one template (CRLF must survive, so
-  # never through read_file_raw / resolve_template).
+  # never through read_file_raw_into / resolve_template).
   if [ -f "$TPL/tools/bash-launcher.cmd" ]; then
-    read_bytes_into content "$TPL/tools/bash-launcher.cmd"
+    tpl_bytes_into content "$TPL/tools/bash-launcher.cmd"
     map_set EMIT "_kit/memory.cmd" "$content"
     map_set EMIT "_kit/log-spawn.cmd" "$content"
   fi
@@ -1724,24 +1982,28 @@ load_answers_json() { # json text → ANSWERS (flattened table)
 }
 
 validate_answers_schema() {
-  local v
-  v="$(jt_q "$ANSWERS" rawe schema)"
+  local v ty len rest h
+  jt_q_into v "$ANSWERS" rawe schema
   if [ "$v" != 1 ]; then
     add_problem "schema must be 1 (got '${v:-missing}')"
   fi
-  if [ "$(jt_q "$ANSWERS" type harnesses)" != array ] || [ "$(jt_q "$ANSWERS" len harnesses)" -lt 1 ]; then
+  jt_q_into ty "$ANSWERS" type harnesses
+  jt_q_into len "$ANSWERS" len harnesses
+  if [ "$ty" != array ] || [ "$len" -lt 1 ]; then
     add_problem "harnesses must be a non-empty array"
   else
-    local h
-    while IFS= read -r h; do
+    jt_q_into rest "$ANSWERS" elems harnesses
+    while IFS= read -r h || [ -n "$h" ]; do
       [ -z "$h" ] && continue
       case "$h" in
         claude-code|cursor|copilot|codex) HARNESSES+=("$h") ;;
         *) add_problem "unknown harness '$h'" ;;
       esac
-    done < <(jt_q "$ANSWERS" elems harnesses)
+    done <<EOF
+$rest
+EOF
   fi
-  PRIMARY="$(jt_q "$ANSWERS" rawe primary)"
+  jt_q_into PRIMARY "$ANSWERS" rawe primary
   if [ -z "$PRIMARY" ]; then
     add_problem "primary is missing"
   else
@@ -1753,29 +2015,32 @@ validate_answers_schema() {
       add_problem "primary '$PRIMARY' is not in harnesses"
     fi
   fi
-  local h
+  local h ty f flag_ty flag_is
   for h in ${HARNESSES[@]+"${HARNESSES[@]}"}; do
-    if [ "$(jt_q "$ANSWERS" type models "$h")" != object ]; then
+    jt_q_into ty "$ANSWERS" type models "$h"
+    if [ "$ty" != object ]; then
       add_problem "models entry missing for harness '$h'"
     else
       validate_models_contract "$h"
     fi
   done
-  local f
   for f in research loop greenfield lint typecheck models_pinned; do
-    if [ "$(jt_q "$ANSWERS" type flags)" != object ] || [ "$(jt_q "$ANSWERS" type flags "$f")" = missing ]; then
+    jt_q_into ty "$ANSWERS" type flags
+    jt_q_into flag_ty "$ANSWERS" type flags "$f"
+    if [ "$ty" != object ] || [ "$flag_ty" = missing ]; then
       add_problem "flags.$f missing"
       flag_set "$f" false
     else
-      if [ "$(jt_q "$ANSWERS" istrue flags "$f")" = true ]; then
+      jt_q_into flag_is "$ANSWERS" istrue flags "$f"
+      if [ "$flag_is" = true ]; then
         flag_set "$f" true
       else
         flag_set "$f" false
       fi
     fi
   done
-  FORGE_KIND="$(jt_q "$ANSWERS" rawe forge kind)"
-  FORGE_HOST="$(jt_q "$ANSWERS" rawe forge host)"
+  jt_q_into FORGE_KIND "$ANSWERS" rawe forge kind
+  jt_q_into FORGE_HOST "$ANSWERS" rawe forge host
   case "$FORGE_KIND" in
     github|azuredevops|gitlab|none) ;;
     *) add_problem "forge.kind must be github|azuredevops|gitlab|none (got '${FORGE_KIND:-missing}')" ;;
@@ -1784,12 +2049,17 @@ validate_answers_schema() {
 
 load_bootstrap_map() {
   map_clear BSV
-  if [ "$(jt_q "$ANSWERS" type bootstrap)" = object ]; then
-    local id
-    while IFS= read -r id; do
+  local ty rest id val
+  jt_q_into ty "$ANSWERS" type bootstrap
+  if [ "$ty" = object ]; then
+    jt_q_into rest "$ANSWERS" keys bootstrap
+    while IFS= read -r id || [ -n "$id" ]; do
       [ -z "$id" ] && continue
-      map_set BSV "$id" "$(jt_q "$ANSWERS" rawe bootstrap "$id")"
-    done < <(jt_q "$ANSWERS" keys bootstrap)
+      jt_q_into val "$ANSWERS" rawe bootstrap "$id"
+      map_set BSV "$id" "$val"
+    done <<EOF
+$rest
+EOF
   fi
 }
 
@@ -1797,13 +2067,28 @@ walk_all_templates() {
   LC_ALL=C find "$TPL" -type f | LC_ALL=C sort
 }
 
+TPL_FILES=()
+
 scan_all_templates() {
-  local f rel
+  local f rel content
+  TPL_FILES=()
   while IFS= read -r f; do
     [ -z "$f" ] && continue
-    rel="$(rel_tpl "$f")"
-    scan_if_syntax "$f" "$rel"
-    scan_bootstrap_ids_in "$f" "$rel"
+    TPL_FILES+=("$f")
+    rel="${f#"$TPL"/}"
+    tpl_captured_into content "$f"
+    scan_if_syntax_content "$content" "$rel"
+    find_bootstrap "$content" "$rel"
+    local i id
+    for ((i = 0; i < ${#BS_ID[@]}; i++)); do
+      id="${BS_ID[$i]}"
+      case "$id" in
+        kit-*) continue ;;
+      esac
+      if ! map_has BSP "$id"; then
+        map_set BSP "$id" "$rel"
+      fi
+    done
   done < <(walk_all_templates)
 }
 
@@ -1850,23 +2135,6 @@ compute_missing_bootstrap() {
 file_has_marker() {
   local path="$1" marker="$2"
   [ -f "$path" ] && grep -Fq -- "$marker" "$path"
-}
-
-planned_pointer_content() { # destpath new-section → full file bytes or empty if skip
-  local dest="$1" section="$2"
-  if [ -f "$dest" ] && grep -Fq -- "$POINTER_MARKER" "$dest"; then
-    printf ''
-    return 1
-  fi
-  if [ ! -f "$dest" ]; then
-    printf '%s' "$(ensure_trailing_nl "$section")"
-    return 0
-  fi
-  local existing
-  existing="$(read_file_raw "$dest")"
-  existing="$(ensure_trailing_nl "$existing")"
-  printf '%s\n%s' "${existing%$'\n'}" "$(ensure_trailing_nl "$section")"
-  return 0
 }
 
 git_bytes_has_line() { # haystack needle → 0 when any line bare-matches needle
@@ -2008,7 +2276,7 @@ collect_upgrade_migrate_pairs() {
   if [ -d "$ROOT/_goals" ]; then
     while IFS= read -r entry; do
       [ -z "$entry" ] && continue
-      base="$(basename "$entry")"
+      base="${entry##*/}"
       relpath="_goals/$base"
       case "$base" in
         backlog.md|LEARNINGS.md|ESCALATIONS.md|breaker-state.json|archive)
@@ -2024,7 +2292,7 @@ collect_upgrade_migrate_pairs() {
   if [ -d "$ROOT/_research" ]; then
     while IFS= read -r entry; do
       [ -z "$entry" ] && continue
-      base="$(basename "$entry")"
+      base="${entry##*/}"
       UPGRADE_MIGRATE_PAIRS+=("_research/$base|_memory/work/research/$base")
     done < <(LC_ALL=C find "$ROOT/_research" -mindepth 1 -maxdepth 1 -print | LC_ALL=C sort)
   fi
@@ -2084,7 +2352,7 @@ apply_upgrade_migrations() {
       src="${pair%%|*}"
       dst="${pair#*|}"
       [ -z "$src" ] || [ -z "$dst" ] && continue
-      mkdir -p "$(dirname "$ROOT/$dst")"
+      mkdir_p_parent "$ROOT/$dst"
       if legacy_path_has_tracked "$src"; then
         git -C "$ROOT" mv -- "$src" "$dst"
       else
@@ -2199,16 +2467,21 @@ load_old_manifest() {
     OLD_HAS_MANIFEST=1
     OLD_TABLE="$(awk "$JSON_AWK_PARSE_PROG" <"$MANIFEST")" || die 2 "answers file unreadable"
     json_root_falsy "$OLD_TABLE" && die 2 "answers file unreadable"
-    OLD_INSTALLED_AT="$(jt_q "$OLD_TABLE" rawe installedAt)"
-    if [ "$(jt_q "$OLD_TABLE" truthy answers)" = 1 ]; then
+    jt_q_into OLD_INSTALLED_AT "$OLD_TABLE" rawe installedAt
+    local ans_truthy k v rest ty
+    jt_q_into ans_truthy "$OLD_TABLE" truthy answers
+    if [ "$ans_truthy" = 1 ]; then
       HAS_OLD_ANSWERS=1
     fi
-    local k v
-    if [ "$(jt_q "$OLD_TABLE" type files)" = object ]; then
-      while IFS=$'\t' read -r k v; do
+    jt_q_into ty "$OLD_TABLE" type files
+    if [ "$ty" = object ]; then
+      jt_q_into rest "$OLD_TABLE" pairs files
+      while IFS=$'\t' read -r k v || [ -n "$k" ]; do
         [ -z "$k" ] && continue
         map_set OLDH "$k" "$v"
-      done < <(jt_q "$OLD_TABLE" pairs files)
+      done <<EOF
+$rest
+EOF
     fi
   fi
 }
@@ -2233,12 +2506,12 @@ plan_and_maybe_write() {
     [ -z "$p" ] && continue
     sorted+=("$p")
   done < <(map_sorted_keys EMIT)
+  sha256_emit_contents_batch ${sorted[@]+"${sorted[@]}"}
   for p in ${sorted[@]+"${sorted[@]}"}; do
-    map_get EMIT "$p"
-    new_hash="$(sha256_str "$MV")"
-    map_set NEWF "$p" "$new_hash"
+    map_get NEWF "$p"
+    new_hash="$MV"
     if [ -f "$ROOT/$p" ]; then
-      disk_hash="$(sha256_file "$ROOT/$p")"
+      sha256_file_into disk_hash "$ROOT/$p"
     else
       disk_hash=""
     fi
@@ -2270,14 +2543,16 @@ write_emit_files() {
     sorted+=("$p")
   done < <(map_sorted_keys EMIT)
   for p in ${sorted[@]+"${sorted[@]}"}; do
-    local dest="$ROOT/$p"
+    local dest="$ROOT/$p" disk_hash
     local new_hash
-    map_get EMIT "$p"
-    new_hash="$(sha256_str "$MV")"
-    if [ -f "$dest" ] && [ "$(sha256_file "$dest")" = "$new_hash" ]; then
-      continue
+    map_get NEWF "$p"
+    new_hash="$MV"
+    if [ -f "$dest" ]; then
+      sha256_file_into disk_hash "$dest"
+      [ "$disk_hash" = "$new_hash" ] && continue
     fi
-    mkdir -p "$(dirname "$dest")"
+    mkdir_p_parent "$dest"
+    map_get EMIT "$p"
     printf '%s' "$MV" > "$dest"
     if [[ "$p" == *.sh ]]; then
       chmod +x "$dest"
@@ -2304,7 +2579,7 @@ write_seed() {
   fi
   local dest="$ROOT/_memory/loop/backlog.md"
   if [ ! -f "$dest" ]; then
-    mkdir -p "$(dirname "$dest")"
+    mkdir_p_parent "$dest"
     if [ -n "$SEED_CONTENT" ] && [ "${SEED_CONTENT: -1}" != $'\n' ]; then
       SEED_CONTENT+=$'\n'
     fi
@@ -2328,7 +2603,7 @@ plan_prune_and_foreign() {
     old="${OLDH_V[$i]}"
     if is_kit_owned "$p"; then
       if [ -f "$ROOT/$p" ]; then
-        disk="$(sha256_file "$ROOT/$p")"
+        sha256_file_into disk "$ROOT/$p"
         if [ "$disk" = "$old" ]; then
           PRUNED_P=$((PRUNED_P + 1))
           dry_action prune "$p"
@@ -2343,7 +2618,8 @@ plan_prune_and_foreign() {
     else
       # foreign
       if [ -f "$ROOT/$p" ]; then
-        map_set NEWF "$p" "$(sha256_file "$ROOT/$p")"
+        sha256_file_into disk "$ROOT/$p" || true
+        map_set NEWF "$p" "$disk"
         dry_action keep "$p"
       else
         bump_warn
@@ -2365,20 +2641,22 @@ do_prune() {
     fi
     if ! is_kit_owned "$p"; then
       if [ -f "$ROOT/$p" ]; then
-        map_set NEWF "$p" "$(sha256_file "$ROOT/$p")"
+        sha256_file_into disk "$ROOT/$p" || true
+        map_set NEWF "$p" "$disk"
       fi
       continue
     fi
     old="${OLDH_V[$i]}"
     if [ -f "$ROOT/$p" ]; then
-      disk="$(sha256_file "$ROOT/$p")"
+      sha256_file_into disk "$ROOT/$p"
       if [ "$disk" = "$old" ]; then
         rm -f "$ROOT/$p"
         PRUNED_P=$((PRUNED_P + 1))
         # remove now-empty parent directories, never above the repo root
-        dir="$(dirname "$ROOT/$p")"
+        dir="${ROOT}/$p"
+        dir="${dir%/*}"
         while [ "$dir" != "$ROOT" ] && [ -d "$dir" ] && rmdir "$dir" 2>/dev/null; do
-          dir="$(dirname "$dir")"
+          dir="${dir%/*}"
         done
       fi
     fi
@@ -2397,13 +2675,14 @@ harness_wanted() {
 }
 
 settings_has_spawn_depth() { # settings.json path → 0 when .env.CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH is truthy
-  local t
+  local t depth
   t="$(awk "$JSON_AWK_PARSE_PROG" <"$1" 2>/dev/null)" || return 1
-  [ "$(jt_q "$t" truthy env CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH)" = 1 ]
+  jt_q_into depth "$t" truthy env CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH
+  [ "$depth" = 1 ]
 }
 
 put_optional_kit_files() {
-  local cf light tables existing
+  local cf light tables existing out
   if harness_wanted claude-code; then
     if [ ! -f "$ROOT/.claude/settings.json" ]; then
       put_emit ".claude/settings.json" "$(settings_json_min)"
@@ -2415,14 +2694,18 @@ put_optional_kit_files() {
   fi
   if harness_wanted codex; then
     cf="$ROOT/.codex/config.toml"
-    light="$(ans_model "codex" light)"
+    ans_model_into light codex light
     tables="$(codex_config_tables "$light")"
     if [ ! -f "$cf" ]; then
-      put_emit ".codex/config.toml" "$(ensure_trailing_nl "$tables")"
+      ensure_trailing_nl_into existing "$tables"
+      put_emit ".codex/config.toml" "$existing"
     elif ! grep -Fq -- "$CODEX_AGENTS_MARKER" "$cf"; then
-      existing="$(read_file_raw "$cf")"
-      existing="$(ensure_trailing_nl "$existing")"
-      put_emit ".codex/config.toml" "$(printf '%s\n%s' "${existing%$'\n'}" "$(ensure_trailing_nl "$tables")")"
+      read_file_raw_captured_into existing "$cf"
+      ensure_trailing_nl_into existing "$existing"
+      existing="${existing%$'\n'}"
+      ensure_trailing_nl_into tables "$tables"
+      out="$existing"$'\n'"$tables"
+      put_emit ".codex/config.toml" "$out"
     fi
   fi
 }
@@ -2475,10 +2758,10 @@ append_pointer_file() {
     fi
     return 0
   fi
-  mkdir -p "$(dirname "$dest")"
+  mkdir_p_parent "$dest"
   section="${section%$'\n'}"
   if [ -f "$dest" ]; then
-    existing="$(read_file_raw "$dest")"
+    read_file_raw_captured_into existing "$dest"
     existing="${existing%$'\n'}"
     printf '%s\n%s\n' "$existing" "$section" > "$dest"
   else
@@ -2609,39 +2892,46 @@ record_verify() { VERIFY_ERRS+=("$1"); }
 
 verify_content() { # path content
   local p="$1" content="$2"
-  local hits
-  if printf '%s' "$content" | grep -qE '\{\{[A-Z_]+\}\}'; then
+  if [[ "$content" =~ \{\{[A-Z_]+\}\} ]]; then
     record_verify "verify: $p: leftover token"
     return 1
   fi
-  if printf '%s' "$content" | grep -qF '<!-- BOOTSTRAP'; then
+  if [[ "$content" == *'<!-- BOOTSTRAP'* ]]; then
     record_verify "verify: $p: leftover BOOTSTRAP"
     return 1
   fi
-  if printf '%s' "$content" | grep -qF '<!-- IF'; then
+  if [[ "$content" == *'<!-- IF'* ]]; then
     record_verify "verify: $p: leftover IF"
     return 1
   fi
-  if printf '%s' "$content" | grep -qF '<!-- ENDIF'; then
+  if [[ "$content" == *'<!-- ENDIF'* ]]; then
     record_verify "verify: $p: leftover ENDIF"
     return 1
   fi
   return 0
 }
 
-fm_name() { # content → name or empty
-  local content="$1"
-  split_fm "$content" || return 0
-  local line
+fm_name_into() { # <var> content → name or empty
+  local _v="$1" _input="$2" line n
+  split_fm "$_input" || {
+    printf -v "$_v" '%s' ""
+    return 0
+  }
+  local src="${FM_INNER%$'\n'}"
+  if [ -n "$FM_INNER" ]; then
   while IFS= read -r line || [ -n "$line" ]; do
     if [[ "$line" == name:* ]]; then
-      local n="${line#name:}"
+      n="${line#name:}"
       n="${n#"${n%%[![:space:]]*}"}"
       n="${n%\"}"; n="${n#\"}"
-      printf '%s' "$n"
-      return
+      printf -v "$_v" '%s' "$n"
+      return 0
     fi
-  done < <(printf '%s' "$FM_INNER")
+  done <<EOF
+$src
+EOF
+  fi
+  printf -v "$_v" '%s' ""
 }
 
 verify_all() {
@@ -2655,9 +2945,9 @@ verify_all() {
     fi
     case "$p" in
       */agents/*.md|*/agents/*.agent.md|.github/agents/*.agent.md)
-        name="$(fm_name "$content")"
+        fm_name_into name "$content"
         if [ -n "$name" ]; then
-          expected="$(basename "$p")"
+          expected="${p##*/}"
           expected="${expected%.agent.md}"
           expected="${expected%.md}"
           if [ "$name" != "$expected" ]; then
@@ -2667,8 +2957,9 @@ verify_all() {
         fi
         ;;
       */skills/*/SKILL.md)
-        name="$(fm_name "$content")"
-        expected="$(basename "$(dirname "$p")")"
+        fm_name_into name "$content"
+        expected="${p%/*}"
+        expected="${expected##*/}"
         if [ -n "$name" ] && [ "$name" != "$expected" ]; then
           record_verify "verify: $p: name: $name != $expected"
           rc=1
@@ -2690,18 +2981,55 @@ verify_all() {
   done
   if [ ${#ps1_files[@]} -gt 0 ]; then
     if command -v pwsh >/dev/null 2>&1; then
+      local ps1_abs=() ps1_fail=() fp abs rel
       for p in "${ps1_files[@]}"; do
         if [ -f "$ROOT/$p" ]; then
-          if ! pwsh -NoProfile -Command "
-            \$e = \$null
-            [void][System.Management.Automation.Language.Parser]::ParseFile('$ROOT/$p', [ref]\$null, [ref]\$e)
-            if (\$e) { \$e | ForEach-Object { \$_.Message }; exit 1 }
-          " >/dev/null 2>&1; then
-            record_verify "verify: $p: pwsh parse failed"
-            rc=1
-          fi
+          ps1_abs+=("$ROOT/$p")
         fi
       done
+      if [ ${#ps1_abs[@]} -gt 0 ]; then
+        local pwsh_rc=0 ps1_out
+        PS1_VERIFY_LIST="$(printf '%s\n' "${ps1_abs[@]}")"
+        export PS1_VERIFY_LIST
+        ps1_out="$(pwsh -NoProfile -Command '
+          foreach ($fp in ($env:PS1_VERIFY_LIST -split "`n")) {
+            if (-not $fp) { continue }
+            $e = $null
+            [void][System.Management.Automation.Language.Parser]::ParseFile($fp, [ref]$null, [ref]$e)
+            if ($e) { Write-Output $fp }
+          }
+        ' 2>/dev/null)" || pwsh_rc=$?
+        unset PS1_VERIFY_LIST
+        if [ "$pwsh_rc" -ne 0 ]; then
+          for p in "${ps1_files[@]}"; do
+            if [ -f "$ROOT/$p" ]; then
+              record_verify "verify: $p: pwsh parse failed"
+              rc=1
+            fi
+          done
+        else
+          while IFS= read -r abs || [ -n "$abs" ]; do
+            [ -z "$abs" ] && continue
+            abs="${abs%$'\r'}"
+            ps1_fail+=("$abs")
+          done <<EOF
+$ps1_out
+EOF
+          for p in "${ps1_files[@]}"; do
+            abs="$ROOT/$p"
+            if [ ! -f "$abs" ]; then
+              continue
+            fi
+            for fp in ${ps1_fail[@]+"${ps1_fail[@]}"}; do
+              if [ "$fp" = "$abs" ]; then
+                record_verify "verify: $p: pwsh parse failed"
+                rc=1
+                break
+              fi
+            done
+          done
+        fi
+      fi
     else
       bump_warn
       printf 'emit: pwsh not on PATH — skipped .ps1 parse\n' >&2
@@ -2736,11 +3064,13 @@ print_summary() {
 run_emit() {
   local id n rc bp _mid
 
+  map_clear JTQ
   load_old_manifest
 
   if [ -n "$ANSWERS_FILE" ]; then
     [ -f "$ANSWERS_FILE" ] || die 2 "answers file unreadable"
-    load_answers_json "$(read_file_raw "$ANSWERS_FILE")"
+    read_file_raw_captured_into _ans_raw "$ANSWERS_FILE"
+    load_answers_json "$_ans_raw"
   elif [ "$OLD_HAS_MANIFEST" -eq 1 ]; then
     if [ "$HAS_OLD_ANSWERS" -eq 0 ]; then
       die 3 "answers missing from manifest — pass --answers (pre-v0.27.0 install)"

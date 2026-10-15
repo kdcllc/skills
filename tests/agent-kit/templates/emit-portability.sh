@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 # Guard: emit.sh portability (jq-free PATH, sha256 tools, Bash 3.2 docker, JSON edges).
+# AGENT_KIT_DOCKER=1 opt-in runs the bash:3.2 docker emit-golden check; default skips it.
 #
 # Exit 0 when no FAIL; 1 otherwise.
 set -u
@@ -253,33 +254,43 @@ else
 fi
 
 # bash:3.2 docker run of emit-golden.sh
-if ! command -v docker >/dev/null 2>&1; then
-  report SKIP "bash:3.2 docker emit-golden.sh" "docker not on PATH"
-elif ! docker image inspect bash:3.2 >/dev/null 2>&1; then
-  report SKIP "bash:3.2 docker emit-golden.sh" "bash:3.2 image not available"
-else
-  drc=0
-  git_common="$(git -C "$REPO_ROOT" rev-parse --git-common-dir 2>/dev/null || echo .git)"
-  git_common_abs="$(cd "$REPO_ROOT" && cd "$git_common" && pwd)"
-  repo_abs="$(cd "$REPO_ROOT" && pwd)"
-  docker_v=( -v "$repo_abs:/w" )
-  safe_dirs=( "/w" )
-  if [ "$git_common_abs" != "$repo_abs" ] && [ -d "$git_common_abs" ]; then
-    docker_v+=( -v "$git_common_abs:$git_common_abs" )
-    safe_dirs+=( "$git_common_abs" )
-  fi
-  safe_cfg=""
-  for sd in "${safe_dirs[@]}"; do
-    safe_cfg="${safe_cfg}git config --global --add safe.directory '$sd' && "
-  done
-  dout="$(docker run --rm "${docker_v[@]}" -w /w bash:3.2 sh -c \
-    "apk add --no-cache git >/dev/null && ${safe_cfg}bash tests/agent-kit/templates/emit-golden.sh" 2>&1)" || drc=$?
-  if [ "$drc" -eq 0 ]; then
-    report PASS "bash:3.2 docker emit-golden.sh"
-  else
-    report FAIL "bash:3.2 docker emit-golden.sh" "rc=$drc"
-  fi
-fi
+case "${AGENT_KIT_DOCKER:-}" in
+  ''|0)
+    report SKIP "bash:3.2 docker emit-golden.sh" "set AGENT_KIT_DOCKER=1 to run"
+    ;;
+  1)
+    if ! command -v docker >/dev/null 2>&1; then
+      report FAIL "bash:3.2 docker emit-golden.sh" "AGENT_KIT_DOCKER=1 but docker not on PATH"
+    elif ! docker image inspect bash:3.2 >/dev/null 2>&1; then
+      report FAIL "bash:3.2 docker emit-golden.sh" "AGENT_KIT_DOCKER=1 but bash:3.2 image not available (docker pull bash:3.2)"
+    else
+      drc=0
+      git_common="$(git -C "$REPO_ROOT" rev-parse --git-common-dir 2>/dev/null || echo .git)"
+      git_common_abs="$(cd "$REPO_ROOT" && cd "$git_common" && pwd)"
+      repo_abs="$(cd "$REPO_ROOT" && pwd)"
+      docker_v=( -v "$repo_abs:/w" )
+      safe_dirs=( "/w" )
+      if [ "$git_common_abs" != "$repo_abs" ] && [ -d "$git_common_abs" ]; then
+        docker_v+=( -v "$git_common_abs:$git_common_abs" )
+        safe_dirs+=( "$git_common_abs" )
+      fi
+      safe_cfg=""
+      for sd in "${safe_dirs[@]}"; do
+        safe_cfg="${safe_cfg}git config --global --add safe.directory '$sd' && "
+      done
+      dout="$(docker run --rm "${docker_v[@]}" -w /w bash:3.2 sh -c \
+        "apk add --no-cache git >/dev/null && ${safe_cfg}bash tests/agent-kit/templates/emit-golden.sh" 2>&1)" || drc=$?
+      if [ "$drc" -eq 0 ]; then
+        report PASS "bash:3.2 docker emit-golden.sh"
+      else
+        report FAIL "bash:3.2 docker emit-golden.sh" "rc=$drc"
+      fi
+    fi
+    ;;
+  *)
+    report FAIL "bash:3.2 docker emit-golden.sh" "AGENT_KIT_DOCKER must be 0 or 1"
+    ;;
+esac
 
 echo "SUMMARY: pass=$pass fail=$fail skip=$skip"
 [ "$fail" -eq 0 ]

@@ -34,6 +34,11 @@ jobs:
           git config --global user.email "ci@users.noreply.github.com"
           git config --global user.name "agent-kit ci"
 
+      - name: Pull bash:3.2 for portability
+        run: docker pull bash:3.2
+
       # jq and pwsh ship on ubuntu-latest; pwsh enables the twin-parity cases.
       - name: Full agent-kit suite
+        env:
+          AGENT_KIT_DOCKER: '1'
         run: bash tests/agent-kit/run-all.sh

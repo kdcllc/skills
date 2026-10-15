@@ -17,6 +17,7 @@
 #   AGENT_KIT_TEST_JOBS   Same as -j (command line wins).
 #   AGENT_KIT_CASE_JOBS   Parallel case blocks inside suites (default 4; exported to children).
 #   AGENT_KIT_EMIT_CACHE  Run-scoped emit cache directory (set automatically under the log dir).
+#   AGENT_KIT_DOCKER      1 = run the Docker bash:3.2 check in emit-portability.sh (default: skip).
 set -u
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -67,6 +68,7 @@ Environment:
   AGENT_KIT_TEST_JOBS   Same as -j (command line wins).
   AGENT_KIT_CASE_JOBS   Parallel case blocks inside suites (default 4).
   AGENT_KIT_EMIT_CACHE  Run-scoped emit cache dir (run-all sets under the log dir).
+  AGENT_KIT_DOCKER      1 = run the Docker bash:3.2 check in emit-portability.sh (default: skip).
 EOF
   exit 2
 }
@@ -159,12 +161,17 @@ fi
 
 # Slowest suites first when scheduling parallel jobs (stable print order is separate).
 PRIORITY=(
-  tests/agent-kit/templates/emit-determinism.sh
-  tests/agent-kit/templates/model-currency.sh
   tests/agent-kit/templates/memory.sh
-  tests/agent-kit/templates/emit-golden.sh
-  tests/agent-kit/templates/memory-wiring.sh
   tests/agent-kit/loop-harness/run.sh
+  tests/agent-kit/templates/emit-determinism.sh
+  tests/agent-kit/templates/emit-portability.sh
+  tests/agent-kit/templates/model-currency.sh
+  tests/agent-kit/templates/legacy-paths.sh
+  tests/agent-kit/templates/memory-wiring.sh
+  tests/agent-kit/templates/emit-migrate.sh
+  tests/agent-kit/templates/emit-golden.sh
+  tests/agent-kit/templates/windows-launcher.sh
+  tests/agent-kit/templates/log-spawn.sh
 )
 
 QUICK_SUITES=(

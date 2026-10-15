@@ -12,6 +12,8 @@ FIXTURE_TMPDIR="$(mktemp -d "${TMPDIR:-/tmp}/emitmigbase.XXXXXX")" || exit 1
 export TMPDIR="$FIXTURE_TMPDIR"
 # shellcheck source=../lib/fixture-root.sh
 . "$HERE/../lib/fixture-root.sh"
+# shellcheck source=../lib/parallel.sh
+. "$HERE/../lib/parallel.sh"
 
 CANON_EMIT="$REPO_ROOT/skills/agent-kit/bin/emit.sh"
 EMIT_SH="${EMIT_SH:-$CANON_EMIT}"
@@ -19,8 +21,9 @@ KIT="$REPO_ROOT/skills/agent-kit"
 ANSWERS="$REPO_ROOT/tests/agent-kit/fixtures/self-answers.json"
 
 pass=0; fail=0; skip=0
-TMP_BASE=""
-CLEANUP=()
+SHARED_CANON_ROOT=""
+SHARED_CANON_OUT=""
+SHARED_CANON_RC=""
 
 report() {
   case "$1" in
@@ -30,17 +33,20 @@ report() {
   esac
 }
 
-cleanup() {
-  [[ ${#CLEANUP[@]} -gt 0 ]] && rm -rf "${CLEANUP[@]}"
-  [[ -n "$TMP_BASE" ]] && rm -rf "$TMP_BASE"
+par_fail() {
+  report FAIL "$1"
 }
-trap cleanup EXIT
+
+_suite_cleanup() {
+  rm -rf "$FIXTURE_TMPDIR"
+  par_cleanup
+}
+trap _suite_cleanup EXIT
 
 mktemp_root() {
-  local d prefix="${TMP_BASE:-$FIXTURE_TMPDIR}"
-  d="$(mktemp -d "$prefix/root.XXXXXX")" || exit 1
+  local d
+  d="$(mktemp -d "$FIXTURE_TMPDIR/root.XXXXXX")" || exit 1
   assert_fixture_root "$d" || exit 1
-  CLEANUP+=("$d")
   printf '%s' "$d"
 }
 
@@ -224,9 +230,6 @@ emit_mut_test() { # sed name canon_fn [expect_n] — canon_fn: rc 0 behavior hol
   fi
 }
 
-TMP_BASE="$FIXTURE_TMPDIR"
-CLEANUP+=("$FIXTURE_TMPDIR")
-
 # --- fixture-root helper fails closed (negative controls) ---
 # Each probe sources the helper in a SUBSHELL (an `exit` inside it ends only the subshell) with a
 # hostile REPO_ROOT / FIXTURE_TMPDIR pair. The helper only reads paths; nothing is written.
@@ -242,30 +245,6 @@ fr_expect_fail() { # label repo tmpdir
     report FAIL "fixture-root: $1 was accepted" "rc=0"
   fi
 }
-fr_expect_fail 'empty FIXTURE_TMPDIR' "$REPO_ROOT" ""
-fr_expect_fail "FIXTURE_TMPDIR='/'" "$REPO_ROOT" "/"
-fr_expect_fail 'FIXTURE_TMPDIR = repository root' "$REPO_ROOT" "$REPO_ROOT"
-fr_expect_fail 'FIXTURE_TMPDIR under the repository root' "$REPO_ROOT" "$REPO_ROOT/tests"
-fr_expect_fail 'relative FIXTURE_TMPDIR' "$REPO_ROOT" "relative/path"
-fr_expect_fail 'missing FIXTURE_TMPDIR' "$REPO_ROOT" "$FIXTURE_TMPDIR/does-not-exist"
-fr_expect_fail 'empty REPO_ROOT' "" "$FIXTURE_TMPDIR"
-fixture_root_src_rc "$REPO_ROOT" "$FIXTURE_TMPDIR"; fr_rc=$?
-[[ "$fr_rc" -eq 0 ]] \
-  && report PASS "fixture-root: control — private TMPDIR outside the repo sources cleanly (rc=0)" \
-  || report FAIL "fixture-root: valid private TMPDIR was rejected" "rc=$fr_rc"
-# The resolver never falls back to the cwd; inherited *_ABS values are ignored; repo root refused.
-fr_probe="$( ( REPO_ROOT_ABS=/poison; FIXTURE_TMPDIR_ABS=/
-    REPO_ROOT="$REPO_ROOT"; FIXTURE_TMPDIR="$FIXTURE_TMPDIR"
-    . "$HERE/../lib/fixture-root.sh" || exit 9
-    resolved="$(_fixture_root_resolve "")" && echo "resolve-empty-ok:$resolved"
-    [[ "$REPO_ROOT_ABS" != /poison && "$FIXTURE_TMPDIR_ABS" == "$(cd "$FIXTURE_TMPDIR" && pwd -P)" ]] || echo "abs-inherited"
-    assert_fixture_root "$REPO_ROOT" 2>/dev/null && echo "repo-root-accepted"
-    assert_fixture_root "" 2>/dev/null && echo "empty-accepted"
-    echo done ) 2>&1 )"
-[[ "$fr_probe" == done ]] \
-  && report PASS "fixture-root: _fixture_root_resolve '' fails, inherited *_ABS overridden, repo root and empty root refused" \
-  || report FAIL "fixture-root: resolver/assert probe" "$fr_probe"
-
 # --- dry-run writes nothing ---
 assert_dry_run() {
   local R="$1" before after gs0 gs1
@@ -282,13 +261,6 @@ assert_dry_run() {
     && grep -q 'migrate _goals/empty-goal -> _memory/work/goals/empty-goal' <<<"$out" \
     && [[ "$before" == "$after" && "$gs0" == "$gs1" ]]
 }
-R="$(mktemp_root)"
-if assert_dry_run "$R"; then
-  report PASS "dry-run: migrate actions listed, tree + git snapshot unchanged"
-else
-  report FAIL "dry-run snapshot" "rc=$rc"
-fi
-
 assert_empty_root() { # rc 0 guard holds, 1 guard missing (target), 2 precondition failed
   local d rc out files_before files_after
   d="$(mktemp -d "$FIXTURE_TMPDIR/emptycwd.XXXXXX")" || return 2
@@ -304,8 +276,6 @@ assert_empty_root() { # rc 0 guard holds, 1 guard missing (target), 2 preconditi
   fi
   return 1
 }
-assert_empty_root && report PASS "empty --root: exit 2, usage message, writes nothing under temp cwd" \
-  || report FAIL "empty --root guard"
 
 # --- real migration ---
 assert_migrate_run() {
@@ -345,37 +315,6 @@ assert_migrate_run() {
   grep -q '^user-ga-keep$' "$R/.gitattributes" || return 1
   return 0
 }
-R="$(mktemp_root)"
-if assert_migrate_run "$R" 0; then
-  report PASS "migrate: paths, untrack goals/research, archive tracked, hint on stderr"
-  retired_lines_absent "$R" && report PASS "migrate: all four retired git lines absent" || report FAIL "retired lines absent"
-  cmp -s <(user_lines_ga "$R") <(printf '%s\n' 'user-ga-keep') \
-    && cmp -s <(user_lines_gi "$R") <(printf '%s\n' 'user-gi-keep') \
-    && report PASS "migrate: user lines present once" || report FAIL "user git lines cmp"
-  git_files_byte_prefix_ok "$R" \
-    && report PASS "migrate: pre-migration files minus retired lines (grep-filtered) cmp equal to the migrated .gitattributes/.gitignore prefix" \
-    || report FAIL "non-circular byte prefix check"
-  crlf_exact_ok "$R" \
-    && report PASS "migrate: exactly one CRLF '_memory/** text eol=lf' line; CRLF user lines (gitattributes + gitignore) kept once, byte-identical" \
-    || report FAIL "exact CRLF lines"
-  blank_user_lines_ok "$R" \
-    && report PASS "migrate: blank user lines kept in place (.gitattributes + .gitignore)" \
-    || report FAIL "blank user lines kept"
-  [[ -d "$R/_memory/work/goals/empty-goal" && ! -e "$R/_goals" && ! -e "$R/_research" ]] \
-    && [[ -z "$(git_fixture "$R" ls-files -- _memory/work/goals/empty-goal)" ]] \
-    && report PASS "migrate: empty legacy dir _goals/empty-goal moved to _memory/work/goals/empty-goal (untracked), _goals and _research gone" \
-    || report FAIL "empty legacy dir handling"
-else
-  report FAIL "migrate run"
-fi
-
-# --- rerun no-op ---
-RERUN_SNAP="$(snap_tree "$R")"
-out="$(run_emit "$R" --answers "$ANSWERS" --upgrade 2>&1)"; rc=$?
-[[ "$(snap_tree "$R")" == "$RERUN_SNAP" ]] \
-  && grep -q 'migrated 0' <<<"$out" && [[ "$rc" -eq 0 ]] \
-  && report PASS "rerun: migrated 0, tree snapshot unchanged" \
-  || report FAIL "rerun no-op" "rc=$rc out=$out"
 
 # --- conflict exit 4, nothing moved ---
 assert_conflict() {
@@ -392,9 +331,6 @@ assert_conflict() {
     && ! grep -q 'backfill --plan' <<<"$out" \
     && ! grep -q 'legacy _goals/g1 left in place' <<<"$out"
 }
-R="$(mktemp_root)"
-assert_conflict "$R" && report PASS "conflict: exit 4, all legacy sources unmoved, no loop backlog, hint matrix (blocked only)" \
-  || report FAIL "conflict blocked"
 
 # --- force keeps both ---
 assert_force() {
@@ -412,25 +348,12 @@ assert_force() {
     && grep -q 'backfill --plan' <<<"$out" \
     && grep -q 'legacy _goals/g1 left in place' <<<"$out"
 }
-R="$(mktemp_root)"
-assert_force "$R" && report PASS "--force: hint matrix (backfill hint + left-in-place warning), both copies kept" \
-  || report FAIL "--force conflict"
-
-R="$(mktemp_root)"; mk_old_layout "$R" || report FAIL "hint matrix fixture setup"
-out_clean="$(run_emit "$R" --answers "$ANSWERS" --upgrade 2>&1)" || true
-grep -q 'backfill --plan' <<<"$out_clean" \
-  && ! grep -q 'legacy _goals/g1 left in place' <<<"$out_clean" \
-  && report PASS "hint matrix: clean migrate emits backfill hint only" \
-  || report FAIL "hint matrix clean migrate"
-
-# --- spaces in names ---
-R="$(mktemp_root)"
-assert_migrate_run "$R" 1 && report PASS "paths with spaces in goal/research names" || report FAIL "space paths"
 
 # --- non-git root (plain mv) ---
 assert_nogit() {
   local R out rc
-  R="$(mktemp_root)"
+  R="$(mktemp_root)" || return 1
+  assert_fixture_root "$R" || return 1
   mkdir -p "$R/_goals/g1" "$R/_research/t1"
   printf 'b\n' > "$R/_goals/backlog.md"
   printf 'g\n' > "$R/_goals/g1/goal.md"
@@ -443,7 +366,6 @@ assert_nogit() {
     && [[ -f "$R/_memory/work/research/t1/report.md" ]] && grep -qxF 't' "$R/_memory/work/research/t1/report.md" \
     && [[ ! -e "$R/_goals" ]] && [[ ! -e "$R/_research" ]]
 }
-assert_nogit && report PASS "non-git root: plain mv migration" || report FAIL "non-git root"
 
 # --- backlog seed preserved on upgrade emit ---
 assert_seed() {
@@ -454,8 +376,6 @@ assert_seed() {
   run_emit "$R" --answers "$ANSWERS" --force --upgrade >/dev/null 2>&1 || return 1
   [[ "$(sha256sum "$R/_memory/loop/backlog.md" | awk '{print $1}')" == "$h" ]]
 }
-R="$(mktemp_root)"
-assert_seed "$R" && report PASS "backlog seed content preserved across migration emit" || report FAIL "seed preserved"
 
 # --- mutations ---
 # Each mut_* function (the canonical assertion for one behavior) returns:
@@ -479,8 +399,6 @@ mut_dry_run() {
   [[ "$(snap_tree "$R")" == "$before" ]] && return 0
   return 1
 }
-emit_mut_test '/^  if \[ "\$DRY_RUN" -eq 1 \]; then$/,/^  apply_upgrade_migrations$/ s/^    exit 0$/    : # mut-dry-fallthrough/' \
-  'dry-run-no-op' mut_dry_run 1
 
 mut_conflict_block() {
   local R rc
@@ -491,74 +409,90 @@ mut_conflict_block() {
   [[ "$rc" -eq 4 ]] && [[ -d "$R/_goals/g1" ]] && [[ -f "$R/_goals/backlog.md" ]] && return 0
   return 1
 }
-emit_mut_test '/^plan_upgrade_migrations() {/,/^}/ s/&& \[ "\$FORCE" -eq 0 \]/\&\& [ 1 -eq 0 ]/' \
-  'conflict-exit-4' mut_conflict_block 1
 
 mut_hint() {
   local R out rc
-  mut_fixture R || return 2
-  out="$(run_emit "$R" --answers "$ANSWERS" --upgrade 2>&1)"; rc=$?
+  if [[ "$EMIT_SH" == "$CANON_EMIT" ]]; then
+    out="$SHARED_CANON_OUT"
+    rc="$SHARED_CANON_RC"
+  else
+    mut_fixture R || return 2
+    out="$(run_emit "$R" --answers "$ANSWERS" --upgrade 2>&1)"; rc=$?
+  fi
   [[ "$rc" -eq 0 ]] || return 2
   grep -q 'backfill --plan' <<<"$out" && return 0
   return 1
 }
-emit_mut_test 's/run _kit\/memory.sh backfill --plan to archive/MUTATED/' \
-  'stderr-hint' mut_hint 1
 
 mut_retired() {
   local R rc
-  mut_fixture R || return 2
-  run_emit "$R" --answers "$ANSWERS" --upgrade >/dev/null 2>&1; rc=$?
+  if [[ "$EMIT_SH" == "$CANON_EMIT" ]]; then
+    R="$SHARED_CANON_ROOT"
+    rc="$SHARED_CANON_RC"
+  else
+    mut_fixture R || return 2
+    run_emit "$R" --answers "$ANSWERS" --upgrade >/dev/null 2>&1; rc=$?
+  fi
   [[ "$rc" -eq 0 ]] || return 2
   retired_lines_absent "$R" && return 0
   return 1
 }
-emit_mut_test '/^strip_retired_git_lines_bytes() {/,/^}/ s/if is_retired_git_line/if false \&\& is_retired_git_line/' \
-  'retired-lines-removed' mut_retired 1
 
 mut_migrated_count() {
   local R out rc
-  mut_fixture R || return 2
-  out="$(run_emit "$R" --answers "$ANSWERS" --upgrade 2>&1)"; rc=$?
+  if [[ "$EMIT_SH" == "$CANON_EMIT" ]]; then
+    out="$SHARED_CANON_OUT"
+    rc="$SHARED_CANON_RC"
+  else
+    mut_fixture R || return 2
+    out="$(run_emit "$R" --answers "$ANSWERS" --upgrade 2>&1)"; rc=$?
+  fi
   [[ "$rc" -eq 0 ]] || return 2
   grep -q 'migrated [1-9]' <<<"$out" && return 0
   return 1
 }
-emit_mut_test 's/MIGRATED_N=\$((MIGRATED_N + 1))/:/' \
-  'summary-migrated-n' mut_migrated_count 1
 
 mut_git_mv_tracked() {
   local R rc
-  mut_fixture R || return 2
-  run_emit "$R" --answers "$ANSWERS" --upgrade >/dev/null 2>&1; rc=$?
+  if [[ "$EMIT_SH" == "$CANON_EMIT" ]]; then
+    R="$SHARED_CANON_ROOT"
+    rc="$SHARED_CANON_RC"
+  else
+    mut_fixture R || return 2
+    run_emit "$R" --answers "$ANSWERS" --upgrade >/dev/null 2>&1; rc=$?
+  fi
   [[ "$rc" -eq 0 ]] || return 2
   git_fixture "$R" ls-files --error-unmatch "_memory/loop/backlog.md" >/dev/null 2>&1 && return 0
   return 1
 }
-emit_mut_test 's/git -C "\$ROOT" mv -- "\$src" "\$dst"/mv -- "$ROOT\/$src" "$ROOT\/$dst"/' \
-  'git-mv-tracked' mut_git_mv_tracked 1
 
 mut_untrack_work() {
   local R rc
-  mut_fixture R || return 2
-  run_emit "$R" --answers "$ANSWERS" --upgrade >/dev/null 2>&1; rc=$?
+  if [[ "$EMIT_SH" == "$CANON_EMIT" ]]; then
+    R="$SHARED_CANON_ROOT"
+    rc="$SHARED_CANON_RC"
+  else
+    mut_fixture R || return 2
+    run_emit "$R" --answers "$ANSWERS" --upgrade >/dev/null 2>&1; rc=$?
+  fi
   [[ "$rc" -eq 0 ]] || return 2
   git_fixture "$R" ls-files -- "_memory/work/goals/g1" 2>/dev/null | grep -q . && return 1
   return 0
 }
-emit_mut_test '/apply_upgrade_migrations() {/,/^}/ s/git -C "\$ROOT" rm -r --cached --quiet -- "\$dst"/:# git rm cached/' \
-  'untrack-work-goals' mut_untrack_work 1
 
 mut_crlf_bytes() {
   local R rc
-  mut_fixture R || return 2
-  run_emit "$R" --answers "$ANSWERS" --upgrade >/dev/null 2>&1; rc=$?
+  if [[ "$EMIT_SH" == "$CANON_EMIT" ]]; then
+    R="$SHARED_CANON_ROOT"
+    rc="$SHARED_CANON_RC"
+  else
+    mut_fixture R || return 2
+    run_emit "$R" --answers "$ANSWERS" --upgrade >/dev/null 2>&1; rc=$?
+  fi
   [[ "$rc" -eq 0 ]] || return 2
   crlf_exact_ok "$R" && return 0
   return 1
 }
-emit_mut_test 's@      printf '"'"'%s\\n'"'"' "\$line"@      printf "%s\\n" "${line//\$'"'"'\\r'"'"'/}"@' \
-  'crlf-line-endings' mut_crlf_bytes 1
 
 mut_rerun_snap() {
   local R s1 s2 rc
@@ -572,8 +506,6 @@ mut_rerun_snap() {
   [[ "$s1" == "$s2" ]] && return 0
   return 1
 }
-emit_mut_test '/git_bytes_append_eol_into "\$out" eol/,/printf '"'"'%s'"'"' "\$out"/ s/printf '"'"'%s'"'"' "\$out"/printf "%s# rerun-mut-tag\\n" "$out"/' \
-  'rerun-no-op-snapshot' mut_rerun_snap 1
 
 mut_force_keep_both() {
   local R out rc
@@ -585,19 +517,20 @@ mut_force_keep_both() {
   grep -q 'legacy _goals/g1 left in place' <<<"$out" && [[ -f "$R/_goals/g1/goal.md" ]] && return 0
   return 1
 }
-emit_mut_test 's/record_warn_line "legacy \$src left in place/# record_warn_line "legacy \$src left in place/' \
-  'force-keep-both-warn' mut_force_keep_both 1
 
 mut_empty_pairs_guard() {
   local R out rc
-  mut_fixture R || return 2
-  out="$(run_emit "$R" --answers "$ANSWERS" --upgrade 2>&1)"; rc=$?
+  if [[ "$EMIT_SH" == "$CANON_EMIT" ]]; then
+    out="$SHARED_CANON_OUT"
+    rc="$SHARED_CANON_RC"
+  else
+    mut_fixture R || return 2
+    out="$(run_emit "$R" --answers "$ANSWERS" --upgrade 2>&1)"; rc=$?
+  fi
   [[ "$rc" -eq 0 ]] || return 2
   grep -q 'migrated [1-9]' <<<"$out" && return 0
   return 1
 }
-emit_mut_test '/^collect_upgrade_migrate_pairs() {/,/^}/ s/UPGRADE_MIGRATE_PAIRS=\(\)/UPGRADE_MIGRATE_PAIRS=() ; return 0 # mut/' \
-  'empty-pairs-guard' mut_empty_pairs_guard 1
 
 # write_seed's existing-file branch must keep the migrated backlog (the mutant overwrites it).
 mut_seed_keeps_existing_backlog() {
@@ -611,21 +544,239 @@ mut_seed_keeps_existing_backlog() {
   [[ "$(sha256sum "$R/_memory/loop/backlog.md" | awk '{print $1}')" == "$h" ]] && return 0
   return 1
 }
-emit_mut_test '/write_seed() {/,/^}/ s/SEEDS_KEPT=\$((SEEDS_KEPT + 1))/printf "%s" "CORRUPT" > "$dest"; return 0 # mut/' \
-  'seed-keeps-existing-backlog' mut_seed_keeps_existing_backlog 1
 
 mut_empty_root_check() { assert_empty_root; }
-emit_mut_test '/die 2 "--root requires a non-empty directory path"/d' \
-  'empty-root-exit-2' mut_empty_root_check 1
 
-case "$FIXTURE_TMPDIR" in
-  "$REPO_ROOT"|"$REPO_ROOT"/*)
-    report FAIL "(leak) FIXTURE_TMPDIR must not be under REPO_ROOT"
-    ;;
-  *)
-    report PASS "(leak) FIXTURE_TMPDIR under private TMPDIR (not repo root)"
-    ;;
-esac
+_par_prepare_shared_canon() {
+  if ! {
+    SHARED_CANON_ROOT="$(mktemp -d "$FIXTURE_TMPDIR/shared.XXXXXX")" &&
+      assert_fixture_root "$SHARED_CANON_ROOT" &&
+      mk_old_layout "$SHARED_CANON_ROOT"
+  }; then
+    SHARED_CANON_RC=2
+    SHARED_CANON_OUT=""
+    return 0
+  fi
+  SHARED_CANON_OUT="$(EMIT_SH="$CANON_EMIT" run_emit "$SHARED_CANON_ROOT" --answers "$ANSWERS" --upgrade 2>&1)"
+  SHARED_CANON_RC=$?
+}
+
+blk_fixture_root() {
+  local fr_rc fr_probe
+  fr_expect_fail 'empty FIXTURE_TMPDIR' "$REPO_ROOT" ""
+  fr_expect_fail "FIXTURE_TMPDIR='/'" "$REPO_ROOT" "/"
+  fr_expect_fail 'FIXTURE_TMPDIR = repository root' "$REPO_ROOT" "$REPO_ROOT"
+  fr_expect_fail 'FIXTURE_TMPDIR under the repository root' "$REPO_ROOT" "$REPO_ROOT/tests"
+  fr_expect_fail 'relative FIXTURE_TMPDIR' "$REPO_ROOT" "relative/path"
+  fr_expect_fail 'missing FIXTURE_TMPDIR' "$REPO_ROOT" "$FIXTURE_TMPDIR/does-not-exist"
+  fr_expect_fail 'empty REPO_ROOT' "" "$FIXTURE_TMPDIR"
+  fixture_root_src_rc "$REPO_ROOT" "$FIXTURE_TMPDIR"; fr_rc=$?
+  [[ "$fr_rc" -eq 0 ]] \
+    && report PASS "fixture-root: control — private TMPDIR outside the repo sources cleanly (rc=0)" \
+    || report FAIL "fixture-root: valid private TMPDIR was rejected" "rc=$fr_rc"
+  fr_probe="$( ( REPO_ROOT_ABS=/poison; FIXTURE_TMPDIR_ABS=/
+      REPO_ROOT="$REPO_ROOT"; FIXTURE_TMPDIR="$FIXTURE_TMPDIR"
+      . "$HERE/../lib/fixture-root.sh" || exit 9
+      resolved="$(_fixture_root_resolve "")" && echo "resolve-empty-ok:$resolved"
+      [[ "$REPO_ROOT_ABS" != /poison && "$FIXTURE_TMPDIR_ABS" == "$(cd "$FIXTURE_TMPDIR" && pwd -P)" ]] || echo "abs-inherited"
+      assert_fixture_root "$REPO_ROOT" 2>/dev/null && echo "repo-root-accepted"
+      assert_fixture_root "" 2>/dev/null && echo "empty-accepted"
+      echo done ) 2>&1 )"
+  [[ "$fr_probe" == done ]] \
+    && report PASS "fixture-root: _fixture_root_resolve '' fails, inherited *_ABS overridden, repo root and empty root refused" \
+    || report FAIL "fixture-root: resolver/assert probe" "$fr_probe"
+}
+
+blk_dry_run() {
+  local R rc=""
+  R="$(mktemp_root)" || { report FAIL "dry-run snapshot"; return; }
+  assert_fixture_root "$R" || { report FAIL "dry-run snapshot"; return; }
+  if assert_dry_run "$R"; then
+    report PASS "dry-run: migrate actions listed, tree + git snapshot unchanged"
+  else
+    report FAIL "dry-run snapshot" "rc=$rc"
+  fi
+}
+
+blk_empty_root() {
+  assert_empty_root && report PASS "empty --root: exit 2, usage message, writes nothing under temp cwd" \
+    || report FAIL "empty --root guard"
+}
+
+blk_migrate_and_rerun() {
+  local R out rc RERUN_SNAP
+  R="$(mktemp_root)" || { report FAIL "migrate run"; return; }
+  assert_fixture_root "$R" || { report FAIL "migrate run"; return; }
+  if assert_migrate_run "$R" 0; then
+    report PASS "migrate: paths, untrack goals/research, archive tracked, hint on stderr"
+    retired_lines_absent "$R" && report PASS "migrate: all four retired git lines absent" || report FAIL "retired lines absent"
+    cmp -s <(user_lines_ga "$R") <(printf '%s\n' 'user-ga-keep') \
+      && cmp -s <(user_lines_gi "$R") <(printf '%s\n' 'user-gi-keep') \
+      && report PASS "migrate: user lines present once" || report FAIL "user git lines cmp"
+    git_files_byte_prefix_ok "$R" \
+      && report PASS "migrate: pre-migration files minus retired lines (grep-filtered) cmp equal to the migrated .gitattributes/.gitignore prefix" \
+      || report FAIL "non-circular byte prefix check"
+    crlf_exact_ok "$R" \
+      && report PASS "migrate: exactly one CRLF '_memory/** text eol=lf' line; CRLF user lines (gitattributes + gitignore) kept once, byte-identical" \
+      || report FAIL "exact CRLF lines"
+    blank_user_lines_ok "$R" \
+      && report PASS "migrate: blank user lines kept in place (.gitattributes + .gitignore)" \
+      || report FAIL "blank user lines kept"
+    [[ -d "$R/_memory/work/goals/empty-goal" && ! -e "$R/_goals" && ! -e "$R/_research" ]] \
+      && [[ -z "$(git_fixture "$R" ls-files -- _memory/work/goals/empty-goal)" ]] \
+      && report PASS "migrate: empty legacy dir _goals/empty-goal moved to _memory/work/goals/empty-goal (untracked), _goals and _research gone" \
+      || report FAIL "empty legacy dir handling"
+  else
+    report FAIL "migrate run"
+  fi
+  RERUN_SNAP="$(snap_tree "$R")"
+  out="$(run_emit "$R" --answers "$ANSWERS" --upgrade 2>&1)"; rc=$?
+  [[ "$(snap_tree "$R")" == "$RERUN_SNAP" ]] \
+    && grep -q 'migrated 0' <<<"$out" && [[ "$rc" -eq 0 ]] \
+    && report PASS "rerun: migrated 0, tree snapshot unchanged" \
+    || report FAIL "rerun no-op" "rc=$rc out=$out"
+}
+
+blk_conflict() {
+  local R
+  R="$(mktemp_root)" || { report FAIL "conflict blocked"; return; }
+  assert_fixture_root "$R" || { report FAIL "conflict blocked"; return; }
+  assert_conflict "$R" && report PASS "conflict: exit 4, all legacy sources unmoved, no loop backlog, hint matrix (blocked only)" \
+    || report FAIL "conflict blocked"
+}
+
+blk_force() {
+  local R
+  R="$(mktemp_root)" || { report FAIL "--force conflict"; return; }
+  assert_fixture_root "$R" || { report FAIL "--force conflict"; return; }
+  assert_force "$R" && report PASS "--force: hint matrix (backfill hint + left-in-place warning), both copies kept" \
+    || report FAIL "--force conflict"
+}
+
+blk_hint_matrix() {
+  local R out_clean
+  R="$(mktemp_root)" || { report FAIL "hint matrix fixture setup"; return; }
+  assert_fixture_root "$R" || { report FAIL "hint matrix fixture setup"; return; }
+  mk_old_layout "$R" || { report FAIL "hint matrix fixture setup"; return; }
+  out_clean="$(run_emit "$R" --answers "$ANSWERS" --upgrade 2>&1)" || true
+  grep -q 'backfill --plan' <<<"$out_clean" \
+    && ! grep -q 'legacy _goals/g1 left in place' <<<"$out_clean" \
+    && report PASS "hint matrix: clean migrate emits backfill hint only" \
+    || report FAIL "hint matrix clean migrate"
+}
+
+blk_spaces() {
+  local R
+  R="$(mktemp_root)" || { report FAIL "space paths"; return; }
+  assert_fixture_root "$R" || { report FAIL "space paths"; return; }
+  assert_migrate_run "$R" 1 && report PASS "paths with spaces in goal/research names" || report FAIL "space paths"
+}
+
+blk_nogit() {
+  assert_nogit && report PASS "non-git root: plain mv migration" || report FAIL "non-git root"
+}
+
+blk_seed() {
+  local R
+  R="$(mktemp_root)" || { report FAIL "seed preserved"; return; }
+  assert_fixture_root "$R" || { report FAIL "seed preserved"; return; }
+  assert_seed "$R" && report PASS "backlog seed content preserved across migration emit" || report FAIL "seed preserved"
+}
+
+blk_mut_dry_run() {
+  emit_mut_test '/^  if \[ "\$DRY_RUN" -eq 1 \]; then$/,/^  apply_upgrade_migrations$/ s/^    exit 0$/    : # mut-dry-fallthrough/' \
+    'dry-run-no-op' mut_dry_run 1
+}
+blk_mut_conflict() {
+  emit_mut_test '/^plan_upgrade_migrations() {/,/^}/ s/&& \[ "\$FORCE" -eq 0 \]/\&\& [ 1 -eq 0 ]/' \
+    'conflict-exit-4' mut_conflict_block 1
+}
+blk_mut_hint() {
+  emit_mut_test 's/run _kit\/memory.sh backfill --plan to archive/MUTATED/' \
+    'stderr-hint' mut_hint 1
+}
+blk_mut_retired() {
+  emit_mut_test '/^strip_retired_git_lines_bytes() {/,/^}/ s/if is_retired_git_line/if false \&\& is_retired_git_line/' \
+    'retired-lines-removed' mut_retired 1
+}
+blk_mut_migrated_count() {
+  emit_mut_test 's/MIGRATED_N=\$((MIGRATED_N + 1))/:/' \
+    'summary-migrated-n' mut_migrated_count 1
+}
+blk_mut_git_mv_tracked() {
+  emit_mut_test 's/git -C "\$ROOT" mv -- "\$src" "\$dst"/mv -- "$ROOT\/$src" "$ROOT\/$dst"/' \
+    'git-mv-tracked' mut_git_mv_tracked 1
+}
+blk_mut_untrack_work() {
+  emit_mut_test '/apply_upgrade_migrations() {/,/^}/ s/git -C "\$ROOT" rm -r --cached --quiet -- "\$dst"/:# git rm cached/' \
+    'untrack-work-goals' mut_untrack_work 1
+}
+blk_mut_crlf_bytes() {
+  emit_mut_test 's@      printf '"'"'%s\\n'"'"' "\$line"@      printf "%s\\n" "${line//\$'"'"'\\r'"'"'/}"@' \
+    'crlf-line-endings' mut_crlf_bytes 1
+}
+blk_mut_rerun_snap() {
+  emit_mut_test '/git_bytes_append_eol_into "\$out" eol/,/printf '"'"'%s'"'"' "\$out"/ s/printf '"'"'%s'"'"' "\$out"/printf "%s# rerun-mut-tag\\n" "$out"/' \
+    'rerun-no-op-snapshot' mut_rerun_snap 1
+}
+blk_mut_force_keep_both() {
+  emit_mut_test 's/record_warn_line "legacy \$src left in place/# record_warn_line "legacy \$src left in place/' \
+    'force-keep-both-warn' mut_force_keep_both 1
+}
+blk_mut_empty_pairs_guard() {
+  emit_mut_test '/^collect_upgrade_migrate_pairs() {/,/^}/ s/UPGRADE_MIGRATE_PAIRS=\(\)/UPGRADE_MIGRATE_PAIRS=() ; return 0 # mut/' \
+    'empty-pairs-guard' mut_empty_pairs_guard 1
+}
+blk_mut_seed() {
+  emit_mut_test '/write_seed() {/,/^}/ s/SEEDS_KEPT=\$((SEEDS_KEPT + 1))/printf "%s" "CORRUPT" > "$dest"; return 0 # mut/' \
+    'seed-keeps-existing-backlog' mut_seed_keeps_existing_backlog 1
+}
+blk_mut_empty_root() {
+  emit_mut_test '/die 2 "--root requires a non-empty directory path"/d' \
+    'empty-root-exit-2' mut_empty_root_check 1
+}
+
+blk_leak() {
+  case "$FIXTURE_TMPDIR" in
+    "$REPO_ROOT"|"$REPO_ROOT"/*)
+      report FAIL "(leak) FIXTURE_TMPDIR must not be under REPO_ROOT"
+      ;;
+    *)
+      report PASS "(leak) FIXTURE_TMPDIR under private TMPDIR (not repo root)"
+      ;;
+  esac
+}
+
+PAR_COUNTERS="pass fail skip"
+PAR_REPORT_FAIL=par_fail
+
+par_init
+par_block blk_fixture_root
+par_block blk_dry_run
+par_block blk_empty_root
+par_block blk_migrate_and_rerun
+par_block blk_conflict
+par_block blk_force
+par_block blk_hint_matrix
+par_block blk_spaces
+par_block blk_nogit
+par_block blk_seed
+_par_prepare_shared_canon
+par_block blk_mut_dry_run
+par_block blk_mut_conflict
+par_block blk_mut_hint
+par_block blk_mut_retired
+par_block blk_mut_migrated_count
+par_block blk_mut_git_mv_tracked
+par_block blk_mut_untrack_work
+par_block blk_mut_crlf_bytes
+par_block blk_mut_rerun_snap
+par_block blk_mut_force_keep_both
+par_block blk_mut_empty_pairs_guard
+par_block blk_mut_seed
+par_block blk_mut_empty_root
+par_block blk_leak
+par_finish
 
 echo
 echo "PASS: $pass   FAIL: $fail   SKIP: $skip"
