@@ -1,0 +1,7 @@
+# Re-include dogfood paths ignored by the repo root .gitignore (any depth).
+!.claude/
+!_kit/
+!_loop/
+!_goals/
+!orchestration-kit.manifest.json
+!orchestration-kit.manifest.json.prior

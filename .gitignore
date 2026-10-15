@@ -8,3 +8,23 @@ node_modules/
 __pycache__/
 .env*
 .DS_Store
+
+# --- agent-kit dogfood instance — NEVER commit. ---
+# Emitted by scripts/agent-kit/self-install.sh from
+# tests/agent-kit/fixtures/self-answers.json (--symlink also writes
+# .agents/skills/). Re-runnable at any time; the canonical kit is skills/agent-kit/.
+.claude/
+.cursor/skills/
+.cursor/agents/
+.cursor/rules/
+.cursor/ORCHESTRATION.md
+.agents/skills/
+_kit/
+_loop/
+orchestration-kit.manifest.json
+.loop-worktrees/
+_memory/.index/
+_memory/raw/
+_memory/work/
+_memory/loop/
+_memory/loop/breaker-state.json

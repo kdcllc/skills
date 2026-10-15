@@ -23,6 +23,11 @@
       "skills": ["greek-to-hebrew"]
     },
     {
+      "title": "Agent orchestration",
+      "description": "The AI Orchestration Kit: an orchestrator/worker/evaluator multi-agent system compiled for Claude Code, Cursor, GitHub Copilot, and Codex.",
+      "skills": ["agent-kit"]
+    },
+    {
       "title": "Skill authoring",
       "description": "Tools for maintaining multi-skill repositories: per-skill versions, changelogs, and releases.",
       "skills": ["skill-versioning"]

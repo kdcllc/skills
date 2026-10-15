@@ -156,8 +156,17 @@ check_repo_layout() {
     error "${rel}SKILL.md is discovered by the Skills CLI; skills must live in skills/<name>/"
   done
 
+  # Inside a git work tree only tracked files reach the Skills CLI, so a
+  # gitignored local install (the agent-kit dogfood instance) is allowed.
+  local in_git=0
+  git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1 && in_git=1
+
   for rel in "${AGENT_SKILL_DIRS[@]}"; do
-    if [[ -d "${ROOT}/${rel}" ]]; then
+    if (( in_git )); then
+      if [[ -n "$(git -C "$ROOT" ls-files -- "$rel")" ]]; then
+        error "${rel}/ has tracked files; the Skills CLI scans it and would publish them. Untrack it and move its skills to skills/<name>/"
+      fi
+    elif [[ -d "${ROOT}/${rel}" ]]; then
       error "${rel}/ is scanned by the Skills CLI and would be published; remove it or move its skills to skills/<name>/"
     fi
   done
