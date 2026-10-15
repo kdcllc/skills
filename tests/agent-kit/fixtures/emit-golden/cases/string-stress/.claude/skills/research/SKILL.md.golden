@@ -12,23 +12,23 @@ access**. You coordinate four phases; the output feeds `feature` Phase 4.
 
 **Recall:** search `--kind research-ingest,decision` (≤ 5) per
 `.claude/skills/feature/reference/memory-protocol.md`; write ids or `none` to
-`_research/<topic>/recalled-memory.md` (avoid re-researching settled questions).
+`_memory/work/research/<topic>/recalled-memory.md` (avoid re-researching settled questions).
 
-Write `_research/prompts/[topic].md` from `templates/research-prompt.md`. The prompt must
+Write `_memory/work/research/prompts/[topic].md` from `templates/research-prompt.md`. The prompt must
 be self-contained (the researcher cannot see this repo): include the relevant facts from
 docs/agent-kit/research-multi-harness-upgrade.md and the domain skill, the exact questions to answer, and the
 required report structure. The user copy-pastes it to their external research tool.
 
 ## Phase 2 — Ingest the report
 
-Save the returned report as `_research/[topic]/report.md` (structure per
+Save the returned report as `_memory/work/research/[topic]/report.md` (structure per
 `templates/research-report.md`). Read it critically: flag claims that contradict
 docs/agent-kit/research-multi-harness-upgrade.md or the codebase, and list open questions back to the user.
-Promote durable findings into docs/agent-kit/research-multi-harness-upgrade.md; `_research/` stays scratch.
+Promote durable findings into docs/agent-kit/research-multi-harness-upgrade.md; `_memory/work/research/` stays scratch.
 
 **Archive:** one `research-ingest` after ingestion review per
 `.claude/skills/feature/reference/memory-protocol.md`; run `_kit/memory.sh check` on
-each path `add` writes (or quarantines), then write `_research/<topic>/ingested` per
+each path `add` writes (or quarantines), then write `_memory/work/research/<topic>/ingested` per
 protocol before commit.
 
 ## Phase 3 — High-level plan
@@ -38,7 +38,7 @@ tradeoffs, chosen direction, affected layers (lane/a	lane\b).
 
 ## Phase 4 — Low-level tasks
 
-Create `_goals/[goal-name]/` using the `feature` skill's `goal.md`/`task.md`
+Create `_memory/work/goals/[goal-name]/` using the `feature` skill's `goal.md`/`task.md`
 templates; copy Phase 1 picks (or `none`) from `recalled-memory.md` into the goal's
 `## Recalled memory` and log the note per
 `.claude/skills/feature/reference/memory-protocol.md`. Hand off: the goal enters

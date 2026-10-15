@@ -16,7 +16,7 @@
     "typecheck": false
   },
   "seedFiles": [
-    "_goals/backlog.md"
+    "_memory/loop/backlog.md"
   ],
   "files": {
     ".codex/agents/diagnostician.md": "7d0121fb18ee3c128bc3884acd8aee1796c3ae5161d5f3506315d1614a52f1f2",
@@ -32,18 +32,18 @@
     ".codex/agents/test-writer.md": "fd310b91980bae2cbe0230156ccb4d9f771291423816c3d224d6ec16582b79b2",
     ".codex/agents/test-writer.toml": "4092fe6c250c290e8ca3b43ef5998904f0965247e5aff3d837d486395d06241b",
     ".codex/config.toml": "52eed364237d0eb7475b8e1beb571842cd14d1fd526854b4ca9ecb8b828c1042",
-    "ORCHESTRATION.md": "57c37b43821c207cc74107f00b9f23c12c390e57527aa13e5d3b5a913c6b81ca",
+    "ORCHESTRATION.md": "6cead5fd23b5da19bcb484255d11485cea04c3f96f169d443d01acc75afe97ee",
     "_kit/log-spawn.cmd": "ae9541294a03f741311ff8bc0d5c6f9985d6947fb42f7aaeaf6613088e34bf7e",
-    "_kit/log-spawn.sh": "da1a893e6e34a6767b1c1f54b73a0edd10d2c1ab2c520763b21203406faf0ab8",
+    "_kit/log-spawn.sh": "ed5f24b28b48effdae6caa8014ba8644a793ddfa3a52a5198af33fb0601c3fa0",
     "_kit/memory.cmd": "ae9541294a03f741311ff8bc0d5c6f9985d6947fb42f7aaeaf6613088e34bf7e",
     "_kit/memory.ps1": "ab1972554d139c838c0908f78ac5619257faff4d24d6e2dbcb228ba8ceea63c6",
-    "_kit/memory.sh": "7522f351ec824db32d819449d6da1b14a9b32413f0945cc67fe08a4ff5c4f51c",
-    "_loop/PROMPT.md": "e05a16a6d77d7421d3d06d01d97035a3e184bfd54b3428b323b872d5249a94c4",
+    "_kit/memory.sh": "9ee91e10d7207eb9f25b58e16c5b13ec54e09ef04f63155d3f682ff54d95023c",
+    "_loop/PROMPT.md": "fdce88d9b733e1018c13ba9fdec03e4cd0a83f5c3ba85e84f87d728b96c0d250",
     "_loop/breaker.ps1": "aca26dccdd9110c7da79aef8d2369401fec4b07d98e8fe3d19eaa9f4e6c47750",
     "_loop/breaker.sh": "92d762f93a3a76db1f8176f454c4ad401f65b5449a8bd8bbbd0c690344a6c686",
-    "_loop/loop.ps1": "0ab4db21a9800172fc15d6b0718f7d146febb559f456e23aa95c52ecc2b890bf",
-    "_loop/loop.sh": "f9820c1db5ddddbba091b66db773d2e208df3cfbd2540cf87a7f790c1c206fd0",
-    "_memory/README.md": "283b2444625a62b011b65edf1d74c295b5cc43320c7469e1912dea1b11179b2f"
+    "_loop/loop.ps1": "ec4b99307220df3b1df49bf6ff01e06851c4a7de00ccbfe6b9a9a1e40f86a919",
+    "_loop/loop.sh": "7b8df9f4ebd6ad6e58fee94c0ab75bcdb44502d8fa2a268d23c68c9fad45af4b",
+    "_memory/README.md": "0d85940ee115e7f629b54c06d1d9d58401257e82fbc5ec1cfb83e8efddcccb95"
   },
   "answers": {
     "bootstrap": {

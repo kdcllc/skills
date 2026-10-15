@@ -51,7 +51,7 @@ Optional: start an unattended run (sandboxed!) with `_loop/loop.sh 10` or
   **orchestration log** per goal with `io_est_tokens` (orchestrator I/O proxy, chars/4)
   and `work_est_tokens` (subagent self-reported Footprint /4) — appended by the emitted
   `_kit/log-spawn.sh` (Windows outside Git Bash: `_kit\log-spawn.cmd`; Git for Windows required), with every context package and verbatim report
-  stored under `_goals/<goal>/spawns/`. How each piece arrived is in
+  stored under `_memory/work/goals/<goal>/spawns/`. How each piece arrived is in
   [CHANGELOG.md](CHANGELOG.md); mechanics are in
   [evaluation-system.md](https://github.com/kdcllc/skills/blob/master/docs/agent-kit/guide/evaluation-system.md).
   The research behind the continuation ladder is
@@ -172,11 +172,11 @@ exit codes.
 | `skills/test-ladder` | New → impacted tests mid-cycle; full suites only at cycle end |
 | `skills/align-docs` | Phase 6: evaluator-gated sync of all docs to shipped code |
 | `skills/ship-pr` | Phase 7: approval-gated forge delivery (GitHub / Azure DevOps / GitLab / hand-over) |
-| `skills/auto-loop` + `_loop/` + `_goals/backlog.md` | Autonomous loop with structural guards (optional) |
+| `skills/auto-loop` + `_loop/` + `_memory/loop/backlog.md` | Autonomous loop with structural guards (optional) |
 | `skills/agent-kit-models.map.md` | The model map — the only place model IDs live per install |
 | `_kit/log-spawn.sh` + `_kit/log-spawn.cmd` | Single-copy orchestration-log writer + Windows launcher (`spawn` / `outcome` / `note`) |
 | `_kit/memory.sh` + `_kit/memory.cmd` (+ `_kit/memory.ps1` for `loop.ps1`) | Single-copy memory store + Windows launcher (`add` / `index` / `search` / `show` / `redact` / `check` / `rm` / `capture` / `backfill`) |
-| `_memory/` | Tracked immutable records (`records/`, `quarantine/`); gitignored derived `.index/` and `raw/` (redacted captures, ledgers, distillation drafts) |
+| `_memory/` | Tracked records (`records/`, `quarantine/`, `loop/`); gitignored scratch `work/` plus derived `.index/` and `raw/` |
 | `ORCHESTRATION.md` | The architecture doc, filled in for the project |
 | `orchestration-kit.manifest.json` | Kit version + file hashes + embedded `answers`, enabling clean upgrades |
 
@@ -223,7 +223,10 @@ Re-run `/agent-kit` when providers rotate model names.
    Pre-v0.27.0 installs have no embedded `answers` — run `/agent-kit` Steps 1–4 once to
    create an answers file, then `--answers … --upgrade`. Exit code 4 lists
    user-modified files; confirm with `--force`. Use `--dry-run` to preview planned
-   actions. Seed files like `_goals/backlog.md` are never overwritten.
+   actions (including `migrate` lines when `_goals/` or `_research/` remain).
+   Seed files like `_memory/loop/backlog.md` are never overwritten. Legacy installs
+   move into `_memory/` on upgrade (`git mv` when tracked); goal/research scratch is
+   untracked afterward — see `_memory/README.md` and run `_kit/memory.sh backfill --plan`.
 
 Manifest semantics, seed files, and stale-file pruning are documented in
 [contributing.md](https://github.com/kdcllc/skills/blob/master/docs/agent-kit/guide/contributing.md).

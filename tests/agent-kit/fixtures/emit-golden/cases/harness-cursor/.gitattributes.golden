@@ -1,7 +1,6 @@
-_goals/*/orchestration-log.md merge=union
 _memory/** text eol=lf
 *.cmd -text
-_goals/LEARNINGS.md merge=union
-_goals/ESCALATIONS.md merge=union
+_memory/loop/LEARNINGS.md merge=union
+_memory/loop/ESCALATIONS.md merge=union
 *.sh text eol=lf
 *.ps1 text eol=lf

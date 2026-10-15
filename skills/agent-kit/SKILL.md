@@ -339,12 +339,12 @@ This kit repo's own dogfood uses `scripts/agent-kit/self-install.sh`. If `orches
 
 ## Step 6 — Report
 
-Read the summary line (`emit: written N · unchanged M · pruned P · seeds-kept S · warnings W · manifest orchestration-kit.manifest.json · kit <VERSION>`).
+Read the summary line (`emit: written N · unchanged M · pruned P · seeds-kept S · migrated U · warnings W · manifest orchestration-kit.manifest.json · kit <VERSION>`).
 Delete `orchestration-kit.answers.json` (the manifest holds `answers`).
 Report written / pruned / warnings and the next step (`/feature`).
 The script writes the manifest; schema in `bin/README.md`.
 Manifest `options` is flat — `"forge": "<detected>"` plus optional `forgeHost`.
-`seedFiles` lists seeds (today `_goals/backlog.md`); they are never overwritten
+`seedFiles` lists seeds (today `_memory/loop/backlog.md`); they are never overwritten
 on upgrade.
 
 ## Upgrading / re-running
@@ -353,9 +353,31 @@ A script-only `--upgrade` never runs Step 2b. A full interactive `/agent-kit` re
 does run it (skipping installed skills).
 
 `bash $SETUP/bin/emit.sh --upgrade` (answers come from the manifest; add
-`--answers` only when the interview changed). Exit 4 lists user-modified files;
-show the user, then `--force` if they confirm. `--dry-run` prints planned actions
-and still exits 4 when any path is blocked.
+`--answers` only when the interview changed). Exit 4 lists user-modified files
+and upgrade target conflicts; show the user, then `--force` if they confirm.
+`--dry-run` prints planned actions (including `migrate <src> -> <dst>` for legacy
+layout moves) and still exits 4 when any path is blocked.
+
+**Legacy layout migration:** when `_goals/` or `_research/` still exist, emit moves
+them into `_memory/loop/` (loop files) and `_memory/work/` (goal and research scratch)
+before writing kit files — `git mv` when tracked, plain `mv` otherwise. Previously
+tracked goal/research trees and `breaker-state.json` are untracked afterward
+(`git rm --cached`; files stay on disk). Loop markdown stays tracked. Retired kit
+`.gitattributes` / `.gitignore` lines (`_goals/*/orchestration-log.md merge=union`,
+`_goals/LEARNINGS.md merge=union`, `_goals/ESCALATIONS.md merge=union`,
+`_goals/breaker-state.json`) are removed by exact line match; user lines are kept.
+If a target path already exists, emit exits 4 before moving anything unless
+`--force` (conflicting sources stay put with a warning; nothing is overwritten).
+A second upgrade with nothing left to move reports `migrated 0`. After a move, stderr
+prints a hint to run `_kit/memory.sh backfill --plan`.
+
+**Warnings after layout migration:**
+
+- `LOOP_WORKTREE=1` users must commit the staged `_memory/loop/` move so worktrees
+  see tracked loop files.
+- Committing the untracking of goal/research folders removes those paths from
+  teammates' working trees on pull — teammates should upgrade locally first, or the
+  team should back-fill and coordinate before committing the layout change.
 
 Prune: kit-owned paths in the previous manifest that are not in the new emit set
 are deleted when unchanged, else kept and warned; seeds are never pruned.
@@ -368,7 +390,8 @@ GitHub → Azure DevOps), surface both values and ask — never silently flip, n
 keep a stale value unmentioned.
 
 Paths listed in `seedFiles` are outside the overwrite flow: create a seed if it is
-missing, otherwise leave it exactly as it is.
+missing, otherwise leave it exactly as it is. Manifests from older kits may still
+list `_goals/backlog.md` as a seed; that path is treated as a seed, not foreign.
 
 From v0.29.0, emit warns for a reused or unacknowledged same-family arbiter (fix:
 set `arbiter_same_family: true` or pick a different arbiter) and exits 3 for

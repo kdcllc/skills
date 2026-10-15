@@ -186,7 +186,7 @@ At goal evaluation, the evaluator verifies write-set disjointness ([`goal-criter
 6. **Contracts first** — shared interfaces/schemas frozen in an earlier task than consumers.
 7. **Hotspots** — shared high-traffic files owned by one task or serialized by dependency; never concurrently written.
 
-**Orchestrator-owned carve-out:** `_goals/` artifacts (goal files, orchestration log) and Phase 6 doc surfaces listed in the align-docs map sit **outside** the task write-set union — coverage and single-owner apply to task-owned product files only.
+**Orchestrator-owned carve-out:** Goal and task files and the other `_memory/work/goals/` artifacts (orchestration log), the `_memory/loop/` ledgers (backlog status fields, LEARNINGS/ESCALATIONS notes) are written by the orchestrator, as are the documentation surfaces Phase 6 owns **as listed in the `align-docs` skill's documentation surface map** — that map bounds the exemption; it does not widen to "any doc". All of these sit **outside** the task write-set union: coverage and single-owner apply to task-owned product files only.
 
 Any violation of the seven checks is **NEEDS REVISION**. A missing ownership block is also **NEEDS REVISION** (fail closed).
 
@@ -194,7 +194,7 @@ Any violation of the seven checks is **NEEDS REVISION**. A missing ownership blo
 
 Goal evaluation also applies scope discipline from [`goal-criteria/SKILL.template.md`](../../../skills/agent-kit/templates/skills/goal-criteria/SKILL.template.md) §4 (out-of-scope section, no smuggled refactoring, no contradiction with constraints or ground truth).
 
-**Canonical template leak check** ([`goal-criteria/SKILL.template.md`](../../../skills/agent-kit/templates/skills/goal-criteria/SKILL.template.md) § Canonical template leak check): when a task's `writes` include paths the project distributes as reusable templates (for example a canonical `templates/` tree), flag **NEEDS REVISION** if its requirements or proposed content copy **this repository's own** goal slugs from `_goals/` or `_goals/archive/`, memory record ids (`YYYYMMDDTHHMMSSZ-<hex>`), or verbatim memory record titles from `_memory/records/` into those templates — templates must stay generic. Clearly labeled placeholder samples in a task requirement are not a leak (informational note only, not **NEEDS REVISION**).
+**Canonical template leak check** ([`goal-criteria/SKILL.template.md`](../../../skills/agent-kit/templates/skills/goal-criteria/SKILL.template.md) § Canonical template leak check): when a task's `writes` include paths the project distributes as reusable templates (for example a canonical `templates/` tree), flag **NEEDS REVISION** if its requirements or proposed content copy **this repository's own** goal slugs from `_memory/work/goals/` (or legacy `_goals/` / `_goals/archive/` in older projects), memory record ids (`YYYYMMDDTHHMMSSZ-<hex>`), or verbatim memory record titles from `_memory/records/` into those templates — templates must stay generic. Clearly labeled placeholder samples in a task requirement are not a leak (informational note only, not **NEEDS REVISION**).
 
 ## Staged test ladder
 
@@ -276,9 +276,9 @@ Fixes and revisions are **always** re-evaluated — there is no exception ([`fea
 
 ## Orchestration log (append-only audit trail)
 
-Each goal maintains `_goals/[goal-name]/orchestration-log.md` ([`feature/SKILL.template.md`](../../../skills/agent-kit/templates/skills/feature/SKILL.template.md) § Orchestration log). As of v0.25.0 it is written only by the emitted `_kit/log-spawn.sh` / `_kit/log-spawn.ps1` twins ([`templates/tools/log-spawn.sh`](../../../skills/agent-kit/templates/tools/log-spawn.sh)); as of v0.26.0 the header's running `io_est_tokens` / `work_est_tokens` totals say "see latest entry".
+Each goal maintains `_memory/work/goals/[goal-name]/orchestration-log.md` ([`feature/SKILL.template.md`](../../../skills/agent-kit/templates/skills/feature/SKILL.template.md) § Orchestration log). As of v0.25.0 it is written only by the emitted `_kit/log-spawn.sh` / `_kit/log-spawn.ps1` twins ([`templates/tools/log-spawn.sh`](../../../skills/agent-kit/templates/tools/log-spawn.sh)); as of v0.26.0 the header's running `io_est_tokens` / `work_est_tokens` totals say "see latest entry".
 
-**Artifacts are the verbatim record.** Every context package is saved to `_goals/[goal]/spawns/NN-context.md` before launch and every report to `spawns/NN-report.md` after return — unedited. The log references those files rather than quoting them, so an auditor reads exactly what the agent read and wrote. Agents end every report with a **`### Footprint`** block — `files_read: N (~C chars)` and `commands_run: N` as the last non-blank lines inside the report fence ([`agents/evaluator.md`](../../../skills/agent-kit/templates/agents/evaluator.md)).
+**Artifacts are the verbatim record.** Every context package is saved to `_memory/work/goals/[goal]/spawns/NN-context.md` before launch and every report to `spawns/NN-report.md` after return — unedited. The log references those files rather than quoting them, so an auditor reads exactly what the agent read and wrote. Agents end every report with a **`### Footprint`** block — `files_read: N (~C chars)` and `commands_run: N` as the last non-blank lines inside the report fence ([`agents/evaluator.md`](../../../skills/agent-kit/templates/agents/evaluator.md)).
 
 **Entry-before-launch** (`spawn`) — records timestamp, agent, **model requested** (and rotation/fallback), why this agent was routed, the task's `writes` claim (allowed-paths fence), expected outputs, and `context_chars` measured from the context file. The heading carries `[#NN]`.
 

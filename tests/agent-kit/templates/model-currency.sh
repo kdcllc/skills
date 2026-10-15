@@ -11,7 +11,10 @@ export EMIT_DATE=2026-09-03
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$HERE/../../.." && pwd)"
-cd "$REPO_ROOT" || exit 1
+FIXTURE_TMPDIR="$(mktemp -d "${TMPDIR:-/tmp}/modelcur.XXXXXX")" || exit 1
+export TMPDIR="$FIXTURE_TMPDIR"
+# shellcheck source=../lib/fixture-root.sh
+. "$HERE/../lib/fixture-root.sh"
 
 . "$HERE/../lib/parallel.sh"
 . "$HERE/../lib/emit-cache.sh"
@@ -26,7 +29,7 @@ SETUP_SKILL="$REPO_ROOT/skills/agent-kit/SKILL.md"
 EMITTER_CURSOR="$REPO_ROOT/skills/agent-kit/emitters/cursor.md"
 EMITTER_CLAUDE="$REPO_ROOT/skills/agent-kit/emitters/claude-code.md"
 
-TMP_BASE="$(mktemp -d)"
+TMP_BASE="$FIXTURE_TMPDIR"
 TMP_N=0
 _suite_cleanup() {
   rm -rf "$TMP_BASE"
@@ -53,7 +56,8 @@ alloc_path() { # <prefix> → sets ALLOC_PATH (unique per call for parallel bloc
 }
 
 alloc_root() {
-  ALLOC_PATH="$(mktemp -d "$TMP_BASE/root.XXXXXX")"
+  ALLOC_PATH="$(mktemp -d "$TMP_BASE/root.XXXXXX")" || exit 1
+  assert_fixture_root "$ALLOC_PATH" || exit 1
 }
 
 alloc_answers() {
@@ -62,6 +66,7 @@ alloc_answers() {
 }
 
 run_emit_sh() { # root [emit args...]
+  assert_fixture_root "$1" || exit 1
   bash "$EMIT_SH" --root "$1" --kit "$KIT" "${@:2}"
 }
 
@@ -379,15 +384,15 @@ logspawn_run_case10() { # <label> <runner...>
   # match (gpt vs o3)
   alloc_root
   fx="$ALLOC_PATH"
-  mkdir -p "$fx/_goals/demo/spawns"
-  head -c 20 /dev/zero | tr '\0' 'a' > "$fx/_goals/demo/spawns/31-context.md"
-  head -c 10 /dev/zero | tr '\0' 'b' > "$fx/_goals/demo/spawns/31-report.md"
-  log="$fx/_goals/demo/orchestration-log.md"
+  mkdir -p "$fx/_memory/work/goals/demo/spawns"
+  head -c 20 /dev/zero | tr '\0' 'a' > "$fx/_memory/work/goals/demo/spawns/31-context.md"
+  head -c 10 /dev/zero | tr '\0' 'b' > "$fx/_memory/work/goals/demo/spawns/31-report.md"
+  log="$fx/_memory/work/goals/demo/orchestration-log.md"
   (
     cd "$fx" || exit 1
     "${runner[@]}" spawn --goal demo --agent e --phase P --model-requested gpt-4.1-mini \
-         --context _goals/demo/spawns/31-context.md >/dev/null
-    out="$("${runner[@]}" outcome --goal demo --spawn 31 --report _goals/demo/spawns/31-report.md \
+         --context _memory/work/goals/demo/spawns/31-context.md >/dev/null
+    out="$("${runner[@]}" outcome --goal demo --spawn 31 --report _memory/work/goals/demo/spawns/31-report.md \
           --verdict PASS --model-reported o3 2>/dev/null)"; rc=$?
     [[ $rc -eq 0 && "$out" == *'model_check: match'* ]] || exit 1
     grep -qF 'model_check: match' "$log" || exit 1
@@ -396,16 +401,16 @@ logspawn_run_case10() { # <label> <runner...>
   # MISMATCH exact stderr + log OUTCOME line
   alloc_root
   fx="$ALLOC_PATH"
-  mkdir -p "$fx/_goals/demo/spawns"
-  head -c 20 /dev/zero | tr '\0' 'a' > "$fx/_goals/demo/spawns/32-context.md"
-  head -c 10 /dev/zero | tr '\0' 'b' > "$fx/_goals/demo/spawns/32-report.md"
-  log="$fx/_goals/demo/orchestration-log.md"
+  mkdir -p "$fx/_memory/work/goals/demo/spawns"
+  head -c 20 /dev/zero | tr '\0' 'a' > "$fx/_memory/work/goals/demo/spawns/32-context.md"
+  head -c 10 /dev/zero | tr '\0' 'b' > "$fx/_memory/work/goals/demo/spawns/32-report.md"
+  log="$fx/_memory/work/goals/demo/orchestration-log.md"
   want_err='log-spawn: MODEL-FAMILY-MISMATCH requested=claude-sonnet-5-5 reported=gpt-4.1'
   (
     cd "$fx" || exit 1
     "${runner[@]}" spawn --goal demo --agent e --phase P --model-requested claude-sonnet-5-5 \
-         --context _goals/demo/spawns/32-context.md >/dev/null
-    err="$("${runner[@]}" outcome --goal demo --spawn 32 --report _goals/demo/spawns/32-report.md \
+         --context _memory/work/goals/demo/spawns/32-context.md >/dev/null
+    err="$("${runner[@]}" outcome --goal demo --spawn 32 --report _memory/work/goals/demo/spawns/32-report.md \
           --verdict PASS --model-reported gpt-4.1 2>&1 >/dev/null)"; rc=$?
     [[ $rc -eq 0 && "$err" == *"$want_err"* ]] || exit 1
     grep -qF 'model_check: MISMATCH' "$log" || exit 1
@@ -415,15 +420,15 @@ logspawn_run_case10() { # <label> <runner...>
   # unverified (unknown reported)
   alloc_root
   fx="$ALLOC_PATH"
-  mkdir -p "$fx/_goals/demo/spawns"
-  head -c 20 /dev/zero | tr '\0' 'a' > "$fx/_goals/demo/spawns/33-context.md"
-  head -c 10 /dev/zero | tr '\0' 'b' > "$fx/_goals/demo/spawns/33-report.md"
-  log="$fx/_goals/demo/orchestration-log.md"
+  mkdir -p "$fx/_memory/work/goals/demo/spawns"
+  head -c 20 /dev/zero | tr '\0' 'a' > "$fx/_memory/work/goals/demo/spawns/33-context.md"
+  head -c 10 /dev/zero | tr '\0' 'b' > "$fx/_memory/work/goals/demo/spawns/33-report.md"
+  log="$fx/_memory/work/goals/demo/orchestration-log.md"
   (
     cd "$fx" || exit 1
     "${runner[@]}" spawn --goal demo --agent e --phase P --model-requested gpt-4.1-mini \
-         --context _goals/demo/spawns/33-context.md >/dev/null
-    out="$("${runner[@]}" outcome --goal demo --spawn 33 --report _goals/demo/spawns/33-report.md \
+         --context _memory/work/goals/demo/spawns/33-context.md >/dev/null
+    out="$("${runner[@]}" outcome --goal demo --spawn 33 --report _memory/work/goals/demo/spawns/33-report.md \
           --verdict PASS --model-reported unknown 2>/dev/null)"; rc=$?
     [[ $rc -eq 0 && "$out" == *'model_check: unverified'* ]] || exit 1
     grep -qF 'model_check: unverified' "$log" || exit 1
@@ -432,15 +437,15 @@ logspawn_run_case10() { # <label> <runner...>
   # blank requested
   alloc_root
   fx="$ALLOC_PATH"
-  mkdir -p "$fx/_goals/demo/spawns"
-  head -c 20 /dev/zero | tr '\0' 'a' > "$fx/_goals/demo/spawns/34-context.md"
-  head -c 10 /dev/zero | tr '\0' 'b' > "$fx/_goals/demo/spawns/34-report.md"
-  log="$fx/_goals/demo/orchestration-log.md"
+  mkdir -p "$fx/_memory/work/goals/demo/spawns"
+  head -c 20 /dev/zero | tr '\0' 'a' > "$fx/_memory/work/goals/demo/spawns/34-context.md"
+  head -c 10 /dev/zero | tr '\0' 'b' > "$fx/_memory/work/goals/demo/spawns/34-report.md"
+  log="$fx/_memory/work/goals/demo/orchestration-log.md"
   (
     cd "$fx" || exit 1
     "${runner[@]}" spawn --goal demo --agent e --phase P --model-requested " " \
-         --context _goals/demo/spawns/34-context.md >/dev/null
-    out="$("${runner[@]}" outcome --goal demo --spawn 34 --report _goals/demo/spawns/34-report.md \
+         --context _memory/work/goals/demo/spawns/34-context.md >/dev/null
+    out="$("${runner[@]}" outcome --goal demo --spawn 34 --report _memory/work/goals/demo/spawns/34-report.md \
           --verdict PASS --model-reported X 2>/dev/null)"; rc=$?
     [[ $rc -eq 0 && "$out" == *'model_check: unverified'* ]] || exit 1
     grep -qF 'model_check: unverified' "$log" || exit 1

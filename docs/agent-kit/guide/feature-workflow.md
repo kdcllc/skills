@@ -10,7 +10,7 @@ The `/feature` skill is the canonical coordinator for non-trivial implementation
 flowchart TD
     P1["Phase 1: Alignment\n(no files created)"]
     P1Confirm["User confirms\nMy Understanding"]
-    P2["Phase 2: Goal creation\n_goals/name/"]
+    P2["Phase 2: Goal creation\n_memory/work/goals/name/"]
     P3Eval["Phase 3: Goal evaluation"]
     P3Pass["PASS"]
     P3Rev["NEEDS REVISION"]
@@ -117,7 +117,7 @@ The orchestrator presents a **"My Understanding"** summary and **waits for expli
 
 ## Phase 2 — Goal creation
 
-Creates `_goals/[goal-name]/` containing:
+Creates `_memory/work/goals/[goal-name]/` containing:
 
 | Artifact | Template | Purpose |
 |----------|----------|---------|
@@ -249,7 +249,7 @@ When enabled via `goal.md`'s `phases:` block (`align_docs: true`), read and exec
 4. **Execute** per doc via `implementer`; evaluate each doc (3 cycles max per doc).
 5. **Final doc audit** — APPROVED / ISSUES, 3-cycle limit.
 
-**Rules:** docs-only (never code); `_research/` and `_goals/` are **read-only**; anti-invention (every claim traces to a file read this run); surgical edits over rewrites.
+**Rules:** docs-only (never code); the whole `_memory/` tree is **read-only** for docs work (you may read `_memory/work/goals/` and `_memory/work/research/` scratch); anti-invention (every claim traces to a file read this run); surgical edits over rewrites.
 
 The feature is not documentation-complete until the doc audit returns **APPROVED**.
 
@@ -299,16 +299,16 @@ For `criteria-defective` escalations (rung 5 arbitration), the defective criteri
 
 ## Orchestration log
 
-Path: `_goals/[goal-name]/orchestration-log.md` — an **append-only spawn ledger**. As of v0.25.0 the orchestrator never hand-writes it: every entry goes through the emitted tool `_kit/log-spawn.sh` (or `pwsh _kit/log-spawn.ps1` on Windows — same flags, byte-identical output; canonical source [`skills/agent-kit/templates/tools/log-spawn.sh`](../../../skills/agent-kit/templates/tools/log-spawn.sh)). As of v0.26.0 the header's running `io_est_tokens` / `work_est_tokens` totals read "see latest entry" because the script only appends.
+Path: `_memory/work/goals/[goal-name]/orchestration-log.md` — an **append-only spawn ledger**. As of v0.25.0 the orchestrator never hand-writes it: every entry goes through the emitted tool `_kit/log-spawn.sh` (or `pwsh _kit/log-spawn.ps1` on Windows — same flags, byte-identical output; canonical source [`skills/agent-kit/templates/tools/log-spawn.sh`](../../../skills/agent-kit/templates/tools/log-spawn.sh)). As of v0.26.0 the header's running `io_est_tokens` / `work_est_tokens` totals read "see latest entry" because the script only appends.
 
 **File, then script.** The flow for every spawn is:
 
-1. Write the full context package to `_goals/[goal]/spawns/NN-context.md` (NN = next free two-digit number). This file **is** the verbatim record.
+1. Write the full context package to `_memory/work/goals/[goal]/spawns/NN-context.md` (NN = next free two-digit number). This file **is** the verbatim record.
 2. Run `spawn` — it appends the before-launch entry and measures `context_chars` from the file:
 
    ```bash
    _kit/log-spawn.sh spawn --goal my-goal --agent implementer --phase "Phase 4 task 02" \
-     --model-requested <id> --context _goals/my-goal/spawns/03-context.md \
+     --model-requested <id> --context _memory/work/goals/my-goal/spawns/03-context.md \
      --writes "src/foo.ts" --why "task 02" --expect "completion report"
    ```
 
@@ -316,7 +316,7 @@ Path: `_goals/[goal-name]/orchestration-log.md` — an **append-only spawn ledge
 3. Save the agent's report **verbatim** to `spawns/NN-report.md`, then run `outcome`:
 
    ```bash
-   _kit/log-spawn.sh outcome --goal my-goal --spawn 03 --report _goals/my-goal/spawns/03-report.md \
+   _kit/log-spawn.sh outcome --goal my-goal --spawn 03 --report _memory/work/goals/my-goal/spawns/03-report.md \
      --verdict "PASS" --model-reported "<the agent's first line>"
    ```
 
@@ -353,7 +353,7 @@ You are not expected to spawn subagents or run Quality Checks — those are orch
 
 ## Condensed annotated walkthrough: `loop-ps1-slot-interpolation-fix`
 
-The following condenses a **real** goal from this repo's `_goals/` history. Those files are **local run artifacts** (gitignored in this repo) — the quotes below are evidence snapshots, not tracked source files. Delivery was a **local merge**, not a PR.
+The following condenses a **real** goal from `_goals/loop-ps1-slot-interpolation-fix/` (historical goal folder from before the `_memory/work/goals/` layout; not in this repo). Those files were **local run artifacts** — the quotes below are evidence snapshots, not tracked source files. Delivery was a **local merge**, not a PR.
 
 ### Phase 1 — Alignment
 
@@ -443,5 +443,5 @@ Delivery instead followed the goal's Delivery Procedure: merge commit `5825729` 
 - [`skills/agent-kit/templates/skills/ship-pr/SKILL.template.md`](../../../skills/agent-kit/templates/skills/ship-pr/SKILL.template.md) — Phase 7 workflow
 - [`skills/agent-kit/templates/ORCHESTRATION.md`](../../../skills/agent-kit/templates/ORCHESTRATION.md) — architecture invariants, retry limits, continuation ladder, escalation format
 - [`skills/agent-kit/templates/models.map.md`](../../../skills/agent-kit/templates/models.map.md) — continuation-ladder model pins
-- `_goals/loop-ps1-slot-interpolation-fix/goal.md` — exemplar goal (local gitignored artifact)
-- `_goals/loop-ps1-slot-interpolation-fix/orchestration-log.md` — exemplar orchestration log (local gitignored artifact)
+- `_goals/loop-ps1-slot-interpolation-fix/goal.md` — exemplar goal (historical path; pre-`_memory/work/goals/` layout)
+- `_goals/loop-ps1-slot-interpolation-fix/orchestration-log.md` — exemplar orchestration log (same historical layout)

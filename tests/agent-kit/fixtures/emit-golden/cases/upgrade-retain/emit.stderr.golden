@@ -1,1 +1,2 @@
+emit: moved legacy _goals/ and _research/ into _memory/; run _kit/memory.sh backfill --plan to archive closed work
 emit: pwsh not on PATH — skipped .ps1 parse

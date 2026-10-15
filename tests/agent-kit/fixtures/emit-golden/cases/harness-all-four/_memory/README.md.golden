@@ -1,32 +1,38 @@
 # Memory store (_memory/)
 
-The memory store holds durable, git-tracked knowledge distilled from finished work—goals,
-research, decisions, learnings, and session summaries. It **augments** `_goals/` and
-`_research/`; it never replaces them. In-flight work stays in those trees; finished
-knowledge is archived here as immutable records.
+The memory store holds everything the kit persists for knowledge and workflow state.
+Immutable finished knowledge lives in `records/` and `quarantine/`. In-flight goal and
+research work lives in `work/` (gitignored scratch). Loop state lives in `loop/` (tracked).
+Finished work is archived into immutable records under `records/`.
 
 ## Layout
 
 ```
-_memory/                 # TRACKED
-  README.md              # this file (kit-owned, prunable)
+_memory/
+  README.md
   records/YYYY/MM/<id>.md
-  quarantine/<id>.md     # tracked; humans review
+  quarantine/<id>.md
+  work/                  # GITIGNORED
+    goals/<goal>/        # goal.md, NN-task.md, orchestration-log.md, spawns/, evidence/, memory-drafts/
+    research/            # prompts/, <topic>/report.md, <topic>/recalled-memory.md, <topic>/ingested
+  loop/                  # TRACKED
+    backlog.md
+    LEARNINGS.md
+    ESCALATIONS.md
+    archive/ESCALATIONS-<YYYY-MM>.md
+    breaker-state.json   # GITIGNORED (runtime)
   .index/                # GITIGNORED (derived)
   raw/                   # GITIGNORED
     <harness>/<session>.md   # redacted compact transcripts
-    .captured                # capture ledger
-    drafts/                  # distillation drafts
-    .distilled               # distillation ledger
+    .captured · drafts/ · .distilled
 ```
 
-**Tracked:** `README.md`, `records/`, `quarantine/`.
-
-**Gitignored (derived):** `.index/` (manifest and optional FTS index), `raw/` (capture
-output and distillation scratch).
-
-Emit installs add `.gitignore` entries for `_memory/.index/` and `_memory/raw/`, and
-`.gitattributes` line `_memory/** text eol=lf`.
+**Tracked:** `README.md`, `records/`, `quarantine/`, `loop/` except `breaker-state.json`.
+**Gitignored:** all of `work/`; `loop/breaker-state.json`; derived `.index/` and `raw/`.
+Every emit adds `.gitignore` `_memory/work/`, `_memory/.index/`, and `_memory/raw/`; loop
+emits also add `_memory/loop/breaker-state.json` and `.gitattributes`
+`_memory/loop/LEARNINGS.md merge=union` and `_memory/loop/ESCALATIONS.md merge=union`.
+`_memory/** text eol=lf` always.
 
 ## Record format
 
@@ -64,6 +70,36 @@ sha256: <hex>
 Quarantined files use the same shape, with `quarantined: true` on the line immediately
 after `sha256:`.
 
+## Upgrade migration
+
+`/agent-kit --upgrade` moves legacy top-level `_goals/` and `_research/` into this layout
+(`git mv` when git-tracked, plain `mv` otherwise). Mapping: each `_goals/<goal>/` (goal
+folders only — `_goals/archive/` is loop state, not a goal) → `_memory/work/goals/<goal>/`;
+`_research/` tree → `_memory/work/research/`; loop files `_goals/backlog.md`, `LEARNINGS.md`,
+`ESCALATIONS.md`, and `_goals/archive/` → `_memory/loop/` and `_memory/loop/archive/` (tracked);
+`_goals/breaker-state.json` → `_memory/loop/breaker-state.json`. Moved goal and research
+folders are untracked afterward (`git rm --cached`; content stays on disk as scratch). Loop
+markdown and `loop/archive/` stay tracked; `breaker-state.json` is gitignored at the new path.
+Retired kit lines removed by exact match only — `.gitattributes`: `_goals/*/orchestration-log.md merge=union`,
+`_goals/LEARNINGS.md merge=union`, `_goals/ESCALATIONS.md merge=union`; `.gitignore`:
+`_goals/breaker-state.json`. Leftover empty `_goals/` and `_research/` directories are
+removed after the move.
+
+`--dry-run` prints `migrate` actions and writes nothing. If any target path already exists,
+emit exits **4** before moving anything. With `--force`, non-conflicting entries move; when a
+target already exists, the conflicting source entry stays at its legacy path (stderr `warn`
+line) and is never overwritten — other moves in the same run still apply. A legacy directory
+that is not empty afterward is kept. A second upgrade with nothing left to move is a no-op.
+After upgrading, run `_kit/memory.sh backfill --plan` to review import candidates.
+
+**Warnings:**
+
+- After upgrading, `LOOP_WORKTREE=1` users must commit the staged `_memory/loop/` move so
+  worktrees see tracked loop files.
+- Committing the untracking of goal/research folders removes those paths from teammates'
+  working trees on pull. Teammates should upgrade (move locally) first, or the team should
+  back-fill and coordinate before committing the layout change.
+
 ## Kinds
 
 | Kind | Meaning |
@@ -95,8 +131,9 @@ after `sha256:`.
 - **Source labels.** Use a repo-relative path only for git-tracked files (for example
   `docs/research-x.md`). Gitignored or transient origins get a label, not a path, because
   the path never resolves on another machine and may be deleted locally:
-  `goal <name> (<file>)` for `_goals/<name>/<file>`, `goals ledger (<file>)` for other
-  files under `_goals/`, `research <name> (<file>)` for `_research/<name>/<file>`, and
+  `goal <name> (<file>)` for `_memory/work/goals/<name>/<file>`, `goals ledger (<file>)`
+  for files under `_memory/loop/`, `research <name> (<file>)` for
+  `_memory/work/research/<name>/<file>`, and
   `<harness>-session <short id>` (first 8 characters of the session id) for a chat
   session. `<file>` is the path relative to that folder (e.g. `tasks/03-x.md`). When a
   tracked copy exists (e.g. research promoted to `docs/`), cite the tracked path.
@@ -162,14 +199,16 @@ present, is kept; `{n,}` is ERE notation — implementations may spell repetitio
 ## Merging and sync
 
 New records use add-only paths (`records/YYYY/MM/<id>.md`), so git merges across
-machines are normally conflict-free (distinct files). There is no `merge=union` merge
-driver for `_memory/`.
+machines are normally conflict-free (distinct files). There is no `merge=union` merge driver for `_memory/records/` or `_memory/quarantine/`
+(loop `LEARNINGS.md` / `ESCALATIONS.md` use `merge=union` via `.gitattributes` on loop
+installs).
 
 The `.gitattributes` line `_memory/** text eol=lf` keeps tracked records LF on every OS.
 
-`.index/` is derived. `search` rebuilds it when stale (missing manifest or stamp, any
-record newer than the manifest, or record count differs from stamp); run `index` to
-rebuild explicitly.
+`.index/` is derived from `records/` and `quarantine/` only — never from `work/` or `loop/`.
+`index` and `search` use that scope. `search` rebuilds the index when stale (missing
+manifest or stamp, any record newer than the manifest, or record count differs from stamp);
+run `index` to rebuild explicitly.
 
 ## How the kit uses memory
 
@@ -180,9 +219,9 @@ evaluator, qa-evaluator, or terminal). After a goal is approved, it **archives**
 `research-ingest` after ingestion review. Loop manual mode adds records with `add`;
 driver-dispatched slots write `<outbox>/memory/*.md` proposals for the integrator.
 
-This store holds durable, searchable **records**. `_goals/LEARNINGS.md` remains the
-in-repo ledger for loop learnings and is not auto-imported here. `_goals/ESCALATIONS.md`
-(and archived copies under `_goals/archive/`) stay the live escalation ledger; resolved
+Durable, searchable **records** live under `records/` and `quarantine/`. `_memory/loop/LEARNINGS.md`
+is the in-repo loop learning ledger and is not auto-imported here. `_memory/loop/ESCALATIONS.md`
+(and `_memory/loop/archive/ESCALATIONS-<YYYY-MM>.md`) hold live and archived escalations; resolved
 entries can be back-filled into records with `backfill --escalations` (see below).
 
 Full recall, fence, archive, and loop rules:
@@ -304,7 +343,7 @@ index [--root <dir>]
 ```
 
 Rebuilds `.index/manifest.tsv`, `.index/stamp`, and optionally `.index/fts.db` when
-SQLite FTS5 is available.
+SQLite FTS5 is available. Only `records/` and `quarantine/` are indexed.
 
 ### search
 
@@ -346,8 +385,9 @@ twins.
 check [--staged] [--root <dir>] [<path>…]
 ```
 
-- **Scope:** neither paths nor `--staged` → every `*.md` file under `records/` and
-  `quarantine/` (all names, including names that are not valid ids); paths → those files
+- **Scope:** `check`, `index`, and `search` never read `work/` or `loop/`. Neither paths
+  nor `--staged` → every `*.md` file under `records/` and `quarantine/` (all names,
+  including names that are not valid ids); paths → those files
   (a path that is not a regular file under `<root>/_memory/records/` or
   `<root>/_memory/quarantine/` → exit 2 `memory: check path outside store: <path>`);
   `--staged` → `git -C <root> diff --cached --name-status --no-renames --no-ext-diff
@@ -456,14 +496,16 @@ A name that matches only a kind excluded by the kind flags prints
 topic → one line `memory: backfill only <name> skip:not-found`. Other flag errors use the
 generic usage messages above.
 
-**Goals.** Candidates: every directory `_goals/<g>/` with `goal.md` (`LC_ALL=C` order).
+**Goals.** Candidates: every directory `_memory/work/goals/<g>/` with `goal.md` (`LC_ALL=C`
+order). Sources include `goal.md`, `orchestration-log.md`, and `follow-ups.md`.
 Decision per goal, first match wins:
 
 1. no `orchestration-log.md` → `skip:no-log`;
 2. **archived** → `skip:archived` when (a) the log has a line matching
    `^### [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}[+-][0-9]{2}:[0-9]{2} — ARCHIVED:` listing at
    least one id that exists under `records/` or `quarantine/`, or (b) any record or quarantine
-   file has `source:` equal to `goal <g> (goal.md)` or to `_goals/<g>/goal.md`;
+   file has `source:` equal to `goal <g> (goal.md)`, to the legacy label
+   `_goals/<g>/goal.md`, or to `_memory/work/goals/<g>/goal.md`;
 3. **closed** → `would-add` when (a) the LAST SPAWN entry whose agent is `evaluator` and whose
    phase text (between `(` and `)` after the agent name) starts `Phase 5` (terminal,
    qa-evaluator and other Phase 5 spawns are ignored) has an `- OUTCOME [#NN]: ` line whose
@@ -486,11 +528,18 @@ empty):
 first paragraph under `## Problem Statement` joined into one line · blank · `Success criteria:`
 then one `- <text>` line per `- [ ]`/`- [x]` item under `## Success Criteria` (checkbox removed,
 continuation lines joined) · blank · `Final verdict: <verdict text> (<YYYY-MM-DD UTC date of the
-timestamp>)` · blank · `Follow-ups:` then the first 20 non-empty lines of `_goals/<g>/follow-ups.md`.
+timestamp>)` · blank · `Follow-ups:` then the first 20 non-empty lines of
+`_memory/work/goals/<g>/follow-ups.md`.
 
-**Research.** Candidates: `_research/<t>/report.md`. `_research/<t>/ingested` exists, or any
-record has source `research <t> (report.md)` → `skip:archived`; else named by `--only` →
-`would-add`; else `skip:not-selected`. Record: kind `research-ingest`; source
+**Research.** Candidates: every directory `_memory/work/research/<t>/` with `report.md`
+(`LC_ALL=C` order). Decision per topic, first match wins:
+
+1. **archived** → `skip:archived` when `_memory/work/research/<t>/ingested` exists, or any
+   record has source `research <t> (report.md)`;
+2. **selected** → `would-add` when `<t>` is named by `--only`;
+3. otherwise `skip:not-selected`.
+
+Record: kind `research-ingest`; source
 `research <t> (report.md)`; title `<t>: back-filled research summary`; tags `backfill`,
 `research`; body `Research <t> — back-filled from report.md.` · blank · the text under
 `## Summary of Findings` up to the next `## ` line. Timestamp: the `**Date**:` value of
@@ -501,7 +550,9 @@ before parsing) when it is `YYYY-MM-DD`, at `T120000Z`; else `19700101T000000Z`.
 report (not `research <t> (report.md)`) is not detected as archived; research back-fill is
 opt-in via `--only`.
 
-**Escalations.** Sources `_goals/ESCALATIONS.md` and `_goals/archive/ESCALATIONS-*.md`. An entry
+**Escalations.** Archived files are named `ESCALATIONS-<YYYY-MM>.md`; backfill matches them
+with the glob `ESCALATIONS-*.md`. Sources `_memory/loop/ESCALATIONS.md` and
+`_memory/loop/archive/ESCALATIONS-<YYYY-MM>.md`. An entry
 starts at a line beginning `## ` and runs to the next `## ` line or end of file; text before
 the first `## ` and `# ` H1 lines are ignored. Decision per entry, first match wins:
 
@@ -548,11 +599,11 @@ sources that already have records:
 
 - **Goals:** the feature archive step logs
   `_kit/log-spawn.sh note --goal <g> --text "ARCHIVED: <id> [<id>…]"` (one line). Driver-dispatched loop archives have no ARCHIVED note; their proposals carry `source: goal <g> (goal.md)` so rule 2(b) detects them.
-- **Research:** the research archive step writes `_research/<topic>/ingested` with line 1 = UTC
-  `YYYY-MM-DDTHH:MM:SSZ` and line 2 = the record id(s) separated by spaces.
+- **Research:** the research archive step writes `_memory/work/research/<topic>/ingested` with
+  line 1 = UTC `YYYY-MM-DDTHH:MM:SSZ` and line 2 = the record id(s) separated by spaces.
 - **Escalations:** a human resolving an entry adds the line `- resolved: YYYY-MM-DD <decision>`
   inside the entry (entries start with `## <story-id>: <title>`, archived to
-  `_goals/archive/ESCALATIONS-<YYYY-MM>.md`).
+  `_memory/loop/archive/ESCALATIONS-<YYYY-MM>.md`).
 
 ### Raw session file format
 

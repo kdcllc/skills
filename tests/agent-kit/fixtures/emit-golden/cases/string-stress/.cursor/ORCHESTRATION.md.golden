@@ -171,7 +171,7 @@ report line.
 flowchart TD
     P1["Phase 1: Alignment\n(no files created)"]
     P1Confirm["User confirms\nMy Understanding"]
-    P2["Phase 2: Goal creation\n_goals/name/"]
+    P2["Phase 2: Goal creation\n_memory/work/goals/name/"]
     P3Eval["Phase 3: Goal evaluation"]
     P3Pass["PASS"]
     P3Rev["NEEDS REVISION"]
@@ -238,7 +238,7 @@ are created during this phase. Discovery covers: problem, affected layer/lane,
 external surfaces touched, auth/permissions, behavior/error handling, interface
 shape, existing patterns to follow, priority.
 
-**Phase 2 — Goal creation (with decision gates).** Create `_goals/[name]/` and write
+**Phase 2 — Goal creation (with decision gates).** Create `_memory/work/goals/[name]/` and write
 `goal.md`. For each task: if multiple viable approaches exist, present them to the
 user and WAIT for the decision; only then create the task file. Each task file carries
 `## Acceptance Criteria` (criterion + verification method each); the Phase 3 evaluator
@@ -285,7 +285,7 @@ enabled, Quality Checks green → the align-docs skill: discover the shipped sur
 per-doc edit plan → evaluate the plan → implementer per doc → evaluate each doc →
 final doc audit (same re-evaluate invariants and 3-cycle limits as Phases 3–5).
 RULES: docs-only (never code), anti-invention (every claim traces to a read file),
-`_research/` and `_goals/` are READ-ONLY.
+`_memory/` is READ-ONLY.
 
 **Phase 7 — Pull request (approval-gated, optional).** After Phase 6 (or its skip),
 the orchestrator reads `goal.md`'s `phases:` block — when `pull_request: false`, skip
@@ -395,18 +395,18 @@ routing and the evaluation criteria stay calibrated over time.
 For domain topics an external research agent must investigate without codebase access.
 
 ```
-Phase 1: Generate Research Prompt → _research/prompts/[topic].md  (user copy-pastes out)
-Phase 2: Ingest Research Report   → _research/[topic]/report.md
+Phase 1: Generate Research Prompt → _memory/work/research/prompts/[topic].md  (user copy-pastes out)
+Phase 2: Ingest Research Report   → _memory/work/research/[topic]/report.md
 Phase 3: High-Level Plan          → Collaborative planning (Plan Mode)
-Phase 4: Low-Level Tasks          → _goals/[goal-name]/ structure
+Phase 4: Low-Level Tasks          → _memory/work/goals/[goal-name]/ structure
 ```
 
 **Research locations:**
 - docs/agent-kit/research-multi-harness-upgrade.md — committed ground-truth reference. Cite as ground truth.
-- `_research/` — working/scratch area for new prompts and raw reports. Promote durable
+- `_memory/work/research/` — gitignored working/scratch area for new prompts and raw reports. Promote durable
   findings into docs/agent-kit/research-multi-harness-upgrade.md.
 
-The output of Phase 4 (`_goals/[goal-name]/`) enters the `feature` skill at Phase 3 (goal evaluation) — it must PASS the evaluator before Phase 4 execution begins.
+The output of Phase 4 (`_memory/work/goals/[goal-name]/`) enters the `feature` skill at Phase 3 (goal evaluation) — it must PASS the evaluator before Phase 4 execution begins.
 
 ---
 
@@ -486,25 +486,25 @@ Every subagent invocation requires a complete context package:
 
 ### Orchestration log (spawn ledger)
 
-`_goals/[goal-name]/orchestration-log.md` is an append-only spawn ledger written ONLY
+`_memory/work/goals/[goal-name]/orchestration-log.md` is an append-only spawn ledger written ONLY
 through the emitted tool `_kit/log-spawn.sh` (Windows outside Git Bash:
 `_kit\log-spawn.cmd` — Git for Windows required; same flags, byte-identical output). The orchestrator runs it inline (one-line output;
 exempt from the `terminal` spawn rule). The header's running io_est_tokens /
 work_est_tokens totals are "see latest entry" — the script never rewrites a line.
 Every entry references artifact files rather than inlining them:
 
-- `_goals/<goal>/spawns/NN-context.md` — the full context package as sent (NN = next
+- `_memory/work/goals/<goal>/spawns/NN-context.md` — the full context package as sent (NN = next
   free two-digit number, chosen by the orchestrator). This is the verbatim record.
-- `_goals/<goal>/spawns/NN-report.md` — the subagent's report, verbatim, never polished.
+- `_memory/work/goals/<goal>/spawns/NN-report.md` — the subagent's report, verbatim, never polished.
   Agents end with a `### Footprint` block (`files_read: N (~C chars)` / `commands_run: N`).
 
 Three subcommands (`--help` lists every flag):
 
-- **Before launch** — `spawn --goal G --agent A --phase "P" --model-requested M --context _goals/G/spawns/NN-context.md [--writes …] [--why …] [--expect …]`
+- **Before launch** — `spawn --goal G --agent A --phase "P" --model-requested M --context _memory/work/goals/G/spawns/NN-context.md [--writes …] [--why …] [--expect …]`
   appends `### <ts> — SPAWN A (P) [#NN]` plus bullet lines for agent · model requested,
   why, writes claim, expected output, and `context: <path> · context_chars: <N>` (N =
   measured file bytes).
-- **After return** — `outcome --goal G --spawn NN --report _goals/G/spawns/NN-report.md --verdict "V" --model-reported "M" [--note …] [--work-chars C]`
+- **After return** — `outcome --goal G --spawn NN --report _memory/work/goals/G/spawns/NN-report.md --verdict "V" --model-reported "M" [--note …] [--work-chars C]`
   appends `- OUTCOME [#NN]: V · model reported: M · model_check: <match|MISMATCH|unverified> · report: <path> · report_chars: <R> · io_est_tokens: <T> · work_read_chars: <C|n/a> · work_est_tokens: <W|n/a> · running io: <X> · running work: <Y>`
   where `model_check` compares provider **families** (not exact IDs) for the SPAWN
   `model requested:` id and `--model-reported`: `match` (both known, same family),
@@ -611,7 +611,7 @@ backstop.
 - **Phase 4**: A task is ONLY marked complete after the evaluator returns PASS or PASS (with notes) (`PASS (with notes)` counts as PASS). Fixes without re-evaluate are forbidden.
   Fix cycles rotate models — cycle 2 uses a different model family, cycle 3 the frontier tier (see the model map) — and every spawn is recorded in the goal's append-only orchestration log.
 - **Phase 5**: Audit loop ONLY exits to Quality Checks via an APPROVED verdict. Remediations without re-audit are forbidden.
-- **Phase 6**: A doc is ONLY complete after the evaluator returns PASS; the doc set ONLY ships after the final doc audit returns APPROVED. `_research/`, `_goals/`, and code are never touched.
+- **Phase 6**: A doc is ONLY complete after the evaluator returns PASS; the doc set ONLY ships after the final doc audit returns APPROVED. `_memory/` and code are never touched.
 - **Phase 7**: The PR/MR is ONLY created, or the hand-over printed, after the user approves the drafted title and body.
 
 ### Escalation Format
@@ -660,7 +660,7 @@ cache_write=<n|n/a> cost_usd=<x|n/a> format=<f>` after each slot's `tail -n 25` 
 
 ```mermaid
 flowchart TD
-    Pick["_goals/backlog.md: pick highest-priority story\nwith passes: false, attempts < 3"]
+    Pick["_memory/loop/backlog.md: pick highest-priority story\nwith passes: false, attempts < 3"]
     RunFlow["Run the feature flow\n(Phases 2–6; backlog acceptance criteria replace Phase 1;\nalign-docs runs per story so docs never drift)"]
     Gate{"Evaluator PASS +\nladder rungs green?"}
     Blocked["attempts += 1; if attempts == 3:\nmark blocked, log to ESCALATIONS.md,\nmove to next story"]
@@ -691,7 +691,7 @@ flowchart TD
 | Merge gate | evaluator PASS + green ladder rungs 1–2 before any commit; rung 3 per story after that story's Phase 5 audit, before that story's commit |
 | Docs | align-docs (Phase 6) runs per story — doc updates land in the story's commit |
 | Protected paths | the loop may not modify `_loop/`, kit agents/skills, the manifest, or `.gitattributes` — the loop driver (`loop.sh`/`loop.ps1`) reverts the iteration and stops (exit 4). `_memory/records/` and `_memory/quarantine/`: never staged by dispatched slots (created only via `_kit/memory.*` — integrator step 3b, or the manual iteration with its story commit) |
-| Memory gates | `_goals/LEARNINGS.md` ≥ 15 KB → compact; `_goals/ESCALATIONS.md` ≥ 20 KB → archive resolved entries |
+| Memory gates | `_memory/loop/LEARNINGS.md` ≥ 15 KB → compact; `_memory/loop/ESCALATIONS.md` ≥ 20 KB → archive resolved entries |
 | Shipping | the loop never pushes; at run end, `ship-pr` (Phase 7) drafts and creates the PR/MR on the project's forge, or hand over, with the user approving the draft |
 | Sandbox | run in a worktree/container with minimal credentials; never skip permission prompts outside a sandbox |
 
@@ -712,10 +712,11 @@ drifting run early. Headless entry point: `_loop/loop.sh [max-iterations]` (bash
 
 ## Memory
 
-**Two stores.** `_goals/` ledgers (`LEARNINGS.md`, `ESCALATIONS.md`, per-goal
-orchestration logs) hold iteration notes. **`_memory/`** holds immutable searchable
-records (`_memory/records/`, quarantine under `_memory/quarantine/`) — always-loaded
-files point at search commands; they never inline record bodies.
+**One tree.** **`_memory/`** holds immutable searchable records (`records/`,
+`quarantine/`), gitignored in-flight goal and research work (`work/goals/`,
+`work/research/`), and tracked loop state (`loop/` — backlog, `LEARNINGS.md`,
+`ESCALATIONS.md`, archive). Always-loaded files point at search commands; they never
+inline record bodies.
 
 ```mermaid
 flowchart TD
@@ -736,11 +737,11 @@ flowchart TD
 | Workflow | Read | Write |
 |----------|------|-------|
 | **Feature** | Once before Phase 2; ids in `goal.md` `## Recalled memory` | After Phase 5 APPROVED + green QC — one `goal-summary` + 0–3 `decision`/`pitfall` via `_kit/memory.*` |
-| **Research** | Phase 1 → `_research/<topic>/recalled-memory.md`; Phase 4 copies ids into the new goal | One `research-ingest` after Phase 2 ingestion review |
+| **Research** | Phase 1 → `_memory/work/research/<topic>/recalled-memory.md`; Phase 4 copies ids into the new goal | One `research-ingest` after Phase 2 ingestion review |
 | **Loop (manual)** | Feature recall once before Phase 2 in the iteration | Direct `_kit/memory.sh add`; new record paths in the story commit |
 | **Loop (dispatched)** | At `LOOP_WORKTREE=0`: feature recall once before Phase 2 in the slot; at `LOOP_WORKTREE=1`: empty recall (no `_kit/` in slot worktrees) | Proposals in `<outbox>/memory/*.md`; integrator **step 3b** at reap end |
 | **Capture** | Optional recall when distilling a session | `memory-capture` skill: `_kit/memory.sh capture` → scope confirm → distill → `add` → `check`; gitignored `_memory/raw/` |
-| **Back-fill** | Optional recall before a one-time legacy import | `_kit/memory.sh backfill --plan` (no writes), review output, then `--apply`; closed goals, research topics named with `--only`, and resolved escalations; closed signals — the kit writes the `ARCHIVED:` note and `_research/<topic>/ingested` marker; a human adds the escalation `resolved:` line inside the entry — see `_memory/README.md` (`backfill`, **Closed signals**); one-time transcript import via `memory-capture` (runbook: `.cursor/skills/feature/reference/memory-capture.md`; Codex-only installs: run `capture` per `_memory/README.md` and distill from a Claude Code, Cursor or Copilot session) |
+| **Back-fill** | Optional recall before a one-time legacy import | `_kit/memory.sh backfill --plan` (no writes), review output, then `--apply`; sources under `_memory/work/goals/`, `_memory/work/research/`, and `_memory/loop/ESCALATIONS.md` plus `_memory/loop/archive/`; closed signals — the kit writes the `ARCHIVED:` note and `_memory/work/research/<topic>/ingested`; a human adds the escalation `resolved:` line — see `_memory/README.md` (`backfill`, **Closed signals**); one-time transcript import via `memory-capture` (runbook: `.cursor/skills/feature/reference/memory-capture.md`; Codex-only installs: run `capture` per `_memory/README.md` and distill from a Claude Code, Cursor or Copilot session) |
 
 Before committing memory records, run `_kit/memory.sh check <paths>`, or
 `check --staged` for everything staged. Exit **3** means the gate failed (secret, hash/id mismatch,
@@ -754,7 +755,8 @@ git hook; opt in locally if desired.
 `terminal`. At most five entries; omit the section when recall picked `none`.
 
 **Protected paths.** `_memory/records/` and `_memory/quarantine/` are integrator-only for
-dispatched loop work; no story declares `_memory/` in `writes:`. Step 3b runs after CB0
+dispatched loop work; no story declares `_memory/records/` or `_memory/quarantine/` in
+`writes:`. Step 3b runs after CB0
 and disposal when there is no ITERATION-mismatch, no subset violation, and (at
 `LOOP_WORKTREE=1`) the branch integrated — any verdict, including `failed`. Successful
 adds/quarantines get a path-limited `chore(memory): <story-id> records` commit.
@@ -800,14 +802,16 @@ installs have no kit skills tree (no protocol copy on disk).
 │
 └── ORCHESTRATION.md   # This file
 
-_goals/backlog.md               # Story backlog for the autonomous loop (if enabled)
-_goals/<goal>/orchestration-log.md  # Append-only spawn ledger per goal (written by _kit/log-spawn.*)
-_goals/<goal>/spawns/NN-context.md  # Context package sent to spawn #NN (verbatim)
-_goals/<goal>/spawns/NN-report.md   # Report returned by spawn #NN (verbatim)
-_goals/breaker-state.json       # Model circuit breaker state (runtime, gitignored)
+_memory/loop/backlog.md               # Story backlog for the autonomous loop (if enabled)
+_memory/work/goals/<goal>/orchestration-log.md  # Append-only spawn ledger per goal (written by _kit/log-spawn.*)
+_memory/work/goals/<goal>/spawns/NN-context.md  # Context package sent to spawn #NN (verbatim)
+_memory/work/goals/<goal>/spawns/NN-report.md   # Report returned by spawn #NN (verbatim)
+_memory/loop/breaker-state.json       # Model circuit breaker state (runtime, gitignored)
 _kit/{log-spawn.sh,log-spawn.cmd}  # Single-copy tools: orchestration-log writer + Windows launcher
 _kit/{memory.sh,memory.ps1}  # Single-copy tools: memory store (add / index / search / show / redact / check / rm / capture / backfill)
 _memory/records/ · _memory/quarantine/  # Tracked memory records (immutable, one per file) — see _memory/README.md
+_memory/work/                   # Gitignored in-flight goal and research scratch — see _memory/README.md
+_memory/loop/                   # Tracked loop ledgers and archive (breaker-state.json gitignored)
 _memory/.index/ · _memory/raw/  # Derived index; capture output, ledgers and drafts (gitignored)
 _loop/{loop.sh,loop.ps1,breaker.sh,breaker.ps1,PROMPT.md}  # Headless loop driver (if enabled)
 ```
@@ -848,9 +852,9 @@ bash scripts/validate-skills.sh && bash tests/agent-kit/run-all.sh         # run
 **Orchestration log** (orchestrator runs these inline; Windows outside Git Bash: `_kit\log-spawn.cmd` — Git for Windows required):
 ```bash
 _kit/log-spawn.sh spawn --goal my-goal --agent implementer --phase "Phase 4 task 02" \
-  --model-requested <model-id> --context _goals/my-goal/spawns/03-context.md \
+  --model-requested <model-id> --context _memory/work/goals/my-goal/spawns/03-context.md \
   --writes "src/foo.ts" --why "task 02" --expect "completion report"
-_kit/log-spawn.sh outcome --goal my-goal --spawn 03 --report _goals/my-goal/spawns/03-report.md \
+_kit/log-spawn.sh outcome --goal my-goal --spawn 03 --report _memory/work/goals/my-goal/spawns/03-report.md \
   --verdict "PASS" --model-reported "<model-id as self-reported>"
 _kit/log-spawn.sh note --goal my-goal --text "Phase 4 complete"
 ```
@@ -941,7 +945,7 @@ The orchestrator maintains this state throughout execution:
 - [ ] Change surface + per-doc edit list built
 - [ ] Edit plan evaluated PASS
 - [ ] Each doc executed + evaluated PASS
-- [ ] Final doc audit APPROVED (docs only; _research/ and _goals/ untouched)
+- [ ] Final doc audit APPROVED (docs only; _memory/ untouched)
 
 ### Phase 7: Pull Request (gated on user approval)
 - [ ] PR title + body drafted from branch commits

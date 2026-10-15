@@ -9,7 +9,6 @@ export EMIT_DATE=2026-01-01
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$HERE/../../.." && pwd)"
-cd "$REPO_ROOT" || exit 1
 
 . "$HERE/../lib/parallel.sh"
 . "$HERE/../lib/emit-cache.sh"
@@ -71,6 +70,7 @@ mktemp_dir() { # <out-var> — never use inside $(...) (CLEANUP must persist)
   [[ -n "$_mv" ]] || { report FAIL "mktemp_dir: missing out-var"; exit 1; }
   _md="$(mktemp -d "$TMP_BASE/XXXXXX")" || _md=""
   [[ -n "$_md" && -d "$_md" ]] || { report FAIL "mktemp_dir failed"; exit 1; }
+  assert_fixture_root "$_md" || { report FAIL "mktemp_dir: not a fixture root: $_md"; exit 1; }
   printf -v "$_mv" '%s' "$_md"
 }
 
@@ -132,8 +132,14 @@ four_harness_answers() { # outfile
   ' "$FIXTURE" > "$1"
 }
 
-run_emit_sh() { bash "$EMIT_SH" --root "$1" --kit "$KIT" "${@:2}"; }
-run_emit_ps1() { pwsh -NoProfile -File "$EMIT_PS1" --root "$1" --kit "$KIT" "${@:2}"; }
+run_emit_sh() {
+  assert_fixture_root "${1-}" || exit 1
+  bash "$EMIT_SH" --root "$1" --kit "$KIT" "${@:2}"
+}
+run_emit_ps1() {
+  assert_fixture_root "${1-}" || exit 1
+  pwsh -NoProfile -File "$EMIT_PS1" --root "$1" --kit "$KIT" "${@:2}"
+}
 
 agent_has_memory_frontmatter() {
   local f="$1"
@@ -242,6 +248,11 @@ mutation_expect_fail() { # name check_fn [args...]
 LEAK_TMP_BEFORE="$(count_leak_roots)"   # BEFORE our own scratch root exists
 TMP_BASE="$(mktemp -d "${TMPDIR:-/tmp}/memory-wiring.XXXXXX")"
 CLEANUP+=("$TMP_BASE")
+# Every emit root this suite creates lives under TMP_BASE; fixture-root.sh fails closed (exits)
+# unless TMP_BASE is an absolute, existing directory outside the repository.
+FIXTURE_TMPDIR="$TMP_BASE"
+# shellcheck source=../lib/fixture-root.sh
+. "$HERE/../lib/fixture-root.sh"
 
 blk_s1() {
   local s1_inst_skip=0

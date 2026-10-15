@@ -15,7 +15,10 @@ export EMIT_DATE=2026-09-03
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$HERE/../../.." && pwd)"
-cd "$REPO_ROOT" || exit 1
+FIXTURE_TMPDIR="$(mktemp -d "${TMPDIR:-/tmp}/emitdet.XXXXXX")" || exit 1
+export TMPDIR="$FIXTURE_TMPDIR"
+# shellcheck source=../lib/fixture-root.sh
+. "$HERE/../lib/fixture-root.sh"
 
 . "$HERE/../lib/parallel.sh"
 . "$HERE/../lib/emit-cache.sh"
@@ -44,7 +47,8 @@ report() { # report <PASS|FAIL|SKIP> <name> [detail]
 
 mktemp_root() {
   local d
-  d="$(mktemp -d "$RUN_TMP/root.XXXXXX")"
+  d="$(mktemp -d "$RUN_TMP/root.XXXXXX")" || exit 1
+  assert_fixture_root "$d" || exit 1
   printf '%s' "$d"
 }
 
@@ -71,6 +75,7 @@ class_a_ids() {
 
 run_emit_sh() { # root --kit DIR [extra args...]
   local root="$1"; shift
+  assert_fixture_root "$root" || exit 1
   "$BASH" "$EMIT_SH" --root "$root" "$@"
 }
 
@@ -157,8 +162,8 @@ case_c_manifest_shape() {
   mf="$root/orchestration-kit.manifest.json"
   jq -e '.answers.schema == 1' "$mf" >/dev/null 2>&1 || return 1
   jq -e '.options.forge | type == "string"' "$mf" >/dev/null 2>&1 || return 1
-  jq -e '.seedFiles | index("_goals/backlog.md") != null' "$mf" >/dev/null 2>&1 || return 1
-  jq -e '.files | has("_goals/backlog.md") | not' "$mf" >/dev/null 2>&1 || return 1
+  jq -e '.seedFiles | index("_memory/loop/backlog.md") != null' "$mf" >/dev/null 2>&1 || return 1
+  jq -e '.files | has("_memory/loop/backlog.md") | not' "$mf" >/dev/null 2>&1 || return 1
   manifest_key_order_ok "$mf" || return 1
   manifest_files_hashes_ok "$root" "$mf" || return 1
   jq_object_keys_sorted "$mf" '.answers' || return 1
@@ -282,12 +287,12 @@ case_h_upgrade() {
   jq -e --arg h "$fh" '.files[".claude/checks.sh"] == $h' "$root/orchestration-kit.manifest.json" >/dev/null || return 1
 
   # seed edited stays untouched
-  [[ -f "$root/_goals/backlog.md" ]] || return 1
-  printf '\nSEED_EDIT\n' >> "$root/_goals/backlog.md"
+  [[ -f "$root/_memory/loop/backlog.md" ]] || return 1
+  printf '\nSEED_EDIT\n' >> "$root/_memory/loop/backlog.md"
   local seed_before
-  seed_before="$(sha256sum "$root/_goals/backlog.md" | awk '{print $1}')"
+  seed_before="$(sha256sum "$root/_memory/loop/backlog.md" | awk '{print $1}')"
   run_emit_sh "$root" --kit "$KIT" --force --upgrade >/dev/null 2>&1 || return 1
-  [[ "$(sha256sum "$root/_goals/backlog.md" | awk '{print $1}')" == "$seed_before" ]] || return 1
+  [[ "$(sha256sum "$root/_memory/loop/backlog.md" | awk '{print $1}')" == "$seed_before" ]] || return 1
 
   # manifest without answers
   jq 'del(.answers)' "$root/orchestration-kit.manifest.json" > "${mf}.tmp" && mv "${mf}.tmp" "$mf"
@@ -598,7 +603,7 @@ _suite_cleanup() {
 }
 trap _suite_cleanup EXIT
 
-RUN_TMP="$(mktemp -d 2>/dev/null || mktemp -d -t emit-det)"
+RUN_TMP="$FIXTURE_TMPDIR"
 PATH_WITHOUT_JQ="$(path_without jq)"
 for _awk in gawk mawk busybox; do
   if awk_shim_dir "$_awk"; then

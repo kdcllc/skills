@@ -2549,7 +2549,7 @@ backfill_id_in_store() { # <store> <id>
 
 backfill_goal_status() { # <root> <store> <goal> <only_hit:0|1> → prints 3 lines: status, ts, verdict
   local root="$1" store="$2" g="$3" only_hit="$4"
-  local log="$root/_goals/$g/orchestration-log.md" line last_spawn="" ts="" verdict="" last_note="" any_ts=""
+  local log="$root/_memory/work/goals/$g/orchestration-log.md" line last_spawn="" ts="" verdict="" last_note="" any_ts=""
   while IFS= read -r line || [ -n "$line" ]; do
     line="${line%$'\r'}"
     if printf '%s\n' "$line" | LC_ALL=C grep -Eq '^### [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}[+-][0-9]{2}:[0-9]{2}' 2>/dev/null; then
@@ -2600,9 +2600,10 @@ backfill_goal_status() { # <root> <store> <goal> <only_hit:0|1> → prints 3 lin
 }
 
 backfill_goal_archived_p() { # <root> <store> <goal>
-  local root="$1" store="$2" g="$3" log="$root/_goals/$g/orchestration-log.md" line rest id
+  local root="$1" store="$2" g="$3" log="$root/_memory/work/goals/$g/orchestration-log.md" line rest id
   backfill_source_exists "$store" "goal $g (goal.md)" && return 0
   backfill_source_exists "$store" "_goals/$g/goal.md" && return 0
+  backfill_source_exists "$store" "_memory/work/goals/$g/goal.md" && return 0
   while IFS= read -r line || [ -n "$line" ]; do
     line="${line%$'\r'}"
     if printf '%s\n' "$line" | LC_ALL=C grep -Eq '^### [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}[+-][0-9]{2}:[0-9]{2} — ARCHIVED:' 2>/dev/null; then
@@ -2617,8 +2618,8 @@ backfill_goal_archived_p() { # <root> <store> <goal>
 }
 
 backfill_build_goal_body() { # <root> <goal> <verdict> <utc-date> <out-file>
-  local root="$1" g="$2" verdict="$3" udate="$4" out="$5" goal="$root/_goals/$g/goal.md"
-  export BF_GOAL_MD="$goal" BF_G="$g" BF_VERDICT="$verdict" BF_UDATE="$udate" BF_FU="$root/_goals/$g/follow-ups.md"
+  local root="$1" g="$2" verdict="$3" udate="$4" out="$5" goal="$root/_memory/work/goals/$g/goal.md"
+  export BF_GOAL_MD="$goal" BF_G="$g" BF_VERDICT="$verdict" BF_UDATE="$udate" BF_FU="$root/_memory/work/goals/$g/follow-ups.md"
   awk '
     BEGIN {
       gm = ENVIRON["BF_GOAL_MD"]; g = ENVIRON["BF_G"]; fu = ENVIRON["BF_FU"]
@@ -2722,7 +2723,7 @@ backfill_goal_tags() { # <goal> → stdout
 
 backfill_research_status() { # <root> <store> <topic> <only_hit>
   local root="$1" store="$2" t="$3" only_hit="$4"
-  [ -f "$root/_research/$t/ingested" ] && { printf 'skip:archived'; return; }
+  [ -f "$root/_memory/work/research/$t/ingested" ] && { printf 'skip:archived'; return; }
   backfill_source_exists "$store" "research $t (report.md)" && { printf 'skip:archived'; return; }
   [ "$only_hit" = "1" ] && { printf 'would-add'; return; }
   printf 'skip:not-selected'
@@ -2796,7 +2797,7 @@ backfill_build_research_body() { # <root> <topic> <out>
   local root="$1"
   local topic="$2"
   local out="$3"
-  local rp="$root/_research/$topic/report.md"
+  local rp="$root/_memory/work/research/$topic/report.md"
   local part
   part="$(mk_tmp)"
   awk '
@@ -2846,7 +2847,7 @@ cmd_backfill() {
 
   [ "$seen_root" -eq 1 ] || root="$(default_root)"
   root="$(resolve_root "$root")"
-  local store goals_dir="$root/_goals" research_dir="$root/_research"
+  local store goals_dir="$root/_memory/work/goals" research_dir="$root/_memory/work/research"
   store="$(store_dir "$root")"
 
   if [ -n "$only_raw" ]; then
@@ -2888,7 +2889,7 @@ cmd_backfill() {
         title="${name}: back-filled research summary"
         source="research $name (report.md)"
         tags="backfill research"
-        id_prefix="$(backfill_research_ts "$root/_research/$name/report.md")"
+        id_prefix="$(backfill_research_ts "$root/_memory/work/research/$name/report.md")"
         raw_body="$(mk_tmp)"
         backfill_build_research_body "$root" "$name" "$raw_body"
         prep_body="$(mk_tmp)"
@@ -2994,9 +2995,9 @@ cmd_backfill() {
     else
       local esc_files="$(mk_tmp)" ef entries
       {
-        [ -f "$goals_dir/ESCALATIONS.md" ] && printf '%s\n' "$goals_dir/ESCALATIONS.md"
-        if [ -d "$goals_dir/archive" ]; then
-          find "$goals_dir/archive" -maxdepth 1 -type f -name 'ESCALATIONS-*.md' 2>/dev/null || true
+        [ -f "$root/_memory/loop/ESCALATIONS.md" ] && printf '%s\n' "$root/_memory/loop/ESCALATIONS.md"
+        if [ -d "$root/_memory/loop/archive" ]; then
+          find "$root/_memory/loop/archive" -maxdepth 1 -type f -name 'ESCALATIONS-*.md' 2>/dev/null || true
         fi
       } | awk '{ b = $0; sub(/.*\//, "", b); print b "\t" $0 }' | LC_ALL=C sort -u -t "$TAB" -k1,1 -k2,2 | cut -f2- > "$esc_files"
       while IFS= read -r ef; do

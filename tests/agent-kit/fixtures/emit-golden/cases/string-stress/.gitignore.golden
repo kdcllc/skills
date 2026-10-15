@@ -1,4 +1,5 @@
 _kit/
 _memory/.index/
 _memory/raw/
-_goals/breaker-state.json
+_memory/work/
+_memory/loop/breaker-state.json

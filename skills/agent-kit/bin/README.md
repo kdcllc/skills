@@ -10,13 +10,15 @@ Runs on **Bash 3.2+** with POSIX `awk` (no `jq`). On Windows outside Git Bash, u
 ## Flags
 
 `--answers F` `--upgrade` `--dry-run` `--force` `--check-answers`
-`--root DIR` (default: cwd) `--kit DIR` (default: this script's `..`)
+(legacy `_goals/` / `_research/` → `_memory/` migration runs whenever those dirs exist — fresh install or upgrade)
+`--root DIR` (default: cwd; an empty value exits **2**) `--kit DIR` (default: this script's `..`)
 
 ## Exit codes
 
 `0` ok · `2` usage / answers unreadable · `3` answers invalid or
-unanswered `--check-answers` ids · `4` upgrade blocked (user-modified; `--force`
-overrides) · `5` verify failed · `6` template syntax. `--help` → stderr, exit 2.
+unanswered `--check-answers` ids · `4` upgrade blocked (user-modified kit files or
+legacy migration target exists; `--force` overrides file blocks and skips conflicting
+moves with a warning) · `5` verify failed · `6` template syntax. `--help` → stderr, exit 2.
 
 ## Answers
 

@@ -3,7 +3,7 @@
 <!-- Story format — the auto-loop skill parses these fields:
      priority: lower number = picked first · passes: set true only by a passing
      iteration · attempts: incremented at iteration start · blocked: set true after
-     3 failed attempts (see _goals/ESCALATIONS.md).
+     3 failed attempts (see _memory/loop/ESCALATIONS.md).
      writes: comma-separated path globs this story will touch — literal paths, or
      a trailing `*`/`**` suffix glob only (no mid-path wildcards). Two claimed
      stories may run concurrently only when their writes: globs are disjoint;

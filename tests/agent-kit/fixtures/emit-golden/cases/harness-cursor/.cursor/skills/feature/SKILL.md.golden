@@ -54,9 +54,9 @@ change) and open a Phase 7 PR? (default yes). Present a "My Understanding" summa
 
 **Recall** (once): per `reference/memory-protocol.md`, search and record picked ids or
 `none` in `goal.md` `## Recalled memory`; never block on empty/missing store; `note`
-once `_goals/<goal>/` exists.
+once `_memory/work/goals/<goal>/` exists.
 
-Create `_goals/[goal-name]/` containing:
+Create `_memory/work/goals/[goal-name]/` containing:
 - `goal.md` from `templates/goal.md` (Phase 1 Q&A + `phases:` block)
 - One `NN-task-name.md` per task from `templates/task.md`, in dependency order along
   skills/<name>/ (published skills; agent-kit: templates/ → bin/ + emitters/ → reference/harness-matrix.md) → scripts/checks/ + tests/ → docs/ + root README.md / skills.sh.json / marketplace manifests, then a final test task.
@@ -95,7 +95,7 @@ For each task in dependency order:
 2. **Silent-success check**: empty/missing report ⇒ verify artifacts: present ⇒
    completed ("report lost, files verified"); absent ⇒ failed, respawn once. Never
    re-run when expected artifacts already exist.
-3. Launch `evaluator` with task file, report, `.cursor/skills/task-criteria/SKILL.md`; if read-only (`readonly` in `.cursor/agents/evaluator.md` or refused shell), first spawn `terminal` per acceptance-criterion command, attach output.
+3. Launch `evaluator` with task file, report, `.cursor/skills/task-criteria/SKILL.md`; if read-only (evaluator.md `readonly` or refused shell), first spawn `terminal` per acceptance-criterion command, attach output.
 4. **PASS** or **PASS (with notes)** → next task (notes go into the log entry via `--note`). **NEEDS FIXES** → fix cycle + re-evaluate (max 3). **REJECT** → escalate.
 
    **Bypass at detection (every verdict, cycles 1–3).** Verdicts tagged `destructive`,
@@ -114,7 +114,7 @@ Ladder rungs 1–2 only (`test-ladder`); never rung 3. The headless loop inherit
 
 ## Phase 5 — Final audit (loop until APPROVED)
 
-Launch `evaluator` in audit mode: every task's requirements, cross-task integration, regressions; if read-only (step 3), first spawn `terminal` per acceptance-criterion command, attach output.
+Launch `evaluator` in audit mode: every task's requirements, cross-task integration, regressions; if read-only, first gather `terminal` evidence as in step 3.
 **APPROVED** → Quality Checks (rung 3: full suite + lint/type) via spawned
 `terminal` with `bash scripts/validate-skills.sh && bash tests/agent-kit/run-all.sh`. **ISSUES** → fix via executor + re-evaluate
 (rungs 1–2), re-audit (max 3).
@@ -136,7 +136,7 @@ skipped per goal.md"); `pull_request: false` skips Phase 7 likewise.
 ## Phase 6 — Align docs (loop until doc audit APPROVED)
 
 Read `.cursor/skills/align-docs/SKILL.md` and execute. Docs-only — never code;
-`_research/` and `_goals/` read-only. Complete only at doc audit APPROVED.
+`_memory/` read-only. Complete only at doc audit APPROVED.
 
 ## Phase 7 — Pull request (gated on user approval)
 
@@ -147,10 +147,10 @@ artifact. Skip on the default branch (say so), if the user declines, or on
 
 ## Orchestration log (append-only spawn ledger)
 
-`_goals/[goal]/orchestration-log.md` is written ONLY through `_kit/log-spawn.sh`
+`_memory/work/goals/[goal]/orchestration-log.md` is written ONLY through `_kit/log-spawn.sh`
 (Windows outside Git Bash: `_kit\log-spawn.cmd`; Git for Windows required; same flags — see `--help` or ORCHESTRATION.md).
 **Before** each spawn: write the full context package to
-`_goals/[goal]/spawns/NN-context.md` (NN = next free number), then
+`_memory/work/goals/[goal]/spawns/NN-context.md` (NN = next free number), then
 `_kit/log-spawn.sh spawn --goal [goal] --agent [agent] --phase "…" --model-requested [id] --context [that file] [--writes --why --expect]`
 (measures `context_chars`). **After** return: save the verbatim report to
 `spawns/NN-report.md`, then `_kit/log-spawn.sh outcome --goal [goal] --spawn NN --report [that file] --verdict "…" --model-reported "…"`

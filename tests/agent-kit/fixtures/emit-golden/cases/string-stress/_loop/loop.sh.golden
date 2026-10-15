@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Autonomous feature loop for stress "quotes" café — emoji 🎭 — drives one `auto-loop` iteration per
-# fresh-context CLI run. State lives in _goals/backlog.md + git, never in memory.
+# fresh-context CLI run. State lives in _memory/loop/backlog.md + git, never in memory.
 #
 # Twin: loop.ps1 (PowerShell 7+) — behaviorally identical —
 # same defaults, guards, and exit codes; any divergence is a bug.
@@ -26,7 +26,7 @@
 # This script never pushes and never bypasses permission prompts by itself.
 #
 # Breaker: sources breaker.sh (functions: breaker_load, breaker_should_skip,
-# breaker_record, breaker_current_model); state file: _goals/breaker-state.json.
+# breaker_record, breaker_current_model); state file: _memory/loop/breaker-state.json.
 #
 # Exit codes (driver-aggregated across slots, precedence 4>3>2>1>0 -- the most
 # severe cause is always the one reported):
@@ -52,7 +52,7 @@
 # (the 126 case is Unix-host-only).
 # Exit 5 = setup or integration failure: the LOOP_WORKTREE=1 tracked-instance
 # preflight failing after `git worktree add`, PROMPT.md missing a %%...%%
-# substitution point, a missing/unreadable _goals/backlog.md, or the
+# substitution point, a missing/unreadable _memory/loop/backlog.md, or the
 # rebase-then-ff integration step hitting a non-fast-forward -- all loud,
 # driver-level stops that never silently fall back to the main tree (the
 # preflight path removes its worktree; the non-ff path retains worktree and
@@ -111,8 +111,8 @@ esac
 # LOOP_WORKTREE=1) -- both were relative and depended on the invocation cwd.
 PROMPT_FILE="$(cd "$(dirname "$0")" && pwd)/PROMPT.md"
 SENTINEL='<promise>COMPLETE</promise>'
-STATE_FILE="$PWD/_goals/breaker-state.json"
-BACKLOG_FILE="$PWD/_goals/backlog.md"   # driver-owned selection reads/writes
+STATE_FILE="$PWD/_memory/loop/breaker-state.json"
+BACKLOG_FILE="$PWD/_memory/loop/backlog.md"   # driver-owned selection reads/writes
                                         # this file directly (never via $tree
                                         # -- §6.3: "slots never write it").
 
@@ -1206,10 +1206,10 @@ _loop_fill_slot() {
     # primary. A directory probe on .claude is true on all four harnesses
     # whenever the instance is tracked, and false in exactly the
     # gitignored-instance case -- the iteration needs that whole directory
-    # (it is sent to ORCHESTRATION.md and _goals/ESCALATIONS.md), not just
+    # (it is sent to ORCHESTRATION.md and _memory/loop/ESCALATIONS.md), not just
     # one file in it.
-    if [[ ! -f "$wt/_goals/backlog.md" || ! -d "$wt/.claude" ]]; then
-      echo "!!! worktree preflight failed: '$wt' is missing a tracked _goals/backlog.md and/or a tracked .claude directory — a worktree checks out TRACKED files only, so this repo's loop instance must be committed (not gitignored) for LOOP_WORKTREE=1 — stopping, no fallback to the main tree" >&2
+    if [[ ! -f "$wt/_memory/loop/backlog.md" || ! -d "$wt/.claude" ]]; then
+      echo "!!! worktree preflight failed: '$wt' is missing a tracked _memory/loop/backlog.md and/or a tracked .claude directory — a worktree checks out TRACKED files only, so this repo's loop instance must be committed (not gitignored) for LOOP_WORKTREE=1 — stopping, no fallback to the main tree" >&2
       git worktree remove --force "$wt" 2>/dev/null || true
       git worktree prune
       # The `-b "$branch"` on `git worktree add` above already created this
@@ -1414,10 +1414,10 @@ _loop_reap_slot() {
   # --- Integrator step 3: outbox appends, ALWAYS (independent evidence from
   # the child's own work) -- integration order = reap order.
   if [[ -f "$outbox_dir/learnings.md" ]]; then
-    cat "$outbox_dir/learnings.md" >> "$PWD/_goals/LEARNINGS.md"
+    cat "$outbox_dir/learnings.md" >> "$PWD/_memory/loop/LEARNINGS.md"
   fi
   if [[ -f "$outbox_dir/escalations.md" ]]; then
-    cat "$outbox_dir/escalations.md" >> "$PWD/_goals/ESCALATIONS.md"
+    cat "$outbox_dir/escalations.md" >> "$PWD/_memory/loop/ESCALATIONS.md"
   fi
   # Dispatch-prompt readback (D5/STORY-012): read before the outbox goes
   # away -- empty-safe (a manual/pre-STORY-012 outbox may lack the file).
@@ -1466,16 +1466,16 @@ _loop_reap_slot() {
   # dispatched) iteration, whose skill text keeps the gates. 15/20 KB read
   # as the binary (KiB) convention, matching typical file-size tooling.
   local sz
-  if [[ -f "$PWD/_goals/LEARNINGS.md" ]]; then
-    sz="$(wc -c < "$PWD/_goals/LEARNINGS.md" | tr -d '[:space:]')"
+  if [[ -f "$PWD/_memory/loop/LEARNINGS.md" ]]; then
+    sz="$(wc -c < "$PWD/_memory/loop/LEARNINGS.md" | tr -d '[:space:]')"
     if (( sz >= 15360 )); then
-      echo "!!! _goals/LEARNINGS.md is >= 15KB ($sz bytes) -- compaction deferred to the next MANUAL iteration; automated prose compaction is out of the driver's competence (design §6.3 :685-689 single-writer rule -- the driver IS the single writer, but semantic rewriting is not)" >&2
+      echo "!!! _memory/loop/LEARNINGS.md is >= 15KB ($sz bytes) -- compaction deferred to the next MANUAL iteration; automated prose compaction is out of the driver's competence (design §6.3 :685-689 single-writer rule -- the driver IS the single writer, but semantic rewriting is not)" >&2
     fi
   fi
-  if [[ -f "$PWD/_goals/ESCALATIONS.md" ]]; then
-    sz="$(wc -c < "$PWD/_goals/ESCALATIONS.md" | tr -d '[:space:]')"
+  if [[ -f "$PWD/_memory/loop/ESCALATIONS.md" ]]; then
+    sz="$(wc -c < "$PWD/_memory/loop/ESCALATIONS.md" | tr -d '[:space:]')"
     if (( sz >= 20480 )); then
-      echo "!!! _goals/ESCALATIONS.md is >= 20KB ($sz bytes) -- archival (move RESOLVED entries) deferred to the next MANUAL iteration; same single-writer-competence limit as LEARNINGS above" >&2
+      echo "!!! _memory/loop/ESCALATIONS.md is >= 20KB ($sz bytes) -- archival (move RESOLVED entries) deferred to the next MANUAL iteration; same single-writer-competence limit as LEARNINGS above" >&2
     fi
   fi
 

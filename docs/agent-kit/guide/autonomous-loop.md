@@ -4,14 +4,14 @@
 
 The autonomous loop is **optional**. It drives unattended runs: the loop driver (`_loop/loop.sh` or `_loop/loop.ps1`) repeatedly dispatches the `auto-loop` skill with fresh context until the run budget is exhausted or a structural guard stops the run. **SAFETY: run inside a sandbox** (worktree/container) with minimal credentials. The drivers never push and never bypass permission prompts by themselves — the same sandbox warning appears in the skill [README](../../../skills/agent-kit/README.md) and the loop driver header.
 
-As of **v0.19.0**, this guide describes **canonical shipped behavior** — what `/agent-kit` emits from `skills/agent-kit/templates/loop/` into your project's `_loop/` tree. In **this kit repo**, the emitted instance is gitignored, so live runs here stay serial on the main tree; `LOOP_WORKTREE=1` requires a **tracked** instance (committed `_goals/backlog.md` and harness directory), which is labeled explicitly wherever it matters below.
+As of **v0.19.0**, this guide describes **canonical shipped behavior** — what `/agent-kit` emits from `skills/agent-kit/templates/loop/` into your project's `_loop/` tree. In **this kit repo**, the emitted instance is gitignored and `_memory/loop/` is not tracked, so live runs here stay serial on the main tree; `LOOP_WORKTREE=1` requires a **tracked** `_memory/loop/backlog.md` (and harness directory) in the install, which is labeled explicitly wherever it matters below.
 
 ## What a run is
 
 One **run** is:
 
 1. **N iterations** — the driver's `max-iterations` argument (default **10** when omitted), counting total dispatches across all active slots.
-2. **One backlog story per fresh-context iteration** — each dispatch gets a clean CLI session; state lives in `_goals/backlog.md`, git, and outbox files, never in driver memory.
+2. **One backlog story per fresh-context iteration** — each dispatch gets a clean CLI session; state lives in `_memory/loop/backlog.md`, git, and outbox files, never in driver memory.
 3. **One human-approved PR at run end (when enabled)** — Phase 7 (`ship-pr`) ships the branch as a single pull request with your approval when loop-level `pull_request` is enabled. The loop never auto-pushes.
 
 If you have not installed the loop yet, see [getting-started.md](getting-started.md) for `/agent-kit` and the emitted `_loop/` layout.
@@ -44,7 +44,7 @@ flowchart TD
     Next -->|"no eligible stories or max iter"| Exit
 ```
 
-**Story selection (driver-owned dispatch).** The driver reads `_goals/backlog.md`, picks the highest-priority eligible story (`passes: false`, not blocked, within attempt limits), increments `attempts` at claim time, and dispatches a prompt naming the story id and outbox directory. Slots never re-select or print `<promise>COMPLETE</promise>` in dispatched mode — that sentinel is for manual `auto-loop` runs only.
+**Story selection (driver-owned dispatch).** The driver reads `_memory/loop/backlog.md`, picks the highest-priority eligible story (`passes: false`, not blocked, within attempt limits), increments `attempts` at claim time, and dispatches a prompt naming the story id and outbox directory. Slots never re-select or print `<promise>COMPLETE</promise>` in dispatched mode — that sentinel is for manual `auto-loop` runs only.
 
 **Write-set admission.** Before dispatch, the driver checks the story's declared `writes:` globs against other in-flight claims and refuses stories that would touch **protected paths** (see below). Refused stories are skipped for this run, not silently widened.
 
@@ -68,10 +68,10 @@ These guards are **structural** — enforced by `loop.sh` / `loop.ps1` and the `
 
 | Guard | Driver behavior (as of v0.19.0) |
 |-------|----------------------------------|
-| **Protected paths** | The loop may not modify `_loop/`, kit agents/skills, `orchestration-kit.manifest.json`, or `.gitattributes`. As of **v1.0.0**, **`_memory/records/`** and **`_memory/quarantine/`** are integrator-only in driver-dispatched mode (slots never declare `_memory/` in `writes:`). A protected-path violation reverts the iteration and **stops the run immediately** (exit **4**); other running slots are killed. |
+| **Protected paths** | The loop may not modify `_loop/`, kit agents/skills, `orchestration-kit.manifest.json`, or `.gitattributes`. As of **v1.0.0**, **`_memory/records/`** and **`_memory/quarantine/`** are integrator-only in driver-dispatched mode (no story may declare `_memory/records/` or `_memory/quarantine/` in `writes:`; manual iterations may update `_memory/loop/backlog.md`). A protected-path violation reverts the iteration and **stops the run immediately** (exit **4**); other running slots are killed. |
 | **Circuit breaker (CB1 / CB2)** | **Per slot:** retire after **3 consecutive no-commit reaps** (CB1) or **5 identical failure signatures** (CB2). The run **continues** while other slots remain active. When **every slot is retired**, the run stops — exit **3** if any retirement was signature-based (CB2), else exit **2**. |
-| **Model breaker** | CLOSED/OPEN/HALF-OPEN on anchored rate-limit detection; 600s cooldown, 2 successes to close; falls down the loop model chain. OPEN sleeps instead of hammering; rate-limited passes are CB1-exempt. State: `_goals/breaker-state.json`. |
-| **Memory size gates** | After integrate, the driver **detects** breaches and prints a deferral — it never compacts or archives. Thresholds match the guard table: `_goals/LEARNINGS.md` ≥ **15 KB** (compact) and `_goals/ESCALATIONS.md` ≥ **20 KB** (archive resolved entries) — an entry is resolved when it carries a `- resolved: YYYY-MM-DD <decision>` line; archived entries go to `_goals/archive/ESCALATIONS-<YYYY-MM>.md`, where `memory.sh backfill --escalations` can turn them into `decision` records. Compaction and archival happen in a **manual** `auto-loop` iteration only; driver-dispatched slots never run these gates. |
+| **Model breaker** | CLOSED/OPEN/HALF-OPEN on anchored rate-limit detection; 600s cooldown, 2 successes to close; falls down the loop model chain. OPEN sleeps instead of hammering; rate-limited passes are CB1-exempt. State: `_memory/loop/breaker-state.json` (gitignored). |
+| **Memory size gates** | After integrate, the driver **detects** breaches and prints a deferral — it never compacts or archives. Thresholds match the guard table: `_memory/loop/LEARNINGS.md` ≥ **15 KB** (compact) and `_memory/loop/ESCALATIONS.md` ≥ **20 KB** (archive resolved entries) — an entry is resolved when it carries a `- resolved: YYYY-MM-DD <decision>` line; archived entries go to `_memory/loop/archive/ESCALATIONS-<YYYY-MM>.md`, where `memory.sh backfill --escalations` can turn them into `decision` records. Compaction and archival happen in a **manual** `auto-loop` iteration only; driver-dispatched slots never run these gates. |
 | **Merge gate** | Evaluator PASS + green ladder rungs **1–2** before any commit; rung **3** per story after that story's Phase 5 audit, before that story's commit. |
 | **PR gate / shipping** | The loop **never pushes**. At run end, when loop-level `pull_request` is enabled, **`ship-pr` (Phase 7)** ships the branch as **one PR**, with the user approving the draft. |
 | **Per-story attempt cap** | **3** attempts, then `blocked: true` plus an escalation entry. |
@@ -90,7 +90,7 @@ Both drivers honor the same environment variables. **`loop.ps1` is a behaviorall
 | **0** (default) | Every iteration runs in the **main tree** — today's serial behavior. |
 | **1** | Each iteration runs in its own git worktree under `.loop-worktrees/`. |
 
-When `LOOP_WORKTREE=1`, the driver runs a **tracked-instance preflight** immediately after `git worktree add`: the worktree must contain a tracked `_goals/backlog.md` and a tracked harness directory (`{{IDE_DIR}}` at install time). If either is missing — typical when the loop instance is gitignored — the driver removes the worktree, deletes the branch, prints a loud error, and exits **5**. There is **no fallback to the main tree**.
+When `LOOP_WORKTREE=1`, the driver runs a **tracked-instance preflight** immediately after `git worktree add`: the worktree must contain a tracked `_memory/loop/backlog.md` and a tracked harness directory (`{{IDE_DIR}}` at install time). If either is missing — typical when the loop instance is gitignored in this repo — the driver removes the worktree, deletes the branch, prints a loud error, and exits **5**. There is **no fallback to the main tree**.
 
 ### `LOOP_SLOTS`
 
@@ -156,7 +156,7 @@ Exit codes are **driver-aggregated across slots** with precedence **4 > 3 > 2 > 
 | **2** | **Circuit breaker — all slots retired on no-progress** — each retired slot hit CB1 (3 consecutive no-commit reaps). |
 | **3** | **Circuit breaker — all slots retired with at least one CB2 retirement** — at least one slot retired on 5 consecutive identical failure signatures. |
 | **4** | **Protected-path modification** — iteration reverted; run stops immediately; every other running slot is killed. |
-| **5** | **Setup or integration failure** — includes: `LOOP_WORKTREE=1` tracked-instance preflight failure; missing/unreadable `_goals/backlog.md`; `PROMPT.md` missing a required substitution point; rebase-then-ff integration hitting a non-fast-forward. Loud stops with **no silent fallback** to the main tree (preflight removes its worktree; non-ff retains worktree and branch for inspection). |
+| **5** | **Setup or integration failure** — includes: `LOOP_WORKTREE=1` tracked-instance preflight failure; missing/unreadable `_memory/loop/backlog.md`; `PROMPT.md` missing a required substitution point; rebase-then-ff integration hitting a non-fast-forward. Loud stops with **no silent fallback** to the main tree (preflight removes its worktree; non-ff retains worktree and branch for inspection). |
 
 **Per-slot retirement vs run-fatal stop.** CB1 and CB2 trips **retire the slot** (no refill) while the run may continue on remaining active slots. Only when **all slots are retired** does the run exit **2** or **3** — not on the first no-progress or signature match.
 
@@ -178,11 +178,11 @@ Quarantined branches block a "clean" exit **0** — inspect markers and branches
 
 ## Backlog stories
 
-Stories live in **`_goals/backlog.md`**. Each entry requires `priority` (lower number picked first), `passes`, `attempts`, `blocked`, `writes` (comma-separated path globs — disjoint globs allow concurrent slots; absent/empty `writes` serializes the story), a description that replaces Phase 1 alignment, and concrete acceptance criteria. Loop-suitable stories are **small, well-specified, and independently verifiable** — sized to one context window with observable outcomes a skeptical evaluator can check without asking you mid-run. Whether your work belongs in the loop at all — versus `/feature`, `/research`, or a direct edit — is a mode choice; see [decision-guide.md](decision-guide.md).
+Stories live in **`_memory/loop/backlog.md`**. Each entry requires `priority` (lower number picked first), `passes`, `attempts`, `blocked`, `writes` (comma-separated path globs — disjoint globs allow concurrent slots; absent/empty `writes` serializes the story), a description that replaces Phase 1 alignment, and concrete acceptance criteria. Loop-suitable stories are **small, well-specified, and independently verifiable** — sized to one context window with observable outcomes a skeptical evaluator can check without asking you mid-run. Whether your work belongs in the loop at all — versus `/feature`, `/research`, or a direct edit — is a mode choice; see [decision-guide.md](decision-guide.md).
 
 ## Starting a run
 
-After `/agent-kit` emits `_loop/` and `_goals/backlog.md`, start an unattended run from the repository root:
+After `/agent-kit` emits `_loop/` and seeds `_memory/loop/backlog.md` (create-if-missing), start an unattended run from the repository root:
 
 ```bash
 _loop/loop.sh 10

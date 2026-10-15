@@ -11,7 +11,7 @@ The kit lives in the multi-skill [kdcllc/skills](https://github.com/kdcllc/skill
 | Layer | Role | Key paths (tracked unless noted) |
 |-------|------|----------------------------------|
 | **CANONICAL** | Source of truth — what `/agent-kit` reads and compiles | `skills/agent-kit/templates/` (Claude Code format), `skills/agent-kit/bin/` (`emit.sh` + `emit.ps1` — deterministic emit), `skills/agent-kit/emitters/` (per-harness caveats), `skills/agent-kit/reference/` (`harness-matrix.md`, `bootstrap-ids.md`), `metadata.version` in `skills/agent-kit/SKILL.md` (kit version written into each install's manifest) |
-| **INSTANCE** | Emitted by `/agent-kit` and self-install in **this repo only** — gitignored, re-runnable, never committed | Entire `.claude/`; **partial** `.cursor/` only — `.cursor/skills/`, `.cursor/agents/`, `.cursor/rules/`, `.cursor/ORCHESTRATION.md` (the rest of `.cursor/` is **not** gitignored); `.agents/skills/` (self-install `--symlink` canonical tree); `.loop-worktrees/` (loop driver scratch); `_goals/`, `_loop/`, `_research/`; `orchestration-kit.manifest.json` |
+| **INSTANCE** | Emitted by `/agent-kit` and self-install in **this repo only** — gitignored, re-runnable, never committed | Entire `.claude/`; **partial** `.cursor/` only — `.cursor/skills/`, `.cursor/agents/`, `.cursor/rules/`, `.cursor/ORCHESTRATION.md` (the rest of `.cursor/` is **not** gitignored); `.agents/skills/` (self-install `--symlink` canonical tree); `.loop-worktrees/` (loop driver scratch); `_kit/`, `_loop/`, `_memory/work/`, `_memory/loop/`, `_memory/.index/`, `_memory/raw/`; `orchestration-kit.manifest.json`. Tracked memory: `_memory/README.md`, `_memory/records/`, `_memory/quarantine/` |
 | **MAINTAINER (tracked, not shipped)** | Tooling and documentation for kit contributors; lives outside the skill folder so it never reaches installs | `skills/agent-kit/README.md` and `CHANGELOG.md` (ship with the skill), `docs/agent-kit/` (this guide suite, research studies, the architecture **pointer** `ORCHESTRATION.md`), `tests/agent-kit/` (checks, guards, harness, `fixtures/self-answers.json`), `scripts/agent-kit/` (self-install twins), `scripts/checks/agent-kit.sh` (fast guard run by `scripts/validate-skills.sh`) |
 
 **Instance-specific note:** In consumer projects, `/agent-kit` emits into harness-native directories (`.claude/`, `.cursor/`, `.github/`, `.codex/`, root `ORCHESTRATION.md`, etc.) per the emitters. This repo dogfoods the kit: its `.gitignore` lists the instance paths above so local dogfood output never reaches git, and `scripts/validate-skills.sh` rejects agent skill directories only when they contain tracked files.
@@ -108,7 +108,7 @@ The full placeholder reference table lives in [`skills/agent-kit/SKILL.md`](../.
 | Concern | Location |
 |---------|----------|
 | Canonical prose and structure | `skills/agent-kit/templates/` |
-| Harness-agnostic tool twins (`log-spawn.sh` / `log-spawn.ps1`, `memory.sh` / `memory.ps1`; no tokens) | `skills/agent-kit/templates/tools/` — emitted single-copy to `_kit/log-spawn.sh` / `_kit/log-spawn.ps1` and `_kit/memory.sh` / `_kit/memory.ps1` (`_kit/` is gitignored in this repo; `_memory/` is tracked) |
+| Harness-agnostic tool twins (`log-spawn.sh` / `log-spawn.ps1`, `memory.sh` / `memory.ps1`; no tokens) | `skills/agent-kit/templates/tools/` — emitted single-copy to `_kit/log-spawn.sh` / `_kit/log-spawn.ps1` and `_kit/memory.sh` / `_kit/memory.ps1` (`_kit/` is gitignored in this repo; `_memory/records/` and `_memory/quarantine/` are tracked; `_memory/work/` and `_memory/loop/` are gitignored here) |
 | Per-harness translation (frontmatter shape, path mapping, pointer rules) | `skills/agent-kit/bin/emit.sh` / `emit.ps1` — see [`bin/README.md`](../../../skills/agent-kit/bin/README.md) |
 | Harness caveats (live model-check URLs, silent-fallback warnings) | `skills/agent-kit/emitters/` |
 | Verified harness capabilities and friction points | `skills/agent-kit/reference/harness-matrix.md` |
@@ -163,7 +163,7 @@ For installed projects (including dogfood in this repo):
 
 **Hash diff protects local modifications:** Unmodified emitted files update silently; modified files require confirmation before overwrite.
 
-**`seedFiles` semantics (as of v0.27.0):** The manifest lists `_goals/backlog.md` in `seedFiles` only (not in `files`). Seeds are created only when missing, never overwritten on upgrade, and are exempt from the hash-diff overwrite flow.
+**`seedFiles` semantics (as of v0.27.0):** When loop is enabled, the manifest lists `_memory/loop/backlog.md` in `seedFiles` only (not in `files`). Seeds are created only when missing, never overwritten on upgrade, and are exempt from the hash-diff overwrite flow.
 
 **Stale-file pruning (as of v0.19.0):** After regeneration, paths in the old manifest but absent from the new emit set are deleted if unmodified, or reported for manual removal if the user edited them.
 

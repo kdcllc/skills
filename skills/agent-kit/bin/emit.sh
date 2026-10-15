@@ -37,7 +37,7 @@
 #   --help prints usage to stderr and exits 2.
 #
 #   Success stdout is exactly one line:
-#     emit: written N · unchanged M · pruned P · seeds-kept S · warnings W · manifest orchestration-kit.manifest.json · kit <VERSION>
+#     emit: written N · unchanged M · pruned P · seeds-kept S · migrated U · warnings W · manifest orchestration-kit.manifest.json · kit <VERSION>
 #   N/M count emit-set files only (written = bytes differ or file absent; unchanged
 #   = identical). The manifest is always rewritten and never counted in N.
 #
@@ -85,6 +85,7 @@ DRY_RUN=0
 FORCE=0
 CHECK_ANSWERS=0
 ROOT=""
+ROOT_EXPLICIT=0
 KIT=""
 
 [ $# -eq 0 ] && { usage; exit 2; }
@@ -93,7 +94,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     -h|--help|help) usage; exit 2 ;;
     --answers)        need_val "$@"; ANSWERS_FILE="$2"; shift 2 ;;
-    --root)           need_val "$@"; ROOT="$2"; shift 2 ;;
+    --root)           need_val "$@"; ROOT_EXPLICIT=1; ROOT="$2"; shift 2 ;;
     --kit)            need_val "$@"; KIT="$2"; shift 2 ;;
     --upgrade)        DO_UPGRADE=1; shift ;;
     --dry-run)        DRY_RUN=1; shift ;;
@@ -117,6 +118,10 @@ if [ -z "$KIT" ]; then
 else
   [ -d "$KIT" ] || die 2 "kit directory not found: $KIT"
   KIT="$(cd "$KIT" && pwd)"
+fi
+if [ "$ROOT_EXPLICIT" -eq 1 ] && [ -z "$ROOT" ]; then
+  usage >&2
+  die 2 "--root requires a non-empty directory path"
 fi
 if [ -z "$ROOT" ]; then
   ROOT="$PWD"
@@ -598,6 +603,11 @@ read_bytes_into() { # <var> <path> — exact bytes (CR and trailing newlines kep
   local _d
   _d="$(cat -- "$2"; printf x)"
   printf -v "$1" '%s' "${_d%x}"
+}
+
+capture_stdout() { # "$@" → CAP_OUT (trailing bytes from stdout preserved; $(…) would drop a final NL)
+  CAP_OUT="$("$@"; printf x)"
+  CAP_OUT="${CAP_OUT%x}"
 }
 
 sha256_str() {
@@ -1212,7 +1222,12 @@ load_kit_skills() {
   [ "$has_al" -eq 0 ] && KIT_SKILLS+=(auto-loop)
 }
 
-is_seed_path() { [ "$1" = '_goals/backlog.md' ]; }
+is_seed_path() {
+  case "$1" in
+    _goals/backlog.md|_memory/loop/backlog.md) return 0 ;;
+  esac
+  return 1
+}
 
 is_kit_owned() {
   local p="$1" dir skill
@@ -1854,47 +1869,256 @@ planned_pointer_content() { # destpath new-section → full file bytes or empty 
   return 0
 }
 
-append_line_once_bytes() { # current-or-empty line → stdout ending with NL
-  local current="$1" line="$2"
-  current="${current%$'\n'}"
-  LINE_CHANGED=0
-  if [ -n "$current" ] && printf '%s\n' "$current" | grep -Fxq -- "$line"; then
-    printf '%s\n' "$current"
-    return
-  fi
-  LINE_CHANGED=1
-  if [ -z "$current" ]; then
-    printf '%s\n' "$line"
-  else
-    printf '%s\n%s\n' "$current" "$line"
-  fi
+git_bytes_has_line() { # haystack needle → 0 when any line bare-matches needle
+  local hay="$1" needle="$2" line bare
+  [ -n "$hay" ] || return 1
+  while IFS= read -r line || [ -n "$line" ]; do
+    bare="${line%$'\r'}"
+    [ "$bare" = "$needle" ] && return 0
+  done < <(printf '%s' "$hay")
+  return 1
 }
+
+git_bytes_append_eol_into() { # <data> <outvar> — ending for appended lines: CRLF only when the last existing line ends CRLF, else LF
+  local data="$1" head
+  case "$data" in
+    *$'\r\n') printf -v "$2" '%s' $'\r\n'; return 0 ;;
+    *$'\n') printf -v "$2" '%s' $'\n'; return 0 ;;
+  esac
+  # Last line has no terminator: follow the nearest preceding terminated line.
+  head="${data%$'\n'*}"
+  if [ "$head" != "$data" ]; then
+    case "$head" in
+      *$'\r') printf -v "$2" '%s' $'\r\n'; return 0 ;;
+    esac
+  fi
+  printf -v "$2" '%s' $'\n'
+}
+
+RETIRED_GA_LINES=('_goals/*/orchestration-log.md merge=union' '_goals/LEARNINGS.md merge=union' '_goals/ESCALATIONS.md merge=union')
+RETIRED_GI_LINES=('_goals/breaker-state.json')
 
 planned_git_lines() {
-  GA_LINES=('_goals/*/orchestration-log.md merge=union' '_memory/** text eol=lf' '*.cmd -text')
-  GI_LINES=('_kit/' '_memory/.index/' '_memory/raw/')
+  GA_LINES=('_memory/** text eol=lf' '*.cmd -text')
+  GI_LINES=('_kit/' '_memory/.index/' '_memory/raw/' '_memory/work/')
   if flag_is loop; then
-    GA_LINES+=('_goals/LEARNINGS.md merge=union' '_goals/ESCALATIONS.md merge=union' '*.sh text eol=lf' '*.ps1 text eol=lf')
-    GI_LINES+=('_goals/breaker-state.json')
+    GA_LINES+=('_memory/loop/LEARNINGS.md merge=union' '_memory/loop/ESCALATIONS.md merge=union' '*.sh text eol=lf' '*.ps1 text eol=lf')
+    GI_LINES+=('_memory/loop/breaker-state.json')
   fi
 }
 
-# 0 = would append or create; 1 = every planned line already present.
-git_append_would_change() {
-  local file="$1"
-  shift
-  if [ ! -f "$file" ]; then
-    return 0
-  fi
-  local cur line
-  cur="$(read_file_raw "$file")"
-  cur="${cur%$'\n'}"
-  for line in "$@"; do
-    if [ -z "$cur" ] || ! printf '%s\n' "$cur" | grep -Fxq -- "$line"; then
-      return 0
-    fi
+is_retired_git_line() { # line-without-CR → 0 when retired kit line
+  local line="$1" r
+  for r in ${RETIRED_GA_LINES[@]+"${RETIRED_GA_LINES[@]}"} ${RETIRED_GI_LINES[@]+"${RETIRED_GI_LINES[@]}"}; do
+    [ "$line" = "$r" ] && return 0
   done
   return 1
+}
+
+strip_retired_git_lines_bytes() { # raw file bytes → stdout (retired whole lines removed; every other line verbatim, own ending included)
+  local data="$1" line term
+  if [ -z "$data" ]; then
+    return 0
+  fi
+  while :; do
+    if IFS= read -r line; then
+      term=1
+    elif [ -n "$line" ]; then
+      term=0 # final line without a terminator
+    else
+      break
+    fi
+    if is_retired_git_line "${line%$'\r'}"; then
+      continue
+    fi
+    if [ "$term" -eq 1 ]; then
+      printf '%s\n' "$line"
+    else
+      printf '%s' "$line"
+    fi
+  done < <(printf '%s' "$data")
+}
+
+git_file_planned_bytes() { # ga|gi raw-bytes → stdout planned bytes
+  local kind="$1" data="$2" eol plan_line out appended=0
+  local -a plan=()
+  capture_stdout strip_retired_git_lines_bytes "$data"
+  out="$CAP_OUT"
+  if [ "$kind" = ga ]; then
+    plan=("${GA_LINES[@]}")
+  else
+    plan=("${GI_LINES[@]}")
+  fi
+  git_bytes_append_eol_into "$out" eol
+  for plan_line in ${plan[@]+"${plan[@]}"}; do
+    git_bytes_has_line "$out" "$plan_line" && continue
+    if [ "$appended" -eq 0 ] && [ -n "$out" ]; then
+      case "$out" in
+        *$'\n') ;;
+        *) out="$out$eol" ;; # terminate the unterminated last line before appending
+      esac
+    fi
+    out="$out$plan_line$eol"
+    appended=1
+  done
+  printf '%s' "$out"
+}
+
+git_file_planned_bytes_into() { # ga|gi raw-bytes outvar
+  capture_stdout git_file_planned_bytes "$1" "$2"
+  printf -v "$3" '%s' "$CAP_OUT"
+}
+
+git_file_would_change() { # ga|gi path → 0 when planned bytes differ
+  local kind="$1" path="$2" raw planned
+  if [ -f "$path" ]; then
+    read_bytes_into raw "$path"
+  else
+    raw=""
+  fi
+  planned_git_lines
+  git_file_planned_bytes_into "$kind" "$raw" planned
+  if [ -z "$raw" ]; then
+    [ -n "$planned" ] && return 0
+    return 1
+  fi
+  [ "$raw" != "$planned" ] && return 0
+  return 1
+}
+
+root_is_git_worktree() {
+  git -C "$ROOT" rev-parse --is-inside-work-tree >/dev/null 2>&1
+}
+
+legacy_path_has_tracked() { # relpath under ROOT → 0 when git tracks anything under it
+  root_is_git_worktree || return 1
+  git -C "$ROOT" ls-files -- "$1" | grep -q .
+}
+
+UPGRADE_MIGRATE_PAIRS=()
+MIGRATED_N=0
+
+upgrade_legacy_dirs_present() {
+  [ -d "$ROOT/_goals" ] || [ -d "$ROOT/_research" ]
+}
+
+collect_upgrade_migrate_pairs() {
+  UPGRADE_MIGRATE_PAIRS=()
+  local entry base relpath dst
+  if [ -d "$ROOT/_goals" ]; then
+    while IFS= read -r entry; do
+      [ -z "$entry" ] && continue
+      base="$(basename "$entry")"
+      relpath="_goals/$base"
+      case "$base" in
+        backlog.md|LEARNINGS.md|ESCALATIONS.md|breaker-state.json|archive)
+          dst="_memory/loop/$base"
+          ;;
+        *)
+          dst="_memory/work/goals/$base"
+          ;;
+      esac
+      UPGRADE_MIGRATE_PAIRS+=("$relpath|$dst")
+    done < <(LC_ALL=C find "$ROOT/_goals" -mindepth 1 -maxdepth 1 -print | LC_ALL=C sort)
+  fi
+  if [ -d "$ROOT/_research" ]; then
+    while IFS= read -r entry; do
+      [ -z "$entry" ] && continue
+      base="$(basename "$entry")"
+      UPGRADE_MIGRATE_PAIRS+=("_research/$base|_memory/work/research/$base")
+    done < <(LC_ALL=C find "$ROOT/_research" -mindepth 1 -maxdepth 1 -print | LC_ALL=C sort)
+  fi
+}
+
+plan_upgrade_migrations() {
+  local pair src dst conflict=0
+  local -a conflicts=()
+  if ! upgrade_legacy_dirs_present; then
+    return
+  fi
+  collect_upgrade_migrate_pairs
+  for pair in ${UPGRADE_MIGRATE_PAIRS[@]+"${UPGRADE_MIGRATE_PAIRS[@]}"}; do
+    src="${pair%%|*}"
+    dst="${pair#*|}"
+    if [ -e "$ROOT/$dst" ]; then
+      conflicts+=("$dst")
+    fi
+  done
+  if [ ${#conflicts[@]} -gt 0 ] && [ "$FORCE" -eq 0 ]; then
+    conflict=1
+    for dst in ${conflicts[@]+"${conflicts[@]}"}; do
+      BLOCKED_PATHS+=("$dst")
+      dry_action blocked "$dst"
+    done
+    UPGRADE_MIGRATE_PAIRS=()
+    return
+  fi
+  local -a planned=()
+  for pair in ${UPGRADE_MIGRATE_PAIRS[@]+"${UPGRADE_MIGRATE_PAIRS[@]}"}; do
+    src="${pair%%|*}"
+    dst="${pair#*|}"
+    if [ "$conflict" -eq 1 ]; then
+      continue
+    fi
+    if [ -e "$ROOT/$dst" ]; then
+      dry_action warn "$src"
+      record_warn_line "legacy $src left in place — target $dst exists"
+      continue
+    fi
+    DRY_ACTIONS+=("migrate $src -> $dst")
+    planned+=("$pair")
+  done
+  if [ ${#planned[@]} -eq 0 ]; then
+    UPGRADE_MIGRATE_PAIRS=()
+  else
+    UPGRADE_MIGRATE_PAIRS=("${planned[@]}")
+  fi
+}
+
+apply_upgrade_migrations() {
+  local pair src dst
+  MIGRATED_N=0
+  if [ ${#UPGRADE_MIGRATE_PAIRS[@]} -gt 0 ]; then
+    for pair in ${UPGRADE_MIGRATE_PAIRS[@]+"${UPGRADE_MIGRATE_PAIRS[@]}"}; do
+      [ -z "$pair" ] && continue
+      src="${pair%%|*}"
+      dst="${pair#*|}"
+      [ -z "$src" ] || [ -z "$dst" ] && continue
+      mkdir -p "$(dirname "$ROOT/$dst")"
+      if legacy_path_has_tracked "$src"; then
+        git -C "$ROOT" mv -- "$src" "$dst"
+      else
+        mv -- "$ROOT/$src" "$ROOT/$dst"
+      fi
+      MIGRATED_N=$((MIGRATED_N + 1))
+    done
+    if root_is_git_worktree; then
+      for pair in ${UPGRADE_MIGRATE_PAIRS[@]+"${UPGRADE_MIGRATE_PAIRS[@]}"}; do
+        [ -z "$pair" ] && continue
+        dst="${pair#*|}"
+        case "$dst" in
+          _memory/work/goals/*|_memory/work/research/*)
+            git -C "$ROOT" rm -r --cached --quiet -- "$dst" 2>/dev/null || true
+            ;;
+          _memory/loop/breaker-state.json)
+            git -C "$ROOT" rm --cached --quiet -- "$dst" 2>/dev/null || true
+            ;;
+        esac
+      done
+    fi
+  fi
+  if [ -d "$ROOT/_goals" ] && rmdir "$ROOT/_goals" 2>/dev/null; then
+    :
+  fi
+  if [ -d "$ROOT/_research" ] && rmdir "$ROOT/_research" 2>/dev/null; then
+    :
+  fi
+  if [ "$MIGRATED_N" -gt 0 ]; then
+    printf 'emit: moved legacy _goals/ and _research/ into _memory/; run _kit/memory.sh backfill --plan to archive closed work\n' >&2
+  fi
+  if upgrade_legacy_dirs_present; then
+    printf 'emit: some legacy entries were left in place (see warnings); _goals/ or _research/ still exists\n' >&2
+  fi
 }
 
 # ---------------------------------------------------------------------------
@@ -2065,7 +2289,7 @@ plan_seeds() {
   if [ -z "$SEED_CONTENT" ]; then
     return
   fi
-  local p='_goals/backlog.md'
+  local p='_memory/loop/backlog.md'
   if [ -f "$ROOT/$p" ]; then
     SEEDS_KEPT=$((SEEDS_KEPT + 1))
     dry_action seed "$p"
@@ -2078,7 +2302,7 @@ write_seed() {
   if [ -z "$SEED_CONTENT" ]; then
     return
   fi
-  local dest="$ROOT/_goals/backlog.md"
+  local dest="$ROOT/_memory/loop/backlog.md"
   if [ ! -f "$dest" ]; then
     mkdir -p "$(dirname "$dest")"
     if [ -n "$SEED_CONTENT" ] && [ "${SEED_CONTENT: -1}" != $'\n' ]; then
@@ -2290,12 +2514,12 @@ plan_pointers_and_git() {
     fi
   fi
   planned_git_lines
-  if git_append_would_change "$ROOT/.gitattributes" ${GA_LINES[@]+"${GA_LINES[@]}"}; then
+  if git_file_would_change ga "$ROOT/.gitattributes"; then
     dry_action write .gitattributes
   else
     dry_action keep .gitattributes
   fi
-  if git_append_would_change "$ROOT/.gitignore" ${GI_LINES[@]+"${GI_LINES[@]}"}; then
+  if git_file_would_change gi "$ROOT/.gitignore"; then
     dry_action write .gitignore
   else
     dry_action keep .gitignore
@@ -2325,17 +2549,13 @@ write_pointers_and_git() {
     fi
   fi
   planned_git_lines
-  if [ -f "$ROOT/.gitattributes" ]; then cur="$(read_file_raw "$ROOT/.gitattributes")"; else cur=""; fi
-  for line in ${GA_LINES[@]+"${GA_LINES[@]}"}; do
-    cur="$(append_line_once_bytes "$cur" "$line")"
-  done
+  if [ -f "$ROOT/.gitattributes" ]; then read_bytes_into cur "$ROOT/.gitattributes"; else cur=""; fi
+  git_file_planned_bytes_into ga "$cur" cur
   mkdir -p "$ROOT"
-  printf '%s\n' "$cur" > "$ROOT/.gitattributes"
-  if [ -f "$ROOT/.gitignore" ]; then cur="$(read_file_raw "$ROOT/.gitignore")"; else cur=""; fi
-  for line in ${GI_LINES[@]+"${GI_LINES[@]}"}; do
-    cur="$(append_line_once_bytes "$cur" "$line")"
-  done
-  printf '%s\n' "$cur" > "$ROOT/.gitignore"
+  if [ -n "$cur" ]; then printf '%s' "$cur" > "$ROOT/.gitattributes"; else : > "$ROOT/.gitattributes"; fi
+  if [ -f "$ROOT/.gitignore" ]; then read_bytes_into cur "$ROOT/.gitignore"; else cur=""; fi
+  git_file_planned_bytes_into gi "$cur" cur
+  if [ -n "$cur" ]; then printf '%s' "$cur" > "$ROOT/.gitignore"; else : > "$ROOT/.gitignore"; fi
 }
 
 # The manifest is built as a flattened JSON table (top-level order fixed;
@@ -2371,7 +2591,7 @@ write_manifest() {
   fi
   MT+="${J_US}seedFiles"$'\t'array$'\t\n'
   if [ -n "$SEED_CONTENT" ]; then
-    mt_str "${J_US}seedFiles${J_US}0" "_goals/backlog.md"
+    mt_str "${J_US}seedFiles${J_US}0" "_memory/loop/backlog.md"
   fi
   MT+="${J_US}files"$'\t'object$'\t\n'
   while IFS= read -r p; do
@@ -2505,8 +2725,8 @@ verify_all() {
 
 print_summary() {
   flush_warn_lines
-  printf 'emit: written %s · unchanged %s · pruned %s · seeds-kept %s · warnings %s · manifest orchestration-kit.manifest.json · kit %s\n' \
-    "$WRITTEN_N" "$UNCHANGED_M" "$PRUNED_P" "$SEEDS_KEPT" "$WARNINGS" "$VERSION"
+  printf 'emit: written %s · unchanged %s · pruned %s · seeds-kept %s · migrated %s · warnings %s · manifest orchestration-kit.manifest.json · kit %s\n' \
+    "$WRITTEN_N" "$UNCHANGED_M" "$PRUNED_P" "$SEEDS_KEPT" "$MIGRATED_N" "$WARNINGS" "$VERSION"
 }
 
 
@@ -2578,6 +2798,7 @@ run_emit() {
   plan_seeds
   plan_prune_and_foreign
   plan_pointers_and_git
+  plan_upgrade_migrations
 
   if [ ${#BLOCKED_PATHS[@]} -gt 0 ]; then
     if [ "$DRY_RUN" -eq 1 ]; then
@@ -2605,6 +2826,7 @@ run_emit() {
     exit 0
   fi
 
+  apply_upgrade_migrations
   write_emit_files
   SEEDS_KEPT=0
   write_seed

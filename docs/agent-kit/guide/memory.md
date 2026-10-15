@@ -10,11 +10,11 @@ The kit uses several persistence layers; each has a different lifecycle:
 
 | Layer | Location | Holds | When to use it |
 |-------|----------|-------|----------------|
-| **Goal artifacts** | `_goals/<goal>/` — `goal.md`, task files, append-only `orchestration-log.md`, `spawns/` context and reports | In-flight and recently closed feature work: plans, verdicts, spawn audit trail | Trace how a goal was executed; not a cross-goal search index |
-| **Loop ledgers** | `_goals/LEARNINGS.md`, `_goals/ESCALATIONS.md` (plus backlog and breaker state) | Loop-specific learnings and escalations; size gates defer compaction/archival to manual iterations | Autonomous loop operation; **not** auto-imported into `_memory/` |
-| **Memory store** | `_memory/records/`, `_memory/quarantine/` | Immutable distilled records (decisions, goal summaries, research ingests, pitfalls, etc.) | Cross-session recall before planning; team-shareable via git |
+| **Goal artifacts** | `_memory/work/goals/<goal>/` — `goal.md`, task files, append-only `orchestration-log.md`, `spawns/`, `evidence/`, `memory-drafts/` (gitignored scratch) | In-flight and recently closed feature work: plans, verdicts, spawn audit trail | Trace how a goal was executed; not a cross-goal search index |
+| **Loop ledgers** | `_memory/loop/` — `backlog.md`, `LEARNINGS.md`, `ESCALATIONS.md`, `archive/ESCALATIONS-<YYYY-MM>.md` (tracked); `breaker-state.json` (gitignored runtime) | Loop backlog, learnings, escalations; size gates defer compaction/archival to manual iterations | Autonomous loop operation; ledgers are **not** auto-imported into `records/` |
+| **Memory store** | `_memory/records/`, `_memory/quarantine/` (immutable, tracked); plus gitignored `work/` and derived `.index/` / `raw/` | Distilled records (decisions, goal summaries, research ingests, pitfalls, etc.) | Cross-session recall before planning; team-shareable via git |
 
-Scratch research lives under `_research/` until promoted or ingested; it is working space, not the memory store.
+Scratch research lives under `_memory/work/research/` until promoted or ingested; it is working space, not the immutable record store.
 
 ## Harness-native memory is not this store
 
@@ -49,15 +49,15 @@ flowchart TD
 
 ### Feature workflow (`/feature`)
 
-- **Recall:** Once **before Phase 2** (goal creation). Run `_kit/memory.sh search <term>… --limit 10`, read candidates with `show <id>`, pick **≤ 5** (drop anything contradicted by the codebase). Write ids or `none` into `goal.md` **`## Recalled memory`**. After `_goals/<goal>/` exists, log picks or failure with `_kit/log-spawn.sh note`. Any non-zero exit, missing tool, or stderr `memory: 0 results` ⇒ treat as **no prior knowledge** — the phase never blocks.
-- **Archive:** After Phase 5 **APPROVED** and green **Quality Checks**, before optional Phases 6/7: one **`goal-summary`** plus zero to three **`decision`** / **`pitfall`** records via `_kit/memory.sh add` (drafts under `_goals/<goal>/memory-drafts/`). After each added or quarantined path, run `_kit/memory.sh check <path>`; exit **3** ⇒ report the failing stdout line to the user and do not commit until fixed. After every path passes `check`, the orchestrator logs one closed marker `_kit/log-spawn.sh note --goal <g> --text "ARCHIVED: <id> [<id>…]"` listing **all** ids `add` wrote (including quarantined). Driver-dispatched slots write no ARCHIVED note; their **`goal-summary`** proposals set `source: goal <g> (goal.md)` (or `_goals/<g>/goal.md` when that file is tracked). Untracked bad record ⇒ `_kit/memory.sh rm <id>`; committed correction ⇒ new record with **`--supersedes`**. Records stay **uncommitted** with the goal for human review. Exit **5** (quarantined) ⇒ report to the user, run `check` on the quarantined path too; do not retry automatically.
+- **Recall:** Once **before Phase 2** (goal creation). Run `_kit/memory.sh search <term>… --limit 10`, read candidates with `show <id>`, pick **≤ 5** (drop anything contradicted by the codebase). Write ids or `none` into `goal.md` **`## Recalled memory`**. After `_memory/work/goals/<goal>/` exists, log picks or failure with `_kit/log-spawn.sh note`. Any non-zero exit, missing tool, or stderr `memory: 0 results` ⇒ treat as **no prior knowledge** — the phase never blocks.
+- **Archive:** After Phase 5 **APPROVED** and green **Quality Checks**, before optional Phases 6/7: one **`goal-summary`** plus zero to three **`decision`** / **`pitfall`** records via `_kit/memory.sh add` (drafts under `_memory/work/goals/<goal>/memory-drafts/`). After each added or quarantined path, run `_kit/memory.sh check <path>`; exit **3** ⇒ report the failing stdout line to the user and do not commit until fixed. After every path passes `check`, the orchestrator logs one closed marker `_kit/log-spawn.sh note --goal <g> --text "ARCHIVED: <id> [<id>…]"` listing **all** ids `add` wrote (including quarantined). Driver-dispatched slots write no ARCHIVED note; their **`goal-summary`** proposals set `source: goal <g> (goal.md)` (legacy upgrades may still have records citing `_goals/<g>/goal.md`). Untracked bad record ⇒ `_kit/memory.sh rm <id>`; committed correction ⇒ new record with **`--supersedes`**. Records stay **uncommitted** with the goal for human review. Exit **5** (quarantined) ⇒ report to the user, run `check` on the quarantined path too; do not retry automatically.
 
 See [feature-workflow.md](feature-workflow.md) for phase mechanics.
 
 ### Research workflow (`/research`)
 
-- **Recall:** Once at **Phase 1**, with `--kind research-ingest,decision` so settled research is not re-litigated. Picks go to `_research/<topic>/recalled-memory.md` until Phase 4.
-- **Archive:** After the Phase 2 ingestion review, one **`research-ingest`** record summarizing the report (same `add`, **`check`**, exit **3**, and **`rm` / `--supersedes`** correction rules as feature archive). After `check`, the archive step writes `_research/<topic>/ingested` (line 1 UTC `YYYY-MM-DDTHH:MM:SSZ`, line 2 the record id(s) separated by spaces).
+- **Recall:** Once at **Phase 1**, with `--kind research-ingest,decision` so settled research is not re-litigated. Picks go to `_memory/work/research/<topic>/recalled-memory.md` until Phase 4.
+- **Archive:** After the Phase 2 ingestion review, one **`research-ingest`** record summarizing the report (same `add`, **`check`**, exit **3**, and **`rm` / `--supersedes`** correction rules as feature archive). After `check`, the archive step writes `_memory/work/research/<topic>/ingested` (line 1 UTC `YYYY-MM-DDTHH:MM:SSZ`, line 2 the record id(s) separated by spaces).
 - **Research-born goals:** Phase 4 copies Phase 1 picks into the new goal’s `## Recalled memory`; feature recall does **not** run again.
 
 See [research-workflow.md](research-workflow.md).
@@ -69,7 +69,7 @@ See [research-workflow.md](research-workflow.md).
 - **Driver-dispatched mode:** The feature archive step writes **proposals** under `<outbox>/memory/<name>.md` (header/body format in memory-protocol.md) instead of calling `add`.
 - **Integrator step 3b:** At the **end** of the slot reap, **after** CB0 and disposal, only when there is no ITERATION-mismatch, no subset violation, and at `LOOP_WORKTREE=1` the branch was integrated (any verdict, including `failed`): proposals are applied via `_kit/memory.* add`, then a path-limited `chore(memory): <story-id> records` commit runs when something was added or quarantined. Step 3b **never** changes exit code, backlog, or breakers; failures print `!!!` lines only.
 - **Degraded path:** If the integrator's path-limited `chore(memory): …` commit fails, stderr prints `!!! memory records left uncommitted: git add failed (exit N)` or `!!! memory records left uncommitted: git commit failed (exit N)`; records stay **uncommitted** (they may be staged). A later slot `git add -A` can trip CB0 — fix git identity and hooks.
-- **Protected paths:** `_memory/records/` and `_memory/quarantine/` are integrator-only in dispatched mode; no story may declare `_memory/` in `writes:`.
+- **Protected paths:** `_memory/records/` and `_memory/quarantine/` are integrator-only in driver-dispatched mode; no story may declare `_memory/records/` or `_memory/quarantine/` in `writes:` (manual iterations may update `_memory/loop/backlog.md`).
 
 See [autonomous-loop.md](autonomous-loop.md).
 
@@ -199,9 +199,9 @@ Bash-only, deterministic, LLM-free. Candidates go through the existing `add` pat
 
 | Source | Closed when | Skipped as archived when | Record |
 |--------|-------------|--------------------------|--------|
-| Goals (`_goals/<g>/goal.md` + log) | last Phase 5 evaluator SPAWN has an OUTCOME starting `APPROVED`; or a `### <ts> — Phase 5 APPROVED` note; or named by `--only` | an `ARCHIVED:` note listing an existing id, or a record with source `goal <g> (goal.md)` / `_goals/<g>/goal.md` | `goal-summary` |
-| Research (`_research/<t>/report.md`) | named by `--only` (legacy topics) | `ingested` marker exists, or a record with source `research <t> (report.md)` | `research-ingest` |
-| Escalations (`_goals/ESCALATIONS.md`, `_goals/archive/ESCALATIONS-<YYYY-MM>.md`) | the entry has `- resolved: YYYY-MM-DD <decision>` with a valid calendar date on the **last** matching line | body hash already under `records/` or `quarantine/` as `sha256:` (`skip:archived` in both `--plan` and `--apply`) | `decision` |
+| Goals (`_memory/work/goals/<g>/goal.md` + log) | last Phase 5 evaluator SPAWN has an OUTCOME starting `APPROVED`; or a `### <ts> — Phase 5 APPROVED` note; or named by `--only` | an `ARCHIVED:` note listing an existing id, or a record with source `goal <g> (goal.md)`, `_memory/work/goals/<g>/goal.md`, or legacy `_goals/<g>/goal.md` | `goal-summary` |
+| Research (`_memory/work/research/<t>/report.md`) | named by `--only` (opt-in topics) | `_memory/work/research/<t>/ingested` exists, or a record with source `research <t> (report.md)` | `research-ingest` |
+| Escalations (`_memory/loop/ESCALATIONS.md`, `_memory/loop/archive/ESCALATIONS-<YYYY-MM>.md`) | the entry has `- resolved: YYYY-MM-DD <decision>` with a valid calendar date on the **last** matching line | body hash already under `records/` or `quarantine/` as `sha256:` (`skip:archived` in both `--plan` and `--apply`) | `decision` |
 
 **Research timestamps:** Back-fill uses the `**Date**:` value from `report.md` (text after `**Date**: ` up to ` · ` or end of line, with any trailing CR stripped before parsing) when it is `YYYY-MM-DD`, at `T120000Z`; otherwise `19700101T000000Z`.
 
@@ -209,9 +209,9 @@ Bash-only, deterministic, LLM-free. Candidates go through the existing `add` pat
 
 ### Closed signals the kit writes from now on
 
-- **Goals:** the feature archive step logs `_kit/log-spawn.sh note --goal <g> --text "ARCHIVED: <id> [<id>…]"` (one line). Driver-dispatched loop archives have no ARCHIVED note; their **`goal-summary`** proposals set `source: goal <g> (goal.md)` (or `_goals/<g>/goal.md` when that file is tracked) so backfill detects them as archived.
-- **Research:** the research archive step writes `_research/<topic>/ingested` with line 1 = UTC `YYYY-MM-DDTHH:MM:SSZ` and line 2 = the record id(s) separated by spaces.
-- **Escalations:** a human resolving an entry adds the line `- resolved: YYYY-MM-DD <decision>` inside the entry (entries start with `## <story-id>: <title>`, archived to `_goals/archive/ESCALATIONS-<YYYY-MM>.md`).
+- **Goals:** the feature archive step logs `_kit/log-spawn.sh note --goal <g> --text "ARCHIVED: <id> [<id>…]"` (one line). Driver-dispatched loop archives have no ARCHIVED note; their **`goal-summary`** proposals set `source: goal <g> (goal.md)` so backfill detects them as archived.
+- **Research:** the research archive step writes `_memory/work/research/<topic>/ingested` with line 1 = UTC `YYYY-MM-DDTHH:MM:SSZ` and line 2 = the record id(s) separated by spaces.
+- **Escalations:** a human resolving an entry adds the line `- resolved: YYYY-MM-DD <decision>` inside the entry (entries start with `## <story-id>: <title>`, archived to `_memory/loop/archive/ESCALATIONS-<YYYY-MM>.md`).
 
 **One-time transcript back-fill:** run `capture`, then the `memory-capture` skill session by session — runbook in [`memory-capture.md`](../../../skills/agent-kit/templates/skills/feature/reference/memory-capture.md). Codex-only installs run `capture` and distill from a Claude Code, Cursor, or Copilot session.
 
@@ -267,9 +267,13 @@ Emit also writes the memory pointer block per harness; see [getting-started.md](
 
 Releases C (`memory-store-c-capture`: redaction, `check`, `rm`, `capture`, `memory-capture`) and D (`memory-store-d-backfill`: `backfill` and closed signals) ship in agent-kit **[Unreleased]** (not yet tagged). Capture **hooks** remain a later goal. Roadmap detail: [research-agent-memory-store.md](../research-agent-memory-store.md).
 
+## Layout and upgrade
+
+Every emit writes `_memory/README.md` and the store's `.gitignore` / `.gitattributes` lines (see [getting-started.md](getting-started.md)). **`/agent-kit --upgrade`** moves legacy top-level `_goals/` and `_research/` into `_memory/work/` and loop state into `_memory/loop/` when those legacy trees still exist (`git mv` when tracked, plain `mv` otherwise); retired kit `.gitignore` / `.gitattributes` lines drop by exact match. `--dry-run` lists `migrate` actions; a target conflict exits **4**; `--force` leaves conflicting sources in place. After a successful upgrade the summary reports `migrated N` and hints to run `_kit/memory.sh backfill --plan`. Full mapping and teammate warnings: [`skills/agent-kit/templates/memory/README.md`](../../../skills/agent-kit/templates/memory/README.md) **Upgrade migration**; emit behavior: [`skills/agent-kit/SKILL.md`](../../../skills/agent-kit/SKILL.md) **Upgrading / re-running**.
+
 ## Instance note (this repository)
 
-In **kdcllc/skills**, `_memory/` is **tracked** while `_goals/` and `_research/` are gitignored (dogfood instance). Archive **source** labels therefore use `goal <name> (goal.md)` / `research <topic> (report.md)` forms rather than repo-relative paths to gitignored trees. Canonical behavior is still what `skills/agent-kit/templates/` emits.
+In **kdcllc/skills**, `_memory/records/`, `_memory/quarantine/`, and `_memory/README.md` are **tracked**; `_memory/work/` and `_memory/loop/` are **gitignored** here (along with `_memory/.index/` and `_memory/raw/`), which differs from a canonical loop install where `_memory/loop/` is tracked. Archive **source** labels use `goal <name> (goal.md)` / `research <topic> (report.md)` rather than repo-relative paths to gitignored scratch. Canonical behavior is what `skills/agent-kit/templates/` emits.
 
 ## Sources
 

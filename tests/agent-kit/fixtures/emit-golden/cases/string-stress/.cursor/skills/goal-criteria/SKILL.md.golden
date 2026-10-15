@@ -62,9 +62,10 @@ Every task file carries an ownership block declaring `writes` / `reads` / `depen
 
 Scoping clauses (apply before scoring the seven):
 
-- **Orchestrator-owned carve-out.** Goal and task files and the other `_goals/`
-  artifacts (orchestration log, backlog status fields, LEARNINGS/ESCALATIONS notes) are
-  written by the orchestrator, as are the documentation surfaces Phase 6 owns **as
+- **Orchestrator-owned carve-out.** Goal and task files and the other `_memory/work/goals/`
+  artifacts (orchestration log), the `_memory/loop/` ledgers (backlog status fields,
+  LEARNINGS/ESCALATIONS notes) are written by the orchestrator, as are the documentation
+  surfaces Phase 6 owns **as
   listed in the `align-docs` skill's documentation surface map** — that map bounds the
   exemption; it does not widen to "any doc". All of these sit OUTSIDE the task
   write-set union: coverage and single-owner apply to task-owned product files only.
@@ -121,8 +122,9 @@ contradicts the constraints or the ground-truth doc (docs/agent-kit/research-mul
 
 When a task's `writes` include paths the project distributes as reusable templates (for
 example a canonical `templates/` tree), flag NEEDS REVISION if its requirements or
-proposed content copy **this repository's own** goal slugs from `_goals/` or
-`_goals/archive/`, memory record ids (`YYYYMMDDTHHMMSSZ-<hex>`), or verbatim memory
+proposed content copy **this repository's own** goal slugs from `_memory/work/goals/` (or
+legacy `_goals/` / `_goals/archive/` in older projects), memory record ids
+(`YYYYMMDDTHHMMSSZ-<hex>`), or verbatim memory
 record titles from `_memory/records/` into those templates — templates must stay
 generic. Clearly labeled placeholder samples in a task requirement are not a leak
 (informational note only, not NEEDS REVISION).

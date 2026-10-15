@@ -1485,7 +1485,23 @@ structural_cases() {
   grep -qF 'non-empty 5th column' "$f" || { report FAIL "(q) README .distilled re-offer rule"; return; }
   grep -qF 'git ls-files --error-unmatch' "$f" || { report FAIL "(q) README rm tracked vs untracked"; return; }
   local got exp
-  got="$(sed -n '49,61p' "$f")"
+  got="$(awk '
+    $0 == "---" {
+      getline nextline
+      if (nextline == "id: <id>") {
+        print "---"
+        print nextline
+        while ((getline line) > 0) {
+          print line
+          if (line == "---") {
+            getline body
+            print body
+            exit
+          }
+        }
+      }
+    }
+  ' "$f")"
   exp="$(cat <<'EOF'
 ---
 id: <id>

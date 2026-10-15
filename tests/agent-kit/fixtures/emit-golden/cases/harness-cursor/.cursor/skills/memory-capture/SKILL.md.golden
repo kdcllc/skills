@@ -84,7 +84,7 @@ file's frontmatter `sha256`; README **Ledger formats**).
 
 ### 4. Goal-folder context for tags
 
-Each `_goals/*/` with `orchestration-log.md`: first/last spawn timestamps. Derive
+Each `_memory/work/goals/*/` with `orchestration-log.md`: first/last spawn timestamps. Derive
 **session date** per the reference; include both in the implementer package.
 
 ### 5. Distill (implementer)

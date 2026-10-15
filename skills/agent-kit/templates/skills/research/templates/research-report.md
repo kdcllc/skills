@@ -1,6 +1,6 @@
 # Research Report: [topic]
 
-**Date**: [date] · **Source prompt**: `_research/prompts/[topic].md`
+**Date**: [date] · **Source prompt**: `_memory/work/research/prompts/[topic].md`
 
 ## Summary of Findings
 

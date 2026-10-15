@@ -15,16 +15,18 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 - **Memory hygiene** — `memory.sh rm <full-id>` removes untracked record or quarantine files only.
 - **Transcript capture** — `memory.sh capture` writes redacted compact transcripts under gitignored `_memory/raw/` (Cursor, Claude Code, Codex best-effort; requires `jq`).
 - **Memory backfill** — `memory.sh backfill --plan` / `--apply` (bash-only) deterministically imports closed goals, research topics named with `--only`, and resolved escalations into records via `add`; `memory.ps1 backfill` prints the bash-only pointer (exit **2**).
-- **Closed signals** — feature archive logs `ARCHIVED: <ids>`; research archive writes `_research/<topic>/ingested`; loop skill documents the escalation `resolved:` line convention (archived entries keep it).
+- **Closed signals** — feature archive logs `ARCHIVED: <ids>`; research archive writes `_memory/work/research/<topic>/ingested`; loop skill documents the escalation `resolved:` line convention (archived entries keep it).
 - **Transcript back-fill runbook** — `memory-capture` skill and `feature/reference/memory-capture.md` document one-time session-by-session import after `capture` (cost and scope guidance).
 - **`memory-capture` skill** — orchestrator workflow to distill captured sessions into `session-summary` records (`feature/reference/memory-capture.md`).
 - **Windows `.cmd` launchers** — `bin/emit.cmd`, `_kit/memory.cmd`, and `_kit/log-spawn.cmd` invoke the sibling `.sh` through Git for Windows Bash; Git Bash discovery with optional `AGENT_KIT_BASH` override; exit 127 with an install message when no valid Bash is found ([reference/windows-launcher.md](reference/windows-launcher.md)).
 
 ### Fixed
 
+- **`bin/emit.sh` `.gitignore` / `.gitattributes`** — rewrites preserve every user line byte-for-byte (including blank lines), each line's own line ending, and the file's final newline; retired kit lines are removed by exact match only.
 - **`capture --idle-hours`** — more than six digits exits **2** with `memory: invalid --idle-hours`.
 - **Backfill escalations** — impossible `resolved:` calendar dates print `skip:bad-date`; bodies whose normalized redacted hash already exists under `records/` or `quarantine/` print `skip:archived` in both `--plan` and `--apply` (not `would-add` / duplicate-only on apply).
 - **Backfill research dates** — `**Date**:` values strip a trailing CR before parsing (CRLF reports keep their real id).
+- **`bin/emit.sh --root ""`** — an explicitly empty `--root` value now exits **2** with a usage message instead of silently emitting into the current directory.
 
 ### Removed
 
@@ -33,6 +35,13 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 
 ### Changed
 
+- **Breaking:** orchestration layout — in-flight work lives under gitignored `_memory/work/goals/` and `_memory/work/research/`; loop state lives under tracked `_memory/loop/` (`backlog.md`, `LEARNINGS.md`, `ESCALATIONS.md`, `archive/`; `breaker-state.json` gitignored). Top-level `_goals/` and `_research/` are retired. `--upgrade` migrates legacy folders automatically (`git mv` when tracked, plain `mv` otherwise); moved goal/research trees and `breaker-state.json` are untracked afterward (`git rm --cached`; content stays on disk). Retired kit `.gitattributes` / `.gitignore` lines are removed by exact match. When a migration target already exists, emit exits **4** before moving anything unless `--force` (conflicting sources stay put with a stderr `warn`; nothing is overwritten). `--dry-run` lists `migrate` actions and still exits **4** when blocked. Summary line includes `migrated N`; stderr hints to run `_kit/memory.sh backfill --plan` after a move. `LOOP_WORKTREE=1` users must commit the staged `_memory/loop/` move; committing goal/research untracking removes those paths from teammates' trees on pull — teammates should upgrade locally first.
+- **`_kit/log-spawn.sh`** — spawn context and reports under `_memory/work/goals/<goal>/` (`orchestration-log.md`, `spawns/NN-context.md`, `NN-report.md`).
+- **`memory.sh backfill`** — reads `_memory/work/goals/` and `_memory/work/research/`; legacy `_goals/<g>/goal.md` path labels still count as archived.
+- **Loop drivers** — driver scripts still emit under `_loop/` (`loop.sh`, `loop.ps1`, `PROMPT.md`, breakers) but read and write loop state under `_memory/loop/` (`backlog.md`, `LEARNINGS.md`, `ESCALATIONS.md`, `breaker-state.json`); `LOOP_WORKTREE=1` preflight requires a tracked `_memory/loop/backlog.md`; manifest seed points at `_memory/loop/backlog.md`.
+- **Loop story admission** — `writes:` rule narrowed to forbid `_memory/records/` and `_memory/quarantine/` only (integrator-owned); the driver never stages those paths.
+- **`align-docs` skill** — Phase 6 hard-excludes the whole `_memory/` tree (read `_memory/work/` as source only; never write).
+- **`goal-criteria` skill** — orchestrator-owned carve-out names `_memory/work/goals/` and `_memory/loop/` instead of `_goals/`.
 - **Memory README** — `rm` documents `git ls-files --error-unmatch` exit **1** as the untracked delete case; backfill `--only` omits unnamed goals/topics; closed-goal (3c) id falls back to `19700101T000000Z` when the log has no valid `### <ts>` heading; `memory.ps1` subcommand list matches the twin.
 - **Evaluator evidence (read-only harnesses)** — the evaluator agent judges orchestrator-supplied verbatim command output when shell is refused; the `feature` skill has the orchestrator spawn `terminal` for each acceptance-criterion verification command before evaluation on read-only harnesses.
 - **ORCHESTRATION** — memory check-gate wording and `_memory/raw/` tool-tree labels (capture output, ledgers and drafts).
@@ -47,6 +56,8 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 
 - Replace `pwsh …/bin/emit.ps1` with `bash …/bin/emit.sh` or `…\bin\emit.cmd`, and `pwsh _kit/log-spawn.ps1` with `_kit/log-spawn.sh` or `_kit\log-spawn.cmd`; install Git for Windows. Re-emit with `bash …/bin/emit.sh --upgrade` (or `…\bin\emit.cmd --upgrade`) so unchanged kit-owned `_kit/log-spawn.ps1` is pruned from the tree and manifest.
 - Re-emit with `--upgrade` after pulling the kit. The embedded JSON reader is stricter than jq 1.6 on input that is not valid RFC 8259 JSON (raw control characters in strings, numbers like `1.`/`.5`/`+1`, `nan`, concatenated documents now exit 2; invalid UTF-8 passes through instead of becoming U+FFFD); object and array values in tokens/bootstrap render compact.
+- When `_goals/` or `_research/` still exist, `--upgrade` moves them into `_memory/loop/` and `_memory/work/` before writing kit files (see **Breaking:** orchestration layout above). After upgrading, run `_kit/memory.sh backfill --plan`. Commit the `_memory/loop/` move before relying on `LOOP_WORKTREE=1`; coordinate with teammates before committing goal/research untracking.
+- A migrated `_memory/loop/backlog.md` keeps its old comments (seeds are never rewritten), so a comment may still mention `_goals/ESCALATIONS.md`; the file to use is `_memory/loop/ESCALATIONS.md`.
 
 ## [1.0.0] - 2026-10-11
 

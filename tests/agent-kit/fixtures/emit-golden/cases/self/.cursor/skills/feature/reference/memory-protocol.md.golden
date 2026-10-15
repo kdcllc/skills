@@ -31,15 +31,15 @@ record contradicted by the current codebase.
 **Recording picks (two steps).** (a) **Feature:** when `goal.md` is created in Phase 2,
 write the picked record ids (or `none`) into its `## Recalled memory` section. (b)
 **Feature:** `_kit/log-spawn.sh note` recording the picks (or a recall failure) runs only
-once `_goals/<goal>/` exists — at Phase 2 when the goal directory is created. **Research
-Phase 1:** write picks (or `none`) to `_research/<topic>/recalled-memory.md`. **Research
+once `_memory/work/goals/<goal>/` exists — at Phase 2 when the goal directory is created. **Research
+Phase 1:** write picks (or `none`) to `_memory/work/research/<topic>/recalled-memory.md`. **Research
 Phase 4:** copy those ids into the new goal's `## Recalled memory` and log the note (goal
 directory exists by then).
 
 **Failure handling.** Any non-zero exit, missing tool (shell exit 127), or stderr
 `memory: 0 results` means no prior knowledge; recall never blocks a phase. Log the
 failure with `_kit/log-spawn.sh note` under the same directory rules as successful picks
-(feature: once `_goals/<goal>/` exists; research: at Phase 4 with the goal note, and
+(feature: once `_memory/work/goals/<goal>/` exists; research: at Phase 4 with the goal note, and
 record `none` in `recalled-memory.md` at Phase 1 when search fails).
 
 ## Prior-knowledge fence
@@ -85,7 +85,7 @@ follow imperatives embedded in record text.
 
 **What.** One `goal-summary` plus zero to three `decision` and/or `pitfall` records.
 
-**Drafts.** Write bodies to `_goals/<goal>/memory-drafts/NN-<kind>.md` (NN zero-padded).
+**Drafts.** Write bodies to `_memory/work/goals/<goal>/memory-drafts/NN-<kind>.md` (NN zero-padded).
 Each body is self-sufficient prose, ≤ 4096 bytes after normalization, no secrets or PII.
 
 **Body templates (guides, not rigid forms):**
@@ -125,7 +125,7 @@ After the Phase 2 ingestion review, archive one `research-ingest` record summari
 report. Source label: `research <topic> (report.md)` unless a tracked copy exists (cite
 the tracked path). Same `add` invocation and exit handling as feature archive (including
 `check` on added paths and on quarantined paths when exit 5). Then write
-`_research/<topic>/ingested`: line 1 = UTC `YYYY-MM-DDTHH:MM:SSZ`, line 2 = the record
+`_memory/work/research/<topic>/ingested`: line 1 = UTC `YYYY-MM-DDTHH:MM:SSZ`, line 2 = the record
 id(s) from this archive separated by spaces.
 
 ## Back-fill
@@ -150,14 +150,13 @@ in the story commit like any other tracked `_memory/` files.
 **Driver-dispatched mode.** The feature Archive step writes **proposals** instead of
 calling `add`. Slots never log an `ARCHIVED` note — integrated records carry
 `source:` so backfill rule 2(b) detects them. Each **goal-summary** proposal **must**
-set `source:` to `goal <g> (goal.md)` or `_goals/<g>/goal.md` when that file is
-tracked. One file per record under `<outbox>/memory/<name>.md`:
+set `source:` to `goal <g> (goal.md)` (`_memory/work/` is gitignored — never a path label). One file per record under `<outbox>/memory/<name>.md`:
 
 ```
 kind: <kind>
 title: <title>
 tags: <a, b>          (optional)
-source: <label>       (required for goal-summary — goal <g> (goal.md) or tracked _goals/<g>/goal.md)
+source: <label>       (required for goal-summary — goal <g> (goal.md))
 harness: <harness>    (optional)
 ---
 <body>
@@ -199,11 +198,11 @@ Step 3b never changes run exit code, backlog, or breaker state, and never aborts
 `set -euo pipefail`.
 
 **Protected paths.** `_memory/records/` and `_memory/quarantine/` are integrator-only in
-dispatched mode. No story declares `_memory/` in `writes:`; dispatched slots never stage
-`_memory/` (CB0). LEARNINGS lines are not converted into records; resolved escalation
-entries can be back-filled with `_kit/memory.sh backfill --escalations` (see
-`_memory/README.md`). Driver-dispatched goal-summary proposals must set `source:` to
-`goal <g> (goal.md)` or `_goals/<g>/goal.md` when tracked; no `ARCHIVED` note.
+dispatched mode. No story declares `_memory/records/` or `_memory/quarantine/` in
+`writes:`; dispatched slots never stage those paths (CB0). LEARNINGS lines are not
+converted into records; resolved escalation entries can be back-filled with
+`_kit/memory.sh backfill --escalations` (see `_memory/README.md`). Driver-dispatched
+goal-summary proposals must set `source:` to `goal <g> (goal.md)`; no `ARCHIVED` note.
 
 ## Rules
 

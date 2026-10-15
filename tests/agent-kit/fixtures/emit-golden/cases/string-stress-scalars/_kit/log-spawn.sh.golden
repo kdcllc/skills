@@ -37,7 +37,7 @@
 #     Appends a blank line + `### <ts> — <text>`.
 #
 #   Common: [--root <path>] (repo root; default $PWD). Log path:
-#   <root>/_goals/<goal>/orchestration-log.md — created when missing with the header
+#   <root>/_memory/work/goals/<goal>/orchestration-log.md — created when missing with the header
 #   `# Orchestration Log — <goal>` / blank / `Append-only spawn ledger. Running io_est_tokens
 #   (orchestrator I/O proxy, chars/4) and work_est_tokens (subagent self-reported footprint /4):
 #   see latest entry.` / blank / `---`.
@@ -64,8 +64,8 @@ set -u
 usage() {
   cat <<'EOF'
 usage: log-spawn.sh <spawn|outcome|note> [--root <path>] <flags>
-  spawn   --goal G --agent A --phase P --model-requested M --context _goals/G/spawns/NN-context.md [--writes T] [--why T] [--expect T]
-  outcome --goal G --spawn NN --report _goals/G/spawns/NN-report.md --verdict V --model-reported M [--note T] [--work-chars C]
+  spawn   --goal G --agent A --phase P --model-requested M --context _memory/work/goals/G/spawns/NN-context.md [--writes T] [--why T] [--expect T]
+  outcome --goal G --spawn NN --report _memory/work/goals/G/spawns/NN-report.md --verdict V --model-reported M [--note T] [--work-chars C]
           (OUTCOME adds model_check: match|MISMATCH|unverified; MISMATCH → stderr warning, exit 0)
   note    --goal G --text T
 exit: 0 ok · 2 usage · 3 ledger integrity · 4 missing goal dir / file
@@ -211,7 +211,7 @@ require() { # <flag-name> <value>
 }
 require --goal "$goal"
 
-goal_dir="$root/_goals/$goal"
+goal_dir="$root/_memory/work/goals/$goal"
 log="$goal_dir/orchestration-log.md"
 
 case "$sub" in

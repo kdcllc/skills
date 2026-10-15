@@ -1,7 +1,7 @@
 #!/usr/bin/env pwsh
 #Requires -Version 7.0
 # Autonomous feature loop for kdcllc skills — drives one `auto-loop` iteration per
-# fresh-context CLI run. State lives in _goals/backlog.md + git, never in memory.
+# fresh-context CLI run. State lives in _memory/loop/backlog.md + git, never in memory.
 #
 # Twin: loop.sh (bash) — behaviorally identical — same
 # defaults, guards, and exit codes; any divergence is a bug.
@@ -28,7 +28,7 @@
 # This script never pushes and never bypasses permission prompts by itself.
 #
 # Breaker: dot-sources breaker.ps1 (functions: Breaker-Load, Breaker-ShouldSkip,
-# Breaker-Record, Breaker-CurrentModel); state file: _goals/breaker-state.json.
+# Breaker-Record, Breaker-CurrentModel); state file: _memory/loop/breaker-state.json.
 #
 # Exit codes (driver-aggregated across slots, precedence 4>3>2>1>0 -- the most
 # severe cause is always the one reported):
@@ -54,7 +54,7 @@
 # (the 126 case is Unix-host-only).
 # Exit 5 = setup or integration failure: the LOOP_WORKTREE=1 tracked-instance
 # preflight failing after `git worktree add`, PROMPT.md missing a %%...%%
-# substitution point, a missing/unreadable _goals/backlog.md, or the
+# substitution point, a missing/unreadable _memory/loop/backlog.md, or the
 # rebase-then-ff integration step hitting a non-fast-forward -- all loud,
 # driver-level stops that never silently fall back to the main tree (the
 # preflight path removes its worktree; the non-ff path retains worktree and
@@ -92,10 +92,10 @@ $Sentinel = '<promise>COMPLETE</promise>'
 # dispatched per-dispatch sets its OWN cwd to the slot's tree at
 # LOOP_WORKTREE=1) -- $PromptFile above was already absolute via
 # $PSScriptRoot; $StateFile was relative and depended on the invocation cwd.
-$StateFile = Join-Path (Get-Location).Path '_goals/breaker-state.json'
+$StateFile = Join-Path (Get-Location).Path '_memory/loop/breaker-state.json'
 # Driver-owned selection reads/writes this file directly, never via a slot's
 # worktree (§6.3: "slots never write it").
-$BacklogFile = Join-Path (Get-Location).Path '_goals/backlog.md'
+$BacklogFile = Join-Path (Get-Location).Path '_memory/loop/backlog.md'
 
 $LoopModelFlag = $env:LOOP_MODEL_FLAG
 if ($null -eq $LoopModelFlag) { $LoopModelFlag = '' }
@@ -1311,11 +1311,11 @@ function Invoke-LoopFillSlot {
         # whenever the instance is tracked, and false in exactly the
         # gitignored-instance case -- the iteration needs that whole
         # directory (it is sent to ORCHESTRATION.md and
-        # _goals/ESCALATIONS.md), not just one file in it.
-        $backlogOk = Test-Path -LiteralPath (Join-Path $wt '_goals/backlog.md') -PathType Leaf
+        # _memory/loop/ESCALATIONS.md), not just one file in it.
+        $backlogOk = Test-Path -LiteralPath (Join-Path $wt '_memory/loop/backlog.md') -PathType Leaf
         $ideDirOk = Test-Path -LiteralPath (Join-Path $wt '.cursor') -PathType Container
         if (-not $backlogOk -or -not $ideDirOk) {
-            [Console]::Error.WriteLine("!!! worktree preflight failed: '$wt' is missing a tracked _goals/backlog.md and/or a tracked .cursor directory — a worktree checks out TRACKED files only, so this repo's loop instance must be committed (not gitignored) for LOOP_WORKTREE=1 — stopping, no fallback to the main tree")
+            [Console]::Error.WriteLine("!!! worktree preflight failed: '$wt' is missing a tracked _memory/loop/backlog.md and/or a tracked .cursor directory — a worktree checks out TRACKED files only, so this repo's loop instance must be committed (not gitignored) for LOOP_WORKTREE=1 — stopping, no fallback to the main tree")
             & git worktree remove --force $wt 2>$null
             & git worktree prune
             $pruneRc = $LASTEXITCODE
@@ -1567,8 +1567,8 @@ function Invoke-LoopReapSlot {
 
     # --- Integrator step 3: outbox appends, ALWAYS (independent evidence
     # from the child's own work) -- integration order = reap order.
-    $learningsTarget = Join-Path (Get-Location).Path '_goals/LEARNINGS.md'
-    $escalationsTarget = Join-Path (Get-Location).Path '_goals/ESCALATIONS.md'
+    $learningsTarget = Join-Path (Get-Location).Path '_memory/loop/LEARNINGS.md'
+    $escalationsTarget = Join-Path (Get-Location).Path '_memory/loop/ESCALATIONS.md'
     $learningsSrc = Join-Path $outboxDir 'learnings.md'
     $escalationsSrc = Join-Path $outboxDir 'escalations.md'
     if (Test-Path -LiteralPath $learningsSrc -PathType Leaf) {
@@ -1639,13 +1639,13 @@ function Invoke-LoopReapSlot {
     if (Test-Path -LiteralPath $learningsTarget -PathType Leaf) {
         $sz = (Get-Item -LiteralPath $learningsTarget).Length
         if ($sz -ge 15360) {
-            [Console]::Error.WriteLine("!!! _goals/LEARNINGS.md is >= 15KB ($sz bytes) -- compaction deferred to the next MANUAL iteration; automated prose compaction is out of the driver's competence (design §6.3 :685-689 single-writer rule -- the driver IS the single writer, but semantic rewriting is not)")
+            [Console]::Error.WriteLine("!!! _memory/loop/LEARNINGS.md is >= 15KB ($sz bytes) -- compaction deferred to the next MANUAL iteration; automated prose compaction is out of the driver's competence (design §6.3 :685-689 single-writer rule -- the driver IS the single writer, but semantic rewriting is not)")
         }
     }
     if (Test-Path -LiteralPath $escalationsTarget -PathType Leaf) {
         $sz = (Get-Item -LiteralPath $escalationsTarget).Length
         if ($sz -ge 20480) {
-            [Console]::Error.WriteLine("!!! _goals/ESCALATIONS.md is >= 20KB ($sz bytes) -- archival (move RESOLVED entries) deferred to the next MANUAL iteration; same single-writer-competence limit as LEARNINGS above")
+            [Console]::Error.WriteLine("!!! _memory/loop/ESCALATIONS.md is >= 20KB ($sz bytes) -- archival (move RESOLVED entries) deferred to the next MANUAL iteration; same single-writer-competence limit as LEARNINGS above")
         }
     }
 

@@ -47,7 +47,7 @@ flowchart TD
 - **Direct edit** — typo fixes, comment updates, one-line mechanical changes, or config tweaks you can verify yourself in the same session. The `/feature` skill is invoked to start **any non-trivial feature**; it is not the right path for a one-line mechanical fix.
 - **`/research` → `/feature`** — the research skill covers domain topics an external research agent must investigate **before** implementation. It produces a verifiable report and goal structure, then hands off to `/feature` at goal evaluation (Phase 3 onward).
 - **`/feature`** — full orchestrated feature flow with human decision gates throughout. After cycle-3 exhaustion on a stuck task, interactive goals default to **`phases.ladder: escalate`**: the orchestrator presents options with "Run the continuation ladder" as option 1 rather than auto-running rungs 5→4→6. Phase 6 (docs alignment) is opt-in (`align_docs: false` by default). See [feature-workflow.md](feature-workflow.md).
-- **Autonomous loop** — one backlog story per fresh-context iteration from `_goals/backlog.md`. Loop-created goals set **`phases.ladder: auto`** so cycle-3 exhaustion runs the continuation ladder unattended. Each story's acceptance criteria replace Phase 1 alignment; if a story is too ambiguous to derive a goal from, it is treated as **blocked**, not loop-suitable.
+- **Autonomous loop** — one backlog story per fresh-context iteration from `_memory/loop/backlog.md`. Loop-created goals set **`phases.ladder: auto`** so cycle-3 exhaustion runs the continuation ladder unattended. Each story's acceptance criteria replace Phase 1 alignment; if a story is too ambiguous to derive a goal from, it is treated as **blocked**, not loop-suitable.
 
 ## Mode comparison
 
@@ -56,7 +56,7 @@ flowchart TD
 | **Human involvement** | You edit and verify in one session; no orchestrator phases | Orchestrator asks structured alignment questions (incl. Phase 6/7 intent); you confirm understanding and approve decision gates, PR draft, and escalations | Same human gates as `/feature`, plus collaborative planning after the external report is ingested | Minimal per-iteration involvement; backlog stories pre-specify acceptance criteria; human ships one PR at run end when loop-level `pull_request` is enabled |
 | **Context freshness** | Single continuous session — context accumulates | Fresh-context subagents per task and evaluation; orchestrator retains session history | Same fresh-context model as `/feature`; research report is a durable artifact before coding | One story, one fresh context per iteration; all state lives in files and git |
 | **Verification guarantees** | Whatever checks you run yourself — no evaluator PASS requirement | Evaluator PASS (or APPROVED for audits) required before every phase advance; acceptance criteria validated at Phase 3; fixes always re-evaluated | Research report reviewed critically before goal creation; then full evaluator gates through `/feature` | Evaluator PASS + green ladder rungs before each story commit; same re-evaluate invariants as `/feature` Phases 2–6 |
-| **Artifacts produced** | Git diff only | `_goals/<name>/` (goal, tasks, orchestration log); optional QA evidence | `_research/prompts/`, `_research/<topic>/report.md`, then `_goals/<name>/` | `_goals/backlog.md` entries, per-story commits, `_goals/LEARNINGS.md`, `_goals/ESCALATIONS.md` on failure |
+| **Artifacts produced** | Git diff only | `_memory/work/goals/<name>/` (goal, tasks, orchestration log); optional QA evidence | `_memory/work/research/prompts/`, `_memory/work/research/<topic>/report.md`, then `_memory/work/goals/<name>/` | `_memory/loop/backlog.md` entries, per-story commits, `_memory/loop/LEARNINGS.md`, `_memory/loop/ESCALATIONS.md` on failure |
 | **Typical work size** | One file or a few lines; verifiable immediately | Multi-task features spanning layers; needs decomposition and acceptance criteria at planning | Features whose design depends on external facts, APIs, or standards not yet verified | Many small stories, each sized to one context window and one commit |
 | **Failure mode when misused** | Shipping unreviewed changes to complex behavior; skipping tests on non-trivial edits | Running `/feature` for a typo — heavy process, wasted evaluator cycles | Skipping research and coding against unverified external claims — confident fabrication | Running the loop on ambiguous stories — blocked iterations, wasted evaluator cycles |
 
@@ -68,7 +68,7 @@ The `/research` workflow exists to produce a **verifiable report before goal cre
 
 For the full prompt/report/ingestion flow, see [research-workflow.md](research-workflow.md).
 
-**Real example:** [Multi-harness upgrade research](../research-multi-harness-upgrade.md) grounded harness capability claims — model tiers, fallback behavior, Copilot and Cursor caveats — before those patterns were adopted into the canonical templates. That report is the kind of durable evidence `/research` is meant to produce; durable findings promote into the project's ground-truth reference while `_research/` stays scratch.
+**Real example:** [Multi-harness upgrade research](../research-multi-harness-upgrade.md) grounded harness capability claims — model tiers, fallback behavior, Copilot and Cursor caveats — before those patterns were adopted into the canonical templates. That report is the kind of durable evidence `/research` is meant to produce; durable findings promote into the project's ground-truth reference while `_memory/work/research/` stays gitignored scratch.
 
 ## Worked scenarios
 
@@ -92,7 +92,7 @@ Each scenario states a concrete piece of work, the chosen mode, and why that mod
 
 ### 3. Backlog of ten hardening stories → autonomous loop
 
-**Work:** Ten independent stories in `_goals/backlog.md` — each adds input validation, a mocked unit test, and a doc note — with explicit acceptance criteria and disjoint `writes:` sets.
+**Work:** Ten independent stories in `_memory/loop/backlog.md` — each adds input validation, a mocked unit test, and a doc note — with explicit acceptance criteria and disjoint `writes:` sets.
 
 **Route:** Autonomous loop (`auto-loop` skill, invoked repeatedly by `_loop/loop.sh` or `_loop/loop.ps1`).
 

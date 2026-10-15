@@ -49,9 +49,17 @@ set -u
 # ---------------------------------------------------------------------------
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$HERE/../../.." && pwd)"
+FIXTURE_TMPDIR="$(mktemp -d "${TMPDIR:-/tmp}/loopharn.XXXXXX")" || exit 1
+export TMPDIR="$FIXTURE_TMPDIR"
+# shellcheck source=../lib/fixture-root.sh
+source "$HERE/../lib/fixture-root.sh"
 # shellcheck source=../lib/kit-version.sh
 source "$REPO_ROOT/tests/agent-kit/lib/kit-version.sh"
-cd "$REPO_ROOT" || exit 1
+
+sandbox_git() {
+  assert_fixture_root "$1" || exit 1
+  git -C "$1" "${@:2}"
+}
 
 BREAKER_SH="$REPO_ROOT/skills/agent-kit/templates/loop/breaker.sh"
 BREAKER_PS1="$REPO_ROOT/skills/agent-kit/templates/loop/breaker.ps1"
@@ -74,8 +82,8 @@ CANON_AGENTS_DIR="$REPO_ROOT/skills/agent-kit/templates/agents"
 CONTRACT_TPL="$REPO_ROOT/skills/agent-kit/templates/skills/feature/templates/contract.md"
 INSTANCE_AGENTS_DIR="$REPO_ROOT/.claude/agents"
 
-TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"' EXIT
+TMP="$FIXTURE_TMPDIR"
+trap 'rm -rf "$FIXTURE_TMPDIR"' EXIT
 
 fail_count=0
 pass_count=0
@@ -1420,7 +1428,7 @@ if [[ ! -f "$INSTANCE_LOOP_SH" || ! -f "$INSTANCE_BREAKER_SH" ]]; then
 else
   CB1_DIR="$TMP/cb1-repo"
   rm -rf "$CB1_DIR"
-  mkdir -p "$CB1_DIR/_loop" "$CB1_DIR/_goals"
+  mkdir -p "$CB1_DIR/_loop" "$CB1_DIR/_memory/loop"
   cp "$INSTANCE_LOOP_SH" "$CB1_DIR/_loop/loop.sh"
   cp "$INSTANCE_BREAKER_SH" "$CB1_DIR/_loop/breaker.sh"
   cp "$INSTANCE_PROMPT_MD" "$CB1_DIR/_loop/PROMPT.md"
@@ -1443,7 +1451,7 @@ STUBEOF
   # STORY-CB1B gets dispatch 4 (MAX_ITER reached after reap -> exit 1).
   # Each dispatch is rate-limited -> CB1-exempt (no_progress counter never
   # increments), so the run proves CB1 never fires even with 4 exempt passes.
-  cat > "$CB1_DIR/_goals/backlog.md" <<'BACKLOGEOF'
+  cat > "$CB1_DIR/_memory/loop/backlog.md" <<'BACKLOGEOF'
 # backlog
 
 ## STORY-CB1A: rate-limit carve-out test story A
@@ -1459,7 +1467,7 @@ STUBEOF
 - blocked: false
 BACKLOGEOF
 
-  cat > "$CB1_DIR/_goals/breaker-state.json" <<STATEEOF
+  cat > "$CB1_DIR/_memory/loop/breaker-state.json" <<STATEEOF
 {
 "state": "CLOSED",
 "chain": "sonnet",
@@ -1729,15 +1737,15 @@ fi
 
 # ---------------------------------------------------------------------------
 # 23 (A3, task-02 coverage; PRECISION FIX story-006 task-03 judge): the line
-# naming "_goals/backlog.md" in each emitter caveat file must carry a
+# naming "_memory/loop/backlog.md" in each emitter caveat file must carry a
 # "create if missing" note WITHIN THAT SAME LINE -- not a whole-file grep,
 # which a decoy note elsewhere on an unrelated line (e.g. codex.md's AGENTS.md
 # mention) could satisfy even if the backlog line itself lost its note.
 # ---------------------------------------------------------------------------
-a3_row_check() { # a3_row_check <file> -> 0 if the _goals/backlog.md row contains "create if missing"
+a3_row_check() { # a3_row_check <file> -> 0 if the _memory/loop/backlog.md row contains "create if missing"
   local f="$1" row
   [[ -f "$f" ]] || return 1
-  row="$(grep -F '_goals/backlog.md' "$f" | head -1)"
+  row="$(grep -F '_memory/loop/backlog.md' "$f" | head -1)"
   [[ -n "$row" ]] && grep -qF 'create if missing' <<< "$row"
 }
 a3_missing=()
@@ -1745,9 +1753,9 @@ for f in "$CLAUDE_CODE_MD" "$CODEX_MD" "$COPILOT_MD" "$CURSOR_MD"; do
   a3_row_check "$f" || a3_missing+=("$f")
 done
 if ((${#a3_missing[@]} == 0)); then
-  report PASS "23 (row-scoped): A3 -- 'create if missing' present WITHIN the _goals/backlog.md line in all four emitter caveat files"
+  report PASS "23 (row-scoped): A3 -- 'create if missing' present WITHIN the _memory/loop/backlog.md line in all four emitter caveat files"
 else
-  report FAIL "23 (row-scoped): A3" "'create if missing' absent from the _goals/backlog.md line of: ${a3_missing[*]}"
+  report FAIL "23 (row-scoped): A3" "'create if missing' absent from the _memory/loop/backlog.md line of: ${a3_missing[*]}"
 fi
 
 # 23-mutation-proof: a codex.md copy with the backlog-cell note deleted but
@@ -1755,7 +1763,7 @@ fi
 # check (the old whole-file grep tolerated exactly this case).
 t23_decoy="$TMP/codex_decoy.md"
 cp "$CODEX_MD" "$t23_decoy"
-backlog_ln="$(grep -nF '_goals/backlog.md' "$t23_decoy" | head -1 | cut -d: -f1)"
+backlog_ln="$(grep -nF '_memory/loop/backlog.md' "$t23_decoy" | head -1 | cut -d: -f1)"
 sed -i "${backlog_ln}s/ (create if missing; never overwrite)//" "$t23_decoy"
 if grep -qF 'create if missing' "$t23_decoy" && a3_row_check "$t23_decoy"; then
   report FAIL "23-mutation-proof: codex.md :12 decoy (AGENTS.md note intact, backlog-cell note removed) must FAIL the row-scoped check" "decoy copy incorrectly PASSED"
@@ -1797,7 +1805,7 @@ fi
 # 25 (story-007, check J mutation -- POSITIVE): an INTERNALLY-CONSISTENT
 # manifest copy -- every managed (non-seed) entry's hash recomputed against
 # the CURRENT working tree first (so this proves the seed join itself, not
-# story-induced drift), _goals/backlog.md seed-only (absent from manifest
+# story-induced drift), _memory/loop/backlog.md seed-only (absent from manifest
 # `files`, present in `seedFiles`), the seed file exists on disk, and
 # a tests/agent-kit/checks.sh entry injected at a STALE hash (emit never lists
 # the checks script, so the entry is added here to exercise "self, excluded";
@@ -1823,14 +1831,15 @@ PY
 j_pos_out="$TMP/j_pos_out.txt"
 j_pos_err="$TMP/j_pos_err.txt"
 CHECKS_MANIFEST="$j_pos_manifest" "$CHECKS_SH" > "$j_pos_out" 2> "$j_pos_err"
+BACKLOG_SEED="_memory/loop/backlog.md"
 if grep -qE '^PASS  J: manifest hash join' "$j_pos_out" \
-   && jq -e '.files|has("_goals/backlog.md")|not' "$REPO_ROOT/orchestration-kit.manifest.json" \
-   && jq -e '.seedFiles|index("_goals/backlog.md")!=null' "$REPO_ROOT/orchestration-kit.manifest.json" \
-   && [[ -f "$REPO_ROOT/_goals/backlog.md" ]] \
+   && jq -e --arg s "$BACKLOG_SEED" '.files|has($s)|not' "$REPO_ROOT/orchestration-kit.manifest.json" \
+   && jq -e --arg s "$BACKLOG_SEED" '.seedFiles|index($s)!=null' "$REPO_ROOT/orchestration-kit.manifest.json" \
+   && [[ -f "$REPO_ROOT/$BACKLOG_SEED" ]] \
    && grep -qF 'J: self, excluded -- tests/agent-kit/checks.sh' "$j_pos_out"; then
   report PASS "25: check J mutation (POSITIVE) -- manifest PASSES; backlog seed-only (not in files); seed exists; self excluded line present"
 else
-  report FAIL "25: check J mutation (POSITIVE)" "expected PASS J + seed-only backlog manifest shape + seed file + self excluded line"
+  report FAIL "25: check J mutation (POSITIVE)" "expected PASS J + seed-only backlog manifest shape + seed file + self excluded line (seed=$BACKLOG_SEED)"
 fi
 
 # ---------------------------------------------------------------------------
@@ -2263,7 +2272,7 @@ fi
 # which re-extract against these same canonical files on every run of this
 # harness). make_sandbox wraps the substituted copy in a throwaway git repo
 # under this run's mktemp workdir, with independently-controllable
-# tracked/gitignored _goals and {{IDE_DIR}} state (needed by the two
+# tracked/gitignored _memory/loop and {{IDE_DIR}} state (needed by the two
 # preflight-failure fixtures, 44/45).
 #
 # STORY-011 note (task 05): PROMPT.md now carries the two dispatch-time
@@ -2274,7 +2283,7 @@ fi
 # dispatched slot emitting the sentinel is now itself an ITERATION-mismatch,
 # per the sentinel-from-dispatched-slot rule) -- it documents the ITERATION:
 # line contract instead, matching the shipped PROMPT.md's own dispatch text.
-# _goals/backlog.md now seeds N generic eligible story blocks (STORY-101,
+# _memory/loop/backlog.md now seeds N generic eligible story blocks (STORY-101,
 # STORY-102, ...) in the shipped seed shape (priority/passes/attempts/blocked
 # pinned fields; writes: omitted -- writes-absent runs alone, the simplest
 # admission outcome), so driver-owned selection has something to dispatch;
@@ -2296,17 +2305,18 @@ sandbox_write_loop() { # sandbox_write_loop <dest_dir> <ide_dir_name>
   printf 'Fixture prompt for %%%%STORY_ID%%%%: do the task; outbox %%%%OUTBOX_DIR%%%%; end with an ITERATION: %%%%STORY_ID%%%% <verdict> line.\n' > "$dest/_loop/PROMPT.md"
 }
 
-make_sandbox() { # make_sandbox <dest_dir> <ide_dir_name> <track_goals:0|1> <track_ide:0|1> [n_stories:1]
-  local dest="$1" ide="$2" track_goals="$3" track_ide="$4" n_stories="${5:-1}"
+make_sandbox() { # make_sandbox <dest_dir> <ide_dir_name> <track_loop:0|1> <track_ide:0|1> [n_stories:1]
+  local dest="$1" ide="$2" track_loop="$3" track_ide="$4" n_stories="${5:-1}"
   rm -rf "$dest"
   mkdir -p "$dest"
+  assert_fixture_root "$dest" || exit 1
   sandbox_write_loop "$dest" "$ide"
   (
     cd "$dest"
     git init -q
     git config user.email test@example.com
     git config user.name "story010-test"
-    mkdir -p _goals "$ide"
+    mkdir -p _memory/loop "$ide"
     {
       printf '# backlog\n'
       i=1
@@ -2315,10 +2325,10 @@ make_sandbox() { # make_sandbox <dest_dir> <ide_dir_name> <track_goals:0|1> <tra
         printf -- '- priority: %d\n- passes: false\n- attempts: 0\n- blocked: false\n' "$i"
         i=$((i + 1))
       done
-    } > _goals/backlog.md
+    } > _memory/loop/backlog.md
     printf 'placeholder\n' > "$ide/.keep"
     : > .gitignore
-    if [[ "$track_goals" != "1" ]]; then printf '_goals/\n' >> .gitignore; fi
+    if [[ "$track_loop" != "1" ]]; then printf '_memory/loop/\n' >> .gitignore; fi
     if [[ "$track_ide" != "1" ]]; then printf '%s/\n' "$ide" >> .gitignore; fi
     git add -A
     git commit -qm init
@@ -2352,12 +2362,12 @@ sandbox_write_loop_ps1() { # sandbox_write_loop_ps1 <dest_dir> <ide_dir_name>
 # touches git).
 # ---------------------------------------------------------------------------
 CLAMP_DIR="$TMP/clamp-sandbox"
-mkdir -p "$CLAMP_DIR/_goals"
+mkdir -p "$CLAMP_DIR/_memory/loop"
 sandbox_write_loop "$CLAMP_DIR" ".claude"
 
 run_slots_probe() { # run_slots_probe <value|__UNSET__> -> sets slots_out/slots_err
   local val="$1" out err
-  rm -f "$CLAMP_DIR/_goals/breaker-state.json"
+  rm -f "$CLAMP_DIR/_memory/loop/breaker-state.json"
   out="$TMP/slots_stdout_${RANDOM}.txt"; err="$TMP/slots_stderr_${RANDOM}.txt"
   if [[ "$val" == "__UNSET__" ]]; then
     ( cd "$CLAMP_DIR" && unset LOOP_SLOTS && bash ./_loop/loop.sh 0 ) >"$out" 2>"$err"
@@ -2428,7 +2438,7 @@ fi
 # if/EFFECTIVE_SLOTS=1/else/EFFECTIVE_SLOTS=$SLOTS/fi shape itself is
 # unchanged, so skip=4 still swallows the whole block.
 MUT40_DIR="$TMP/clamp-sandbox-mut40"
-rm -rf "$MUT40_DIR"; mkdir -p "$MUT40_DIR/_goals" "$MUT40_DIR/_loop"
+rm -rf "$MUT40_DIR"; mkdir -p "$MUT40_DIR/_memory/loop" "$MUT40_DIR/_loop"
 awk '
   /^if \(\( SLOTS > 1 \)\) && \(\( WORKTREE != 1 \)\); then$/ && !done {
     print "EFFECTIVE_SLOTS=$SLOTS   # mutation (test 40): dark-launch guard removed"
@@ -2507,7 +2517,7 @@ equiv_rc_b=$?
 
 no_worktree_dir=1; [[ -e "$EQUIV_DIR/.loop-worktrees" ]] && no_worktree_dir=0
 no_new_branch=1
-equiv_branch_count="$(git -C "$EQUIV_DIR" branch --list 'loop/*' | wc -l)"
+equiv_branch_count="$(sandbox_git "$EQUIV_DIR" branch --list 'loop/*' | wc -l)"
 [[ "$equiv_branch_count" -ne 0 ]] && no_new_branch=0
 identical_exit=0
 [[ "$equiv_rc_a" -eq "$equiv_rc_b" && "$equiv_rc_a" -eq 0 ]] && identical_exit=1
@@ -2544,7 +2554,7 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 43: worktree lifecycle, flag=1, TRACKED sandbox (both _goals/backlog.md and
+# 43: worktree lifecycle, flag=1, TRACKED sandbox (both _memory/loop/backlog.md and
 # {{IDE_DIR}} tracked/committed, so the preflight passes). The stub probes
 # its OWN cwd (the worktree, per the driver/child boundary pin) into a file
 # OUTSIDE the repo, commits progress, then prints the sentinel so the run
@@ -2588,10 +2598,10 @@ worktree_removed_after=1
 [[ -e "$expected_wt_path" ]] && worktree_removed_after=0
 
 branch_deleted=1
-[[ -n "$(git -C "$LIFECYCLE_DIR" branch --list 'loop/iter-1')" ]] && branch_deleted=0
+[[ -n "$(sandbox_git "$LIFECYCLE_DIR" branch --list 'loop/iter-1')" ]] && branch_deleted=0
 
 zero_stray_branches=1
-[[ -n "$(git -C "$LIFECYCLE_DIR" branch --list 'loop/*')" ]] && zero_stray_branches=0
+[[ -n "$(sandbox_git "$LIFECYCLE_DIR" branch --list 'loop/*')" ]] && zero_stray_branches=0
 
 # zero_litter: `.loop-worktrees` itself is not removed by `git worktree
 # remove` (only the slot-N entry under it is), so an empty parent is
@@ -2601,15 +2611,15 @@ zero_litter=1
 if [[ -d "$LIFECYCLE_DIR/.loop-worktrees" ]]; then
   [[ -z "$(ls -A "$LIFECYCLE_DIR/.loop-worktrees" 2>/dev/null)" ]] || zero_litter=0
 fi
-litter_status="$(git -C "$LIFECYCLE_DIR" status --porcelain -- . ':(exclude)_goals/breaker-state.json' ':(exclude)_goals/backlog.md')"
+litter_status="$(sandbox_git "$LIFECYCLE_DIR" status --porcelain -- . ':(exclude)_memory/loop/breaker-state.json' ':(exclude)_memory/loop/backlog.md')"
 [[ -n "$litter_status" ]] && zero_litter=0
 
-worktree_list_count="$(git -C "$LIFECYCLE_DIR" worktree list | wc -l)"
+worktree_list_count="$(sandbox_git "$LIFECYCLE_DIR" worktree list | wc -l)"
 main_only=1
 [[ "$worktree_list_count" -ne 1 ]] && main_only=0
 
 integrated=1
-git -C "$LIFECYCLE_DIR" log --oneline | grep -qF "lifecycle progress" || integrated=0
+sandbox_git "$LIFECYCLE_DIR" log --oneline | grep -qF "lifecycle progress" || integrated=0
 
 if [[ "$lifecycle_rc" -eq 0 && "$worktree_existed" -eq 1 && "$worktree_removed_after" -eq 1 \
       && "$branch_deleted" -eq 1 && "$zero_stray_branches" -eq 1 && "$zero_litter" -eq 1 \
@@ -2622,13 +2632,13 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 44 (preflight failure, fixture i): _goals/ GITIGNORED (this repo's own
+# 44 (preflight failure, fixture i): _memory/loop/ GITIGNORED (this repo's own
 # shape). `git worktree add` SUCCEEDS (the branch does not pre-exist), so the
 # failure is the PREFLIGHT's own exit 5, not git's add failing with its own
 # status. Stub carries a marker so "stub never ran" is an assertable fact.
 # ---------------------------------------------------------------------------
 PREFLIGHT_I_DIR="$TMP/preflight-i-sandbox"
-make_sandbox "$PREFLIGHT_I_DIR" ".claude" 0 1   # _goals GITIGNORED, IDE_DIR tracked
+make_sandbox "$PREFLIGHT_I_DIR" ".claude" 0 1   # _memory/loop GITIGNORED, IDE_DIR tracked
 preflight_i_marker="$TMP/preflight-i-stub-ran.marker"
 rm -f "$preflight_i_marker"
 
@@ -2650,27 +2660,27 @@ stub_never_ran_i=1
 worktree_removed_i=1
 [[ -e "$PREFLIGHT_I_DIR/.loop-worktrees/slot-1" ]] && worktree_removed_i=0
 branch_removed_i=1
-[[ -n "$(git -C "$PREFLIGHT_I_DIR" branch --list 'loop/iter-1')" ]] && branch_removed_i=0
+[[ -n "$(sandbox_git "$PREFLIGHT_I_DIR" branch --list 'loop/iter-1')" ]] && branch_removed_i=0
 names_requirement_i=0
 grep -qF "must be committed (not gitignored) for LOOP_WORKTREE=1" "$preflight_i_log" \
-  && grep -qF "_goals/backlog.md" "$preflight_i_log" && names_requirement_i=1
+  && grep -qF "_memory/loop/backlog.md" "$preflight_i_log" && names_requirement_i=1
 
 if [[ "$preflight_i_rc" -eq 5 && "$stub_never_ran_i" -eq 1 && "$worktree_removed_i" -eq 1 \
       && "$branch_removed_i" -eq 1 && "$names_requirement_i" -eq 1 ]]; then
-  report PASS "44: preflight failure fixture (i, gitignored _goals/) -- exit 5, loud error naming the tracked-instance requirement + _goals/backlog.md, worktree removed, branch removed, stub never ran (no silent fallback)"
+  report PASS "44: preflight failure fixture (i, gitignored _memory/loop/) -- exit 5, loud error naming the tracked-instance requirement + _memory/loop/backlog.md, worktree removed, branch removed, stub never ran (no silent fallback)"
 else
-  report FAIL "44: preflight failure fixture (i, gitignored _goals/)" \
+  report FAIL "44: preflight failure fixture (i, gitignored _memory/loop/)" \
     "rc=$preflight_i_rc(expected 5) stub_never_ran=$stub_never_ran_i worktree_removed=$worktree_removed_i branch_removed=$branch_removed_i names_requirement=$names_requirement_i"
   sed 's/^/    /' "$preflight_i_log" >&2
 fi
 
 # ---------------------------------------------------------------------------
-# 45 (preflight failure, fixture ii): _goals/ TRACKED but {{IDE_DIR}}
+# 45 (preflight failure, fixture ii): _memory/loop/ TRACKED but {{IDE_DIR}}
 # GITIGNORED (the cycle-2 mirror case). Same assertions as 44, mirrored;
 # `git worktree add` SUCCEEDS here too.
 # ---------------------------------------------------------------------------
 PREFLIGHT_II_DIR="$TMP/preflight-ii-sandbox"
-make_sandbox "$PREFLIGHT_II_DIR" ".claude" 1 0   # _goals TRACKED, IDE_DIR gitignored
+make_sandbox "$PREFLIGHT_II_DIR" ".claude" 1 0   # _memory/loop TRACKED, IDE_DIR gitignored
 preflight_ii_marker="$TMP/preflight-ii-stub-ran.marker"
 rm -f "$preflight_ii_marker"
 
@@ -2692,16 +2702,16 @@ stub_never_ran_ii=1
 worktree_removed_ii=1
 [[ -e "$PREFLIGHT_II_DIR/.loop-worktrees/slot-1" ]] && worktree_removed_ii=0
 branch_removed_ii=1
-[[ -n "$(git -C "$PREFLIGHT_II_DIR" branch --list 'loop/iter-1')" ]] && branch_removed_ii=0
+[[ -n "$(sandbox_git "$PREFLIGHT_II_DIR" branch --list 'loop/iter-1')" ]] && branch_removed_ii=0
 names_requirement_ii=0
 grep -qF "must be committed (not gitignored) for LOOP_WORKTREE=1" "$preflight_ii_log" \
   && grep -qF ".claude" "$preflight_ii_log" && names_requirement_ii=1
 
 if [[ "$preflight_ii_rc" -eq 5 && "$stub_never_ran_ii" -eq 1 && "$worktree_removed_ii" -eq 1 \
       && "$branch_removed_ii" -eq 1 && "$names_requirement_ii" -eq 1 ]]; then
-  report PASS "45: preflight failure fixture (ii, tracked _goals/ + gitignored {{IDE_DIR}}=.claude) -- exit 5, loud error naming the tracked-instance requirement + .claude, worktree removed, branch removed, stub never ran (no silent fallback)"
+  report PASS "45: preflight failure fixture (ii, tracked _memory/loop/ + gitignored {{IDE_DIR}}=.claude) -- exit 5, loud error naming the tracked-instance requirement + .claude, worktree removed, branch removed, stub never ran (no silent fallback)"
 else
-  report FAIL "45: preflight failure fixture (ii, tracked _goals/ + gitignored IDE_DIR)" \
+  report FAIL "45: preflight failure fixture (ii, tracked _memory/loop/ + gitignored IDE_DIR)" \
     "rc=$preflight_ii_rc(expected 5) stub_never_ran=$stub_never_ran_ii worktree_removed=$worktree_removed_ii branch_removed=$branch_removed_ii names_requirement=$names_requirement_ii"
   sed 's/^/    /' "$preflight_ii_log" >&2
 fi
@@ -2714,7 +2724,7 @@ fi
 # ---------------------------------------------------------------------------
 ABNORMAL_DIR="$TMP/abnormal-sandbox"
 make_sandbox "$ABNORMAL_DIR" ".claude" 1 1
-abnormal_main_head_before="$(git -C "$ABNORMAL_DIR" rev-parse HEAD)"
+abnormal_main_head_before="$(sandbox_git "$ABNORMAL_DIR" rev-parse HEAD)"
 
 cat > "$ABNORMAL_DIR/_loop/stub-abnormal.sh" <<'STUBEOF'
 #!/usr/bin/env bash
@@ -2732,7 +2742,7 @@ abnormal_log="$TMP/abnormal-run.log"
     bash ./_loop/loop.sh 1 ) >"$abnormal_log" 2>&1
 abnormal_rc=$?
 
-abnormal_main_head_after="$(git -C "$ABNORMAL_DIR" rev-parse HEAD)"
+abnormal_main_head_after="$(sandbox_git "$ABNORMAL_DIR" rev-parse HEAD)"
 names_branch=0
 grep -qF "retaining branch 'loop/iter-1'" "$abnormal_log" && names_branch=1
 closing_summary=0
@@ -2740,7 +2750,7 @@ grep -qF "retained branches from quarantined slots (NOT integrated): loop/iter-1
 worktree_cleaned=1
 [[ -e "$ABNORMAL_DIR/.loop-worktrees/slot-1" ]] && worktree_cleaned=0
 branch_retained=1
-[[ -z "$(git -C "$ABNORMAL_DIR" branch --list 'loop/iter-1')" ]] && branch_retained=0
+[[ -z "$(sandbox_git "$ABNORMAL_DIR" branch --list 'loop/iter-1')" ]] && branch_retained=0
 no_integration=1
 [[ "$abnormal_main_head_before" != "$abnormal_main_head_after" ]] && no_integration=0
 
@@ -2820,8 +2830,8 @@ git commit -qm "slot-side commit (never integrated)"
 # a real content conflict (not just an --allow-empty commit, which would
 # rebase cleanly and make the merge succeed).
 echo "conflict from main" > "$FFONLY_DIR/slot-progress.txt"
-git -C "$FFONLY_DIR" add slot-progress.txt
-git -C "$FFONLY_DIR" commit -qm "external main-tree commit (concurrent, conflicting)"
+sandbox_git "$FFONLY_DIR" add slot-progress.txt
+sandbox_git "$FFONLY_DIR" commit -qm "external main-tree commit (concurrent, conflicting)"
 # STORY-011: dispatched slot must emit ITERATION: <id> <verdict> (not sentinel)
 echo "ITERATION: STORY-101 passed"
 exit 0
@@ -2836,7 +2846,7 @@ ffonly_rc=$?
 names_failure=0
 grep -qF "integration failed: 'loop/iter-1' is not a fast-forward" "$ffonly_log" && names_failure=1
 not_force_merged=1
-git -C "$FFONLY_DIR" log --oneline 2>/dev/null | grep -qF "slot-side commit" && not_force_merged=0
+sandbox_git "$FFONLY_DIR" log --oneline 2>/dev/null | grep -qF "slot-side commit" && not_force_merged=0
 
 if [[ "$ffonly_rc" -eq 5 && "$names_failure" -eq 1 && "$not_force_merged" -eq 1 ]]; then
   report PASS "48: ff-only integration stop (mutation-prove: external main-tree commit forces a non-fast-forward) -- exit 5, loud 'not a fast-forward' stop, worktree branch NOT force-merged into main"
@@ -2853,7 +2863,7 @@ fi
 # ---------------------------------------------------------------------------
 CB0_DIR="$TMP/cb0-sandbox"
 make_sandbox "$CB0_DIR" ".claude" 1 1
-cb0_main_head_before="$(git -C "$CB0_DIR" rev-parse HEAD)"
+cb0_main_head_before="$(sandbox_git "$CB0_DIR" rev-parse HEAD)"
 
 cat > "$CB0_DIR/_loop/stub-cb0.sh" <<'STUBEOF'
 #!/usr/bin/env bash
@@ -2872,13 +2882,13 @@ cb0_log="$TMP/cb0-run.log"
     bash ./_loop/loop.sh 1 ) >"$cb0_log" 2>&1
 cb0_rc=$?
 
-cb0_main_head_after="$(git -C "$CB0_DIR" rev-parse HEAD)"
+cb0_main_head_after="$(sandbox_git "$CB0_DIR" rev-parse HEAD)"
 main_head_unchanged=0
 [[ "$cb0_main_head_before" == "$cb0_main_head_after" ]] && main_head_unchanged=1
 cb0_worktree_cleaned=1
 [[ -e "$CB0_DIR/.loop-worktrees/slot-1" ]] && cb0_worktree_cleaned=0
 cb0_no_integration=1
-git -C "$CB0_DIR" log --oneline | grep -qF "protected _loop/" && cb0_no_integration=0
+sandbox_git "$CB0_DIR" log --oneline | grep -qF "protected _loop/" && cb0_no_integration=0
 cb0_named=0
 grep -qF "protected-path modification detected" "$cb0_log" && cb0_named=1
 
@@ -3172,8 +3182,8 @@ sandbox_write_loop "$SEL_DIR" ".claude"
   git init -q
   git config user.email test@example.com
   git config user.name "sel-test"
-  mkdir -p _goals .claude
-  cat > _goals/backlog.md << 'EOF'
+  mkdir -p _memory/loop .claude
+  cat > _memory/loop/backlog.md << 'EOF'
 # backlog
 
 ## STORY-101: first eligible by priority
@@ -3215,8 +3225,8 @@ cat > "$SEL_DIR/_loop/stub-sel.sh" <<STUBEOF
 # attempts at claim, before the stub runs -- this proves the ordering).
 story_id="\$(echo "\$1" | grep -oE 'STORY-[0-9]+' | head -1)"
 echo "\$story_id" >> "$sel_dispatched_file"
-# cwd == sandbox root in main-tree mode; _goals/backlog.md is accessible directly
-grep -A5 "## \$story_id" _goals/backlog.md 2>/dev/null | grep -oE 'attempts: [0-9]+' | head -1 \
+# cwd == sandbox root in main-tree mode; _memory/loop/backlog.md is accessible directly
+grep -A5 "## \$story_id" _memory/loop/backlog.md 2>/dev/null | grep -oE 'attempts: [0-9]+' | head -1 \
   >> "$sel_attempts_file"
 echo "ITERATION: \$story_id passed"
 exit 0
@@ -3230,10 +3240,10 @@ dispatched_id="$(cat "$sel_dispatched_file" 2>/dev/null | head -1)"
 priority_ok=0
 [[ "$dispatched_id" == "STORY-101" ]] && priority_ok=1
 attempts_ok=0
-grep -A5 '## STORY-101' "$SEL_DIR/_goals/backlog.md" 2>/dev/null | grep -q 'attempts: 1' \
+grep -A5 '## STORY-101' "$SEL_DIR/_memory/loop/backlog.md" 2>/dev/null | grep -q 'attempts: 1' \
   && attempts_ok=1
 passes_ok=0
-grep -A5 '## STORY-101' "$SEL_DIR/_goals/backlog.md" 2>/dev/null | grep -q 'passes: true' \
+grep -A5 '## STORY-101' "$SEL_DIR/_memory/loop/backlog.md" 2>/dev/null | grep -q 'passes: true' \
   && passes_ok=1
 elig_filter_ok=0
 [[ "$dispatched_id" != "STORY-102" && "$dispatched_id" != "STORY-103" ]] && elig_filter_ok=1
@@ -3265,11 +3275,11 @@ sandbox_write_loop "$PINNING_DIR" ".claude"
   git init -q
   git config user.email test@example.com
   git config user.name "pinning-test"
-  mkdir -p _goals .claude
+  mkdir -p _memory/loop .claude
   {
     printf '# backlog\n\n## STORY-201: pinning test story\n'
     printf -- '- priority: 1\n- passes: false\n- attempts: 0\n- blocked: false\n'
-  } > _goals/backlog.md
+  } > _memory/loop/backlog.md
   printf 'placeholder\n' > .claude/.keep
   : > .gitignore
   git add -A
@@ -3443,12 +3453,12 @@ sandbox_write_loop "$MIDGLOB_DIR" ".claude"
   git init -q
   git config user.email test@example.com
   git config user.name "midglob-test"
-  mkdir -p _goals .claude
+  mkdir -p _memory/loop .claude
   {
     printf '# backlog\n\n## STORY-301: mid-path glob story\n'
     printf -- '- priority: 1\n- passes: false\n- attempts: 0\n- blocked: false\n'
     printf -- '- writes: skills/*/SKILL.md\n'
-  } > _goals/backlog.md
+  } > _memory/loop/backlog.md
   printf 'placeholder\n' > .claude/.keep
   : > .gitignore
   git add -A
@@ -3498,25 +3508,25 @@ sandbox_write_loop "$REFUSEDCOMP_DIR" ".claude"
   git init -q
   git config user.email test@example.com
   git config user.name "refused-test"
-  mkdir -p _goals .claude
+  mkdir -p _memory/loop .claude
   {
     printf '# backlog\n\n## STORY-401: protected-path story\n'
     printf -- '- priority: 1\n- passes: false\n- attempts: 0\n- blocked: false\n'
     printf -- '- writes: _loop/loop.sh\n'
-  } > _goals/backlog.md
+  } > _memory/loop/backlog.md
   printf 'placeholder\n' > .claude/.keep
   : > .gitignore
   git add -A
   git commit -qm init
 )
 
-backlog_sha_before="$(sha256sum "$REFUSEDCOMP_DIR/_goals/backlog.md" | cut -d' ' -f1)"
+backlog_sha_before="$(sha256sum "$REFUSEDCOMP_DIR/_memory/loop/backlog.md" | cut -d' ' -f1)"
 refusedcomp_out="$TMP/refusedcomp-stdout.txt"
 refusedcomp_err="$TMP/refusedcomp-stderr.txt"
 ( cd "$REFUSEDCOMP_DIR" && env -u LOOP_SLOTS -u LOOP_WORKTREE \
     bash ./_loop/loop.sh 1 ) >"$refusedcomp_out" 2>"$refusedcomp_err"
 refusedcomp_rc=$?
-backlog_sha_after="$(sha256sum "$REFUSEDCOMP_DIR/_goals/backlog.md" | cut -d' ' -f1)"
+backlog_sha_after="$(sha256sum "$REFUSEDCOMP_DIR/_memory/loop/backlog.md" | cut -d' ' -f1)"
 
 refusedcomp_exit0=0; [[ "$refusedcomp_rc" -eq 0 ]] && refusedcomp_exit0=1
 refusedcomp_names_id=0
@@ -3552,7 +3562,7 @@ sandbox_write_loop "$INTEG_DIR" ".claude"
   git init -q
   git config user.email test@example.com
   git config user.name "integ-test"
-  mkdir -p _goals .claude
+  mkdir -p _memory/loop .claude
   {
     printf '# backlog\n\n'
     printf '## STORY-501: will be passed\n'
@@ -3561,7 +3571,7 @@ sandbox_write_loop "$INTEG_DIR" ".claude"
     printf -- '- priority: 2\n- passes: false\n- attempts: 0\n- blocked: false\n\n'
     printf '## STORY-503: untouched\n'
     printf -- '- priority: 3\n- passes: false\n- attempts: 0\n- blocked: false\n'
-  } > _goals/backlog.md
+  } > _memory/loop/backlog.md
   printf 'placeholder\n' > .claude/.keep
   : > .gitignore
   git add -A
@@ -3585,15 +3595,15 @@ chmod +x "$INTEG_DIR/_loop/stub-integ.sh"
 
 # Check transitions: passes:true for STORY-501, blocked:true for STORY-502
 integ_passes_ok=0
-grep -A5 '## STORY-501' "$INTEG_DIR/_goals/backlog.md" | grep -q 'passes: true' \
+grep -A5 '## STORY-501' "$INTEG_DIR/_memory/loop/backlog.md" | grep -q 'passes: true' \
   && integ_passes_ok=1
 integ_blocked_ok=0
-grep -A5 '## STORY-502' "$INTEG_DIR/_goals/backlog.md" | grep -q 'blocked: true' \
+grep -A5 '## STORY-502' "$INTEG_DIR/_memory/loop/backlog.md" | grep -q 'blocked: true' \
   && integ_blocked_ok=1
 # STORY-503 should be untouched (still passes:false, attempts:0)
 integ_503_untouched=0
-story503_passes="$(grep -A5 '## STORY-503' "$INTEG_DIR/_goals/backlog.md" | grep 'passes:' | head -1)"
-story503_attempts="$(grep -A5 '## STORY-503' "$INTEG_DIR/_goals/backlog.md" | grep 'attempts:' | head -1)"
+story503_passes="$(grep -A5 '## STORY-503' "$INTEG_DIR/_memory/loop/backlog.md" | grep 'passes:' | head -1)"
+story503_attempts="$(grep -A5 '## STORY-503' "$INTEG_DIR/_memory/loop/backlog.md" | grep 'attempts:' | head -1)"
 [[ "$story503_passes" == *"false"* && "$story503_attempts" == *": 0"* ]] && integ_503_untouched=1
 
 if [[ "$integ_passes_ok" -eq 1 && "$integ_blocked_ok" -eq 1 && "$integ_503_untouched" -eq 1 ]]; then
@@ -3633,19 +3643,19 @@ mismatch_rc=$?
 mismatch_logged=0
 grep -qF 'ITERATION-mismatch' "$mismatch_log" && mismatch_logged=1
 mismatch_branch_retained=0
-[[ -n "$(git -C "$MISMATCH_DIR" branch --list 'loop/iter-1')" ]] && mismatch_branch_retained=1
+[[ -n "$(sandbox_git "$MISMATCH_DIR" branch --list 'loop/iter-1')" ]] && mismatch_branch_retained=1
 # Story-scoped checks (house pattern: grep -A5 '## STORY-ID'):
 # (a) attempts: 1 -- driver incremented at claim time before dispatch
 # (b) passes: false -- no passes transition (mismatch quarantine skipped it)
 # (c) blocked: false -- no blocked transition
 mismatch_attempts_incremented=0
-grep -A5 '## STORY-101' "$MISMATCH_DIR/_goals/backlog.md" | grep -qF 'attempts: 1' \
+grep -A5 '## STORY-101' "$MISMATCH_DIR/_memory/loop/backlog.md" | grep -qF 'attempts: 1' \
   && mismatch_attempts_incremented=1
 mismatch_no_passes_transition=0
-grep -A5 '## STORY-101' "$MISMATCH_DIR/_goals/backlog.md" | grep -qF 'passes: false' \
+grep -A5 '## STORY-101' "$MISMATCH_DIR/_memory/loop/backlog.md" | grep -qF 'passes: false' \
   && mismatch_no_passes_transition=1
 mismatch_no_blocked_transition=0
-grep -A5 '## STORY-101' "$MISMATCH_DIR/_goals/backlog.md" | grep -qF 'blocked: false' \
+grep -A5 '## STORY-101' "$MISMATCH_DIR/_memory/loop/backlog.md" | grep -qF 'blocked: false' \
   && mismatch_no_blocked_transition=1
 
 if [[ "$mismatch_logged" -eq 1 && "$mismatch_branch_retained" -eq 1 \
@@ -3660,7 +3670,7 @@ fi
 
 # ---------------------------------------------------------------------------
 # 63 + 63-mutation-proof: Subset-check violation -- stub commits a file
-# OUTSIDE its declared writes: (_goals/extra.txt declared only src/widget.txt)
+# OUTSIDE its declared writes: (_memory/work/extra.txt declared only src/widget.txt)
 # -> quarantine-lite, loud naming of offending path, NOT integrated.
 # Mutation-prove: delete the subset check in a COPY of loop.sh -> the
 # violating branch integrates (observable as the offending commit landing on
@@ -3674,12 +3684,12 @@ sandbox_write_loop "$SUBSET_DIR" ".claude"
   git init -q
   git config user.email test@example.com
   git config user.name "subset-test"
-  mkdir -p _goals .claude
+  mkdir -p _memory/loop .claude
   {
     printf '# backlog\n\n## STORY-601: subset-check story\n'
     printf -- '- priority: 1\n- passes: false\n- attempts: 0\n- blocked: false\n'
     printf -- '- writes: src/widget.txt\n'
-  } > _goals/backlog.md
+  } > _memory/loop/backlog.md
   printf 'placeholder\n' > .claude/.keep
   : > .gitignore
   git add -A
@@ -3689,10 +3699,10 @@ sandbox_write_loop "$SUBSET_DIR" ".claude"
 cat > "$SUBSET_DIR/_loop/stub-subset.sh" <<'STUBEOF'
 #!/usr/bin/env bash
 # Commit a file OUTSIDE declares writes: (declared: src/widget.txt;
-# actual commit: _goals/extra.txt -> subset violation)
-mkdir -p _goals
-echo "outside writes" > _goals/extra.txt
-git add _goals/extra.txt
+# actual commit: _memory/work/extra.txt -> subset violation)
+mkdir -p _memory/work
+echo "outside writes" > _memory/work/extra.txt
+git add _memory/work/extra.txt
 git commit -qm "subset-violation commit (outside declared writes:)"
 story_id="$(echo "$1" | grep -oE 'STORY-[0-9]+' | head -1)"
 echo "ITERATION: $story_id passed"
@@ -3700,22 +3710,22 @@ exit 0
 STUBEOF
 chmod +x "$SUBSET_DIR/_loop/stub-subset.sh"
 
-subset_main_before="$(git -C "$SUBSET_DIR" rev-parse HEAD)"
+subset_main_before="$(sandbox_git "$SUBSET_DIR" rev-parse HEAD)"
 subset_log="$TMP/subset-run.log"
 ( cd "$SUBSET_DIR" && env -u LOOP_SLOTS LOOP_WORKTREE=1 \
     LOOP_CLI="$SUBSET_DIR/_loop/stub-subset.sh" bash ./_loop/loop.sh 1 ) \
   >"$subset_log" 2>&1
-subset_main_after="$(git -C "$SUBSET_DIR" rev-parse HEAD)"
+subset_main_after="$(sandbox_git "$SUBSET_DIR" rev-parse HEAD)"
 
 subset_quarantined=0
 grep -qF 'touched paths outside its declared writes:' "$subset_log" && subset_quarantined=1
 subset_names_path=0
-grep -qF '_goals/extra.txt' "$subset_log" && subset_names_path=1
+grep -qF '_memory/work/extra.txt' "$subset_log" && subset_names_path=1
 subset_not_integrated=0
 [[ "$subset_main_before" == "$subset_main_after" ]] && subset_not_integrated=1
 
 if [[ "$subset_quarantined" -eq 1 && "$subset_names_path" -eq 1 && "$subset_not_integrated" -eq 1 ]]; then
-  report PASS "63: subset-check violation -- stub commits '_goals/extra.txt' outside declared 'writes: src/widget.txt' -> quarantine-lite (not integrated, main HEAD unchanged), loud naming of offending path"
+  report PASS "63: subset-check violation -- stub commits '_memory/work/extra.txt' outside declared 'writes: src/widget.txt' -> quarantine-lite (not integrated, main HEAD unchanged), loud naming of offending path"
 else
   report FAIL "63: subset-check violation" \
     "quarantined=$subset_quarantined names_path=$subset_names_path not_integrated=$subset_not_integrated"
@@ -3732,12 +3742,12 @@ sandbox_write_loop "$MUT63_DIR" ".claude"
   git init -q
   git config user.email test@example.com
   git config user.name "subset-mut-test"
-  mkdir -p _goals .claude
+  mkdir -p _memory/loop .claude
   {
     printf '# backlog\n\n## STORY-601: subset-check story\n'
     printf -- '- priority: 1\n- passes: false\n- attempts: 0\n- blocked: false\n'
     printf -- '- writes: src/widget.txt\n'
-  } > _goals/backlog.md
+  } > _memory/loop/backlog.md
   printf 'placeholder\n' > .claude/.keep
   : > .gitignore
   git add -A
@@ -3761,9 +3771,9 @@ mut63_log="$TMP/subset-mut63-run.log"
 ( cd "$MUT63_DIR" && env -u LOOP_SLOTS LOOP_WORKTREE=1 \
     LOOP_CLI="$MUT63_DIR/_loop/stub-subset.sh" bash ./_loop/loop.sh 1 ) \
   >"$mut63_log" 2>&1
-mut63_main_after="$(git -C "$MUT63_DIR" rev-parse HEAD)"
+mut63_main_after="$(sandbox_git "$MUT63_DIR" rev-parse HEAD)"
 mut63_integrated=0
-git -C "$MUT63_DIR" log --oneline | grep -qF "subset-violation commit" && mut63_integrated=1
+sandbox_git "$MUT63_DIR" log --oneline | grep -qF "subset-violation commit" && mut63_integrated=1
 
 if [[ "$mut63_integrated" -eq 1 ]]; then
   report PASS "63-mutation-proof: subset-check deleted in a COPY -> violating branch integrates (subset-violation commit lands on main), confirming the check is load-bearing"
@@ -3787,7 +3797,7 @@ sandbox_write_loop "$ADMIT_E_DIR" ".claude"
   git init -q
   git config user.email test@example.com
   git config user.name "admit-e-test"
-  mkdir -p _goals .claude
+  mkdir -p _memory/loop .claude
   {
     printf '# backlog\n\n'
     printf '## STORY-701: protected-path story\n'
@@ -3795,7 +3805,7 @@ sandbox_write_loop "$ADMIT_E_DIR" ".claude"
     printf -- '- writes: _loop/loop.sh\n\n'
     printf '## STORY-702: normal story\n'
     printf -- '- priority: 2\n- passes: false\n- attempts: 0\n- blocked: false\n'
-  } > _goals/backlog.md
+  } > _memory/loop/backlog.md
   printf 'placeholder\n' > .claude/.keep
   : > .gitignore
   git add -A
@@ -3815,7 +3825,7 @@ chmod +x "$ADMIT_E_DIR/_loop/stub-admit-e.sh"
 
 admit_e_out="$TMP/admit-e-out.txt"
 admit_e_err="$TMP/admit-e-err.txt"
-backlog_before_e="$(sha256sum "$ADMIT_E_DIR/_goals/backlog.md" | cut -d' ' -f1)"
+backlog_before_e="$(sha256sum "$ADMIT_E_DIR/_memory/loop/backlog.md" | cut -d' ' -f1)"
 ( cd "$ADMIT_E_DIR" && env -u LOOP_SLOTS -u LOOP_WORKTREE \
     LOOP_CLI="$ADMIT_E_DIR/_loop/stub-admit-e.sh" bash ./_loop/loop.sh 1 ) \
   >"$admit_e_out" 2>"$admit_e_err"
@@ -3824,9 +3834,9 @@ backlog_before_e="$(sha256sum "$ADMIT_E_DIR/_goals/backlog.md" | cut -d' ' -f1)"
 e_refused_loud=0
 grep -qF 'STORY-701' "$admit_e_err" && grep -qF 'REFUSED' "$admit_e_err" && e_refused_loud=1
 e_no_attempts_increment=0
-backlog_after_e="$(sha256sum "$ADMIT_E_DIR/_goals/backlog.md" | cut -d' ' -f1)"
+backlog_after_e="$(sha256sum "$ADMIT_E_DIR/_memory/loop/backlog.md" | cut -d' ' -f1)"
 # attempts for STORY-701 must remain 0 (no increment on refused story)
-grep -A5 '## STORY-701' "$ADMIT_E_DIR/_goals/backlog.md" | grep -q 'attempts: 0' \
+grep -A5 '## STORY-701' "$ADMIT_E_DIR/_memory/loop/backlog.md" | grep -q 'attempts: 0' \
   && e_no_attempts_increment=1
 # STORY-702 should have been dispatched (stub ran, marker exists)
 e_702_dispatched=0
@@ -3854,7 +3864,7 @@ sandbox_write_loop "$ADMIT_D_DIR" ".claude"
   git init -q
   git config user.email test@example.com
   git config user.name "admit-d-test"
-  mkdir -p _goals .claude
+  mkdir -p _memory/loop .claude
   {
     printf '# backlog\n\n'
     printf '## STORY-801: empty-writes (runs alone)\n'
@@ -3862,7 +3872,7 @@ sandbox_write_loop "$ADMIT_D_DIR" ".claude"
     printf '## STORY-802: disjoint writes\n'
     printf -- '- priority: 2\n- passes: false\n- attempts: 0\n- blocked: false\n'
     printf -- '- writes: src/widget.txt\n'
-  } > _goals/backlog.md
+  } > _memory/loop/backlog.md
   printf 'placeholder\n' > .claude/.keep
   : > .gitignore
   git add -A
@@ -3934,7 +3944,7 @@ sandbox_write_loop "$ADMIT_B_DIR" ".claude"
   git init -q
   git config user.email test@example.com
   git config user.name "admit-b-test"
-  mkdir -p _goals .claude
+  mkdir -p _memory/loop .claude
   {
     printf '# backlog\n\n'
     printf '## STORY-901: intersecting writes\n'
@@ -3943,7 +3953,7 @@ sandbox_write_loop "$ADMIT_B_DIR" ".claude"
     printf '## STORY-902: same intersecting writes\n'
     printf -- '- priority: 2\n- passes: false\n- attempts: 0\n- blocked: false\n'
     printf -- '- writes: src/shared.txt\n'
-  } > _goals/backlog.md
+  } > _memory/loop/backlog.md
   printf 'placeholder\n' > .claude/.keep
   : > .gitignore
   git add -A
@@ -4010,7 +4020,7 @@ sandbox_write_loop "$MUT66_DIR" ".claude"
   git init -q
   git config user.email test@example.com
   git config user.name "admit-b-mut66-test"
-  mkdir -p _goals .claude
+  mkdir -p _memory/loop .claude
   {
     printf '# backlog\n\n'
     printf '## STORY-901: intersecting writes\n'
@@ -4019,7 +4029,7 @@ sandbox_write_loop "$MUT66_DIR" ".claude"
     printf '## STORY-902: same intersecting writes\n'
     printf -- '- priority: 2\n- passes: false\n- attempts: 0\n- blocked: false\n'
     printf -- '- writes: src/shared.txt\n'
-  } > _goals/backlog.md
+  } > _memory/loop/backlog.md
   printf 'placeholder\n' > .claude/.keep
   : > .gitignore
   git add -A
@@ -4101,7 +4111,7 @@ sandbox_write_loop "$ADMIT_A_DIR" ".claude"
   git init -q
   git config user.email test@example.com
   git config user.name "admit-a-test"
-  mkdir -p _goals .claude src
+  mkdir -p _memory/loop .claude src
   {
     printf '# backlog\n\n'
     printf '## STORY-001A: disjoint-writes foo\n'
@@ -4110,7 +4120,7 @@ sandbox_write_loop "$ADMIT_A_DIR" ".claude"
     printf '## STORY-002A: disjoint-writes bar\n'
     printf -- '- priority: 2\n- passes: false\n- attempts: 0\n- blocked: false\n'
     printf -- '- writes: src/bar.txt\n'
-  } > _goals/backlog.md
+  } > _memory/loop/backlog.md
   printf 'placeholder\n' > .claude/.keep
   : > .gitignore
   git add -A
@@ -4166,17 +4176,17 @@ admit_a_rc=$?
 
 a_both_markers=0; [[ -f "$a_mark1" && -f "$a_mark2" ]] && a_both_markers=1
 a_both_integrated=0
-git -C "$ADMIT_A_DIR" log --oneline 2>/dev/null | grep -qF "STORY-001A" \
-  && git -C "$ADMIT_A_DIR" log --oneline 2>/dev/null | grep -qF "STORY-002A" \
+sandbox_git "$ADMIT_A_DIR" log --oneline 2>/dev/null | grep -qF "STORY-001A" \
+  && sandbox_git "$ADMIT_A_DIR" log --oneline 2>/dev/null | grep -qF "STORY-002A" \
   && a_both_integrated=1
 a_both_passes=0
-grep -A5 '## STORY-001A' "$ADMIT_A_DIR/_goals/backlog.md" 2>/dev/null | grep -q 'passes: true' \
-  && grep -A5 '## STORY-002A' "$ADMIT_A_DIR/_goals/backlog.md" 2>/dev/null | grep -q 'passes: true' \
+grep -A5 '## STORY-001A' "$ADMIT_A_DIR/_memory/loop/backlog.md" 2>/dev/null | grep -q 'passes: true' \
+  && grep -A5 '## STORY-002A' "$ADMIT_A_DIR/_memory/loop/backlog.md" 2>/dev/null | grep -q 'passes: true' \
   && a_both_passes=1
 a_learnings_ok=0
-[[ -f "$ADMIT_A_DIR/_goals/LEARNINGS.md" ]] \
-  && grep -q 'slot-001A' "$ADMIT_A_DIR/_goals/LEARNINGS.md" \
-  && grep -q 'slot-002A' "$ADMIT_A_DIR/_goals/LEARNINGS.md" \
+[[ -f "$ADMIT_A_DIR/_memory/loop/LEARNINGS.md" ]] \
+  && grep -q 'slot-001A' "$ADMIT_A_DIR/_memory/loop/LEARNINGS.md" \
+  && grep -q 'slot-002A' "$ADMIT_A_DIR/_memory/loop/LEARNINGS.md" \
   && a_learnings_ok=1
 
 if [[ "$a_both_markers" -eq 1 && "$a_both_integrated" -eq 1 \
@@ -4209,7 +4219,7 @@ sandbox_write_loop "$ADMIT_C_DIR" ".claude"
   git init -q
   git config user.email test@example.com
   git config user.name "admit-c-test"
-  mkdir -p _goals .claude
+  mkdir -p _memory/loop .claude
   {
     printf '# backlog\n\n'
     printf '## STORY-950: hotspot holder A\n'
@@ -4218,7 +4228,7 @@ sandbox_write_loop "$ADMIT_C_DIR" ".claude"
     printf '## STORY-951: hotspot holder B\n'
     printf -- '- priority: 2\n- passes: false\n- attempts: 0\n- blocked: false\n'
     printf -- '- writes: ORCHESTRATION.mdx\n'
-  } > _goals/backlog.md
+  } > _memory/loop/backlog.md
   printf 'placeholder\n' > .claude/.keep
   : > .gitignore
   git add -A
@@ -4286,7 +4296,7 @@ sandbox_write_loop "$MUT68_DIR" ".claude"
   git init -q
   git config user.email test@example.com
   git config user.name "admit-c-mut68-test"
-  mkdir -p _goals .claude
+  mkdir -p _memory/loop .claude
   {
     printf '# backlog\n\n'
     printf '## STORY-950: hotspot holder A\n'
@@ -4295,7 +4305,7 @@ sandbox_write_loop "$MUT68_DIR" ".claude"
     printf '## STORY-951: hotspot holder B\n'
     printf -- '- priority: 2\n- passes: false\n- attempts: 0\n- blocked: false\n'
     printf -- '- writes: ORCHESTRATION.mdx\n'
-  } > _goals/backlog.md
+  } > _memory/loop/backlog.md
   printf 'placeholder\n' > .claude/.keep
   : > .gitignore
   git add -A
@@ -4405,7 +4415,7 @@ sandbox_write_loop "$RETIRE_DIR" ".claude"
   git init -q
   git config user.email test@example.com
   git config user.name "retire-test"
-  mkdir -p _goals .claude dummy
+  mkdir -p _memory/loop .claude dummy
   {
     printf '# backlog\n\n'
     printf '## STORY-301: never commits (retires its slot via CB1)\n'
@@ -4417,7 +4427,7 @@ sandbox_write_loop "$RETIRE_DIR" ".claude"
     printf '## STORY-303: passes immediately\n'
     printf -- '- priority: 3\n- passes: false\n- attempts: 0\n- blocked: false\n'
     printf -- '- writes: dummy/c.txt\n'
-  } > _goals/backlog.md
+  } > _memory/loop/backlog.md
   printf 'placeholder\n' > .claude/.keep
   : > .gitignore
   git add -A
@@ -4458,13 +4468,13 @@ retire_p2_slot0=0
 grep -qE 'circuit breaker: 3 iterations without a commit — slot 0 retired \(not refilled\)' "$retire_log" \
   && retire_p2_slot0=1
 retire_302_passed=0
-grep -A5 '## STORY-302' "$RETIRE_DIR/_goals/backlog.md" 2>/dev/null | grep -qF 'passes: true' \
+grep -A5 '## STORY-302' "$RETIRE_DIR/_memory/loop/backlog.md" 2>/dev/null | grep -qF 'passes: true' \
   && retire_302_passed=1
 retire_303_passed=0
-grep -A5 '## STORY-303' "$RETIRE_DIR/_goals/backlog.md" 2>/dev/null | grep -qF 'passes: true' \
+grep -A5 '## STORY-303' "$RETIRE_DIR/_memory/loop/backlog.md" 2>/dev/null | grep -qF 'passes: true' \
   && retire_303_passed=1
 retire_301_attempts_capped=0
-grep -A5 '## STORY-301' "$RETIRE_DIR/_goals/backlog.md" 2>/dev/null | grep -qF 'attempts: 3' \
+grep -A5 '## STORY-301' "$RETIRE_DIR/_memory/loop/backlog.md" 2>/dev/null | grep -qF 'attempts: 3' \
   && retire_301_attempts_capped=1
 retire_clean_rc=0
 [[ "$retire_rc" -eq 0 ]] && retire_clean_rc=1
@@ -4502,7 +4512,7 @@ sandbox_write_loop "$PREC_DIR" ".claude"
   git init -q
   git config user.email test@example.com
   git config user.name "precedence-test"
-  mkdir -p _goals .claude dummy
+  mkdir -p _memory/loop .claude dummy
   {
     printf '# backlog\n\n'
     printf '## STORY-CB1X: never commits (CB1 track)\n'
@@ -4514,7 +4524,7 @@ sandbox_write_loop "$PREC_DIR" ".claude"
     printf '## STORY-CB2B: same-signature failures (CB2 track, part 2)\n'
     printf -- '- priority: 3\n- passes: false\n- attempts: 0\n- blocked: false\n'
     printf -- '- writes: dummy/cb2b.txt\n'
-  } > _goals/backlog.md
+  } > _memory/loop/backlog.md
   printf 'placeholder\n' > .claude/.keep
   : > .gitignore
   git add -A
@@ -4606,7 +4616,7 @@ grep -qF 'no eligible stories remain, but quarantined branches were retained thi
 qgate_rc1=0
 [[ "$qgate_rc" -eq 1 ]] && qgate_rc1=1
 qgate_attempts_capped=0
-grep -A5 '## STORY-101' "$QGATE_DIR/_goals/backlog.md" 2>/dev/null | grep -qF 'attempts: 3' \
+grep -A5 '## STORY-101' "$QGATE_DIR/_memory/loop/backlog.md" 2>/dev/null | grep -qF 'attempts: 3' \
   && qgate_attempts_capped=1
 
 # Control: no quarantine ever -> rc=0 unchanged, P4 absent.
@@ -4750,7 +4760,7 @@ coincide_rc2=0
 coincide_p3_present=0
 grep -qF '!!! all slots retired — stopping' "$coincide_log" && coincide_p3_present=1
 coincide_attempts3=0
-grep -A5 '## STORY-101' "$COINCIDE_DIR/_goals/backlog.md" 2>/dev/null | grep -qF 'attempts: 3' \
+grep -A5 '## STORY-101' "$COINCIDE_DIR/_memory/loop/backlog.md" 2>/dev/null | grep -qF 'attempts: 3' \
   && coincide_attempts3=1
 
 if [[ "$coincide_rc_never_0_or_1" -eq 1 && "$coincide_rc2" -eq 1 && "$coincide_p3_present" -eq 1 \
@@ -5194,7 +5204,7 @@ STUBEOF
 }
 
 usage_story_passed() { # usage_story_passed <sandbox> → 0 iff STORY-101 passes: true
-  grep -A5 '## STORY-101' "$1/_goals/backlog.md" 2>/dev/null | grep -qF 'passes: true'
+  grep -A5 '## STORY-101' "$1/_memory/loop/backlog.md" 2>/dev/null | grep -qF 'passes: true'
 }
 
 # ---------------------------------------------------------------------------
@@ -5456,12 +5466,12 @@ mem_l1_log="$TMP/mem-l1.log"
 mem_l1_rc=$?
 
 mem_l1_rec=0; mem_l1_quar=0; mem_l1_chore=0; mem_l1_mal=0; mem_l1_qline=0; mem_l1_passes=0
-[[ "$(git -C "$MEM_L1_DIR" ls-files _memory/records 2>/dev/null | grep -c '\.md$' || true)" -eq 1 ]] && mem_l1_rec=1
-[[ "$(git -C "$MEM_L1_DIR" ls-files _memory/quarantine 2>/dev/null | grep -c '\.md$' || true)" -eq 1 ]] && mem_l1_quar=1
-git -C "$MEM_L1_DIR" log --format='%s' | grep -qxF 'chore(memory): STORY-101 records' && mem_l1_chore=1
+[[ "$(sandbox_git "$MEM_L1_DIR" ls-files _memory/records 2>/dev/null | grep -c '\.md$' || true)" -eq 1 ]] && mem_l1_rec=1
+[[ "$(sandbox_git "$MEM_L1_DIR" ls-files _memory/quarantine 2>/dev/null | grep -c '\.md$' || true)" -eq 1 ]] && mem_l1_quar=1
+sandbox_git "$MEM_L1_DIR" log --format='%s' | grep -qxF 'chore(memory): STORY-101 records' && mem_l1_chore=1
 grep -qF '!!! memory proposal 02-malformed skipped:' "$mem_l1_log" && mem_l1_mal=1
 grep -qF '!!! memory proposal 03-quarantine quarantined:' "$mem_l1_log" && mem_l1_qline=1
-grep -A5 '## STORY-101' "$MEM_L1_DIR/_goals/backlog.md" | grep -q 'passes: true' && mem_l1_passes=1
+grep -A5 '## STORY-101' "$MEM_L1_DIR/_memory/loop/backlog.md" | grep -q 'passes: true' && mem_l1_passes=1
 
 if [[ "$mem_l1_rec" -eq 1 && "$mem_l1_quar" -eq 1 && "$mem_l1_chore" -eq 1 \
       && "$mem_l1_mal" -eq 1 && "$mem_l1_qline" -eq 1 && "$mem_l1_passes" -eq 1 \
@@ -5483,12 +5493,12 @@ chmod +x "$MEM_L1M_DIR/_loop/loop.sh"
 ( cd "$MEM_L1M_DIR" && env -u LOOP_SLOTS -u LOOP_WORKTREE \
     LOOP_CLI="$MEM_STUB" bash ./_loop/loop.sh 1 ) >"$TMP/mem-l1m-out.txt" 2>"$TMP/mem-l1m-err.txt"
 mem_l1m_rc=$?
-mem_l1m_rec="$(git -C "$MEM_L1M_DIR" ls-files _memory/records 2>/dev/null | grep -c '\.md$' || true)"
+mem_l1m_rec="$(sandbox_git "$MEM_L1M_DIR" ls-files _memory/records 2>/dev/null | grep -c '\.md$' || true)"
 mem_l1m_passes=0
-grep -A5 '## STORY-101' "$MEM_L1M_DIR/_goals/backlog.md" | grep -q 'passes: true' && mem_l1m_passes=1
+grep -A5 '## STORY-101' "$MEM_L1M_DIR/_memory/loop/backlog.md" | grep -q 'passes: true' && mem_l1m_passes=1
 if [[ "$mem_l1m_rc" -eq "$mem_baseline_rc" && "$mem_l1m_passes" -eq 1 \
       && "${mem_l1m_rec:-0}" -eq 0 ]] \
-     && ! git -C "$MEM_L1M_DIR" log --format='%s' | grep -q 'chore(memory):'; then
+     && ! sandbox_git "$MEM_L1M_DIR" log --format='%s' | grep -q 'chore(memory):'; then
   report PASS "136-mutation-proof: step 3b no-op in loop COPY -> passes:true, baseline rc, no tracked records/chore(memory)"
 else
   report FAIL "136-mutation-proof: step 3b no-op mutant" \
@@ -5513,8 +5523,8 @@ printf 'shared dup body bytes\n' > "$TMP/mem-dup-body.md"
 {
   printf '# backlog\n\n## STORY-105: duplicate proposals\n'
   printf -- '- priority: 1\n- passes: false\n- attempts: 0\n- blocked: false\n'
-} > "$MEM_DUP_DIR/_goals/backlog.md"
-git -C "$MEM_DUP_DIR" add _goals/backlog.md && git -C "$MEM_DUP_DIR" commit -qm 'backlog dup' >/dev/null 2>&1
+} > "$MEM_DUP_DIR/_memory/loop/backlog.md"
+sandbox_git "$MEM_DUP_DIR" add _memory/loop/backlog.md && sandbox_git "$MEM_DUP_DIR" commit -qm 'backlog dup' >/dev/null 2>&1
 mem_dup_log="$TMP/mem-dup.log"
 ( cd "$MEM_DUP_DIR" && env -u LOOP_SLOTS -u LOOP_WORKTREE \
     LOOP_CLI="$MEM_STUB" bash ./_loop/loop.sh 1 ) >"$TMP/mem-dup-out.txt" 2>"$TMP/mem-dup-err.txt"
@@ -5523,7 +5533,7 @@ mem_dup_lines=0
 dup_n="$(grep -c 'memory: duplicate' "$mem_dup_log" 2>/dev/null)" || dup_n=0
 [[ "$dup_n" -eq 2 ]] && mem_dup_lines=1
 mem_dup_chore=0
-git -C "$MEM_DUP_DIR" log --format='%s' | grep -q 'chore(memory): STORY-105' && mem_dup_chore=1 || mem_dup_chore=0
+sandbox_git "$MEM_DUP_DIR" log --format='%s' | grep -q 'chore(memory): STORY-105' && mem_dup_chore=1 || mem_dup_chore=0
 if [[ "$mem_dup_lines" -eq 1 && "$mem_dup_chore" -eq 0 ]]; then
   report PASS "137: all-duplicate proposals — two memory: duplicate lines, no chore(memory) commit"
 else
@@ -5538,8 +5548,8 @@ sandbox_install_memory_kit "$MEM_DUPM_DIR"
 {
   printf '# backlog\n\n## STORY-105: unique dup-mut\n'
   printf -- '- priority: 1\n- passes: false\n- attempts: 0\n- blocked: false\n'
-} > "$MEM_DUPM_DIR/_goals/backlog.md"
-git -C "$MEM_DUPM_DIR" add _goals/backlog.md && git -C "$MEM_DUPM_DIR" commit -qm 'dup mut backlog' >/dev/null 2>&1
+} > "$MEM_DUPM_DIR/_memory/loop/backlog.md"
+sandbox_git "$MEM_DUPM_DIR" add _memory/loop/backlog.md && sandbox_git "$MEM_DUPM_DIR" commit -qm 'dup mut backlog' >/dev/null 2>&1
 cat > "$TMP/mem-dup-mut-stub.sh" <<'STUBEOF'
 #!/usr/bin/env bash
 story_id="$(echo "$1" | grep -oE 'STORY-[0-9A-Z-]+' | head -1)"
@@ -5555,7 +5565,7 @@ chmod +x "$TMP/mem-dup-mut-stub.sh"
 ( cd "$MEM_DUPM_DIR" && env -u LOOP_SLOTS -u LOOP_WORKTREE \
     LOOP_CLI="$TMP/mem-dup-mut-stub.sh" bash ./_loop/loop.sh 1 ) >/dev/null 2>&1
 mem_dupm_chore=0
-git -C "$MEM_DUPM_DIR" log --format='%s' | grep -q 'chore(memory): STORY-105' && mem_dupm_chore=1
+sandbox_git "$MEM_DUPM_DIR" log --format='%s' | grep -q 'chore(memory): STORY-105' && mem_dupm_chore=1
 if [[ "$mem_dupm_chore" -eq 1 ]]; then
   report PASS "137-mutation-proof: unique bodies produce chore(memory) (contrast to all-duplicate)"
 else
@@ -5574,11 +5584,11 @@ sandbox_install_memory_kit "$MEM_L2_DIR"
   git init -q
   git config user.email test@example.com
   git config user.name "mem-l2"
-  mkdir -p _goals .claude
+  mkdir -p _memory/loop .claude
   {
     printf '# backlog\n\n## STORY-MISMATCH: wrong iteration id\n'
     printf -- '- priority: 1\n- passes: false\n- attempts: 0\n- blocked: false\n'
-  } > _goals/backlog.md
+  } > _memory/loop/backlog.md
   printf 'k\n' > .claude/.keep
   printf '_kit/\n' > .gitignore
   git add -A && git commit -qm init
@@ -5587,9 +5597,9 @@ mem_l2_log="$TMP/mem-l2.log"
 ( cd "$MEM_L2_DIR" && env -u LOOP_SLOTS LOOP_WORKTREE=0 \
     LOOP_CLI="$MEM_STUB" bash ./_loop/loop.sh 1 ) >"$TMP/mem-l2-out.txt" 2>"$TMP/mem-l2-err.txt"
 cat "$TMP/mem-l2-out.txt" "$TMP/mem-l2-err.txt" >"$mem_l2_log"
-mem_l2_files="$(find "$MEM_L2_DIR/_memory" -name '*.md' 2>/dev/null | wc -l | tr -d ' ')"
+mem_l2_files="$(find "$MEM_L2_DIR/_memory/records" "$MEM_L2_DIR/_memory/quarantine" -name '*.md' 2>/dev/null | wc -l | tr -d ' ')"
 mem_l2_chore=0
-git -C "$MEM_L2_DIR" log --format='%s' 2>/dev/null | grep -q 'chore(memory):' && mem_l2_chore=1 || mem_l2_chore=0
+sandbox_git "$MEM_L2_DIR" log --format='%s' 2>/dev/null | grep -q 'chore(memory):' && mem_l2_chore=1 || mem_l2_chore=0
 mem_l2_proof=0
 [[ -f "$MEM_L2_PROOF" ]] && mem_l2_proof=1
 mem_l2_mismatch=0
@@ -5612,11 +5622,11 @@ sandbox_install_memory_kit "$MEM_L2M_DIR"
   git init -q
   git config user.email test@example.com
   git config user.name "mem-l2m"
-  mkdir -p _goals .claude
+  mkdir -p _memory/loop .claude
   {
     printf '# backlog\n\n## STORY-MISMATCH: match iteration control\n'
     printf -- '- priority: 1\n- passes: false\n- attempts: 0\n- blocked: false\n'
-  } > _goals/backlog.md
+  } > _memory/loop/backlog.md
   printf 'k\n' > .claude/.keep
   printf '_kit/\n' > .gitignore
   git add -A && git commit -qm init
@@ -5636,7 +5646,7 @@ chmod +x "$MEM_L2M_DIR/_loop/stub-l2-match.sh"
     LOOP_CLI="$MEM_L2M_DIR/_loop/stub-l2-match.sh" bash ./_loop/loop.sh 1 ) \
   >/dev/null 2>"$TMP/mem-l2m.log"
 mem_l2m_chore=0
-git -C "$MEM_L2M_DIR" log --format='%s' | grep -q 'chore(memory): STORY-MISMATCH' && mem_l2m_chore=1
+sandbox_git "$MEM_L2M_DIR" log --format='%s' | grep -q 'chore(memory): STORY-MISMATCH' && mem_l2m_chore=1
 if [[ "$mem_l2m_chore" -eq 1 ]]; then
   report PASS "138-mutation-proof: STORY-MISMATCH + matching ITERATION integrates (chore commit)"
 else
@@ -5656,13 +5666,13 @@ mem_l3_make() { # <dir> <committer-name> — STORY-101 (proposals) then STORY-10
     git init -q
     git config user.email test@example.com
     git config user.name "$who"
-    mkdir -p _goals .claude src
+    mkdir -p _memory/loop .claude src
     {
       printf '# backlog\n\n## STORY-101: proposals first\n'
       printf -- '- priority: 1\n- passes: false\n- attempts: 0\n- blocked: false\n- writes: src/a.txt\n\n'
       printf '## STORY-102: sweeper git add -A\n'
       printf -- '- priority: 2\n- passes: false\n- attempts: 0\n- blocked: false\n'
-    } > _goals/backlog.md
+    } > _memory/loop/backlog.md
     printf 'k\n' > .claude/.keep
     printf '_kit/\n' > .gitignore
     git add -A && git commit -qm init
@@ -5676,10 +5686,10 @@ mem_l3_eval() {
   mem_l3_cb0=0; mem_l3_both=0; mem_l3_tracked=0
   grep -qi 'CB0\|protected' "$lg" && mem_l3_cb0=1
   mem_l3_rec="$(find "$d/_memory/records" -type f -name '*.md' 2>/dev/null | wc -l | tr -d ' ')"
-  grep -A5 '## STORY-101' "$d/_goals/backlog.md" | grep -q 'passes: true' \
-    && grep -A5 '## STORY-102' "$d/_goals/backlog.md" | grep -q 'passes: true' \
+  grep -A5 '## STORY-101' "$d/_memory/loop/backlog.md" | grep -q 'passes: true' \
+    && grep -A5 '## STORY-102' "$d/_memory/loop/backlog.md" | grep -q 'passes: true' \
     && mem_l3_both=1
-  [[ "$(git -C "$d" ls-files _memory/records 2>/dev/null | grep -c '\.md$' || true)" -ge 1 ]] && mem_l3_tracked=1
+  [[ "$(sandbox_git "$d" ls-files _memory/records 2>/dev/null | grep -c '\.md$' || true)" -ge 1 ]] && mem_l3_tracked=1
   [[ "$mem_l3_cb0" -eq 0 && "$mem_l3_tracked" -eq 1 && "$mem_l3_both" -eq 1 ]]
 }
 
@@ -5721,9 +5731,9 @@ mem_l3m_s101=0
 grep -qF 'ITERATION: STORY-101 passed' "$TMP/mem-l3m-out.txt" \
   && grep -qF 'memory: added' "$TMP/mem-l3m-out.txt" && mem_l3m_s101=1
 mem_l3m_chore=0
-git -C "$MEM_L3M_DIR" log --format='%s' | grep -q 'chore(memory):' && mem_l3m_chore=1
+sandbox_git "$MEM_L3M_DIR" log --format='%s' | grep -q 'chore(memory):' && mem_l3m_chore=1
 mem_l3m_s102=0
-grep -A5 '## STORY-102' "$MEM_L3M_DIR/_goals/backlog.md" | grep -q 'passes: true' && mem_l3m_s102=1
+grep -A5 '## STORY-102' "$MEM_L3M_DIR/_memory/loop/backlog.md" | grep -q 'passes: true' && mem_l3m_s102=1
 if mem_l3_eval "$MEM_L3M_DIR" "$mem_l3m_log"; then mem_l3m_139=1; else mem_l3m_139=0; fi
 if [[ "$mem_l3m_valid" -eq 1 && "$mem_l3m_applied" -eq 1 && "$mem_l3m_s101" -eq 1 \
       && "$mem_l3m_chore" -eq 0 && "$mem_l3m_139" -eq 0 && "$mem_l3_cb0" -eq 1 ]]; then
@@ -5764,11 +5774,11 @@ sandbox_write_loop "$MEM_L4B_DIR" ".claude"
   git init -q
   git config user.email test@example.com
   git config user.name "mem-l4b"
-  mkdir -p _goals .claude
+  mkdir -p _memory/loop .claude
   {
     printf '# backlog\n\n## STORY-104: proposals without kit\n'
     printf -- '- priority: 1\n- passes: false\n- attempts: 0\n- blocked: false\n'
-  } > _goals/backlog.md
+  } > _memory/loop/backlog.md
   printf 'k\n' > .claude/.keep
   : > .gitignore
   git add -A && git commit -qm init
@@ -5791,11 +5801,11 @@ sandbox_install_memory_kit "$MEM_L4M_DIR"
 {
   printf '# backlog\n\n## STORY-104: with kit\n'
   printf -- '- priority: 1\n- passes: false\n- attempts: 0\n- blocked: false\n'
-} > "$MEM_L4M_DIR/_goals/backlog.md"
-git -C "$MEM_L4M_DIR" add _goals/backlog.md && git -C "$MEM_L4M_DIR" commit -qm 'l4m backlog' >/dev/null 2>&1
+} > "$MEM_L4M_DIR/_memory/loop/backlog.md"
+sandbox_git "$MEM_L4M_DIR" add _memory/loop/backlog.md && sandbox_git "$MEM_L4M_DIR" commit -qm 'l4m backlog' >/dev/null 2>&1
 ( cd "$MEM_L4M_DIR" && env -u LOOP_SLOTS -u LOOP_WORKTREE \
     LOOP_CLI="$MEM_STUB" bash ./_loop/loop.sh 1 ) >/dev/null 2>&1
-mem_l4m_tracked="$(git -C "$MEM_L4M_DIR" ls-files _memory/records 2>/dev/null | grep -c '\.md$' || true)"
+mem_l4m_tracked="$(sandbox_git "$MEM_L4M_DIR" ls-files _memory/records 2>/dev/null | grep -c '\.md$' || true)"
 if [[ "${mem_l4m_tracked:-0}" -ge 1 ]]; then
   report PASS "140-mutation-proof: _kit/memory.sh present integrates orphan proposal (contrast to 140b skip)"
 else
@@ -5835,12 +5845,12 @@ STUBEOF
   mem_l5_rc=$?   # pwsh driver status — captured BEFORE any cat/log assembly
   cat "$TMP/mem-l5-out.txt" "$TMP/mem-l5-err.txt" >"$mem_l5_log"
   mem_l5_rec=0; mem_l5_quar=0; mem_l5_chore=0; mem_l5_mal=0; mem_l5_qline=0; mem_l5_passes=0
-  [[ "$(git -C "$MEM_L5_DIR" ls-files _memory/records 2>/dev/null | grep -c '\.md$' || true)" -eq 1 ]] && mem_l5_rec=1
-  [[ "$(git -C "$MEM_L5_DIR" ls-files _memory/quarantine 2>/dev/null | grep -c '\.md$' || true)" -eq 1 ]] && mem_l5_quar=1
-  git -C "$MEM_L5_DIR" log --format='%s' | grep -qxF 'chore(memory): STORY-101 records' && mem_l5_chore=1
+  [[ "$(sandbox_git "$MEM_L5_DIR" ls-files _memory/records 2>/dev/null | grep -c '\.md$' || true)" -eq 1 ]] && mem_l5_rec=1
+  [[ "$(sandbox_git "$MEM_L5_DIR" ls-files _memory/quarantine 2>/dev/null | grep -c '\.md$' || true)" -eq 1 ]] && mem_l5_quar=1
+  sandbox_git "$MEM_L5_DIR" log --format='%s' | grep -qxF 'chore(memory): STORY-101 records' && mem_l5_chore=1
   grep -qF '!!! memory proposal 02-malformed skipped:' "$mem_l5_log" && mem_l5_mal=1
   grep -qF '!!! memory proposal 03-quarantine quarantined:' "$mem_l5_log" && mem_l5_qline=1
-  grep -A5 '## STORY-101' "$MEM_L5_DIR/_goals/backlog.md" | grep -q 'passes: true' && mem_l5_passes=1
+  grep -A5 '## STORY-101' "$MEM_L5_DIR/_memory/loop/backlog.md" | grep -q 'passes: true' && mem_l5_passes=1
   if [[ "$mem_l5_rec" -eq 1 && "$mem_l5_quar" -eq 1 && "$mem_l5_chore" -eq 1 \
         && "$mem_l5_mal" -eq 1 && "$mem_l5_qline" -eq 1 && "$mem_l5_passes" -eq 1 \
         && "$mem_l5_rc" -eq "$mem_pw_baseline_rc" ]]; then
@@ -5862,12 +5872,12 @@ STUBEOF
   ( cd "$MEM_L5M_DIR" && env -u LOOP_SLOTS -u LOOP_WORKTREE \
       LOOP_CLI="$MEM_STUB" pwsh -NoProfile -File ./_loop/loop.ps1 1 ) >/dev/null 2>&1
   mem_l5m_rc=$?
-  mem_l5m_tracked="$(git -C "$MEM_L5M_DIR" ls-files _memory/records 2>/dev/null | grep -c '\.md$' || true)"
+  mem_l5m_tracked="$(sandbox_git "$MEM_L5M_DIR" ls-files _memory/records 2>/dev/null | grep -c '\.md$' || true)"
   mem_l5m_passes=0
-  grep -A5 '## STORY-101' "$MEM_L5M_DIR/_goals/backlog.md" | grep -q 'passes: true' && mem_l5m_passes=1
+  grep -A5 '## STORY-101' "$MEM_L5M_DIR/_memory/loop/backlog.md" | grep -q 'passes: true' && mem_l5m_passes=1
   if [[ "$mem_l5m_applied" -eq 1 && "$mem_l5m_passes" -eq 1 && "$mem_l5m_rc" -eq "$mem_pw_baseline_rc" \
         && "${mem_l5m_tracked:-0}" -eq 0 ]] \
-     && ! git -C "$MEM_L5M_DIR" log --format='%s' | grep -q 'chore(memory):'; then
+     && ! sandbox_git "$MEM_L5M_DIR" log --format='%s' | grep -q 'chore(memory):'; then
     report PASS "141-mutation-proof: pwsh step 3b no-op -> mutant ran (passes:true, rc=$mem_l5m_rc), no tracked records/chore(memory)"
   else
     report FAIL "141-mutation-proof: pwsh 3b no-op left integration artifacts or mutant did not run" \

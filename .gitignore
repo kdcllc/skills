@@ -19,12 +19,12 @@ __pycache__/
 .cursor/rules/
 .cursor/ORCHESTRATION.md
 .agents/skills/
-_goals/
 _kit/
 _loop/
-_research/
 orchestration-kit.manifest.json
 .loop-worktrees/
 _memory/.index/
 _memory/raw/
-_goals/breaker-state.json
+_memory/work/
+_memory/loop/
+_memory/loop/breaker-state.json
