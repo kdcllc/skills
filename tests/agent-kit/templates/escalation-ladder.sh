@@ -107,7 +107,7 @@ check1_ok=1
 if ! grep -qF '### Continuation ladder (Phase 4 task execution)' "$ORCH_TEMPLATE" 2>/dev/null; then
   check1_ok=0
 fi
-if ! rg --no-ignore -qF '### Continuation ladder (Phase 4 task execution)' "$EMITTED_ORCH" 2>/dev/null; then
+if ! grep -qF '### Continuation ladder (Phase 4 task execution)' "$EMITTED_ORCH" 2>/dev/null; then
   check1_ok=0
 fi
 if [[ $check1_ok -eq 1 ]]; then
@@ -146,11 +146,11 @@ else
   grep -qF '### Signature Declaration' "$DIAGNOSTICIAN" || check3_ok=0
 fi
 if [[ ! -f "$EMITTED_DIAG_CLAUDE" ]] \
-   || ! rg --no-ignore -qF '### Root-Cause Hypothesis' "$EMITTED_DIAG_CLAUDE" 2>/dev/null; then
+   || ! grep -qF '### Root-Cause Hypothesis' "$EMITTED_DIAG_CLAUDE" 2>/dev/null; then
   check3_ok=0
 fi
 if [[ ! -f "$EMITTED_DIAG_CURSOR" ]] \
-   || ! rg --no-ignore -qF '### Root-Cause Hypothesis' "$EMITTED_DIAG_CURSOR" 2>/dev/null; then
+   || ! grep -qF '### Root-Cause Hypothesis' "$EMITTED_DIAG_CURSOR" 2>/dev/null; then
   check3_ok=0
 fi
 if [[ $check3_ok -eq 1 ]]; then
@@ -186,7 +186,7 @@ check5_ok=1
 check5_detail=""
 for f in "${model_id_files[@]}"; do
   rel="${f#"$REPO_ROOT"/}"
-  raw_hits="$(rg -n 'claude-|gpt-|gemini-' "$f" 2>/dev/null || true)"
+  raw_hits="$(grep -nE 'claude-|gpt-|gemini-' "$f" 2>/dev/null || true)"
   if [[ -z "$raw_hits" ]]; then
     continue
   fi
@@ -226,22 +226,22 @@ fi
 # ===========================================================================
 check6_ok=1
 check6_detail=""
-if ! rg -qF 'tools: Agent(implementer, test-writer, evaluator, qa-evaluator, terminal, diagnostician)' \
+if ! grep -qF 'tools: Agent(implementer, test-writer, evaluator, qa-evaluator, terminal, diagnostician)' \
      "$EMITTERS/claude-code.md" 2>/dev/null; then
   check6_ok=0
   check6_detail="claude-code spawn-allowlist missing diagnostician"
 fi
-if [[ $check6_ok -eq 1 ]] && ! rg -q '\.github/agents/\$\{role\}\.agent\.md' "$EMIT_SH" 2>/dev/null; then
+if [[ $check6_ok -eq 1 ]] && ! grep -qF '.github/agents/${role}.agent.md' "$EMIT_SH" 2>/dev/null; then
   check6_ok=0
   check6_detail="emit.sh copilot agent path missing"
 fi
 if [[ $check6_ok -eq 1 ]] \
-   && ! rg -qF 'agents: [implementer, test-writer, evaluator, qa-evaluator, terminal, diagnostician]' \
+   && ! grep -qF 'agents: [implementer, test-writer, evaluator, qa-evaluator, terminal, diagnostician]' \
         "$EMIT_SH" 2>/dev/null; then
   check6_ok=0
   check6_detail="emit.sh copilot agents: allowlist missing diagnostician"
 fi
-if [[ $check6_ok -eq 1 ]] && ! rg -qF '[agents.diagnostician]' "$EMIT_SH" 2>/dev/null; then
+if [[ $check6_ok -eq 1 ]] && ! grep -qF '[agents.diagnostician]' "$EMIT_SH" 2>/dev/null; then
   check6_ok=0
   check6_detail="emit.sh [agents.diagnostician] table missing"
 fi
@@ -460,7 +460,7 @@ if [[ $check12_ok -eq 1 ]]; then
     fi
   fi
 fi
-if [[ $check12_ok -eq 1 ]] && rg -q 'five subagents' "$ROOT_README" "$SETUP_SKILL" 2>/dev/null; then
+if [[ $check12_ok -eq 1 ]] && grep -q 'five subagents' "$ROOT_README" "$SETUP_SKILL" 2>/dev/null; then
   check12_ok=0
   check12_detail="five-subagent phrasing still present"
 fi

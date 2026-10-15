@@ -100,7 +100,7 @@ if [[ ! -f "$ORCH_TEMPLATE" ]]; then
   check2_ok=0
   check2_detail="missing $ORCH_TEMPLATE"
 else
-  heading_count="$(rg -c '^### Forge adapter \(Phase 7 delivery\)$' "$ORCH_TEMPLATE" 2>/dev/null || echo 0)"
+  heading_count="$(grep -cE '^### Forge adapter \(Phase 7 delivery\)$' "$ORCH_TEMPLATE" 2>/dev/null || true)"
   if [[ "${heading_count:-0}" -ne 1 ]]; then
     check2_ok=0
     check2_detail="expected exactly one live ### Forge adapter heading, got ${heading_count:-0}"
@@ -125,7 +125,7 @@ fi
 # ===========================================================================
 # 3. Recursive absence of `delete Phase 7` under skills/agent-kit/templates/.
 # ===========================================================================
-if rg -qF 'delete Phase 7' "$TEMPLATES" 2>/dev/null; then
+if grep -rqF 'delete Phase 7' "$TEMPLATES" 2>/dev/null; then
   report FAIL "recursive delete Phase 7 absent under skills/agent-kit/templates/" \
     "found delete Phase 7 under templates tree"
 else
@@ -169,12 +169,12 @@ for inst in "$CLAUDE_SHIP_PR" "$CURSOR_SHIP_PR"; do
     check5_detail="missing $rel"
     break
   fi
-  rg --no-ignore -qF 'gh pr create' "$inst" 2>/dev/null || { check5_ok=0; check5_detail="$rel: gh pr create missing"; break; }
-  rg --no-ignore -qF 'az repos pr create' "$inst" 2>/dev/null || { check5_ok=0; check5_detail="$rel: az repos pr create missing"; break; }
-  rg --no-ignore -qF 'glab mr create' "$inst" 2>/dev/null || { check5_ok=0; check5_detail="$rel: glab mr create missing"; break; }
-  rg --no-ignore -qF 'never executes' "$inst" 2>/dev/null || { check5_ok=0; check5_detail="$rel: never executes missing"; break; }
+  grep -qF 'gh pr create' "$inst" 2>/dev/null || { check5_ok=0; check5_detail="$rel: gh pr create missing"; break; }
+  grep -qF 'az repos pr create' "$inst" 2>/dev/null || { check5_ok=0; check5_detail="$rel: az repos pr create missing"; break; }
+  grep -qF 'glab mr create' "$inst" 2>/dev/null || { check5_ok=0; check5_detail="$rel: glab mr create missing"; break; }
+  grep -qF 'never executes' "$inst" 2>/dev/null || { check5_ok=0; check5_detail="$rel: never executes missing"; break; }
 done
-if [[ $check5_ok -eq 1 ]] && rg --no-ignore -q '\{\{' "$CLAUDE_SHIP_PR" "$CURSOR_SHIP_PR" 2>/dev/null; then
+if [[ $check5_ok -eq 1 ]] && grep -qF '{{' "$CLAUDE_SHIP_PR" "$CURSOR_SHIP_PR" 2>/dev/null; then
   check5_ok=0
   check5_detail="{{ placeholder still present in instance ship-pr copy"
 fi
