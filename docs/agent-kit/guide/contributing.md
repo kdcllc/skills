@@ -294,5 +294,5 @@ Install and user-side usage topics belong in [getting-started.md](getting-starte
 - [`tests/agent-kit/lib/fixture-root.sh`](../../../tests/agent-kit/lib/fixture-root.sh) — `FIXTURE_TMPDIR` init and `assert_fixture_root` refuse rules
 - [`tests/agent-kit/loop-harness/run.sh`](../../../tests/agent-kit/loop-harness/run.sh) — behavioral harness header and coverage scope
 - [`tests/agent-kit/run-all.sh`](../../../tests/agent-kit/run-all.sh) — full kit suite driver (options, env, timing summary)
-- [`.github/workflows/agent-kit.yml`](../../../.github/workflows/agent-kit.yml) — CI agent-kit workflow (bash:3.2 pull, `AGENT_KIT_DOCKER`)
+- [`.github/workflows/agent-kit.yml`](../../../.github/workflows/agent-kit.yml) — CI agent-kit workflow (`run-all.sh --quick` on pull requests; the full suite with the bash:3.2 pull and `AGENT_KIT_DOCKER` on `master` pushes and manual runs)
 - `orchestration-kit.manifest.json` — manifest shape and `seedFiles` (instance file; gitignored in this repo)
