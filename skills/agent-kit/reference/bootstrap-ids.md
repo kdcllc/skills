@@ -27,6 +27,7 @@ An `""` answer deletes the comment silently; a missing key deletes it with a war
 | models-map-live-check | models.map.md:8 | a text | live-checked model-list confirmation note |
 | models-map-title | models.map.md:1 | a text | Model Map heading, optionally with a resolved subtitle |
 | path-test-conventions | skills/test-ladder/SKILL.template.md:64 | a text | changed-path → first-impacted-tests convention map |
+| preflight-extra | skills/feature/reference/preflight.md:8 | a text | project-specific pre-flight checks (one bullet each) or deletion when none |
 | qa-evaluator-surfaces | agents/qa-evaluator.md:34 | a text | this project's surfaces and the evidence each must include |
 | qa-surfaces | ORCHESTRATION.md:491 | a text | user-facing surfaces and the evidence each produces |
 | qa-surfaces-keep | skills/qa-criteria/SKILL.template.md:19 | a text | per-surface criteria kept and sharpened for this project |

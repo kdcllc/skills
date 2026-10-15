@@ -6,6 +6,15 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 
 ## [Unreleased]
 
+### Added
+
+- **Pre-flight** — `reference/preflight.md` runs once before Phase 3 evaluation attempt 1 (read-only, unscored); optional bootstrap id `preflight-extra` adds project-specific checks.
+- **Line-patch fix routing** — evaluator tags required fixes `[line-patch]` or `[structural]`; line-patch-only cycles resume the same executor (implementer or test-writer) in apply-verbatim mode on any cycle without model rotation, still counting toward the 3-cycle limit and always re-evaluated.
+
+### Upgrade notes
+
+- Re-emitting without a `preflight-extra` answer raises the emit summary's `warnings` count by one and lists `preflight-extra` under `--check-answers` — answer `""` (or add project checks) to clear it.
+
 ## [1.0.0] - 2026-10-15
 
 First release from [kdcllc/skills](https://github.com/kdcllc/skills). The kit was developed privately as the `setup` skill; that 0.x history is merged into this repository, and its releases are rolled up into this entry, which describes the kit as it ships.

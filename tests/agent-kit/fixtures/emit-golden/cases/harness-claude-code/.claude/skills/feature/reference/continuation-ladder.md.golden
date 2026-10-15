@@ -9,7 +9,9 @@ order; every ladder fix attempt is re-evaluated — there is no exception.
 ## Rung 5 — arbitration (unanimity check)
 
 If all three evaluator verdicts in the orchestration log flagged the same
-required-fix item (unanimous-failure heuristic), spawn `evaluator` in
+required-fix item (unanimous-failure heuristic — compare items with their trailing
+`[line-patch]` / `[structural]` tags stripped, so a tag change across cycles does not
+make the same item count as different), spawn `evaluator` in
 **arbitration mode** on `claude-opus-5-5` with the task file
 (including its Acceptance Criteria), all three verdicts, and all three implementer
 reports. Outcomes:
@@ -52,7 +54,9 @@ Character-consistent with `.claude/ORCHESTRATION.md`:
   remaining budget, escalate instead of splitting.
 - A **repeated failure signature** stops the ladder immediately: the evaluator's
   required-fixes list as recorded in the orchestration log, identical to an earlier
-  cycle's list item-for-item after normalizing whitespace and list numbering.
+  cycle's list item-for-item after normalizing whitespace and list numbering and
+  stripping trailing `[line-patch]` / `[structural]` tags from each item (signature
+  identity ignores those tags).
 - Every rung transition, spawn, and guard trip is an orchestration-log entry recording
   the rung name.
 
