@@ -1,6 +1,6 @@
 jq=jq-1.6
 bash=5.1.16(1)-release
 emit_sh=skills/agent-kit/bin/emit.sh
-emit_commit=b5648ffb3fde19829415a624c9e0878b60d71e8d
+emit_commit=d746dc1ae6cb9e3f2e33bbd53379261d5b3a6b8a
 emit_date=2026-09-03
 lc_all=C
