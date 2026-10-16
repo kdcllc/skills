@@ -117,6 +117,12 @@ The goal's `phases:` block may declare `parallel:`; when present it must be `tru
 still requires pairwise disjoint `writes` for every task pair with no `depends_on`
 ordering — see **Ownership contract (write-set disjointness)** above.
 
+### QA gate (`qa:`)
+
+The goal's `phases:` block may declare `qa:`; when present it must be `run` or `skip`. A
+missing `qa:` key reads as `skip` (informational note only). A goal that changes a
+user-facing surface with `qa: skip` must state why in the goal.
+
 ## 4. Scope Discipline
 
 Out-of-scope section exists; no task smuggles in unrelated refactoring; no requirement

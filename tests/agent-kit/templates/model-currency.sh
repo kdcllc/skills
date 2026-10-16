@@ -465,6 +465,9 @@ case_11() {
   grep -qF 'effort: low' <<<"$fm" || return 1
   fm="$(frontmatter_block "$TEMPLATES/agents/diagnostician.md")"
   grep -qF 'effort: xhigh' <<<"$fm" || return 1
+  fm="$(frontmatter_block "$TEMPLATES/agents/evidence-collector.md")"
+  grep -qF 'model: {{MODEL_LIGHT}}' <<<"$fm" || return 1
+  grep -qF 'effort: medium' <<<"$fm" || return 1
 }
 
 # Case 12 — structural text guards
@@ -555,8 +558,8 @@ blk_case_10_bash() {
   else report FAIL "case 10 log-spawn.sh model_check (match, MISMATCH, unverified x2)"; fi
 }
 blk_case_11() {
-  if case_11; then report PASS "case 11 terminal {{MODEL_FAST}}/effort low; diagnostician xhigh (frontmatter)"
-  else report FAIL "case 11 terminal {{MODEL_FAST}}/effort low; diagnostician xhigh (frontmatter)"; fi
+  if case_11; then report PASS "case 11 terminal fast/low; diagnostician xhigh; evidence-collector MODEL_LIGHT/medium"
+  else report FAIL "case 11 terminal fast/low; diagnostician xhigh; evidence-collector MODEL_LIGHT/medium"; fi
 }
 blk_case_12() {
   if case_12; then report PASS "case 12 models.map + SKILL Step 3 + emitters + model_check guidance"

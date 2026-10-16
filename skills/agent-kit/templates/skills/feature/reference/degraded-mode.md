@@ -26,13 +26,13 @@ capability, or harness restriction — **not** a transient error):
 
 1. Log exactly one `_kit/log-spawn.sh note --goal <goal> --text "..."` naming the
    agent type and the rejected model id (Win: `_kit\log-spawn.cmd`).
-2. Re-spawn the **same agent type** with the **same context package** and **no**
-   `model` argument (harness default / **`inherit`**).
-3. Close the rejected spawn first: save the rejection error as its `spawns/NN-report.md` and
+2. Close the rejected spawn: save the rejection error as its `spawns/NN-report.md` and
    log `outcome` with `--verdict "spawn rejected: model argument" --model-reported "not launched"`.
-   Then copy the package to the **next free** `spawns/NN-context.md` with its `## Model` line set
+   Copy the package to the **next free** `spawns/NN-context.md` with its `## Model` line set
    to `requested: inherit`, and log a new `spawn` with `--model-requested inherit`
    (append-only — never reuse the rejected spawn's NN).
+3. After those ledger entries, re-spawn the **same agent type** with the **same context
+   package** and **no** `model` argument (harness default / **`inherit`**).
 4. Continue the phase normally once the re-spawn succeeds.
 
 ### Persistence for the rest of the goal
@@ -66,9 +66,15 @@ These apply **only** while Case 2 is active:
 | **Terminal spawn rule** | Bash or PowerShell runs **inline** in the orchestrator session (including rung 3 / the full test command). Save long output to a file under the goal folder; **Read** only the slice needed for the verdict — never paste the full stream into chat. |
 
 Re-evaluation after fixes and the **max 3 evaluation cycles** per phase/task still apply.
+Every fix-cycle attempt and every re-evaluation is its own ledger entry — a new
+`spawns/NN-context.md`, `spawn`, report, and `outcome`; never reuse an NN.
 **Never self-perform** verdict roles when a spawn tool exists (see below).
 
-### Worker roles (implementer, test-writer, terminal)
+### Worker roles (implementer, test-writer, terminal, evidence-collector)
+
+**`evidence-collector`** under Case 2: the orchestrator runs the smoke commands and writes
+`_memory/work/goals/<goal>/qa/index.md` itself (logged as a degraded step); record
+visual QA as `visual QA not run (no browser tool)` or `visual QA not run (skipped: <reason>)` — never fabricate screenshots.
 
 For each task (or terminal batch — see **Inline terminal logging**):
 
@@ -166,7 +172,7 @@ mid-goal chat approval.
 
 | Event | Ledger action |
 |-------|----------------|
-| Case 1 first rejection | One `note` (agent + rejected model); re-spawn with `--model-requested inherit` |
+| Case 1 first rejection | One `note` (agent + rejected model); close the rejected spawn with `outcome`, then new `NN-context.md` + `spawn` with `--model-requested inherit`, then re-spawn |
 | Case 1 persistence | One `note`; all later spawns omit `model` |
 | Skipped rotation (Case 1 or 2) | One `note` per skipped rotation |
 | Case 2 per role | `NN-context.md` → `spawn … --model-requested self` → work → `NN-report.md` → `outcome … --model-reported self` with the appropriate `--note` |

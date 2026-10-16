@@ -226,20 +226,20 @@ fi
 # ===========================================================================
 check6_ok=1
 check6_detail=""
-if ! grep -qF 'tools: Agent(implementer, test-writer, evaluator, qa-evaluator, terminal, diagnostician)' \
+if ! grep -qF 'tools: Agent(implementer, test-writer, evaluator, qa-evaluator, terminal, diagnostician, evidence-collector)' \
      "$EMITTERS/claude-code.md" 2>/dev/null; then
   check6_ok=0
-  check6_detail="claude-code spawn-allowlist missing diagnostician"
+  check6_detail="claude-code spawn-allowlist missing diagnostician/evidence-collector"
 fi
 if [[ $check6_ok -eq 1 ]] && ! grep -qF '.github/agents/${role}.agent.md' "$EMIT_SH" 2>/dev/null; then
   check6_ok=0
   check6_detail="emit.sh copilot agent path missing"
 fi
 if [[ $check6_ok -eq 1 ]] \
-   && ! grep -qF 'agents: [implementer, test-writer, evaluator, qa-evaluator, terminal, diagnostician]' \
+   && ! grep -qF 'agents: [implementer, test-writer, evaluator, qa-evaluator, terminal, diagnostician, evidence-collector]' \
         "$EMIT_SH" 2>/dev/null; then
   check6_ok=0
-  check6_detail="emit.sh copilot agents: allowlist missing diagnostician"
+  check6_detail="emit.sh copilot agents: allowlist missing diagnostician/evidence-collector"
 fi
 if [[ $check6_ok -eq 1 ]] && ! grep -qF '[agents.diagnostician]' "$EMIT_SH" 2>/dev/null; then
   check6_ok=0
@@ -464,9 +464,9 @@ if [[ $check12_ok -eq 1 ]] && grep -q 'five subagents' "$ROOT_README" "$SETUP_SK
   check12_ok=0
   check12_detail="five-subagent phrasing still present"
 fi
-if [[ $check12_ok -eq 1 ]] && ! grep -qF 'six subagents' "$SETUP_SKILL" 2>/dev/null; then
+if [[ $check12_ok -eq 1 ]] && ! grep -qF 'seven subagents' "$SETUP_SKILL" 2>/dev/null; then
   check12_ok=0
-  check12_detail="six subagents missing from setup SKILL"
+  check12_detail="seven subagents missing from setup SKILL"
 fi
 if [[ $check12_ok -eq 1 ]]; then
   report PASS "VERSION $KIT_VERSION, README Kit version prose, instance/manifest pins, no five-subagent phrasing"

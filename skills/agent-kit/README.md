@@ -33,9 +33,9 @@ Optional: start an unattended run (sandboxed!) with `_loop/loop.sh 10` or
   escalates with the continuation ladder offered (`phases.ladder: escalate`, default);
   the autonomous loop sets `ladder: auto`. No phase advances without an evaluator
   verdict; fixes are always re-evaluated (3-cycle limits, explicit escalation).
-- **Six subagents with tiered model pinning**: `evaluator` and `qa-evaluator` on the
+- **Seven subagents with tiered model pinning**: `evaluator` and `qa-evaluator` on the
   frontier tier (effort high), `diagnostician` on the frontier tier (effort `xhigh`),
-  `implementer` and `test-writer` on the light tier (effort medium), and `terminal` on
+  `implementer`, `test-writer`, and `evidence-collector` on the light tier (effort medium), and `terminal` on
   the fast tier (effort low — when an install omits `fast`, terminal falls back to the
   light model) — every spawn passes its model explicitly and agents self-report in the
   first line of each report (`**Model (self-reported)**: ...`). `terminal` runs Bash or
@@ -84,7 +84,7 @@ Developer guide: [docs/agent-kit/guide/README.md](https://github.com/kdcllc/skil
 | [feature-workflow.md](https://github.com/kdcllc/skills/blob/master/docs/agent-kit/guide/feature-workflow.md) | Seven phases in depth, acceptance criteria at planning, optional Phases 6/7, fix-cycle rotation, escalation, orchestration log, condensed worked example |
 | [research-workflow.md](https://github.com/kdcllc/skills/blob/master/docs/agent-kit/guide/research-workflow.md) | Why research precedes implementation, prompt/report artifacts, ingestion into a goal, when to skip |
 | [autonomous-loop.md](https://github.com/kdcllc/skills/blob/master/docs/agent-kit/guide/autonomous-loop.md) | Drivers, backlog stories, iteration lifecycle, circuit breakers, slots/worktrees, exit codes, quarantine, safety model |
-| [agents-and-models.md](https://github.com/kdcllc/skills/blob/master/docs/agent-kit/guide/agents-and-models.md) | Six subagent roles and boundaries, model tiers, `models.map.md` anatomy, fallback chains, harness caveats |
+| [agents-and-models.md](https://github.com/kdcllc/skills/blob/master/docs/agent-kit/guide/agents-and-models.md) | Seven subagent roles and boundaries, model tiers, `models.map.md` anatomy, fallback chains, harness caveats |
 | [evaluation-system.md](https://github.com/kdcllc/skills/blob/master/docs/agent-kit/guide/evaluation-system.md) | Verdict vocabulary, confidence ladder, anti-fabrication, devil's advocate, acceptance criteria validation, `eval_depth`, test ladder, orchestration log audit trail |
 | [contributing.md](https://github.com/kdcllc/skills/blob/master/docs/agent-kit/guide/contributing.md) | Repo anatomy (canonical vs instance vs generated), self-install dogfood loop, templates/emitters, harness matrix, version + manifest + upgrades, test harness |
 | [memory.md](https://github.com/kdcllc/skills/blob/master/docs/agent-kit/guide/memory.md) | `_memory/` store, recall and archive per workflow, search CLI, redaction, `check` gate, transcript capture, prior-knowledge fence, loop proposals and integrator step 3b, harness pointers |
@@ -95,7 +95,7 @@ Developer guide: [docs/agent-kit/guide/README.md](https://github.com/kdcllc/skil
 |------|------------|
 | `SKILL.md` | The `/agent-kit` workflow (detect → greenfield gate → inspect → skill suggestions → interview → emit) and the placeholder table; `metadata.version` is the kit version |
 | `bin/` | `emit.sh` + `emit.cmd` (Windows launcher) — deterministic emitter (flags and exit codes in [bin/README.md](bin/README.md)) |
-| `templates/` | The canonical source: architecture doc, `models.map.md`, six agents, the skills (each a `SKILL.template.md`, renamed to `SKILL.md` at emit), the loop drivers, and the `_kit/` tools |
+| `templates/` | The canonical source: architecture doc, `models.map.md`, seven agents, the skills (each a `SKILL.template.md`, renamed to `SKILL.md` at emit), the loop drivers, and the `_kit/` tools |
 | `emitters/` | Per-harness caveats (live model-check URLs, silent-fallback warnings) |
 | `reference/` | `harness-matrix.md` (verified harness facts) and `bootstrap-ids.md` (answers-file id table) |
 | `CHANGELOG.md` | Version history; 1.0.0 rolls up the 0.x releases from before the move to kdcllc/skills |
@@ -166,6 +166,7 @@ exit codes.
 | `agents/evaluator`, `agents/qa-evaluator` | Skeptical reviewers — frontier tier, existence checks + confidence ladder |
 | `agents/diagnostician` | Root-cause analysis after fix-cycle exhaustion — frontier tier, no code writes |
 | `agents/implementer`, `agents/test-writer` | Workers — light tier, ladder rungs 1–2 only |
+| `agents/evidence-collector` | QA evidence for the optional gate — light tier, no verdicts, writes only under the goal's `qa/` folder |
 | `skills/feature` | Seven-phase workflow + goal/task templates + orchestration log + memory protocol reference |
 | `skills/research` | Research → Plan workflow (optional) |
 | `skills/memory-capture` | Post-hoc transcript capture and distillation into `session-summary` records |
@@ -197,7 +198,7 @@ documented in [autonomous-loop.md](https://github.com/kdcllc/skills/blob/master/
 ## Model tiers
 
 Three tiers — frontier, light, and fast — pin orchestrator/evaluators/diagnostician,
-implementer/test-writer, and terminal respectively (installs without a `fast` pin run
+implementer/test-writer/evidence-collector, and terminal respectively (installs without a `fast` pin run
 terminal on light). `models.map.md` is the single place model IDs live per install —
 including fallback chains (never fall back *up* a tier, with a fast→light carve-out
 because light is terminal's baseline when `fast` is omitted), the fix-cycle rotation

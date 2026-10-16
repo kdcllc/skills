@@ -15,7 +15,7 @@ error surfaces — so re-verify against the live list before rotating any pin.
 | Tier | Roles | Rationale |
 |------|-------|-----------|
 | `frontier` | orchestrator (main session), `evaluator`, `qa-evaluator`, `diagnostician` | Delegation and evaluation have a capability floor — don't cheap out on the roles that decide and verify; continuation-ladder diagnosis needs frontier-tier reasoning |
-| `light` | `implementer`, `test-writer` | Checklist-driven execution retains most quality at a fraction of the cost when the plan and the verification are strong |
+| `light` | `implementer`, `test-writer`, `evidence-collector` | Checklist-driven execution retains most quality at a fraction of the cost when the plan and the verification are strong |
 | `fast` | `terminal` | Single-command execution and result extraction need no deep reasoning — the cheapest, quickest tier fits |
 
 ## Resolved models
@@ -141,5 +141,7 @@ cost ceiling; Copilot has no effort key (drop it).
   ID is unknown/stale (a rotated-out or misspelled model name), Cursor substitutes a
   compatible model without erroring — evaluators should state their expected model in
   their prompt and report which model produced the verdict.
-- **Cursor Cloud Agents** are main→L1 only; the QA-gate flow still works, but
-  nested L2 worker spawns from an L1 agent are not available in cloud.
+- **Cursor subagent nesting** (cursor.com/docs/subagents, spot-checked 2026-10-16): the
+  main agent and its direct subagents can launch subagents; a subagent launched by
+  another subagent can't launch further ones; a Cloud-Agent-specific nesting limit is
+  not documented on spot-checked pages.

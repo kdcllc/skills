@@ -125,11 +125,11 @@ else
 fi
 
 # ===========================================================================
-# (b) Model (self-reported) in six canonical + twelve instance agent templates.
+# (b) Model (self-reported) in seven canonical + fourteen instance agent templates.
 # ===========================================================================
 check_b_ok=1
 check_b_detail=""
-for agent in diagnostician evaluator implementer qa-evaluator terminal test-writer; do
+for agent in diagnostician evaluator evidence-collector implementer qa-evaluator terminal test-writer; do
   f="$TEMPLATES/agents/${agent}.md"
   if ! file_has "$f" 'Model (self-reported)'; then
     check_b_ok=0
@@ -143,7 +143,7 @@ if [[ $check_b_ok -eq 1 ]]; then
       skip_report "(b) Model (self-reported) in instance agents ($inst/agents absent)"
       continue
     fi
-    for agent in diagnostician evaluator implementer qa-evaluator terminal test-writer; do
+    for agent in diagnostician evaluator evidence-collector implementer qa-evaluator terminal test-writer; do
       f="$REPO_ROOT/$inst/agents/${agent}.md"
       if [[ ! -f "$f" ]] || ! grep -qF 'Model (self-reported)' "$f"; then
         check_b_ok=0
@@ -154,9 +154,9 @@ if [[ $check_b_ok -eq 1 ]]; then
   done
 fi
 if [[ $check_b_ok -eq 1 ]]; then
-  report PASS "(b) Model (self-reported) in six canonical + twelve instance agent templates"
+  report PASS "(b) Model (self-reported) in seven canonical + fourteen instance agent templates"
 else
-  report FAIL "(b) Model (self-reported) in six canonical + twelve instance agent templates" \
+  report FAIL "(b) Model (self-reported) in seven canonical + fourteen instance agent templates" \
     "$check_b_detail"
 fi
 
@@ -480,11 +480,11 @@ else
 fi
 
 # ===========================================================================
-# (l) ### Footprint in six canonical + twelve instance agent files.
+# (l) ### Footprint in seven canonical + fourteen instance agent files.
 # ===========================================================================
 check_l_ok=1
 check_l_detail=""
-for agent in diagnostician evaluator implementer qa-evaluator terminal test-writer; do
+for agent in diagnostician evaluator evidence-collector implementer qa-evaluator terminal test-writer; do
   f="$TEMPLATES/agents/${agent}.md"
   if ! file_has "$f" '### Footprint'; then
     check_l_ok=0
@@ -498,7 +498,7 @@ if [[ $check_l_ok -eq 1 ]]; then
       skip_report "(l) ### Footprint in instance agents ($inst/agents absent)"
       continue
     fi
-    for agent in diagnostician evaluator implementer qa-evaluator terminal test-writer; do
+    for agent in diagnostician evaluator evidence-collector implementer qa-evaluator terminal test-writer; do
       f="$REPO_ROOT/$inst/agents/${agent}.md"
       if [[ ! -f "$f" ]] || ! grep -qF '### Footprint' "$f"; then
         check_l_ok=0
@@ -509,9 +509,9 @@ if [[ $check_l_ok -eq 1 ]]; then
   done
 fi
 if [[ $check_l_ok -eq 1 ]]; then
-  report PASS "(l) ### Footprint in six canonical + twelve instance agent files"
+  report PASS "(l) ### Footprint in seven canonical + fourteen instance agent files"
 else
-  report FAIL "(l) ### Footprint in six canonical + twelve instance agent files" \
+  report FAIL "(l) ### Footprint in seven canonical + fourteen instance agent files" \
     "$check_l_detail"
 fi
 

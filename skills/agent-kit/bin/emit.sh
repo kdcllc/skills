@@ -1301,7 +1301,7 @@ EOF
     if [ "$seen_user" -eq 0 ]; then
       out+="user-invocable: true"$'\n'
     fi
-    out+="agents: [implementer, test-writer, evaluator, qa-evaluator, terminal, diagnostician]"$'\n'
+    out+="agents: [implementer, test-writer, evaluator, qa-evaluator, terminal, diagnostician, evidence-collector]"$'\n'
     out+="tools: ['agent']"$'\n'
   fi
   _jt_q_strip_trailing_nls_into "$_v" "$out"
@@ -1493,7 +1493,8 @@ ORCHESTRATION.md: plan → evaluate the plan → implement per task (spawn \`imp
 \`test-writer\`) → evaluate every task (spawn \`evaluator\`) → final audit → quality checks.
 Fixes are always re-evaluated. After three fix cycles, spawn \`diagnostician\` for rung 4
 diagnosis. Quality checks spawn \`terminal\` for the full-suite run so its raw output stays
-out of the session. Role instructions: .codex/agents/*.md (six roles).
+out of the session. When the QA gate runs, spawn \`evidence-collector\` then \`qa-evaluator\`.
+Role instructions: .codex/agents/*.md (seven roles).
 ${POINTER_MARKER}
 EOF
 }
@@ -1550,6 +1551,10 @@ config_file = "agents/terminal.toml"
 [agents.diagnostician]
 description = "Root-cause diagnostician for task failures after fix-cycle exhaustion. Read .codex/agents/diagnostician.md first."
 config_file = "agents/diagnostician.toml"
+
+[agents.evidence-collector]
+description = "QA evidence gatherer for user-facing surfaces; never issues verdicts. Read .codex/agents/evidence-collector.md first."
+config_file = "agents/evidence-collector.toml"
 EOF
 }
 

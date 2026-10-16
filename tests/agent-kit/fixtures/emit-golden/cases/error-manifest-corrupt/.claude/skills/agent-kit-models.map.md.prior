@@ -134,5 +134,7 @@ differs from `frontier`), emit warns even with the flag.
   ID is unknown/stale (a rotated-out or misspelled model name), Cursor substitutes a
   compatible model without erroring — evaluators should state their expected model in
   their prompt and report which model produced the verdict.
-- **Cursor Cloud Agents** are main→L1 only; the QA-gate flow still works, but
-  nested L2 worker spawns from an L1 agent are not available in cloud.
+- **Cursor subagent nesting** (cursor.com/docs/subagents, spot-checked 2026-10-16): the
+  main agent and its direct subagents can launch subagents; a subagent launched by
+  another subagent can't launch further ones; a Cloud-Agent-specific nesting limit is
+  not documented on spot-checked pages.

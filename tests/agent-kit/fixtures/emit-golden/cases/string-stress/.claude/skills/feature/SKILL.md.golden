@@ -46,8 +46,8 @@ Update ORCHESTRATION.md Orchestration Progress after each step.
 
 Ask 5–20 MCQs: problem, layer (lane/a	lane\b), surfaces, auth, errors, interface,
 patterns, priority — Phase 6 docs? (default **no**; yes when user-facing docs change) and Phase 7 PR? (default yes). "My
-Understanding" + **wait for explicit confirmation** before Phase 2. Record Phase 6/7 + `ladder:` in
-`goal.md` `phases:` (interactive: `escalate` unless asked).
+Understanding" + **wait for explicit confirmation** before Phase 2. Record Phase 6/7, `ladder:` (default `escalate`), `qa:` in
+`goal.md` `phases:`.
 
 ## Phase 2 — Goal creation
 
@@ -63,7 +63,7 @@ Create `_memory/work/goals/[goal-name]/` containing:
 Every task file carries the ownership contract (`writes`/`reads`/`depends_on`/`owner`/
 `rewrite_semantics` — see `templates/task.md`), `## Acceptance Criteria` (criterion +
 verification method each; Phase 3 validates once), disjoint `writes` for unordered pairs. `eval_depth`
-default `light`; set `full` with reason for contract/scaffold tasks / tasks with interface consumers (mirror/doc/test output does not count) / tasks writing agents, criteria, drivers, shared infra. Contract-first: shared boundary → contract/scaffold task FIRST, `depends_on` on every consumer.
+default `light`; set `full` with reason for contract/scaffold tasks / tasks with interface consumers (mirror/doc/test excluded) / tasks writing agents, criteria, drivers, shared infra. Contract-first: shared boundary → contract/scaffold task FIRST, `depends_on` on every consumer.
 
 Decision gate: multiple approaches → present tradeoffs and **wait**.
 
@@ -117,7 +117,7 @@ Launch `evaluator` in audit mode: every task's requirements, cross-task integrat
 (failure section or last ≤80 lines), route to `implementer`, re-spawn `terminal`
 with a **narrower** command — never dump the full suite here.
 
-Optional QA: after approval, capture evidence and launch `qa-evaluator`.
+If `qa: run`: after QC, spawn `evidence-collector` → `qa-evaluator` with index; re-runs re-collect.
 
 **Archive:** per `reference/memory-protocol.md`, one `goal-summary` + 0–3 `decision`/`pitfall`
 via `_kit/memory.sh add`, `check` each path, log `ARCHIVED: …`; quarantine → user;

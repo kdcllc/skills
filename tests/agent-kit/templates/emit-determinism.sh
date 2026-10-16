@@ -321,6 +321,10 @@ case_i_cursor_isolation_and_variants() {
     [[ -f "$root/.cursor/agents/$agent.md" ]] \
       && grep -qF 'readonly: true' "$root/.cursor/agents/$agent.md" || return 1
   done
+  for agent in implementer test-writer evidence-collector; do
+    [[ -f "$root/.cursor/agents/$agent.md" ]] || return 1
+    grep -qF 'readonly: true' "$root/.cursor/agents/$agent.md" && return 1
+  done
   cmp -s "$root/.claude/skills/agent-kit-models.map.md" "$root/.cursor/skills/agent-kit-models.map.md" || return 1
 
   ans="$(mktemp_file)"

@@ -15,10 +15,11 @@ on a goal to force groups of one.
 
 Orchestrator spawn allowlists use this literal tools line:
 
-tools: Agent(implementer, test-writer, evaluator, qa-evaluator, terminal, diagnostician)
+tools: Agent(implementer, test-writer, evaluator, qa-evaluator, terminal, diagnostician, evidence-collector)
 
 `terminal` is on the allowlist so callers can spawn it; `diagnostician` joins
-for rung 4. P0 skills keep `disable-model-invocation: true` (this emitter never
+for rung 4; `evidence-collector` gathers QA evidence before `qa-evaluator` when
+the QA gate runs. P0 skills keep `disable-model-invocation: true` (this emitter never
 strips frontmatter keys).
 
 Model values: Claude aliases (`opus`, `sonnet`, `haiku`, `fable`) or full IDs

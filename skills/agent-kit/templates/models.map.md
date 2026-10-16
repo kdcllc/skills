@@ -18,7 +18,7 @@ defined; re-run `/agent-kit` (or edit here and re-emit) when providers rotate mo
 | Tier | Roles | Rationale |
 |------|-------|-----------|
 | `frontier` | orchestrator (main session), `evaluator`, `qa-evaluator`, `diagnostician` | Delegation and evaluation have a capability floor — don't cheap out on the roles that decide and verify; continuation-ladder diagnosis needs frontier-tier reasoning |
-| `light` | `implementer`, `test-writer` | Checklist-driven execution retains most quality at a fraction of the cost when the plan and the verification are strong |
+| `light` | `implementer`, `test-writer`, `evidence-collector` | Checklist-driven execution retains most quality at a fraction of the cost when the plan and the verification are strong |
 | `fast` | `terminal` | Single-command execution and result extraction need no deep reasoning — the cheapest, quickest tier fits |
 
 ## Resolved models
@@ -60,7 +60,7 @@ repeats the light ID).
 
 <!-- BOOTSTRAP[models-map-effort]: fill per targeted harness; drop Copilot/Codex sentences when those harnesses are absent; Cursor effort encoding per live docs.
 Reasoning-effort pins (where the harness supports them): evaluators (`evaluator`,
-`qa-evaluator`) `high`, `diagnostician` `xhigh`, `implementer`/`test-writer` `medium`,
+`qa-evaluator`) `high`, `diagnostician` `xhigh`, `implementer`/`test-writer`/`evidence-collector` `medium`,
 `terminal` `low` — Claude Code `effort:` frontmatter, Codex
 `default_subagent_reasoning_effort`; Copilot has no effort key (drop it). Cursor has
 two coexisting forms: bracket params appended to the model ID
