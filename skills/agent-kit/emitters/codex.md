@@ -11,6 +11,11 @@ Appends a separate `## Memory` block (marker `<!-- orchestration-kit:memory-poin
 
 ## Harness specifics
 
+**Ready groups:** for write-disjoint Phase 4 tasks the orchestrator may try parallel
+spawns; concurrency is ⚠️ unverified (`max_concurrent_threads_per_session` /
+`max_threads` are reserved names only) — fall back to sequential on a concurrency
+error. Set `parallel: false` on a goal to force groups of one.
+
 Project-scoped `.codex/config.toml` loads only for **trusted** projects, and
 `model_provider`, `model_providers`, `profile`, `profiles`, `notify`, `otel`
 are ignored at project level — pin models, not providers.

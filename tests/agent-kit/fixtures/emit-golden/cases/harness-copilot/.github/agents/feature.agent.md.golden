@@ -87,7 +87,7 @@ Launch `evaluator` with goal.md, all task files, Phase 1 Q&A, and
 
 ## Phase 4 — Task execution (each task loops until PASS)
 
-For each task in dependency order:
+For each ready group (`reference/ready-groups.md`; `parallel: false` → one task at a time), in dependency order:
 
 1. Launch `implementer` (`test-writer` for the test task) with a full context package.
 2. **Silent-success check**: empty/missing report ⇒ verify artifacts: present ⇒ done

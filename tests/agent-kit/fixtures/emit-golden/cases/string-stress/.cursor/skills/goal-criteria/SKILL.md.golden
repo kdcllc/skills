@@ -110,6 +110,13 @@ output; do not reject the goal for the omission alone.
 The goal's `phases:` block must declare `ladder:` as `escalate` or `auto`. A missing
 `ladder:` key is read as `escalate` (informational note only).
 
+### Phase 4 concurrency (`parallel:`)
+
+The goal's `phases:` block may declare `parallel:`; when present it must be `true` or `false`. A missing
+`parallel:` key reads as `true` (informational note only). A goal with `parallel: true`
+still requires pairwise disjoint `writes` for every task pair with no `depends_on`
+ordering — see **Ownership contract (write-set disjointness)** above.
+
 ## 4. Scope Discipline
 
 Out-of-scope section exists; no task smuggles in unrelated refactoring; no requirement

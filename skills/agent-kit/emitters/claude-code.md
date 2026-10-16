@@ -8,6 +8,11 @@ Appends a separate `## Memory` block (marker `<!-- orchestration-kit:memory-poin
 
 ## Harness specifics
 
+**Ready groups:** for write-disjoint Phase 4 tasks the orchestrator launches parallel
+Agent spawns (documented; default limit 20 concurrent — `Concurrent subagent limit
+reached` means fall back to sequential); kit runs ready groups. Set `parallel: false`
+on a goal to force groups of one.
+
 Orchestrator spawn allowlists use this literal tools line:
 
 tools: Agent(implementer, test-writer, evaluator, qa-evaluator, terminal, diagnostician)

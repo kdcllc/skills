@@ -8,11 +8,13 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 
 ### Added
 
+- **Ready groups** — Phase 4 may run up to three concurrent write-disjoint tasks (default on; `parallel: false` in `goal.md` opts out); read-only parallel evaluators when no writer is in flight; parallel fix cycles; group repository check; self-contained try-then-fall-back on every harness; see `reference/ready-groups.md`.
 - **Pre-flight** — `reference/preflight.md` runs once before Phase 3 evaluation attempt 1 (read-only, unscored); optional bootstrap id `preflight-extra` adds project-specific checks.
 - **Line-patch fix routing** — evaluator tags required fixes `[line-patch]` or `[structural]`; line-patch-only cycles resume the same executor (implementer or test-writer) in apply-verbatim mode on any cycle without model rotation, still counting toward the 3-cycle limit and always re-evaluated.
 
 ### Upgrade notes
 
+- After upgrading, goals whose `goal.md` has no `parallel:` key run Phase 4 as ready groups (default on); add `parallel: false` to keep one task at a time.
 - Re-emitting without a `preflight-extra` answer raises the emit summary's `warnings` count by one and lists `preflight-extra` under `--check-answers` — answer `""` (or add project checks) to clear it.
 
 ## [1.0.0] - 2026-10-15

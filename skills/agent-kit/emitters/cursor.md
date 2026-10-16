@@ -22,6 +22,10 @@ Includes one sentence to search `_memory/` with `_kit/memory.sh search` before p
 
 ## Harness specifics
 
+**Ready groups:** for write-disjoint Phase 4 tasks the orchestrator launches multiple
+Task spawns in one message (documented parallel execution); kit runs ready groups.
+Set `parallel: false` on a goal to force groups of one.
+
 Nesting: main→L1→L2 since Cursor 2.5 — the orchestrator prompt should tell L1
 agents to spawn. Cloud Agents support only main→L1.
 

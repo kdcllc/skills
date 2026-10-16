@@ -107,6 +107,14 @@ ON subagent invocation failure:
    the values from before the spawn. Also compare the changed-file set
    (`git status --porcelain`) with the task's write fence. Anything unexpected stops the
    goal: log it, restore from git or the backup, and fix the cause before continuing.
+   **Group variant:** for a ready group (`reference/ready-groups.md`), record baseline
+   once before any member runs (`HEAD`, branch, local git user) and snapshot the working
+   tree with `git status --porcelain --untracked-files=all`. After all members return,
+   compare to that baseline and snapshot; map each path new or changed since the snapshot
+   to exactly one member's `writes` fence, cross-checked against each member's report. A
+   path in no fence, or attributable to two members, stops the goal. Members share one
+   checkout — tasks that write shared unfenced state (build outputs, caches, instances)
+   belong in separate groups.
 3. **Fixtures never touch the real repo.** Tests and fixtures must never act on the real
    repository. Fixture roots live under a private temp directory, and explicitly empty path
    arguments are rejected.
@@ -270,8 +278,12 @@ revise the goal + tasks and re-evaluate (3 max); REJECT → escalate to the user
 INVARIANT: The ONLY exit to Phase 4 is a PASS verdict from the evaluator subagent.
 Revisions MUST be re-evaluated.
 
-**Phase 4 — Task execution (mandatory re-evaluate after every fix).** For each task,
-in dependency order:
+**Phase 4 — Task execution (mandatory re-evaluate after every fix).** For each ready
+group (`reference/ready-groups.md`), in dependency order: up to **three** write-disjoint
+ready tasks in a group run their executors concurrently (default; `parallel: false` in
+`goal.md` opts out to one at a time). Evaluators for group members may run in parallel
+only when read-only and no writer is in flight. The next group starts only after every
+member reaches task-evaluation PASS or PASS (with notes).
 
 - Step 1: Launch implementer (or test-writer for the test task) — the context
   package includes the task file (including its Acceptance Criteria)
@@ -391,6 +403,9 @@ tests) → rung 2 (impacted tests) mid-cycle; rung 3 (every stack's full suite) 
 at cycle end — in the orchestrator's Phase 5 Quality Checks after the audit is APPROVED,
 and additionally in a goal's designated closer task when one exists (a Phase 4 worker
 gate with a written mandate that never replaces Phase 5).
+
+Tasks with no `depends_on` ordering between them and pairwise disjoint `writes` may run
+together as a ready group (`reference/ready-groups.md`).
 
 Use only the layers the feature actually touches — most features reuse shared
 infrastructure and add one module plus its interface and tests.
@@ -815,7 +830,7 @@ installs have no kit skills tree (no protocol copy on disk).
 ├── skills/
 │   ├── feature/       # Feature coordination
 │   │   ├── SKILL.md
-│   │   ├── reference/{continuation-ladder.md,preflight.md,memory-protocol.md,memory-capture.md}
+│   │   ├── reference/{continuation-ladder.md,preflight.md,ready-groups.md,memory-protocol.md,memory-capture.md}
 │   │   └── templates/{goal.md,task.md}
 │   │
 │   ├── memory-capture/SKILL.md       # Session transcript distillation
@@ -963,10 +978,10 @@ The orchestrator maintains this state throughout execution:
 - [ ] Final verdict that allowed progression: PASS
 
 ### Phase 4: Execution (each task must loop evaluator until PASS)
-| Task | Cycle 1 | Cycle 2 | Cycle 3 | Final Verdict |
-|------|---------|---------|---------|---------------|
-| 01-... | ⬜ | - | - | ⬜ |
-| 02-... | ⬜ | - | - | ⬜ |
+| Task | Group | Cycle 1 | Cycle 2 | Cycle 3 | Final Verdict |
+|------|-------|---------|---------|---------|---------------|
+| 01-... | 1 | ⬜ | - | - | ⬜ |
+| 02-... | 1 | ⬜ | - | - | ⬜ |
 
 ### Phase 5: Final Audit (must loop until APPROVED)
 - [ ] Audit subagent invoked (attempt 1)

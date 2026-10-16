@@ -14,6 +14,7 @@ live docs, emit accordingly, and update this file with a new verified-on date.
 community/secondary sources cited there).
 **Native memory/transcripts/hooks addendum 2026-10-08** — see that section; uses the
 research report's legend.
+**Concurrent-spawn row 2026-10-16** — marks follow the top legend; 🔎 = live page spot-checked that day.
 
 ## The interchange finding
 
@@ -52,6 +53,7 @@ canonical templates are Claude-format:
 | Kit transcript capture (`_memory/raw/`, gitignored) | `_kit/memory.sh capture` scans `~/.claude/projects/<slug>/*.jsonl` under `$HOME` | `_kit/memory.sh capture` scans `~/.cursor/projects/<slug>/agent-transcripts/` | orchestrator-written fallback only (no export API) | `_kit/memory.sh capture --harness codex` best-effort on `~/.codex/sessions/`; docs-only skills tree |
 | Kit memory backfill (`backfill`, deterministic) | `_kit/memory.sh backfill --plan` / `--apply` (bash only; Windows outside Git Bash: `_kit\memory.cmd`) | same | same | same |
 | Kit workflow layout (emit) | In-flight goals/research under gitignored `_memory/work/`; loop backlog/ledgers under tracked `_memory/loop/` (`backlog.md` seed). Legacy top-level `_goals/` / `_research/` move whenever emit finds them (`git mv` when tracked). | same | same | same |
+| Concurrent subagent spawns (ready groups) | 🔎 documented — code.claude.com/docs/en/sub-agents § Run parallel research (spot-checked 2026-10-16): "For independent investigations, spawn multiple subagents to work simultaneously"; § Concurrent subagent limit: default 20 running, spawning past it fails with `Concurrent subagent limit reached` (`CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS`, v2.1.217+); subagents share the checkout unless `isolation: worktree` — kit runs ready groups | 🔎 documented — cursor.com/docs/subagents § Parallel execution (spot-checked 2026-10-16): "Agent sends multiple Task tool calls in a single message, so subagents run simultaneously"; same page warns subagents share the parent checkout and concurrent edits can overwrite each other; supporting local observation (not ✅): memory record 20261015T231020Z-55a77dc6; Cloud Agents L1 only — concurrency there unverified — kit runs ready groups | ⚠️ unverified (`runSubagent` stateless; concurrency not verified) — kit tries parallel ready groups, falls back to sequential on concurrency error | ⚠️ unverified — reserved `[agents]` names `max_concurrent_threads_per_session`, `max_threads` only (verified 2026-08-21); behavior inferred, not verified — kit tries parallel ready groups, falls back to sequential on concurrency error |
 
 Windows note: per-harness CLI availability on Windows is unverified — the loop
 drivers assume the harness CLI runs natively where invoked. **Kit tools** (`bin/emit.*`,
