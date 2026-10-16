@@ -1,6 +1,6 @@
 {
   "kit": "agent-kit",
-  "kitVersion": "1.1.0",
+  "kitVersion": "1.1.1",
   "installedAt": "2026-09-03",
   "harnesses": [
     "cursor"
@@ -29,7 +29,7 @@
     ".cursor/agents/test-writer.md": "a0a86da2f228ee80cbec89f2fc9a538c7a09fa51dfa5abe90ce0eea1d7225772",
     ".cursor/rules/orchestration.mdc": "8cc1fcf97d283460fed60da4ef0259dfff2379646bed820cb5a1bf3bb4a65ceb",
     ".cursor/skills/agent-kit-models.map.md": "9366d85f0d14e7b7df7b02c22341d1c2ca717de4ca9dba88c19e82f94bb24084",
-    ".cursor/skills/align-docs/SKILL.md": "963bdf67fb5e1c293e1533d8a5cd9dd62c28d05463186ec2dabf9073ee168193",
+    ".cursor/skills/align-docs/SKILL.md": "659aa132dcd182256fb5f77ac5fac8d33998ede811c9eca9d50caeb3542ff35c",
     ".cursor/skills/auto-loop/SKILL.md": "c7c5a6e6b03430ca88e2ace070dd74ca0b3ee429c28eb8581442e487c02829c6",
     ".cursor/skills/feature/SKILL.md": "6ad1e6dff3adf27e35b313c6fd2be72fe88686800fe29b2a18a04a2884d89f27",
     ".cursor/skills/feature/reference/continuation-ladder.md": "2a894357c88be56d78a62dcb91f8c90af466ee88052f596cbd1e755ad0ab13eb",
@@ -43,7 +43,7 @@
     ".cursor/skills/goal-criteria/SKILL.md": "350906c5d76026395b4169b44833d65c1ee3cc3472dd0016061cc8624a6be752",
     ".cursor/skills/memory-capture/SKILL.md": "f10c69c9c7ae15e0bb6f6dcb28c5d13d90a072fea7540850df668d2dcc0ca818",
     ".cursor/skills/qa-criteria/SKILL.md": "9ec6e196639454ffb99da67d00c76a9f5d4d2bf83619f3b4014c17a077c5068d",
-    ".cursor/skills/research/SKILL.md": "9447eac7d27217bafc94d659faddeb038f43f7c7b95f3727cef8534d6e38b5de",
+    ".cursor/skills/research/SKILL.md": "33e7d2b7ea043797df754ef090326d099039843079e7d393433dcad45209452f",
     ".cursor/skills/research/templates/research-brief.md": "198529731505e1d97bc840f8473f1383c8041becea49f18a3a712daf4bc52126",
     ".cursor/skills/research/templates/research-index.md": "3861c8baa7d49d1c72f80703396dd07f5d689764e5bd11a4e75f2dfc1d661beb",
     ".cursor/skills/research/templates/research-prompt.md": "7e2c286f3bd6802b650d5d661bacde0eb98829f0e5831382a288af3ed62f3a15",

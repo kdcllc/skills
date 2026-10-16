@@ -149,7 +149,19 @@ order-independent relative to Claude Code (self-contained emission).
 
 ### Version and releases
 
-`metadata.version` in [`skills/agent-kit/SKILL.md`](../../../skills/agent-kit/SKILL.md) holds the kit version; `bin/emit.*` reads it from there (the old `VERSION` file is gone). Never edit it by hand. Write the change under `## [Unreleased]` in [`skills/agent-kit/CHANGELOG.md`](../../../skills/agent-kit/CHANGELOG.md), merge, then release with `bash scripts/release-skill.sh agent-kit X.Y.Z` from the repository root — it bumps `metadata.version`, promotes the changelog section, validates, commits, and tags `agent-kit/vX.Y.Z`. Changes confined to `docs/agent-kit/`, `tests/agent-kit/`, or `scripts/` ship nothing to users and need no release.
+`metadata.version` in [`skills/agent-kit/SKILL.md`](../../../skills/agent-kit/SKILL.md) holds the kit version; `bin/emit.*` reads it from there (the old `VERSION` file is gone). Record every kit change under `## [Unreleased]` in [`skills/agent-kit/CHANGELOG.md`](../../../skills/agent-kit/CHANGELOG.md). Changes confined to `docs/agent-kit/`, `tests/agent-kit/`, or `scripts/` ship nothing to users and need no release.
+
+Unlike other skills in this repo, agent-kit bumps its version **inside the PR that ships the release**, not with `release-skill.sh` after the merge. Other tracked files encode the version and the suite checks them: the `Kit version: **X.Y.Z**` line in [`skills/agent-kit/README.md`](../../../skills/agent-kit/README.md) (asserted by `cursor-isolation.sh`, `forge-adapter.sh`, `escalation-ladder.sh`, and the loop harness) and every emit golden (`kitVersion` in `orchestration-kit.manifest.json.golden`, `kit X.Y.Z` in `emit.stdout.golden`). A bump made only by the release script on `master` leaves them stale, so the tagged commit fails `run-all.sh` and the README advertises the old version.
+
+In the release PR:
+
+1. Set `metadata.version` to `"X.Y.Z"` in `skills/agent-kit/SKILL.md`.
+2. In `CHANGELOG.md`, insert `## [X.Y.Z] - YYYY-MM-DD` directly under `## [Unreleased]`, so Unreleased is empty and the release notes sit under the new heading.
+3. Update `Kit version: **X.Y.Z**` and the `#agent-kit/vX.Y.Z` install pin in `skills/agent-kit/README.md`, and the install pin in [getting-started.md](getting-started.md).
+4. Regenerate goldens with `bash tests/agent-kit/templates/emit-golden.sh --update`; beyond the PR's own template changes, the diff should touch only the `kitVersion` and `kit X.Y.Z` lines.
+5. Run `bash scripts/validate-skills.sh && bash tests/agent-kit/run-all.sh`.
+
+After the PR merges, run `bash scripts/release-skill.sh agent-kit X.Y.Z` on an up-to-date, clean `master`. Because `X.Y.Z` is already the recorded version, the script only validates and creates the `agent-kit/vX.Y.Z` tag; it never pushes. Publish with `git push origin master agent-kit/vX.Y.Z`.
 
 ### Manifest shape
 
@@ -210,6 +222,7 @@ Tracked structural guards live under `tests/agent-kit/templates/`. Each script l
 | [`evidence-collector.sh`](../../../tests/agent-kit/templates/evidence-collector.sh) | Evidence-collector agent template, models map, emit wiring, QA flow docs, emit smoke, optional `QA_SURFACES` token, negative self-test on a copied template |
 | [`invocation-flags.sh`](../../../tests/agent-kit/templates/invocation-flags.sh) | Seven `disable-model-invocation: true` skill flags plus `terminal` agent wiring (frontmatter, models map, test-ladder, ORCHESTRATION, emitters, Codex registration) |
 | [`escalation-ladder.sh`](../../../tests/agent-kit/templates/escalation-ladder.sh) | Phase 4 continuation-ladder prose, failure-class taxonomy alignment, diagnostician wiring, `{{MODEL_FRONTIER_ALT_FAMILY}}` docs |
+| [`phase-handoffs.sh`](../../../tests/agent-kit/templates/phase-handoffs.sh) | Align-docs working-tree change set and snapshot scope literals; research path-Read handoff to `feature` Phase 3; mutation proofs under mktemp |
 | [`template-currency.sh`](../../../tests/agent-kit/templates/template-currency.sh) | Seven shipped template claims (research handoff at Phase 3, escalation **Ladder** line, closer-task rung-3 carve-out, loop dispatch/exit/merge gates, Feature Flow mermaid byte-identical to [feature-workflow.md](feature-workflow.md)) plus optional instance mirrors |
 | [`skill-slimming.sh`](../../../tests/agent-kit/templates/skill-slimming.sh) | Feature skill template byte budget |
 | [`forge-adapter.sh`](../../../tests/agent-kit/templates/forge-adapter.sh) | Ship-PR / forge adapter strings |
@@ -220,6 +233,7 @@ Tracked structural guards live under `tests/agent-kit/templates/`. Each script l
 | [`memory.sh`](../../../tests/agent-kit/templates/memory.sh) | Memory CLI twins, redact/check/rm/capture, quarantine, `_memory/` emit wiring; helpers [`memory-release-c.sh`](../../../tests/agent-kit/lib/memory-release-c.sh) and [`memory-redaction-behavioral.sh`](../../../tests/agent-kit/lib/memory-redaction-behavioral.sh); pwsh legs assert bash-only stubs exit **2** |
 | [`memory-capture.sh`](../../../tests/agent-kit/templates/memory-capture.sh) | Synthetic transcript fixtures for `capture` |
 | [`memory-wiring.sh`](../../../tests/agent-kit/templates/memory-wiring.sh) | Memory pointer blocks, memory-capture emission, mutation proofs |
+| [`research-layout.sh`](../../../tests/agent-kit/templates/research-layout.sh) | Canonical `/research` templates and memory wiring for tracked `_memory/research/`; mutation proofs under mktemp |
 | [`emit-determinism.sh`](../../../tests/agent-kit/templates/emit-determinism.sh) | Byte-identical re-emit and Bash 3.2 / jq-free portability |
 | [`emit-golden.sh`](../../../tests/agent-kit/templates/emit-golden.sh) | Golden corpus for `bin/emit.sh` (use `--update` only with reviewed diff) |
 | [`emit-portability.sh`](../../../tests/agent-kit/templates/emit-portability.sh) | sha256 tools, JSON edges; Docker `bash:3.2` emit-golden leg **skips by default**, `AGENT_KIT_DOCKER=1` opts in and **FAILs** when docker or the `bash:3.2` image is missing; CI pulls `bash:3.2` and sets the opt-in |

@@ -1,6 +1,6 @@
 {
   "kit": "agent-kit",
-  "kitVersion": "1.1.0",
+  "kitVersion": "1.1.1",
   "installedAt": "2026-09-03",
   "harnesses": [
     "copilot"
@@ -27,7 +27,7 @@
     ".github/agents/qa-evaluator.agent.md": "6c632904f3c3a1c7abf8ed27239c57cbb8bc0869d7964cb420c0a17248c8109d",
     ".github/agents/terminal.agent.md": "94820110b19fbe50e19a9e552f3a6a6e9d6e6444e06c1cc7f6d0e889cbf9aff2",
     ".github/agents/test-writer.agent.md": "3eefce23d9e723afb6bcf060d44cf64ddf903d965274a77f9db9da901c7b1af9",
-    ".github/skills/align-docs/SKILL.md": "6497063eff60d96f1ba247201b50cfcf81293e6cfb7d7724482a9cc9f75e808d",
+    ".github/skills/align-docs/SKILL.md": "b6faaa8be9207b9f0ce9ceb4c76aa6a4eba2dc78c3b7924ad4233e5e469b4651",
     ".github/skills/auto-loop/SKILL.md": "227b830f12983aea970d3ca2dbdf4975dfe439cb5acd8316e991bab909266a40",
     ".github/skills/feature/SKILL.md": "438c5f6a98880a10d45660fff8e913d25566a5c59871b423d6314c9109909a84",
     ".github/skills/feature/reference/continuation-ladder.md": "7302e1eaa30d447de87a7b48e6dc5f21abac5ec0f6c3ac11bc975d9fec5d61fe",
@@ -41,7 +41,7 @@
     ".github/skills/goal-criteria/SKILL.md": "350906c5d76026395b4169b44833d65c1ee3cc3472dd0016061cc8624a6be752",
     ".github/skills/memory-capture/SKILL.md": "992997a0e912efdc44bb699fbad3a1a11ae5559b576676ff74228b9a2b558d25",
     ".github/skills/qa-criteria/SKILL.md": "378cca9ded6cb915e61c6e852d1b86ffd78f3ab12579381b46abce098b49a7d2",
-    ".github/skills/research/SKILL.md": "9a80dee88e14a1006ffae4770c72270707ced5eae5312d6d6ea2d75e06c9df3f",
+    ".github/skills/research/SKILL.md": "42d12bd61f782703f3a0baa4d783cbcdb1f78f97fecd6db78f11f860ee38f407",
     ".github/skills/research/templates/research-brief.md": "198529731505e1d97bc840f8473f1383c8041becea49f18a3a712daf4bc52126",
     ".github/skills/research/templates/research-index.md": "3861c8baa7d49d1c72f80703396dd07f5d689764e5bd11a4e75f2dfc1d661beb",
     ".github/skills/research/templates/research-prompt.md": "7e2c286f3bd6802b650d5d661bacde0eb98829f0e5831382a288af3ed62f3a15",

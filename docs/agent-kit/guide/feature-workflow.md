@@ -284,11 +284,11 @@ After APPROVED + Quality Checks, read `goal.md`'s `phases:` block: when `align_d
 
 When enabled via `goal.md`'s `phases:` block (`align_docs: true`), read and execute [`align-docs/SKILL.template.md`](../../../skills/agent-kit/templates/skills/align-docs/SKILL.template.md):
 
-1. **Discover** shipped change surface (read-only: goal files + git diff).
+1. **Discover** shipped change surface (read-only: goal files + git diff from the merge base to the **working tree** — committed, staged, unstaged, and goal-owned untracked files). Non-owned tracked and untracked paths are listed and excluded from shipped facts (standalone runs, or goals whose tasks have no `writes:` sets, confirm candidate paths with the user first).
 2. **Map** changes to affected docs; build per-doc edit list.
 3. **Evaluate** the edit plan (`evaluator`) — PASS / NEEDS REVISION / REJECT, 3-cycle limit. When the edit list is 3 docs or fewer, this step folds into step 5 (one evaluator spawn covers plan + audit).
-4. **Execute** per doc via `implementer`; evaluate each doc (3 cycles max per doc).
-5. **Final doc audit** — APPROVED / ISSUES, 3-cycle limit.
+4. **Execute** per doc via `implementer`; evaluate each doc (3 cycles max per doc). Per-doc scope checks diff against a **working-tree snapshot** (git tree object) taken before any doc edit — only in-scope docs may have changed since that snapshot.
+5. **Final doc audit** — APPROVED / ISSUES, 3-cycle limit; the same snapshot delta must contain only in-scope docs (uncommitted feature code present in the snapshot and unchanged since is expected, not a scope failure).
 
 **Rules:** docs-only (never code); the whole `_memory/` tree is **read-only** for docs work (you may read `_memory/work/goals/` and `_memory/work/research/` scratch); anti-invention (every claim traces to a file read this run); surgical edits over rewrites.
 
