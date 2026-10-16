@@ -8,6 +8,10 @@ before pinning tool names.
 
 ## Harness specifics
 
+**Ready groups:** for write-disjoint Phase 4 tasks the orchestrator may try parallel
+`runSubagent` spawns; concurrency is ⚠️ unverified — fall back to sequential on a
+concurrency error. Set `parallel: false` on a goal to force groups of one.
+
 **Cost ceiling**: a subagent cannot run a stronger model than the session; a
 too-strong pin makes the subagent **not run at all**. Orchestrated sessions
 run the frontier tier; evaluators never pin above it; workers pin down.

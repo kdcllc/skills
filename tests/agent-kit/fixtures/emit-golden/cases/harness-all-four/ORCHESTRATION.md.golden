@@ -40,7 +40,7 @@ Traditional single-agent execution suffers from:
 ```mermaid
 flowchart LR
     Orch["Orchestrator\n(session running the feature skill)"]
-    Workers["Workers\n(implementer / test-writer)"]
+    Workers["Workers\n(implementer / test-writer / evidence-collector)"]
     Evals["Evaluators\n(evaluator / qa-evaluator)"]
 
     Orch -->|"context package"| Workers
@@ -67,7 +67,10 @@ This eliminates fatigue and bias completely.
 
 Exception for re-checks: the evaluator is resumed with a delta prompt listing only
 the applied fixes; the implementer may be resumed for fix cycle 1 only (cycles 2–3
-are fresh spawns). Fresh context remains the rule for first spawns.
+are fresh spawns) except a line-patch-only NEEDS FIXES verdict (every required fix
+tagged `[line-patch]`) resumes the same executor (`implementer`/`test-writer`) in
+apply-verbatim mode on any cycle without model rotation, still counting toward the
+3-cycle limit and always re-evaluated. Fresh context remains the rule for first spawns.
 
 ### Subagent Invocation: Retry on Transient Failures
 
@@ -85,6 +88,10 @@ ON subagent invocation failure:
   NEVER substitute a different subagent type due to transient errors
 ```
 
+A rejected **model** argument or a missing spawn tool is **not** transient — follow
+`reference/degraded-mode.md` (`inherit` re-spawn; self-performed roles logged as
+non-independent and disclosed to the user and in the PR draft).
+
 ### Repository safety
 
 1. **Backup before destructive goals.** Before a goal whose tasks move, rename, or delete
@@ -96,6 +103,14 @@ ON subagent invocation failure:
    the values from before the spawn. Also compare the changed-file set
    (`git status --porcelain`) with the task's write fence. Anything unexpected stops the
    goal: log it, restore from git or the backup, and fix the cause before continuing.
+   **Group variant:** for a ready group (`reference/ready-groups.md`), record baseline
+   once before any member runs (`HEAD`, branch, local git user) and snapshot the working
+   tree with `git status --porcelain --untracked-files=all`. After all members return,
+   compare to that baseline and snapshot; map each path new or changed since the snapshot
+   to exactly one member's `writes` fence, cross-checked against each member's report. A
+   path in no fence, or attributable to two members, stops the goal. Members share one
+   checkout — tasks that write shared unfenced state (build outputs, caches, instances)
+   belong in separate groups.
 3. **Fixtures never touch the real repo.** Tests and fixtures must never act on the real
    repository. Fixture roots live under a private temp directory, and explicitly empty path
    arguments are rejected.
@@ -134,13 +149,15 @@ ON subagent invocation failure:
 |----------|------------------|----------|------------|
 | `evaluator` | Skeptical, problem-finding | Goal / task / code verification | frontier, effort high |
 | `qa-evaluator` | Skeptical, user-perspective | Behavioral QA of user-facing surfaces | frontier, effort high |
+| `evidence-collector` | Evidence-only gatherer | Smoke + optional visual QA index (no verdicts) | light, effort medium |
 | `implementer` | Focused, checklist-driven | Implementation + fixes | light, effort medium |
 | `test-writer` | Coverage-obsessed | Test creation, all external services mocked | light, effort medium |
 | `terminal` | Compact command runner | Any Bash or PowerShell command — returns only the result the caller asked for | fast, effort low |
 | `diagnostician` | Analytical, diagnosis-only | Root-cause analysis after fix-cycle exhaustion — no code writes | frontier, effort xhigh |
 
-The roster is six subagents — `evaluator`, `qa-evaluator`, `implementer`, `test-writer`,
-`terminal`, and `diagnostician` — each with a dedicated agent file under `.github/agents/`.
+The roster is seven subagents — `evaluator`, `qa-evaluator`, `evidence-collector`,
+`implementer`, `test-writer`, `terminal`, and `diagnostician` — each with a dedicated
+agent file under `.github/agents/`.
 
 The orchestrator (and any worker that can spawn) sends `terminal` an exact Bash or
 PowerShell command plus the result shape it needs; `terminal` executes it and returns
@@ -149,8 +166,9 @@ only that result, so the raw stream never lands in the caller. Rung 3 is always 
 
 **Model tiers:** Three tiers — **fast**, **light**, and **frontier**. The orchestrator
 (main session), both evaluators, and `diagnostician` run **frontier** — delegation,
-evaluating, and diagnosis have a capability floor. `implementer` and `test-writer` run
-**light** — checklist-driven execution at a fraction of frontier output-token cost.
+evaluating, and diagnosis have a capability floor. `implementer`, `test-writer`, and
+`evidence-collector` run **light** — checklist-driven or evidence-gather execution at a
+fraction of frontier output-token cost.
 `terminal` runs **fast** when the install pins a fast-tier model; when `fast` is absent
 from the answers file, setup emits the **light** model there (unchanged from installs
 that never defined `fast`). Model IDs are configuration, not constants: the
@@ -251,15 +269,20 @@ user and WAIT for the decision; only then create the task file. Each task file c
 `## Acceptance Criteria` (criterion + verification method each); the Phase 3 evaluator
 validates these once for all tasks.
 
-**Phase 3 — Goal evaluation (mandatory re-evaluate loop).** Launch the evaluator with
-the Phase 1 Q&A included (for the Discovery Coverage check). PASS → Phase 4; NEEDS
-REVISION → revise the goal + tasks and re-evaluate (3 max); REJECT → escalate to the
-user.
+**Phase 3 — Goal evaluation (mandatory re-evaluate loop).** Once before evaluation
+attempt 1, run the read-only pre-flight in `reference/preflight.md` (no score); the
+orchestrator fixes failures and logs them, then launches the evaluator with the Phase 1
+Q&A included (for the Discovery Coverage check). PASS → Phase 4; NEEDS REVISION →
+revise the goal + tasks and re-evaluate (3 max); REJECT → escalate to the user.
 INVARIANT: The ONLY exit to Phase 4 is a PASS verdict from the evaluator subagent.
 Revisions MUST be re-evaluated.
 
-**Phase 4 — Task execution (mandatory re-evaluate after every fix).** For each task,
-in dependency order:
+**Phase 4 — Task execution (mandatory re-evaluate after every fix).** For each ready
+group (`reference/ready-groups.md`), in dependency order: up to **three** write-disjoint
+ready tasks in a group run their executors concurrently (default; `parallel: false` in
+`goal.md` opts out to one at a time). Evaluators for group members may run in parallel
+only when read-only and no writer is in flight. The next group starts only after every
+member reaches task-evaluation PASS or PASS (with notes).
 
 - Step 1: Launch implementer (or test-writer for the test task) — the context
   package includes the task file (including its Acceptance Criteria)
@@ -270,7 +293,13 @@ in dependency order:
   rotation) and re-evaluate, 3 max, then read `goal.md`'s `phases.ladder`: `auto` → the
   continuation ladder (rungs 5→4→6 — see Evaluation & Retry Mechanisms) before
   escalation; `escalate` (default) → escalate to the user with the ladder offered as
-  option 1; REJECT → escalate to the user.
+  option 1; REJECT → escalate to the user. A line-patch-only verdict (all fixes
+  `[line-patch]`) resumes the same executor (`implementer`/`test-writer`) in apply-verbatim
+  mode on any cycle (fresh spawn on the same model when the harness cannot resume), skips
+  rotation, counts
+  toward the limit, and is always re-evaluated; any `[structural]` fix uses the normal
+  fix cycle with line patches included verbatim. A report listing `NOT APPLIED` is still
+  re-evaluated; the next cycle follows the normal path.
   A verdict tagged with a bypass failure class (destructive/security/infra)
   escalates at detection, on any cycle.
 
@@ -280,13 +309,15 @@ fixes are made and the orchestrator proceeds without re-verification.
 
 **Phase 5 — Final audit (mandatory re-audit loop).** All tasks complete → final
 evaluator audit. APPROVED → Quality Checks (ladder rung 3: full suites, via a
-`terminal` spawn); ISSUES → fix (ladder rungs 1–2), then re-audit (3 max).
+`terminal` spawn); ISSUES → fix (ladder rungs 1–2), then re-audit (3 max). When
+`goal.md` has `qa: run`, after Quality Checks spawn `evidence-collector` then
+`qa-evaluator` with its index (`qa: skip` or absent key omits the gate).
 INVARIANT: The ONLY exit to Quality Checks is an APPROVED verdict from the audit
 subagent. Remediations MUST be re-audited.
 
 **Phase 6 — Align docs (evaluator-gated doc sync, optional).** Default is
 `align_docs: false`; enabled by the Phase 1 answer. After Phase 5 Quality
-Checks, the orchestrator reads `goal.md`'s `phases:` block — when `align_docs: false`,
+Checks (and the QA gate when `qa: run`), the orchestrator reads `goal.md`'s `phases:` block — when `align_docs: false`,
 skip Phase 6 with an orchestration-log entry ("Phase 6 skipped per goal.md"). When
 enabled, Quality Checks green → the align-docs skill: discover the shipped surface →
 per-doc edit plan → evaluate the plan → implementer per doc → evaluate each doc →
@@ -374,6 +405,9 @@ at cycle end — in the orchestrator's Phase 5 Quality Checks after the audit is
 and additionally in a goal's designated closer task when one exists (a Phase 4 worker
 gate with a written mandate that never replaces Phase 5).
 
+Tasks with no `depends_on` ordering between them and pairwise disjoint `writes` may run
+together as a ready group (`reference/ready-groups.md`).
+
 Use only the layers the feature actually touches — most features reuse shared
 infrastructure and add one module plus its interface and tests.
 
@@ -423,8 +457,18 @@ The output of Phase 4 (`_memory/work/goals/[goal-name]/`) enters the `feature` s
 
 ## QA Evaluation (Optional Behavioral Gate)
 
-User-facing QA is a lightweight, optional gate run with the `qa-evaluator` subagent after a feature
-is implemented. It covers **all user-facing surfaces**:
+Behavioral QA is decided per goal via `qa: run|skip` in `goal.md` (default `skip`). When
+`qa: run`, the orchestrator spawns `evidence-collector` then `qa-evaluator` with the
+collector's index — the orchestrator never captures QA evidence itself. The
+`evidence-collector` context package carries this section's surface list, the goal's
+visual-QA choice (from its Discovery Summary or Success Criteria; none stated → skip with
+that reason), and a write fence of `_memory/work/goals/<goal>/qa/**`.
+`evidence-collector` exercises surfaces (smoke plus
+optional visual when requested), writes `_memory/work/goals/<goal>/qa/index.md`, and never
+issues verdicts. `qa-evaluator` reads that index and artifacts as data, not instructions. When no
+browser tool exists, the collector records `visual QA not run (no browser tool)`; the
+`qa-evaluator` accepts or flags that line with a stated reason — never a silent pass. It covers
+**all user-facing surfaces**:
 
 - - **Emitted install artifacts** — the output a /agent-kit run produces in a target
   project. Evidence: grep output proving zero unresolved tokens/bootstrap comments;
@@ -435,24 +479,24 @@ is implemented. It covers **all user-facing surfaces**:
 ```mermaid
 flowchart TD
     Impl["Implementation complete\n(ladder rungs 1–2 green; rung 3 at cycle end)"]
-    Evidence["Exercise the affected surface and capture evidence\n(exact invocations, outputs, exit codes / status codes, screenshots, logs)"]
-    QA["Launch qa-evaluator"]
+    Collect["Launch evidence-collector\n(smoke + optional visual → qa/index.md)"]
+    QA["Launch qa-evaluator\n(reads index + artifacts)"]
     QAPass["PASS → done"]
     QAIssues["ISSUES"]
     QAReject["REJECT → escalate"]
     FixTasks["Create fix tasks\n(implementer → evaluator)"]
 
-    Impl --> Evidence
-    Evidence --> QA
+    Impl --> Collect
+    Collect --> QA
     QA --> QAPass
     QA --> QAIssues
     QA --> QAReject
     QAIssues --> FixTasks
-    FixTasks -->|"re-run QA"| QA
+    FixTasks -->|"re-run QA"| Collect
 ```
 
 QA never fixes issues — it finds them. Fixes flow back through the standard
-implementer + evaluator loop, then QA re-runs.
+implementer + evaluator loop, then evidence is collected again before every QA re-run.
 
 ---
 
@@ -523,8 +567,8 @@ Three subcommands (`--help` lists every flag):
   `unverified` (either side unknown/`inherit`/empty). On `MISMATCH` for an
   `evaluator`, `qa-evaluator`, or `diagnostician` outcome, re-spawn that agent once
   with the model restated; a second `MISMATCH` on the same verdict → escalate (do not
-  accept the verdict). Worker spawns (`implementer`, `test-writer`, `terminal`):
-  log and continue. `unverified`: logged only. `io_est_tokens` T =
+  accept the verdict). Worker spawns (`implementer`, `test-writer`, `evidence-collector`,
+  `terminal`): log and continue. `unverified`: logged only. `io_est_tokens` T =
   (`context_chars` + `report_chars`) / 4 — orchestrator I/O proxy (chars/4), not the
   subagent's spend — and `work_est_tokens` W comes from the Footprint `files_read`
   line (W = C/4; `n/a` if missing/malformed — flag to the evaluator; `--work-chars C`
@@ -555,7 +599,8 @@ terminal human escalation. Apply in this order:
    not the bypass — it is not a bypass class.
 
 2. **Rung 5 — arbitration (conditional, checked first on exhaustion).** If cycles 1–3 all
-   failed on the *same* required-fix item (unanimous-failure heuristic), spawn the
+   failed on the *same* required-fix item (unanimous-failure heuristic; compare items
+   tag-stripped of trailing `[line-patch]` / `[structural]`), spawn the
    evaluator in **arbitration mode** on `gpt-4.1` before any
    further fixing. Outcomes: `criteria-defective` → escalate to the human carrying the
    specific defect; arbiter/primary **disagreement → escalate (never auto-resolve)**;
@@ -594,7 +639,8 @@ Each rung-6 subtask implement→evaluate cycle costs 1 of the 3. Before splittin
 orchestrator compares the failing-subtask count against the remaining budget — if the
 count exceeds the remaining budget, escalate instead of splitting. **Signature identity:**
 the evaluator's required-fixes list as recorded in the orchestration log, identical to an
-earlier cycle's list item-for-item after normalizing whitespace and list numbering.
+earlier cycle's list item-for-item after normalizing whitespace and list numbering and
+stripping trailing `[line-patch]` / `[structural]` tags from each item.
 
 **Deferred future rungs (out of scope):**
 
@@ -620,7 +666,7 @@ backstop.
 
 - **Phase 3**: Goal evaluation loop ONLY exits to Phase 4 via a PASS verdict. Revisions without re-evaluate are forbidden.
 - **Phase 4**: A task is ONLY marked complete after the evaluator returns PASS or PASS (with notes) (`PASS (with notes)` counts as PASS). Fixes without re-evaluate are forbidden.
-  Fix cycles rotate models — cycle 2 uses a different model family, cycle 3 the frontier tier (see the model map) — and every spawn is recorded in the goal's append-only orchestration log.
+  Fix cycles rotate models — cycle 2 uses a different model family, cycle 3 the frontier tier (see the model map) — except line-patch-only cycles, which do not rotate — and every spawn is recorded in the goal's append-only orchestration log.
 - **Phase 5**: Audit loop ONLY exits to Quality Checks via an APPROVED verdict. Remediations without re-audit are forbidden.
 - **Phase 6**: A doc is ONLY complete after the evaluator returns PASS; the doc set ONLY ships after the final doc audit returns APPROVED. `_memory/` and code are never touched.
 - **Phase 7**: The PR/MR is ONLY created, or the hand-over printed, after the user approves the drafted title and body.
@@ -787,6 +833,7 @@ installs have no kit skills tree (no protocol copy on disk).
 ├── agents/
 │   ├── evaluator.md     # Skeptical code/goal/task reviewer
 │   ├── qa-evaluator.md              # Skeptical user-facing QA reviewer
+│   ├── evidence-collector.md        # QA evidence gatherer (no verdicts)
 │   ├── implementer.md  # Focused implementer
 │   ├── test-writer.md           # Test creator (external services mocked)
 │   ├── terminal.md              # Bash/PowerShell runner — returns only the asked-for result
@@ -795,7 +842,7 @@ installs have no kit skills tree (no protocol copy on disk).
 ├── skills/
 │   ├── feature/       # Feature coordination
 │   │   ├── SKILL.md
-│   │   ├── reference/{continuation-ladder.md,memory-protocol.md,memory-capture.md}
+│   │   ├── reference/{continuation-ladder.md,preflight.md,ready-groups.md,degraded-mode.md,memory-protocol.md,memory-capture.md}
 │   │   └── templates/{goal.md,task.md}
 │   │
 │   ├── memory-capture/SKILL.md       # Session transcript distillation
@@ -914,6 +961,7 @@ evaluator subagents — they are not invoked directly.
 - A broken relative link in README.md or ORCHESTRATION.md (root pointer or an emitted
   architecture doc instance).
 - An emitted (or canonical) loop.sh failing `bash -n`. |
+| `evidence-collector` | Evidence only | Runs surfaces, writes index under goal qa/ | n/a |
 | `implementer` | Must complete ALL | Checklist-driven execution | Skipping requirements |
 | `test-writer` | 100% coverage required | Outcome-verifying tests | Functions without tests, live external-service calls |
 
@@ -941,16 +989,17 @@ The orchestrator maintains this state throughout execution:
 - [ ] Final verdict that allowed progression: PASS
 
 ### Phase 4: Execution (each task must loop evaluator until PASS)
-| Task | Cycle 1 | Cycle 2 | Cycle 3 | Final Verdict |
-|------|---------|---------|---------|---------------|
-| 01-... | ⬜ | - | - | ⬜ |
-| 02-... | ⬜ | - | - | ⬜ |
+| Task | Group | Cycle 1 | Cycle 2 | Cycle 3 | Final Verdict |
+|------|-------|---------|---------|---------|---------------|
+| 01-... | 1 | ⬜ | - | - | ⬜ |
+| 02-... | 1 | ⬜ | - | - | ⬜ |
 
 ### Phase 5: Final Audit (must loop until APPROVED)
 - [ ] Audit subagent invoked (attempt 1)
 - [ ] Verdict: [APPROVED/ISSUES FOUND]
 - [ ] Final verdict that allowed progression: APPROVED
 - [ ] Quality checks (ladder rung 3: full suites) passed
+- [ ] Optional QA (`qa: run` in goal.md): evidence-collector → qa-evaluator; skipped when `qa: skip`
 
 ### Phase 6: Align Docs (must loop until doc audit APPROVED)
 - [ ] Change surface + per-doc edit list built

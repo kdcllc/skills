@@ -10,7 +10,7 @@ The kit uses several persistence layers; each has a different lifecycle:
 
 | Layer | Location | Holds | When to use it |
 |-------|----------|-------|----------------|
-| **Goal artifacts** | `_memory/work/goals/<goal>/` — `goal.md`, task files, append-only `orchestration-log.md`, `spawns/`, `evidence/`, `memory-drafts/` (gitignored scratch) | In-flight and recently closed feature work: plans, verdicts, spawn audit trail | Trace how a goal was executed; not a cross-goal search index |
+| **Goal artifacts** | `_memory/work/goals/<goal>/` — `goal.md`, task files, append-only `orchestration-log.md`, `spawns/`, `evidence/`, `qa/` (behavioral QA index and artifacts when the optional QA gate runs), `memory-drafts/` (gitignored scratch) | In-flight and recently closed feature work: plans, verdicts, spawn audit trail | Trace how a goal was executed; not a cross-goal search index |
 | **Loop ledgers** | `_memory/loop/` — `backlog.md`, `LEARNINGS.md`, `ESCALATIONS.md`, `archive/ESCALATIONS-<YYYY-MM>.md` (tracked); `breaker-state.json` (gitignored runtime) | Loop backlog, learnings, escalations; size gates defer compaction/archival to manual iterations | Autonomous loop operation; ledgers are **not** auto-imported into `records/` |
 | **Memory store** | `_memory/records/`, `_memory/quarantine/` (immutable, tracked); plus gitignored `work/` and derived `.index/` / `raw/` | Distilled records (decisions, goal summaries, research ingests, pitfalls, etc.) | Cross-session recall before planning; team-shareable via git |
 

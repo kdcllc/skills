@@ -154,6 +154,15 @@ or convention file is the reference — two evaluators could disagree on PASS.
 or output. Anything named by a requirement or AC, anything that alters behavior, and
 anything on the auto-fail list is never `minor`.
 
+## Required-fix tags (`[line-patch]` / `[structural]`)
+
+The evaluator tags every required-fix item with exactly one trailing tag. **`[line-patch]`**
+means the implementer can apply exact text substitutions at named `file:line` locations,
+changing no requirement, write set, or behavior beyond what the cited criterion demands.
+**`[structural]`** is everything else. A fix tagged `[line-patch]` that actually changes
+behavior, requirements, or write sets beyond what the cited criterion demands (a **mislabeled** line patch) is a **`major`**
+issue in the next evaluation — not `minor`.
+
 ## Verdicts
 
 - **PASS**: every requirement and acceptance criterion verified, ladder rungs 1–2 green,

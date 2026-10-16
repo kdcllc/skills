@@ -26,3 +26,7 @@ config_file = "agents/terminal.toml"
 [agents.diagnostician]
 description = "Root-cause diagnostician for task failures after fix-cycle exhaustion. Read .codex/agents/diagnostician.md first."
 config_file = "agents/diagnostician.toml"
+
+[agents.evidence-collector]
+description = "QA evidence gatherer for user-facing surfaces; never issues verdicts. Read .codex/agents/evidence-collector.md first."
+config_file = "agents/evidence-collector.toml"

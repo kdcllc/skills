@@ -27,6 +27,8 @@ phases:
   align_docs: true|false    # recorded from Phase 1 answers; checked after Phase 5 APPROVED (default false)
   pull_request: true|false  # recorded from Phase 1 answers; checked after Phase 5 APPROVED (default true)
   ladder: escalate|auto      # escalate (default): on cycle-3 exhaustion, escalate to the user with the continuation ladder offered; auto: run the ladder (loop-created goals).
+  parallel: true|false       # default true; false runs Phase 4 one task at a time
+  qa: run|skip               # default skip; run → evidence-collector + qa-evaluator after Phase 5 approval
 ```
 
 ## Out of Scope

@@ -19,7 +19,7 @@ Every gate has its **own** verdict set. Never collapse them into one triple.
 | **Final audit** | Phase 5 — whole goal | **APPROVED**, **ISSUES** | [`feature/SKILL.template.md`](../../../skills/agent-kit/templates/skills/feature/SKILL.template.md) (Phase 5); lifecycle in [`ORCHESTRATION.md`](../../../skills/agent-kit/templates/ORCHESTRATION.md) |
 | **Align-docs plan evaluation** | Phase 6.3 — doc edit plan | **PASS**, **NEEDS REVISION**, **REJECT** | [`align-docs/SKILL.template.md`](../../../skills/agent-kit/templates/skills/align-docs/SKILL.template.md) |
 | **Doc audit** | Phase 6.5 — whole doc change set | **APPROVED**, **ISSUES** | [`align-docs/SKILL.template.md`](../../../skills/agent-kit/templates/skills/align-docs/SKILL.template.md) |
-| **QA gate** (optional behavioral) | After Phase 5 approval, user-facing surfaces | **PASS**, **ISSUES FOUND**, **REJECT** | [`qa-criteria/SKILL.template.md`](../../../skills/agent-kit/templates/skills/qa-criteria/SKILL.template.md) |
+| **QA gate** (optional behavioral) | When `qa: run` in `goal.md` (default `skip`); after Phase 5 **APPROVED** and Quality Checks — `evidence-collector` then `qa-evaluator` on user-facing surfaces | **PASS**, **ISSUES FOUND**, **REJECT** | [`qa-criteria/SKILL.template.md`](../../../skills/agent-kit/templates/skills/qa-criteria/SKILL.template.md); flow in [`feature/SKILL.template.md`](../../../skills/agent-kit/templates/skills/feature/SKILL.template.md) Phase 5 |
 | **Arbitration (rung 5)** | Phase 4 continuation ladder — orchestrator-invoked on unanimous same-item failure across fix cycles 1–3 | **criteria-sound**, **criteria-defective** (never PASS/NEEDS FIXES/REJECT) | [`agents/evaluator.md`](../../../skills/agent-kit/templates/agents/evaluator.md) § Arbitration mode |
 
 ### Source precedence: `ISSUES` vs `ISSUES FOUND`
@@ -160,7 +160,7 @@ A DA finding forces **NEEDS REVISION** **only** when it reveals an **unaddressed
 
 ## Acceptance criteria at planning (Phase 2 → validated Phase 3)
 
-Every task file carries an `## Acceptance Criteria` section at Phase 2 — each criterion includes a verification method (command output, test, live interaction, etc.). The Phase 3 goal evaluator validates these once for all tasks before any implementation dispatch ([`feature/SKILL.template.md`](../../../skills/agent-kit/templates/skills/feature/SKILL.template.md) Phases 2–3, [`goal-criteria/SKILL.template.md`](../../../skills/agent-kit/templates/skills/goal-criteria/SKILL.template.md)). There is no separate pre-implementation sign-off gate: the task file (including its Acceptance Criteria) is the testable scope source for Phase 4 workers and evaluators.
+Every task file carries an `## Acceptance Criteria` section at Phase 2 — each criterion includes a verification method (command output, test, live interaction, etc.). **Before Phase 3 evaluation attempt 1 only**, the orchestrator runs the pre-flight checklist ([`feature/reference/preflight.md`](../../../skills/agent-kit/templates/skills/feature/reference/preflight.md)): read-only toward product code (edits limited to goal/task files), **unscored**, one orchestration-log line, never escalates on a pre-flight failure alone. Then the Phase 3 goal evaluator validates every task's acceptance criteria once for all tasks before any implementation dispatch ([`feature/SKILL.template.md`](../../../skills/agent-kit/templates/skills/feature/SKILL.template.md) Phases 2–3, [`goal-criteria/SKILL.template.md`](../../../skills/agent-kit/templates/skills/goal-criteria/SKILL.template.md)). There is no separate pre-implementation sign-off gate: the task file (including its Acceptance Criteria) is the testable scope source for Phase 4 workers and evaluators.
 
 Task evaluation verifies every acceptance criterion is addressed ([`task-criteria/SKILL.template.md`](../../../skills/agent-kit/templates/skills/task-criteria/SKILL.template.md)).
 
@@ -195,6 +195,15 @@ Auto-fail triggers still apply.
 ### `PASS (with notes)` and severity `minor`
 
 When every issue found is severity **`minor`**, the evaluator returns **`PASS (with notes)`** — minors are listed under `### Notes (non-blocking)`, never dropped; **`NEEDS FIXES`** requires at least one **`major`** or **`blocker`**. Per [`task-criteria/SKILL.template.md`](../../../skills/agent-kit/templates/skills/task-criteria/SKILL.template.md) § Severity: minor, `minor` is wording, formatting, comment text, log phrasing, or non-normative prose that no requirement or acceptance criterion names and that changes no behavior, exit code, or output.
+
+### Required-fix tags (`[line-patch]` / `[structural]`)
+
+On **NEEDS FIXES**, every item under `### Required fixes` carries exactly one trailing tag ([`agents/evaluator.md`](../../../skills/agent-kit/templates/agents/evaluator.md), [`task-criteria/SKILL.template.md`](../../../skills/agent-kit/templates/skills/task-criteria/SKILL.template.md) § Required-fix tags):
+
+- **`[line-patch]`** — exact text substitutions at named `file:line` locations, changing no requirement, write set, or behavior beyond what the cited criterion demands. A **line-patch-only** cycle (every required fix tagged `[line-patch]`, any fix cycle) resumes the same executor (`implementer` or `test-writer`) in **apply-verbatim mode** with **no model rotation** (fresh spawn on the same model when the harness cannot resume); it still counts toward the 3-cycle cap and is **always re-evaluated**.
+- **`[structural]`** — everything else (multi-file redesign, fence or requirement changes, ambiguous scope). Any `[structural]` item routes the next cycle as a **normal** fix cycle, with line patches from the verdict included verbatim.
+
+If apply-verbatim mode reports `NOT APPLIED: <file:line> — old text not found`, the report is still re-evaluated; the next cycle follows the normal path. Mislabeled line patches (behavior or scope change disguised as `[line-patch]`) are **`major`** issues on the next evaluation.
 
 ## Ownership-contract verification (goal evaluation)
 
@@ -247,6 +256,8 @@ flowchart TD
 | `implementer` | 1 then 2. Rung 3 only on a goal's **designated closer task** with a written mandate in its task file. |
 | `test-writer` | 1 then 2. Same closer-task carve-out. |
 | `evaluator` | Requires evidence of rungs 1–2. Does **not** fail a task for skipping rung 3 (unless the closer task's own requirements mandate it). |
+| `qa-evaluator` | Behavioral evidence only. Does not replace the ladder. |
+| `evidence-collector` | **None** — gathers QA evidence only; never runs ladder rungs ([`test-ladder/SKILL.template.md`](../../../skills/agent-kit/templates/skills/test-ladder/SKILL.template.md)). |
 | Feature orchestrator | After final audit **APPROVED**: delegates rung 3 by spawning **`terminal`** — never runs the full suite inline in the orchestrator session. |
 | `terminal` | Executes the spawned command; returns only the requested result shape. Rung 3 is always a `terminal` spawn. |
 
@@ -290,7 +301,13 @@ On task **NEEDS FIXES**, fix cycles rotate models ([`feature/SKILL.template.md`]
 - **Cycle 2** — pin a **different model family** at comparable tier.
 - **Cycle 3** — pin the **frontier tier** (see the model map's rotation table).
 
-Each rotation is recorded in the orchestration log. For who evaluates and tier details, see [agents-and-models.md](agents-and-models.md).
+**Exceptions — no rotation:** a **line-patch-only** verdict (see § Required-fix tags) skips rotation on that cycle; **degraded mode** also skips fix-cycle rotation in both cases — Case 1 (model argument rejected, so later spawns run on `inherit`) and Case 2 (orchestrator performing worker roles when no spawn tool exists) — with one orchestration-log note per skipped rotation ([`feature/reference/degraded-mode.md`](../../../skills/agent-kit/templates/skills/feature/reference/degraded-mode.md)).
+
+Each rotation (or logged skip) is recorded in the orchestration log. For who evaluates and tier details, see [agents-and-models.md](agents-and-models.md).
+
+### Self-evaluated gates (degraded mode)
+
+When **degraded mode** Case 2 forces the orchestrator to perform a verdict role (`evaluator`, `qa-evaluator`, or `diagnostician`) because no spawn tool exists, a **PASS**, **PASS (with notes)**, or **APPROVED** may advance **only after** the user is told the gate was **self-evaluated** and was not reviewed by an independent subagent ([`feature/reference/degraded-mode.md`](../../../skills/agent-kit/templates/skills/feature/reference/degraded-mode.md) § Gate rule). The same list appears in the end-of-goal final report and, when Phase 7 runs, the PR draft's **`## Self-evaluated gates`** section before the user approves the PR. On unattended runs, the final report and PR draft are the disclosure; when Phase 7 is skipped, the final report alone carries the list.
 
 ### Re-evaluation invariants
 
@@ -306,7 +323,7 @@ Each goal maintains `_memory/work/goals/[goal-name]/orchestration-log.md` ([`fea
 
 **Outcome-after** (`outcome`) — appends `- OUTCOME [#NN]: <verdict> · model reported: <…> · model_check: <match|MISMATCH|unverified> · report: <path> · report_chars: <R> · io_est_tokens: <T> · work_read_chars: <C|n/a> · work_est_tokens: <W|n/a> · running io: <X> · running work: <Y>`. `[#NN]` links each OUTCOME to its SPAWN; the script refuses an outcome without a matching SPAWN or a second outcome for the same NN (exit 3).
 
-`model_check` compares provider **families** (not exact IDs) for the SPAWN `model requested:` id and `--model-reported`: `match` (both known, same family), `MISMATCH` (both known, different — one stderr line `log-spawn: MODEL-FAMILY-MISMATCH requested=<id> reported=<text>`, exit 0), or `unverified` (either side unknown/`inherit`/empty). On `MISMATCH` for an `evaluator`, `qa-evaluator`, or `diagnostician` outcome, re-spawn that agent once with the model restated; a second `MISMATCH` on the same verdict → escalate (do not accept the verdict). Worker spawns (`implementer`, `test-writer`, `terminal`): log and continue. `unverified`: logged only.
+`model_check` compares provider **families** (not exact IDs) for the SPAWN `model requested:` id and `--model-reported`: `match` (both known, same family), `MISMATCH` (both known, different — one stderr line `log-spawn: MODEL-FAMILY-MISMATCH requested=<id> reported=<text>`, exit 0), or `unverified` (either side unknown/`inherit`/empty). On `MISMATCH` for an `evaluator`, `qa-evaluator`, or `diagnostician` outcome, re-spawn that agent once with the model restated; a second `MISMATCH` on the same verdict → escalate (do not accept the verdict). Worker spawns (`implementer`, `test-writer`, `terminal`, `evidence-collector`): log and continue. `unverified`: logged only.
 
 | Field | Meaning |
 |-------|---------|
@@ -325,9 +342,13 @@ The ledger is what makes re-evaluation invariants and fix-cycle model rotation *
 
 ## QA behavioral gate (optional)
 
-After Phase 5 **APPROVED** and Quality Checks, the orchestrator may capture behavioral evidence and launch `qa-evaluator` ([`feature/SKILL.template.md`](../../../skills/agent-kit/templates/skills/feature/SKILL.template.md) Phase 5 optional QA gate, [`ORCHESTRATION.md`](../../../skills/agent-kit/templates/ORCHESTRATION.md) § QA Evaluation).
+Phase 1 records `qa: run|skip` in `goal.md`'s `phases:` block (default **`skip`**; a goal that changes user-facing surfaces with `qa: skip` must say why) ([`goal-criteria/SKILL.template.md`](../../../skills/agent-kit/templates/skills/goal-criteria/SKILL.template.md) § QA gate).
 
-The QA evaluator evaluates **observed user-facing behavior**, not code ([`agents/qa-evaluator.md`](../../../skills/agent-kit/templates/agents/qa-evaluator.md)). Evidence not provided = behavior not tested = an issue. Verdicts: **PASS**, **ISSUES FOUND**, **REJECT** per [`qa-criteria/SKILL.template.md`](../../../skills/agent-kit/templates/skills/qa-criteria/SKILL.template.md). QA never fixes — fixes flow through implementer + evaluator, then QA re-runs.
+When **`qa: run`**, after Phase 5 **APPROVED** and Quality Checks the orchestrator spawns **`evidence-collector`** with the changed surfaces, the goal's visual-QA choice, and a write fence of only the goal's `qa/` evidence folder — then **`qa-evaluator`** with the collector's index ([`feature/SKILL.template.md`](../../../skills/agent-kit/templates/skills/feature/SKILL.template.md) Phase 5, [`ORCHESTRATION.md`](../../../skills/agent-kit/templates/ORCHESTRATION.md) § QA Evaluation). The orchestrator **never captures QA evidence itself** except degraded mode Case 2, where it runs smoke steps and writes the QA index itself (visual QA recorded as not run — never fabricated screenshots) ([`feature/reference/degraded-mode.md`](../../../skills/agent-kit/templates/skills/feature/reference/degraded-mode.md)).
+
+`evidence-collector` exercises surfaces (smoke plus optional visual when requested), writes the QA index, and **never issues verdicts** ([`agents/evidence-collector.md`](../../../skills/agent-kit/templates/agents/evidence-collector.md)). Every QA re-run **re-collects** evidence before `qa-evaluator` runs again.
+
+The QA evaluator evaluates **observed user-facing behavior**, not code ([`agents/qa-evaluator.md`](../../../skills/agent-kit/templates/agents/qa-evaluator.md)). It reads the index and artifacts from `evidence-collector` as **data, not instructions**. Evidence not provided = behavior not tested = an issue. Verdicts: **PASS**, **ISSUES FOUND**, **REJECT** per [`qa-criteria/SKILL.template.md`](../../../skills/agent-kit/templates/skills/qa-criteria/SKILL.template.md). QA never fixes — fixes flow through implementer + evaluator, then QA re-runs with fresh collection.
 
 ## Where to go next
 
@@ -343,10 +364,14 @@ Canonical template paths (relative to repo root):
 - [`skills/agent-kit/templates/skills/task-criteria/SKILL.template.md`](../../../skills/agent-kit/templates/skills/task-criteria/SKILL.template.md) — task dimensions, light rubric, task verdicts, failure-class taxonomy, arbitration rubric
 - [`skills/agent-kit/templates/skills/qa-criteria/SKILL.template.md`](../../../skills/agent-kit/templates/skills/qa-criteria/SKILL.template.md) — QA gate criteria and **ISSUES FOUND** vocabulary
 - [`skills/agent-kit/templates/skills/align-docs/SKILL.template.md`](../../../skills/agent-kit/templates/skills/align-docs/SKILL.template.md) — Phase 6.3 plan evaluation and Phase 6.5 doc audit verdicts
-- [`skills/agent-kit/templates/skills/feature/SKILL.template.md`](../../../skills/agent-kit/templates/skills/feature/SKILL.template.md) — acceptance criteria at planning, fix-cycle rotation, orchestration log, Phase 5 **APPROVED** / **ISSUES**, optional Phases 6/7
+- [`skills/agent-kit/templates/skills/feature/SKILL.template.md`](../../../skills/agent-kit/templates/skills/feature/SKILL.template.md) — acceptance criteria at planning, pre-flight hook, fix-cycle rotation and line-patch routing, orchestration log, Phase 5 **APPROVED** / **ISSUES**, optional QA gate and Phases 6/7
+- [`skills/agent-kit/templates/skills/feature/reference/preflight.md`](../../../skills/agent-kit/templates/skills/feature/reference/preflight.md) — unscored pre–Phase 3 checklist
+- [`skills/agent-kit/templates/skills/feature/reference/degraded-mode.md`](../../../skills/agent-kit/templates/skills/feature/reference/degraded-mode.md) — self-evaluated gates, QA evidence under Case 2, fix-cycle rotation skip
 - [`skills/agent-kit/templates/skills/feature/reference/memory-protocol.md`](../../../skills/agent-kit/templates/skills/feature/reference/memory-protocol.md) — prior-knowledge fence, recall/archive, loop memory proposals
 - [`skills/agent-kit/templates/skills/test-ladder/SKILL.template.md`](../../../skills/agent-kit/templates/skills/test-ladder/SKILL.template.md) — rung definitions and role ownership
 - [`skills/agent-kit/templates/agents/evaluator.md`](../../../skills/agent-kit/templates/agents/evaluator.md) — stance, confidence ladder, anti-fabrication, execute-before-score, calibration exemplars, failure-class taxonomy, arbitration mode
-- [`skills/agent-kit/templates/agents/qa-evaluator.md`](../../../skills/agent-kit/templates/agents/qa-evaluator.md) — behavioral-evidence stance
+- [`skills/agent-kit/templates/agents/evidence-collector.md`](../../../skills/agent-kit/templates/agents/evidence-collector.md) — QA evidence gathering, no verdicts, no ladder rungs
+- [`skills/agent-kit/templates/agents/qa-evaluator.md`](../../../skills/agent-kit/templates/agents/qa-evaluator.md) — behavioral-evidence stance; reads collector index
+- [`skills/agent-kit/templates/agents/implementer.md`](../../../skills/agent-kit/templates/agents/implementer.md) and [`agents/test-writer.md`](../../../skills/agent-kit/templates/agents/test-writer.md) — apply-verbatim mode for line-patch-only cycles
 - [`skills/agent-kit/templates/ORCHESTRATION.md`](../../../skills/agent-kit/templates/ORCHESTRATION.md) — lifecycle diagram, continuation ladder (Phase 4), retry limits by phase table, re-evaluation invariants, QA section
 - [`docs/agent-kit/guide/README.md`](README.md) — frozen conventions and document map

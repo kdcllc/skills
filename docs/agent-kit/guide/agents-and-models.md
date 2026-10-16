@@ -1,10 +1,10 @@
-**Who this is for / What you'll learn:** Kit **users** and **contributors** who need to understand the six subagents, which model tier each role runs on, and how `models.map.md` governs IDs, fallbacks, and fix-cycle rotation. You will learn each agent's role, write boundaries, and prohibitions; why evaluators and the diagnostician run frontier models, workers run light models, and `terminal` runs the fast tier; the diagnostician's role in the post-exhaustion continuation ladder; the structure and rules of the model map; and harness caveats that affect tiering. For what evaluators enforce (verdict vocabulary, confidence ladder, contracts), see [evaluation-system.md](evaluation-system.md). For where each agent appears in the `/feature` phases, see [feature-workflow.md](feature-workflow.md).
+**Who this is for / What you'll learn:** Kit **users** and **contributors** who need to understand the seven subagents, which model tier each role runs on, and how `models.map.md` governs IDs, fallbacks, and fix-cycle rotation. You will learn each agent's role, write boundaries, and prohibitions; why evaluators and the diagnostician run frontier models, workers run light models, and `terminal` runs the fast tier; the diagnostician's role in the post-exhaustion continuation ladder; the structure and rules of the model map; and harness caveats that affect tiering. For what evaluators enforce (verdict vocabulary, confidence ladder, contracts), see [evaluation-system.md](evaluation-system.md). For where each agent appears in the `/feature` phases, see [feature-workflow.md](feature-workflow.md).
 
 # Agents and Model Configuration
 
-The kit uses **three model tiers**: **coordination and verification** on the **frontier** tier, **checklist-driven execution** on the **light** tier, and **single-command runs** on the **fast** tier (`terminal`). One orchestrating main session prepares context, makes decisions, and spawns subagents — it never implements tasks itself. Every spawn passes its model explicitly (the model map's resolved ID for the agent's tier); each agent report starts with **`**Model (self-reported)**: ...`**. Six specialized subagents handle implementation, testing, command execution, evaluation, and post-exhaustion diagnosis. Model IDs, fallback chains, and fix-cycle rotation are configured in a single template file that `/agent-kit` resolves per harness. See [architecture.md](architecture.md) for how tiers fit the spawn lifecycle.
+The kit uses **three model tiers**: **coordination and verification** on the **frontier** tier, **checklist-driven execution** on the **light** tier, and **single-command runs** on the **fast** tier (`terminal`). One orchestrating main session prepares context, makes decisions, and spawns subagents — it never implements tasks itself. Every spawn passes its model explicitly (the model map's resolved ID for the agent's tier); each agent report starts with **`**Model (self-reported)**: ...`**. Seven specialized subagents handle implementation, testing, command execution, optional QA evidence gathering, evaluation, user-facing QA review, and post-exhaustion diagnosis. Model IDs, fallback chains, and fix-cycle rotation are configured in a single template file that `/agent-kit` resolves per harness. See [architecture.md](architecture.md) for how tiers fit the spawn lifecycle.
 
-## The six subagents at a glance
+## The seven subagents at a glance
 
 | Agent | Tier | May write | Must never |
 |-------|------|-----------|------------|
@@ -12,12 +12,13 @@ The kit uses **three model tiers**: **coordination and verification** on the **f
 | `qa-evaluator` | `frontier` | Nothing | Fix anything; extrapolate untested behavior |
 | `implementer` | `light` (`{{MODEL_LIGHT}}`) | Only paths in the task's `writes` set | Edit out-of-fence files; run rung-3 full suites |
 | `test-writer` | `light` | Only test files in task `writes` | Hit live external services; edit source to make tests pass |
+| `evidence-collector` | `light` | Only the goal's `qa/` evidence folder | Issue verdicts; run test-ladder rungs; edit product or goal files outside `qa/` |
 | `terminal` | `fast` (`{{MODEL_FAST}}`; falls back to light when an install omits `fast`) | Shell side effects only (no Edit/Write tools) | Dump raw command streams into the caller session |
 | `diagnostician` | `frontier` (`{{MODEL_FRONTIER}}`) | Nothing — diagnosis-only report | Edit files or write product code; re-litigate whether the acceptance criteria are sound (rung-5 arbitration's job) |
 
 The sections below quote or paraphrase the canonical agent templates under [`skills/agent-kit/templates/agents/`](../../../skills/agent-kit/templates/agents/). Capabilities not confirmed there are omitted.
 
-## Report Footprint (all six agents)
+## Report Footprint (all seven agents)
 
 Every agent completion report ends with a machine-readable **`### Footprint`** block — the last non-blank lines inside the report fence:
 
@@ -52,7 +53,7 @@ Evaluation criteria — verdict vocabulary, confidence ladder, anti-fabrication 
 
 ## QA Evaluator
 
-**Role:** Skeptical user-perspective QA reviewer for user-facing surfaces. Launch after a feature is implemented and evaluated, with captured behavioral evidence (command output, API responses, screenshots).
+**Role:** Skeptical user-perspective QA reviewer for user-facing surfaces. When the goal's `phases:` block sets `qa: run`, launch after Phase 5 **APPROVED** and quality checks, once `evidence-collector` has written the goal's `qa/index.md` and listed artifacts — read that index and the artifacts it cites (command output, API responses, screenshots). Every QA re-run re-collects evidence first.
 
 **Tier:** `frontier` — frontmatter `model: {{MODEL_FRONTIER}}`, effort `high`.
 
@@ -65,6 +66,24 @@ Evaluation criteria — verdict vocabulary, confidence ladder, anti-fabrication 
 - Pass when evidence for a claimed surface was not provided.
 
 The QA evaluator evaluates **behavior a user actually experiences**, not the code. Missing evidence is an issue, not a pass.
+
+## Evidence Collector
+
+**Role:** Behavioral QA evidence gatherer for the goal's changed user-facing surfaces. Launch when a goal runs the optional QA gate (`qa: run` in `goal.md`), with the surface list, the goal's visual-QA choice, and a write fence limited to the goal's `qa/` folder. Exercises surfaces (smoke, optional visual checks after a browser-tool probe), writes `qa/index.md` — never issues verdicts.
+
+**Tier:** `light` — frontmatter `model: {{MODEL_LIGHT}}`, effort `medium`.
+
+**What it may write:** Only under the goal's `qa/` folder (`smoke.md`, optional `visual/` artifacts, BLOCKED log tails, and `index.md`).
+
+**What it must never do:**
+
+- Issue PASS / ISSUES / REJECT or any verdict language — verdicts belong to `qa-evaluator`.
+- Run test-ladder rungs 1–3 (those belong to executors and the orchestrator).
+- Edit product source, docs, or goal files outside the `qa/` write fence.
+- Invent screenshots, stdout, status codes, or response bodies — record what you observed or mark a surface **BLOCKED**.
+- Hit production or customer environments; never echo secrets in captured output.
+
+When the goal asks for visual QA but no browser-automation tool exists, record the literal line `visual QA not run (no browser tool)` in the evidence set. When visual QA is skipped, record `visual QA not run (skipped: <reason>)`. Context packages for this role omit the prior-knowledge (recalled-memory) fence — recall applies to implementer, test-writer, and diagnostician only.
 
 ## Implementer
 
@@ -83,6 +102,8 @@ The QA evaluator evaluates **behavior a user actually experiences**, not the cod
 
 For noisy Bash or PowerShell commands whose raw output is not needed, spawn `terminal` with the exact command and the result you want back (where the harness allows — not Copilot).
 
+**Apply-verbatim mode:** When the context package marks the fix cycle **line-patch-only**, apply exactly the evaluator's listed substitutions — bottom-up per file, report `NOT APPLIED` for patches whose old text is missing, no refactors — then run rung 1–2 verification and report it. The orchestrator resumes the same implementer on the same model (fresh spawn on that model when the harness cannot resume; no fix-cycle rotation) for that cycle.
+
 ## Test Writer
 
 **Role:** Coverage-obsessed test author for the dedicated test task of a goal. Writes outcome-verifying tests with all external services mocked.
@@ -99,6 +120,8 @@ For noisy Bash or PowerShell commands whose raw output is not needed, spawn `ter
 - Run rung 3 (full suites) — rungs 1–2 only during the task.
 
 For noisy commands, spawn `terminal` where the harness allows (not Copilot).
+
+**Apply-verbatim mode:** Same as implementer — line-patch-only cycles apply listed substitutions verbatim, skip missing patches with `NOT APPLIED`, verify rungs 1–2, no model rotation on that cycle.
 
 ## Terminal
 
@@ -141,13 +164,14 @@ You supply the report — the orchestrator routes (signature match → rung 6 or
 
 ## Roster diagram
 
-The orchestrating session runs on the frontier tier. It dispatches light-tier workers for execution, a fast-tier terminal for isolated command output, and frontier-tier evaluators for verification. A frontier-tier diagnostician is spawned for post-exhaustion diagnosis.
+The orchestrating session runs on the frontier tier. It dispatches light-tier workers for execution and optional QA evidence, a fast-tier terminal for isolated command output, and frontier-tier evaluators for verification. When the goal opts into the QA gate, a light-tier `evidence-collector` gathers smoke and optional visual artifacts under the goal's `qa/` folder; `qa-evaluator` reads that index. A frontier-tier diagnostician is spawned for post-exhaustion diagnosis.
 
 ```mermaid
 flowchart TD
     Orch["Orchestrating session\n(frontier tier)"]
     Impl["implementer\n(light tier)"]
     TW["test-writer\n(light tier)"]
+    EC["evidence-collector\n(light tier)\nevidence only"]
     Term["terminal\n(fast tier)\nshell-output shield"]
     Eval["evaluator\n(frontier tier)"]
     QA["qa-evaluator\n(frontier tier)"]
@@ -155,6 +179,7 @@ flowchart TD
 
     Orch -->|"spawn: implement / fix"| Impl
     Orch -->|"spawn: write tests"| TW
+    Orch -->|"spawn: QA evidence (qa: run)"| EC
     Orch -->|"spawn: run command"| Term
     Orch -->|"spawn: verify task / goal"| Eval
     Orch -->|"spawn: verify UX"| QA
@@ -162,6 +187,7 @@ flowchart TD
     Impl -->|"noisy command"| Term
     TW -->|"noisy command"| Term
     Term -->|"result only, no raw stream"| Orch
+    EC -->|"index + artifacts"| QA
     Eval -->|"verdict"| Orch
     QA -->|"QA verdict"| Orch
     Diag -->|"diagnosis report"| Orch
@@ -171,17 +197,17 @@ Workers never advance a phase on their own — evaluators gate progression. See 
 
 ## Why frontier vs light
 
-Evaluators, the diagnostician, and the orchestrating session run **frontier** models; `implementer` and `test-writer` run **light** models; `terminal` runs the **fast** tier (or light when an install omits `fast`). The split follows a simple cost–quality tradeoff:
+Evaluators, the diagnostician, and the orchestrating session run **frontier** models; `implementer`, `test-writer`, and `evidence-collector` run **light** models; `terminal` runs the **fast** tier (or light when an install omits `fast`). The split follows a simple cost–quality tradeoff:
 
 | Tier | Roles | Rationale |
 |------|-------|-----------|
 | `frontier` | Orchestrator (main session), `evaluator`, `qa-evaluator`, `diagnostician` | Delegation and evaluation have a capability floor — don't cheap out on the roles that decide and verify; continuation-ladder diagnosis needs frontier-tier reasoning |
-| `light` | `implementer`, `test-writer` | Checklist-driven execution retains most quality at a fraction of the cost when the plan and the verification are strong |
+| `light` | `implementer`, `test-writer`, `evidence-collector` | Checklist-driven execution retains most quality at a fraction of the cost when the plan and the verification are strong |
 | `fast` | `terminal` | Single-command execution and result extraction need no deep reasoning — the cheapest, quickest tier fits |
 
 **Verification quality is where frontier spend pays off.** Implementation is cheaper-tier work that evaluators re-check before anything advances. A light-tier implementer following the task file (including its Acceptance Criteria) and strong evaluation is cheaper than running everything on frontier — without sacrificing gate quality at the roles that matter.
 
-Reasoning-effort pins (where the harness supports them): `evaluator` and `qa-evaluator` `high`, `diagnostician` `xhigh`, `implementer` and `test-writer` `medium`, `terminal` `low`.
+Reasoning-effort pins (where the harness supports them): `evaluator` and `qa-evaluator` `high`, `diagnostician` `xhigh`, `implementer`, `test-writer`, and `evidence-collector` `medium`, `terminal` `low`.
 
 ## `models.map.md` anatomy
 
@@ -252,6 +278,10 @@ After evaluator rejections, rotate the implementer's model — a model blind to 
 | 2 | `{{MODEL_ALT_FAMILY}}` — a different model **family** at comparable tier (analytical diversity) |
 | 3 | `{{MODEL_FRONTIER}}` |
 
+**Exceptions — no rotation:** A **line-patch-only** NEEDS FIXES verdict (every required fix tagged `[line-patch]`) resumes the same executor (`implementer` or `test-writer`) in apply-verbatim mode on the **same model** — fresh spawn on that model when the harness cannot resume — and the cycle still counts toward the three-cycle cap. Evaluators tag each required fix `[line-patch]` or `[structural]`; any `[structural]` item routes a normal fix cycle with line patches applied verbatim. **`NOT APPLIED`** patches trigger re-evaluation; rotation resumes on the next normal cycle.
+
+**Degraded mode** also skips fix-cycle rotation: Case 1 (model argument rejected → subsequent spawns use `inherit`) logs rotation as skipped per cycle; Case 2 (no spawn tool) runs one task at a time and logs each rotation skip while the orchestrator performs worker roles inside write fences.
+
 The workflow context for when fix cycles fire is in [feature-workflow.md](feature-workflow.md).
 
 ### After cycle 3 — continuation ladder pins
@@ -310,10 +340,10 @@ Each subagent is spawned at specific moments in the orchestration lifecycle:
 
 - **Goal and task evaluation** — `evaluator` after goal creation, after each task, and at final audit; `evaluator` in **arbitration mode** at continuation-ladder rung 5 on unanimous same-item failure across fix cycles 1–3. Criteria and verdict mechanics: [evaluation-system.md](evaluation-system.md).
 - **Post-exhaustion diagnosis** — `diagnostician` at continuation-ladder rung 4 after Phase 4 fix cycles exhaust.
-- **Implementation and fixes** — `implementer` for each task and fix cycle (model rotates per the fix-cycle table above).
+- **Implementation and fixes** — `implementer` for each task and fix cycle (model rotates per the fix-cycle table above, except line-patch-only and degraded-mode cycles).
 - **Dedicated test tasks** — `test-writer` when a goal includes a test-only task.
 - **Noisy commands** — `terminal` for rung-3 full suites at cycle end, and whenever a worker or orchestrator needs command output without flooding context.
-- **User-facing QA** — `qa-evaluator` after implementation and code evaluation, with captured behavioral evidence.
+- **User-facing QA** — when `qa: run`, `evidence-collector` after Phase 5 quality checks (smoke and optional visual artifacts under the goal's `qa/` folder), then `qa-evaluator` with that index; the orchestrator does not capture QA evidence itself except in degraded Case 2. Every QA re-run re-collects.
 
 Phase-by-phase spawn timing, contracts, and escalation: [feature-workflow.md](feature-workflow.md).
 
@@ -328,7 +358,13 @@ Never copy model IDs from kit documentation without checking — IDs rotate freq
 ## Sources
 
 - [`skills/agent-kit/templates/agents/evaluator.md`](../../../skills/agent-kit/templates/agents/evaluator.md) — evaluator role, stance, prohibitions
-- [`skills/agent-kit/templates/agents/qa-evaluator.md`](../../../skills/agent-kit/templates/agents/qa-evaluator.md) — QA evaluator role, evidence rules, prohibitions
+- [`skills/agent-kit/templates/agents/qa-evaluator.md`](../../../skills/agent-kit/templates/agents/qa-evaluator.md) — QA evaluator role, index and artifact evidence, prohibitions
+- [`skills/agent-kit/templates/agents/evidence-collector.md`](../../../skills/agent-kit/templates/agents/evidence-collector.md) — evidence collector role, qa write fence, smoke/visual/index, no verdicts
+- [`skills/agent-kit/templates/skills/feature/SKILL.template.md`](../../../skills/agent-kit/templates/skills/feature/SKILL.template.md) — `qa:` gate, line-patch-only fix cycles, Phase 5 QA spawn order
+- [`skills/agent-kit/templates/skills/feature/reference/degraded-mode.md`](../../../skills/agent-kit/templates/skills/feature/reference/degraded-mode.md) — Case 1/2 fix-cycle rotation skip, Case 2 QA index by orchestrator
+- [`skills/agent-kit/templates/ORCHESTRATION.md`](../../../skills/agent-kit/templates/ORCHESTRATION.md) — QA Evaluation section (orchestrator never captures QA evidence itself; collector context package and `qa/**` fence)
+- [`skills/agent-kit/templates/skills/feature/reference/memory-protocol.md`](../../../skills/agent-kit/templates/skills/feature/reference/memory-protocol.md) — prior-knowledge fence recipients (excludes evidence-collector)
+- [`skills/agent-kit/templates/skills/task-criteria/SKILL.template.md`](../../../skills/agent-kit/templates/skills/task-criteria/SKILL.template.md) — required-fix `[line-patch]` / `[structural]` tags
 - [`skills/agent-kit/templates/agents/implementer.md`](../../../skills/agent-kit/templates/agents/implementer.md) — implementer rules, write fence, test ladder, terminal spawn
 - [`skills/agent-kit/templates/agents/test-writer.md`](../../../skills/agent-kit/templates/agents/test-writer.md) — test writer coverage rules, mocking, write fence
 - [`skills/agent-kit/templates/agents/terminal.md`](../../../skills/agent-kit/templates/agents/terminal.md) — terminal command runner, output isolation

@@ -12,7 +12,7 @@ A human drives an **orchestrator session** in their AI coding harness. The orche
 flowchart TD
     User["Human user"]
     Harness["Harness session\n(orchestrator)"]
-    Workers["Subagents\nimplementer · test-writer · terminal"]
+    Workers["Subagents\nimplementer · test-writer · evidence-collector · terminal"]
     Evaluators["Subagents\nevaluator · qa-evaluator · diagnostician"]
     KitPkg["agent-kit package\nskills/agent-kit/"]
     Repo["Target repository\nemitted instance + code"]
@@ -134,12 +134,13 @@ Layout norm: [`templates/memory/README.md`](../../../skills/agent-kit/templates/
 
 ## Who writes what
 
-Write authority is **contract-driven**. Task files declare a YAML `writes:` fence; workers touch only those paths. The orchestrator owns goal folders, spawn artifacts, research brief promotion, and recall/archive orchestration. Evaluators and QA evaluators **never fix** — they return verdicts only. The **`terminal`** subagent runs commands and returns requested output. Loop **drivers** own backlog transitions; the **integrator** applies memory proposals in dispatched mode.
+Write authority is **contract-driven**. Task files declare a YAML `writes:` fence; workers touch only those paths. The orchestrator owns goal folders, spawn artifacts, research brief promotion, and recall/archive orchestration. Evaluators and QA evaluators **never fix** — they return verdicts only. The **`evidence-collector`** subagent writes behavioral QA artifacts only under `_memory/work/goals/<goal>/qa/**` (never product code or verdicts). The **`terminal`** subagent runs commands and returns requested output. Loop **drivers** own backlog transitions; the **integrator** applies memory proposals in dispatched mode.
 
 | Actor | Typical write targets |
 |-------|------------------------|
 | **Orchestrator** | `_memory/work/goals/<goal>/` (goal, tasks, `spawns/NN-context.md`, `spawns/NN-report.md`, log via tool), `_memory/work/research/<topic>/`, `_memory/research/` briefs and index in exactly three places: research **Promote** (`status: ingested` + index row), research **Phase 4** (append `goals:` + `status: adopted` + index row), and feature archive (`status: shipped` + index row) — never workers or driver-dispatched slots |
 | **implementer / test-writer** | Only paths in the task `writes:` list |
+| **evidence-collector** | `_memory/work/goals/<goal>/qa/**` only |
 | **evaluator / qa-evaluator** | Verdict only — no writes; the orchestrator saves spawn reports |
 | **terminal** | None (command output only) |
 | **Loop driver / integrator** | Driver: `_memory/loop/backlog.md`, outbox, integration commits; integrator step **3b**: `_memory/records/` or `quarantine/` via `_kit/memory.* add` |
@@ -172,6 +173,8 @@ Protected paths: **no loop story in any mode** may list `_memory/records/` or `_
 
 Every subagent dispatch is auditable: the orchestrator writes **`spawns/NN-context.md`**, logs **`log-spawn.sh spawn`**, runs the subagent, saves **`spawns/NN-report.md`**, logs **`log-spawn.sh outcome`** (including **`model_check`**: `match`, `MISMATCH`, or `unverified`), then spawns an **evaluator** when the phase requires it. After return, **repository safety** compares `HEAD`, branch, local git user config, and `git status --porcelain` against pre-spawn snapshots and the task write fence; unexpected changes stop the goal until restored.
 
+Phase 4 may launch **ready groups** — up to three write-disjoint tasks concurrently when enabled (default; `parallel: false` in `goal.md` forces groups of one) — with pre-assigned spawn numbers and a group-level repository check before evaluation. **Degraded mode** keeps the same ledger shape in both cases: when a model argument is rejected (Case 1), the orchestrator re-spawns the same agent with `inherit`; when there is no subagent spawn tool (Case 2), the orchestrator performs worker and verdict roles itself inside write fences, one task at a time, and discloses every self-evaluated gate to the user, in the final report, and in the PR draft. Fix-cycle **model rotation** is skipped and logged in both degraded cases.
+
 ```mermaid
 sequenceDiagram
     participant Orch as Orchestrator
@@ -202,7 +205,7 @@ Spawn ledger format: [`templates/tools/log-spawn.sh`](../../../skills/agent-kit/
 
 ## Task verdict states
 
-Phase 4 tasks move through dispatch and evaluation until a terminal verdict. **NEEDS FIXES** triggers up to **three** implement→evaluate **fix cycles** with **model rotation**: cycle **1** re-runs on the normal **light** tier, cycle **2** pins a **different model family** at comparable tier, cycle **3** pins **frontier** ([`models.map.md`](../../../skills/agent-kit/templates/models.map.md) · [`feature` skill template](../../../skills/agent-kit/templates/skills/feature/SKILL.template.md)). **Bypass** failure classes (`destructive`, `security`, `infra`) escalate immediately on any cycle. After cycle-3 exhaustion, `goal.md`'s `phases.ladder` chooses **`escalate`** (offer continuation ladder to the human) or **`auto`** (run ladder rungs **5 → 4 → 6**, then human escalation if still stuck).
+Phase 4 tasks move through dispatch and evaluation until a terminal verdict. **NEEDS FIXES** triggers up to **three** implement→evaluate **fix cycles** with **model rotation**: cycle **1** re-runs on the normal **light** tier, cycle **2** pins a **different model family** at comparable tier, cycle **3** pins **frontier** ([`models.map.md`](../../../skills/agent-kit/templates/models.map.md) · [`feature` skill template](../../../skills/agent-kit/templates/skills/feature/SKILL.template.md)). A **line-patch-only** verdict (every required fix tagged `[line-patch]`) resumes the same executor (`implementer` / `test-writer`) in apply-verbatim mode on any cycle **without** rotation, still counts toward the cap, and is always re-evaluated; any `[structural]` fix uses the normal cycle with line patches applied verbatim. In **degraded mode**, fix-cycle rotation is **skipped** (logged once per skipped rotation) in both Case 1 (model argument rejected) and Case 2 (no spawn tool). **Bypass** failure classes (`destructive`, `security`, `infra`) escalate immediately on any cycle. After cycle-3 exhaustion, `goal.md`'s `phases.ladder` chooses **`escalate`** (offer continuation ladder to the human) or **`auto`** (run ladder rungs **5 → 4 → 6**, then human escalation if still stuck).
 
 ```mermaid
 stateDiagram-v2
@@ -218,7 +221,7 @@ stateDiagram-v2
     PassNotes --> [*]
     Reject --> HumanEsc: escalate to user
     BypassEsc --> HumanEsc
-    NeedsFixes --> FixCycle: cycle 1 to 3 model rotation
+    NeedsFixes --> FixCycle: cycles 1–3 rotation unless line-patch or degraded
     FixCycle --> Dispatched: re-implement
     FixCycle --> Evaluating: re-evaluate
     FixCycle --> LadderChoice: cycle 3 exhausted
@@ -403,6 +406,10 @@ Stop on first failing rung; after a fix, restart at rung 1 for that fix.
 - [`skills/agent-kit/reference/windows-launcher.md`](../../../skills/agent-kit/reference/windows-launcher.md) — `.cmd` launcher requirements
 - [`skills/agent-kit/templates/models.map.md`](../../../skills/agent-kit/templates/models.map.md) — fix-cycle rotation pins
 - [`skills/agent-kit/templates/ORCHESTRATION.md`](../../../skills/agent-kit/templates/ORCHESTRATION.md) — runtime architecture, spawn ledger, repository safety, feature/loop/memory guards
+- [`skills/agent-kit/templates/agents/evidence-collector.md`](../../../skills/agent-kit/templates/agents/evidence-collector.md) — QA evidence write fence and behavioral rules
+- [`skills/agent-kit/templates/agents/evaluator.md`](../../../skills/agent-kit/templates/agents/evaluator.md) — required-fix `[line-patch]` / `[structural]` tags
+- [`skills/agent-kit/templates/skills/feature/reference/ready-groups.md`](../../../skills/agent-kit/templates/skills/feature/reference/ready-groups.md) — Phase 4 concurrent ready groups
+- [`skills/agent-kit/templates/skills/feature/reference/degraded-mode.md`](../../../skills/agent-kit/templates/skills/feature/reference/degraded-mode.md) — degraded spawn paths and rotation skip
 - [`skills/agent-kit/templates/memory/README.md`](../../../skills/agent-kit/templates/memory/README.md) — `_memory/` layout, CLI exit codes, capture
 - [`skills/agent-kit/templates/skills/feature/reference/memory-protocol.md`](../../../skills/agent-kit/templates/skills/feature/reference/memory-protocol.md) — recall, fence, archive, brief status updates
 - [`skills/agent-kit/templates/skills/feature/reference/continuation-ladder.md`](../../../skills/agent-kit/templates/skills/feature/reference/continuation-ladder.md) — rungs 5, 4, 6 after fix-cycle exhaustion

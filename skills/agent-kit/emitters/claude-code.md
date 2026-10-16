@@ -8,12 +8,18 @@ Appends a separate `## Memory` block (marker `<!-- orchestration-kit:memory-poin
 
 ## Harness specifics
 
+**Ready groups:** for write-disjoint Phase 4 tasks the orchestrator launches parallel
+Agent spawns (documented; default limit 20 concurrent — `Concurrent subagent limit
+reached` means fall back to sequential); kit runs ready groups. Set `parallel: false`
+on a goal to force groups of one.
+
 Orchestrator spawn allowlists use this literal tools line:
 
-tools: Agent(implementer, test-writer, evaluator, qa-evaluator, terminal, diagnostician)
+tools: Agent(implementer, test-writer, evaluator, qa-evaluator, terminal, diagnostician, evidence-collector)
 
 `terminal` is on the allowlist so callers can spawn it; `diagnostician` joins
-for rung 4. P0 skills keep `disable-model-invocation: true` (this emitter never
+for rung 4; `evidence-collector` gathers QA evidence before `qa-evaluator` when
+the QA gate runs. P0 skills keep `disable-model-invocation: true` (this emitter never
 strips frontmatter keys).
 
 Model values: Claude aliases (`opus`, `sonnet`, `haiku`, `fable`) or full IDs

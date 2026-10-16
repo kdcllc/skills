@@ -6,6 +6,27 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-16
+
+### Added
+
+- **Evidence collector** — seventh subagent (light tier): when a goal sets `qa: run`, the orchestrator spawns `evidence-collector` then `qa-evaluator` with the index under `_memory/work/goals/<goal>/qa/`; per-goal gate via `qa: run|skip` (default skip); the orchestrator never captures QA evidence itself.
+- **Ready groups** — Phase 4 may run up to three concurrent write-disjoint tasks (default on; `parallel: false` in `goal.md` opts out); read-only parallel evaluators when no writer is in flight; parallel fix cycles; group repository check; self-contained try-then-fall-back on every harness; see `reference/ready-groups.md`.
+- **Pre-flight** — `reference/preflight.md` runs once before Phase 3 evaluation attempt 1 (read-only, unscored); optional bootstrap id `preflight-extra` adds project-specific checks.
+- **Line-patch fix routing** — evaluator tags required fixes `[line-patch]` or `[structural]`; line-patch-only cycles resume the same executor (implementer or test-writer) in apply-verbatim mode on any cycle without model rotation, still counting toward the 3-cycle limit and always re-evaluated.
+- **Degraded mode** — when a spawn's `model` argument is rejected, re-spawn the same agent with `inherit` and log it; when no spawn tool exists, the orchestrator performs roles inside write fences with `self` / non-independent ledger notes and discloses self-evaluated gates to the user and in the PR draft (`reference/degraded-mode.md`; harness-matrix degraded row + Cursor emitter caveat).
+
+### Changed
+
+- **Subagent nesting documentation** — stale claims of a Cloud Agents-only nesting cap in the harness matrix, Cursor emitter, and dogfood fixture were corrected to the documented general nesting rule (the main agent and its direct subagents may launch subagents; a subagent launched by another subagent can't launch further ones).
+
+### Upgrade notes
+
+- Re-emit adds the `evidence-collector` agent file for every harness (Copilot `.github/agents/evidence-collector.agent.md`; Codex also `.codex/agents/evidence-collector.toml`). An install's own `models-map-effort` answer text is preserved on upgrade, so its model map effort paragraph may not name `evidence-collector` even though the agent's `effort: medium` frontmatter still applies.
+- **Codex manual step** — `emit.sh --upgrade` appends the `.codex/config.toml` agent tables block and the root `AGENTS.md` orchestration pointer only when the `# orchestration-kit:agents` marker (or the AGENTS.md pointer marker) is missing. Existing Codex installs that already have that marker but predate `evidence-collector` must add the `[agents.evidence-collector]` table manually (re-emit writes `agents/evidence-collector.toml`) — copy from a fresh emit's `codex_config_tables` output in `bin/emit.sh`. The existing `AGENTS.md` `## Orchestration` section is likewise left untouched (its role count and QA-gate line predate `evidence-collector`); replace it by hand with the section from a fresh emit (`pointer_agents_md` in `bin/emit.sh`).
+- After upgrading, goals whose `goal.md` has no `parallel:` key run Phase 4 as ready groups (default on); add `parallel: false` to keep one task at a time.
+- Re-emitting without a `preflight-extra` answer raises the emit summary's `warnings` count by one and lists `preflight-extra` under `--check-answers` — answer `""` (or add project checks) to clear it.
+
 ## [1.0.0] - 2026-10-15
 
 First release from [kdcllc/skills](https://github.com/kdcllc/skills). The kit was developed privately as the `setup` skill; that 0.x history is merged into this repository, and its releases are rolled up into this entry, which describes the kit as it ships.

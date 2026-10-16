@@ -123,7 +123,8 @@ Return exactly this structure (arbitration mode excepted — see **Arbitration m
 - [used ONLY with PASS (with notes) — list every minor here; never drop]
 
 ### Required fixes (if NEEDS FIXES)
-- [ ] [specific, actionable fix]
+- [ ] [specific, actionable fix] [line-patch|structural]
+- [ ] `file:line` — replace `<exact old text>` with `<exact new text>` [line-patch]
 
 ### Footprint
 files_read: [N] (~[C] chars)
@@ -133,6 +134,16 @@ commands_run: [N]
 Footprint is a self-estimate: count the files you opened and sum their sizes (round
 to the nearest thousand chars); count shell commands you ran. Never omit the block —
 write `files_read: 0 (~0 chars)` if you read nothing.
+
+**Required-fix tags** — every item under `### Required fixes (if NEEDS FIXES)` carries
+exactly one trailing tag: `[line-patch]` or `[structural]`. **`[line-patch]`** means the
+implementer can apply the fix as exact text substitutions at named `file:line` locations,
+changing no requirement, write set, or behavior beyond what the cited criterion demands
+(use the line-patch shape above). **`[structural]`** is everything else (multi-file
+redesign, fence or requirement changes, ambiguous scope). When unsure, tag
+`[structural]`. Line numbers refer to the file **as the evaluator read it** (before any
+patch in the same verdict is applied); the old text is authoritative and the line number
+is a locating hint only.
 
 Every **non-PASS** verdict (`NEEDS FIXES` or `REJECT`) MUST include `failure_class:`.
 Omit it on PASS only. `PASS (with notes)` is a PASS for `failure_class` purposes

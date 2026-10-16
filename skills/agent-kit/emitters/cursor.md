@@ -22,8 +22,23 @@ Includes one sentence to search `_memory/` with `_kit/memory.sh search` before p
 
 ## Harness specifics
 
-Nesting: main→L1→L2 since Cursor 2.5 — the orchestrator prompt should tell L1
-agents to spawn. Cloud Agents support only main→L1.
+**Ready groups:** for write-disjoint Phase 4 tasks the orchestrator launches multiple
+Task spawns in one message (documented parallel execution); kit runs ready groups.
+Set `parallel: false` on a goal to force groups of one.
+
+**Degraded mode**: live docs (spot-checked 2026-10-16) say subagents work in Cloud
+Agents, Cloud Agents use a curated model set, cloud subagents follow the same model
+and capability rules as other Cloud Agents, and configured subagent models fall back
+when admin/plan blocks them; nesting spawns need Task tool access and hooks or tool
+policies can block spawning. When the harness rejects a model pin or the spawn tool
+is unavailable, the orchestrator follows the feature skill's degraded mode — model
+rejected → `inherit`; no spawn tool → self-performed worker/evaluator roles with
+disclosed gates.
+
+Nesting (spot-checked 2026-10-16): cursor.com/docs/subagents — the main agent and
+its direct subagents can launch subagents; a subagent launched by another subagent
+can't launch further ones. main→L1→L2 since Cursor 2.5 🔎 — prompt L1 agents to
+spawn. ⚠️ Cloud Agents-specific main→L1-only cap not documented on spot-checked pages.
 
 `diagnostician` pins the frontier Cursor model (same tier as `evaluator`).
 `terminal` pins fast (light when no fast tier); Cursor drops `tools:` unless the live
