@@ -6,7 +6,7 @@ description: Research → Plan workflow for stress "quotes" café — emoji 🎭
 # Research (Deep Research → Plan Orchestrator)
 
 For domain topics an external research agent must investigate **without codebase
-access**. You coordinate four phases; the output feeds `feature` Phase 4.
+access**. You coordinate four phases; the output enters `feature` at Phase 3 (goal evaluation).
 
 ## Phase 1 — Generate the research prompt
 
@@ -51,5 +51,5 @@ templates; copy Phase 1 picks (or `none`) from `recalled-memory.md` into the goa
 `## Recalled memory` and log the note per
 `.cursor/skills/feature/reference/memory-protocol.md`. Append the goal name to the
 brief's `goals:` list (set `status: adopted` when it was `ingested`, and mirror the status
-in its index row). Hand off: the goal enters
-`feature` at Phase 3 (goal evaluation) — it still must PASS the evaluator before execution.
+in its index row). Read `.cursor/skills/feature/SKILL.md` and continue from its
+Phase 3 (goal evaluation) — the goal still must PASS the evaluator before execution.

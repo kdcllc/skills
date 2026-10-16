@@ -6,6 +6,11 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 
 ## [Unreleased]
 
+### Fixed
+
+- **Align-docs Phase 6 change set** — discovery runs from the merge base to the working tree (committed, staged, unstaged, plus goal-owned untracked files); non-owned tracked and untracked paths are listed and excluded; standalone runs or goals without `writes:` confirm candidate paths with the user; Phase 6.4/6.5 scope checks diff against a working-tree snapshot (git tree object) taken before doc edits, so uncommitted feature code no longer fails them and reverted or deleted paths are caught.
+- **Research Phase 4 handoff** — path-Reads the emitted `feature` skill file and continues at its Phase 3 (goal evaluation) instead of relying on skill auto-discovery; the goal still must PASS the evaluator before execution.
+
 ## [1.1.0] - 2026-10-16
 
 ### Added

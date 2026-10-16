@@ -239,7 +239,7 @@ The orchestrator creates `_memory/work/goals/[goal-name]/` using the `feature` s
 
 ### Handoff to `/feature` — evaluation still applies
 
-The resulting goal enters the `feature` skill at **Phase 3 (goal evaluation)**. It still must **PASS** the evaluator before execution begins — research does not bypass evaluation. Phase 3 runs the full goal evaluation checklist: devil's advocate section, ownership-contract disjointness verification, acceptance criteria review, and the complete evaluator protocol described in [feature-workflow.md](feature-workflow.md) and [evaluation-system.md](evaluation-system.md).
+The orchestrator **path-Reads** the emitted [`feature/SKILL.md`](../../../skills/agent-kit/templates/skills/feature/SKILL.template.md) (under the install's skill directory) and continues from **Phase 3 (goal evaluation)** there — the goal still must **PASS** the evaluator before execution begins; research does not bypass evaluation. Phase 3 runs the full goal evaluation checklist: devil's advocate section, ownership-contract disjointness verification, acceptance criteria review, and the complete evaluator protocol described in [feature-workflow.md](feature-workflow.md) and [evaluation-system.md](evaluation-system.md).
 
 Only after a **PASS** does `/feature` advance to Phase 4 (task execution). Workers dispatched from research-derived goals follow the same fix-cycle rotation and test-ladder rules as any other feature goal.
 
