@@ -6,6 +6,8 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-10-16
+
 ### Added
 
 - **Evidence collector** — seventh subagent (light tier): when a goal sets `qa: run`, the orchestrator spawns `evidence-collector` then `qa-evaluator` with the index under `_memory/work/goals/<goal>/qa/`; per-goal gate via `qa: run|skip` (default skip); the orchestrator never captures QA evidence itself.
