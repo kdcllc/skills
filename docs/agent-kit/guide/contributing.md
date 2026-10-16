@@ -136,10 +136,10 @@ translation tables. Full CLI contract: [`skills/agent-kit/bin/README.md`](../../
 
 | Emitter file | Target harness | Caveats cover |
 |--------------|----------------|---------------|
-| [`claude-code.md`](../../../skills/agent-kit/emitters/claude-code.md) | Claude Code (`.claude/`) | Model-config docs plus `claude --version` per-pin floor; Anthropic models only (same-family arbiter flag); aliases resolve per provider (prefer full IDs); `best`, `fable`, or `claude-fable*` in a loop chain → emit exit 3; inherit/unpinned behaviour |
-| [`cursor.md`](../../../skills/agent-kit/emitters/cursor.md) | Cursor (self-contained `.cursor/`) | Unresolved IDs → parent's model ([`harness-matrix.md`](../../../skills/agent-kit/reference/harness-matrix.md) ⚠️); admin/plan limits → compatible model (vendor docs); values emitted unquoted; bracket-param form documented, suffix slugs in pickers; empty `agent models` → IDE picker; live model list check URL |
-| [`copilot.md`](../../../skills/agent-kit/emitters/copilot.md) | GitHub Copilot VS Code (`.github/`) | Cost-ceiling policy; model fallback arrays |
-| [`codex.md`](../../../skills/agent-kit/emitters/codex.md) | OpenAI Codex (`AGENTS.md` + `.codex/`) | Role config in TOML; `AGENTS.md` size cap |
+| [`claude-code.md`](../../../skills/agent-kit/emitters/claude-code.md) | Claude Code (`.claude/`) | Model-config docs plus `claude --version` per-pin floor; Anthropic models only (same-family arbiter flag); aliases resolve per provider (prefer full IDs); `best`, `fable`, or `claude-fable*` in a loop chain → emit exit 3; inherit/unpinned behaviour; ready groups (parallel Agent spawns for write-disjoint Phase 4 tasks, `parallel: false` opts out); orchestrator spawn allowlist includes `evidence-collector` for the QA gate |
+| [`cursor.md`](../../../skills/agent-kit/emitters/cursor.md) | Cursor (self-contained `.cursor/`) | Unresolved IDs → parent's model ([`harness-matrix.md`](../../../skills/agent-kit/reference/harness-matrix.md) ⚠️); admin/plan limits → compatible model (vendor docs); values emitted unquoted; bracket-param form documented, suffix slugs in pickers; empty `agent models` → IDE picker; live model list check URL; ready groups (parallel Task spawns for write-disjoint Phase 4 tasks, `parallel: false` opts out); degraded mode when a model pin is rejected or the spawn tool is unavailable (`inherit` re-spawn or self-performed worker/evaluator roles with disclosed gates) |
+| [`copilot.md`](../../../skills/agent-kit/emitters/copilot.md) | GitHub Copilot VS Code (`.github/`) | Cost-ceiling policy; model fallback arrays; ready groups (parallel `runSubagent` for write-disjoint Phase 4 tasks, concurrency ⚠️ unverified — sequential fallback on error, `parallel: false` opts out) |
+| [`codex.md`](../../../skills/agent-kit/emitters/codex.md) | OpenAI Codex (`AGENTS.md` + `.codex/`) | Role config in TOML; `AGENTS.md` size cap; ready groups (parallel spawns for write-disjoint Phase 4 tasks, concurrency ⚠️ unverified — sequential fallback on error, `parallel: false` opts out) |
 
 When you change a canonical template file, update `bin/emit.*` if translation paths
 change — emitters no longer carry Emit tables. The Cursor emitter is
@@ -206,13 +206,16 @@ Tracked structural guards live under `tests/agent-kit/templates/`. Each script l
 | Guard | What it locks |
 |-------|----------------|
 | [`cursor-isolation.sh`](../../../tests/agent-kit/templates/cursor-isolation.sh) | No `.claude/` literals under canonical templates; Cursor self-contained emission |
+| [`degraded-mode.sh`](../../../tests/agent-kit/templates/degraded-mode.sh) | Degraded-mode reference, feature-skill and ORCHESTRATION wiring, harness-matrix and Cursor emitter caveats, ship-pr self-evaluated gates section, emitted degraded-mode instances, negative self-test on a copied template |
+| [`evidence-collector.sh`](../../../tests/agent-kit/templates/evidence-collector.sh) | Evidence-collector agent template, models map, emit wiring, QA flow docs, emit smoke, optional `QA_SURFACES` token, negative self-test on a copied template |
 | [`invocation-flags.sh`](../../../tests/agent-kit/templates/invocation-flags.sh) | Seven `disable-model-invocation: true` skill flags plus `terminal` agent wiring (frontmatter, models map, test-ladder, ORCHESTRATION, emitters, Codex registration) |
 | [`escalation-ladder.sh`](../../../tests/agent-kit/templates/escalation-ladder.sh) | Phase 4 continuation-ladder prose, failure-class taxonomy alignment, diagnostician wiring, `{{MODEL_FRONTIER_ALT_FAMILY}}` docs |
-| [`template-currency.sh`](../../../tests/agent-kit/templates/template-currency.sh) | Six shipped template claims (research handoff at Phase 3, escalation **Ladder** line, closer-task rung-3 carve-out, loop dispatch/exit/merge gates) plus optional instance mirrors |
+| [`template-currency.sh`](../../../tests/agent-kit/templates/template-currency.sh) | Seven shipped template claims (research handoff at Phase 3, escalation **Ladder** line, closer-task rung-3 carve-out, loop dispatch/exit/merge gates, Feature Flow mermaid byte-identical to [feature-workflow.md](feature-workflow.md)) plus optional instance mirrors |
 | [`skill-slimming.sh`](../../../tests/agent-kit/templates/skill-slimming.sh) | Feature skill template byte budget |
 | [`forge-adapter.sh`](../../../tests/agent-kit/templates/forge-adapter.sh) | Ship-PR / forge adapter strings |
 | [`model-enforcement.sh`](../../../tests/agent-kit/templates/model-enforcement.sh) | Model tier policy strings in templates and agents |
 | [`model-currency.sh`](../../../tests/agent-kit/templates/model-currency.sh) | Fast tier, arbiter warnings, loop model denylist, upgrade compatibility, dogfood pins |
+| [`ready-groups.sh`](../../../tests/agent-kit/templates/ready-groups.sh) | Ready-groups reference, feature-skill and ORCHESTRATION wiring, goal template `parallel` flag, harness-matrix and emitter caveats, emitted ready-groups instances, negative self-test on a copied template |
 | [`log-spawn.sh`](../../../tests/agent-kit/templates/log-spawn.sh) | Canonical `log-spawn.sh` ledger behavior, Footprint ingestion, OUTCOME `model_check`, `_kit/log-spawn.*` emit wiring |
 | [`memory.sh`](../../../tests/agent-kit/templates/memory.sh) | Memory CLI twins, redact/check/rm/capture, quarantine, `_memory/` emit wiring; helpers [`memory-release-c.sh`](../../../tests/agent-kit/lib/memory-release-c.sh) and [`memory-redaction-behavioral.sh`](../../../tests/agent-kit/lib/memory-redaction-behavioral.sh); pwsh legs assert bash-only stubs exit **2** |
 | [`memory-capture.sh`](../../../tests/agent-kit/templates/memory-capture.sh) | Synthetic transcript fixtures for `capture` |
@@ -223,6 +226,7 @@ Tracked structural guards live under `tests/agent-kit/templates/`. Each script l
 | [`emit-migrate.sh`](../../../tests/agent-kit/templates/emit-migrate.sh) | Legacy layout migration on `--upgrade` (private fixtures; cases run in parallel via [`parallel.sh`](../../../tests/agent-kit/lib/parallel.sh) / `AGENT_KIT_CASE_JOBS`) |
 | [`emit-perf.sh`](../../../tests/agent-kit/templates/emit-perf.sh) | Default: structural checks + in-suite mutation proofs (no timing); `EMIT_PERF=1` adds three timed self-answers emits (median vs `EMIT_PERF_MAX`, default **4.0**) and optional strace fork budget (`EMIT_PERF_MAX_FORKS`, default **589**) |
 | [`legacy-paths.sh`](../../../tests/agent-kit/templates/legacy-paths.sh) | No stray legacy `_goals` / `_research` tokens outside the allow-list |
+| [`line-patch-preflight.sh`](../../../tests/agent-kit/templates/line-patch-preflight.sh) | Pre-flight reference, bootstrap id, evaluator/implementer/task-criteria line-patch wording, continuation-ladder tag-stripping, feature-skill and ORCHESTRATION wiring, emitted preflight instances, negative self-test on copied templates |
 | [`memory-backfill.sh`](../../../tests/agent-kit/templates/memory-backfill.sh) | `memory.sh backfill` plan/apply semantics |
 | [`windows-launcher.sh`](../../../tests/agent-kit/templates/windows-launcher.sh) | Windows `.cmd` launcher static checks everywhere; behavior checks only under Git Bash on Windows, otherwise **SKIP** |
 
@@ -294,5 +298,6 @@ Install and user-side usage topics belong in [getting-started.md](getting-starte
 - [`tests/agent-kit/lib/fixture-root.sh`](../../../tests/agent-kit/lib/fixture-root.sh) — `FIXTURE_TMPDIR` init and `assert_fixture_root` refuse rules
 - [`tests/agent-kit/loop-harness/run.sh`](../../../tests/agent-kit/loop-harness/run.sh) — behavioral harness header and coverage scope
 - [`tests/agent-kit/run-all.sh`](../../../tests/agent-kit/run-all.sh) — full kit suite driver (options, env, timing summary)
+- [`tests/agent-kit/templates/`](../../../tests/agent-kit/templates/) — guard script header comments (what each guard locks)
 - [`.github/workflows/agent-kit.yml`](../../../.github/workflows/agent-kit.yml) — CI agent-kit workflow (`run-all.sh --quick` on pull requests; the full suite with the bash:3.2 pull and `AGENT_KIT_DOCKER` on `master` pushes and manual runs)
 - `orchestration-kit.manifest.json` — manifest shape and `seedFiles` (instance file; gitignored in this repo)
