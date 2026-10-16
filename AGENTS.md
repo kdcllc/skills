@@ -22,8 +22,9 @@ This repository is **kdcllc/skills**, a multi-skill pack distributed through [sk
 ## Versioning rules
 
 - Every skill carries its own version in `metadata.version` (`MAJOR.MINOR.PATCH`, quoted) and its own `skills/<name>/CHANGELOG.md`. The changelog keeps an `## [Unreleased]` section at the top, and its first released `## [X.Y.Z]` heading must equal `metadata.version`.
-- When you change a skill's folder, add a line under `## [Unreleased]` in that skill's changelog. Don't bump `metadata.version` yourself. Follow [skills/skill-versioning/SKILL.md](skills/skill-versioning/SKILL.md) for how to write entries, pick a bump, and release; `bash skills/skill-versioning/scripts/skill-status.sh` shows which skills need an entry or a release.
+- When you change a skill's folder, add a line under `## [Unreleased]` in that skill's changelog. Don't bump `metadata.version` yourself (the `agent-kit` release-PR exception is below). Follow [skills/skill-versioning/SKILL.md](skills/skill-versioning/SKILL.md) for how to write entries, pick a bump, and release; `bash skills/skill-versioning/scripts/skill-status.sh` shows which skills need an entry or a release.
 - Releases go through `bash scripts/release-skill.sh <name> X.Y.Z`, which bumps the version, commits, and creates the tag `<name>/vX.Y.Z`. Never hand-edit versions or create release tags manually, and never push tags unless the user asks.
+- Exception: `agent-kit` bumps its version inside the release PR, because its README version line, install pins, and emit goldens encode the version and its tests check them. Follow [docs/agent-kit/guide/contributing.md § Version and releases](docs/agent-kit/guide/contributing.md#version-and-releases). After the merge, `release-skill.sh agent-kit X.Y.Z` only validates and tags.
 
 ## When adding, renaming, or removing a skill
 

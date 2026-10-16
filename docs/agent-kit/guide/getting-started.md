@@ -13,7 +13,7 @@ The skill is published from the public [kdcllc/skills](https://github.com/kdcllc
 npx skills add kdcllc/skills --skill agent-kit
 
 # Pin to a release tag
-npx skills add kdcllc/skills#agent-kit/v1.0.0 --skill agent-kit
+npx skills add kdcllc/skills#agent-kit/v1.1.1 --skill agent-kit
 
 # Option B — agent-skills-cli
 npx agent-skills-cli install https://github.com/kdcllc/skills.git

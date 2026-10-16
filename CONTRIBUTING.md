@@ -138,4 +138,6 @@ When skills link to each other (like the four `terraform-azure*` skills), a chan
    git push origin master <name>/vX.Y.Z
    ```
 
-Never edit `metadata.version` or create a release tag by hand. `gh skill publish --dry-run` (`gh` 2.90 or newer) is still useful as an extra check, but let the release workflow create the releases. The repo needs the `agent-skills` topic for `gh skill` discovery: `gh repo edit kdcllc/skills --add-topic agent-skills`.
+**Exception: `agent-kit`.** Its README version line, install pins, and emit test goldens encode the version, and its tests check them, so agent-kit bumps `metadata.version`, adds the `## [X.Y.Z]` heading, and updates those files inside the release PR. After the merge, `release-skill.sh` only validates and tags. The steps are in [docs/agent-kit/guide/contributing.md](docs/agent-kit/guide/contributing.md#version-and-releases).
+
+Apart from that exception, never edit `metadata.version` or create a release tag by hand. `gh skill publish --dry-run` (`gh` 2.90 or newer) is still useful as an extra check, but let the release workflow create the releases. The repo needs the `agent-skills` topic for `gh skill` discovery: `gh repo edit kdcllc/skills --add-topic agent-skills`.

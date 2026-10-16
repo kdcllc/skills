@@ -6,6 +6,8 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-10-16
+
 ### Fixed
 
 - **Align-docs sees uncommitted work** — Phase 6 now reads changes from the merge base to the working tree (including new files the goal owns) instead of committed changes only, and its scope checks compare against a working-tree snapshot, so uncommitted feature code no longer fails them.
