@@ -469,6 +469,33 @@ run_model_check_case() { # <label> <runner...>
 run_model_check_case bash bash "$BIN"
 
 # ---------------------------------------------------------------------------
+# model-reported self (degraded mode) → unverified even when spawn pinned a model id
+# ---------------------------------------------------------------------------
+run_model_reported_self_case() { # <label> <runner...>
+  local label="$1"; shift
+  local fx log out rc
+  fx="$(alloc_fx)"
+  mkdir -p "$fx/_memory/work/goals/demo/spawns"
+  head -c 20 /dev/zero | tr '\0' 'a' > "$fx/_memory/work/goals/demo/spawns/09-context.md"
+  head -c 10 /dev/zero | tr '\0' 'b' > "$fx/_memory/work/goals/demo/spawns/09-report.md"
+  log="$fx/_memory/work/goals/demo/orchestration-log.md"
+  cd "$fx" || return 1
+  "$@" spawn --goal demo --agent implementer --phase P4 --model-requested claude-opus-5-5-high \
+       --context _memory/work/goals/demo/spawns/09-context.md >/dev/null 2>&1
+  out="$("$@" outcome --goal demo --spawn 09 --report _memory/work/goals/demo/spawns/09-report.md \
+        --verdict PASS --model-reported self 2>/dev/null)"; rc=$?
+  if [[ $rc -eq 0 ]] \
+     && grep -qF 'model reported: self · model_check: unverified' "$log" \
+     && [[ "$out" == *'model reported: self · model_check: unverified'* ]]; then
+    report PASS "[$label] model-reported self vs pinned request → model_check: unverified (degraded ledger)"
+  else
+    report FAIL "[$label] model-reported self vs pinned request" "rc=$rc out='$out' log=$(grep OUTCOME "$log" | tail -1)"
+  fi
+}
+
+run_model_reported_self_case bash bash "$BIN"
+
+# ---------------------------------------------------------------------------
 # Structural wiring
 # ---------------------------------------------------------------------------
 for em in claude-code cursor copilot codex; do

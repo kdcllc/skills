@@ -152,7 +152,18 @@ schema/contract changes, anything risky.>
 
 ## Notes for reviewers
 <Optional: call-outs, follow-ups, open questions. Omit if empty.>
+
+## Self-evaluated gates
+<Include only when any delivered goal's orchestration log contains
+`self-evaluation, not independent`. List each gate: goal, phase/task, verdict.
+Omit this section otherwise.>
 ```
+
+Before finalizing the body, read `_memory/work/goals/<goal>/orchestration-log.md`
+for **every goal delivered on this branch** (one PR may carry several goals). When
+any log contains `self-evaluation, not independent`, include `## Self-evaluated gates`
+in the draft with one bullet per gate (goal id, phase/task, verdict); otherwise omit
+that section entirely.
 
 Drafting rules: the Summary is outcomes and impact, never a commit log; derive content
 from the diff, not just commit subjects; omit empty sections; match the repo's tone.

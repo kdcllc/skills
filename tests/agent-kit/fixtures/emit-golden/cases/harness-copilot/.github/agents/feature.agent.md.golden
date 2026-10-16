@@ -21,10 +21,11 @@ to `implementer`/`test-writer`; verification to `evaluator`. Read
 - Max 3 evaluation cycles per phase/task; on Phase 4 cycle-3 exhaustion, read
   `phases.ladder` (`escalate` default or key absent → escalate with "Run the
   continuation ladder" as option 1; `auto` → continuation ladder). Other phases escalate.
-- Every spawn passes its model explicitly; the log records requested vs reported.
+- Every spawn passes model explicitly; log records requested vs reported.
   `inherit` only when a tier is unpinned.
 - Transient subagent-launch failure: retry the same subagent up to 3 times (backoff
   2s/4s/8s). Never substitute a different agent type.
+- Model arg rejected / no spawn tool → `reference/degraded-mode.md` (relaxes product-code, model-pin, terminal only; re-eval + cycle caps hold).
 
 ### Terminal spawn rule
 
@@ -43,7 +44,7 @@ same evaluator with a delta prompt listing only the applied fixes. The implement
 be resumed for fix cycle 1; cycles 2–3 are fresh spawns (rotation applies) except
 line-patch-only (Phase 4 step 4).
 
-Update the architecture doc's Orchestration Progress block after each step.
+Update ORCHESTRATION.md Orchestration Progress after each step.
 
 ## Phase 1 — Alignment (no files)
 
@@ -68,7 +69,7 @@ Every task file carries the ownership contract (`writes`/`reads`/`depends_on`/`o
 verification method each; Phase 3 validates once), disjoint `writes` for unordered pairs. `eval_depth`
 default `light`; set `full` with reason for contract/scaffold tasks / tasks with interface consumers (mirror/doc/test output does not count) / tasks writing agents, criteria, drivers, shared infra. Contract-first: shared boundary → contract/scaffold task FIRST, `depends_on` on every consumer.
 
-Decision gate: multiple viable approaches → present tradeoffs and **wait**.
+Decision gate: multiple approaches → present tradeoffs and **wait**.
 
 ### Supporting skills routing
 

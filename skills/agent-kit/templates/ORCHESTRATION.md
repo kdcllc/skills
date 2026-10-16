@@ -128,6 +128,10 @@ ON subagent invocation failure:
   NEVER substitute a different subagent type due to transient errors
 ```
 
+A rejected **model** argument or a missing spawn tool is **not** transient — follow
+`reference/degraded-mode.md` (`inherit` re-spawn; self-performed roles logged as
+non-independent and disclosed to the user and in the PR draft).
+
 ### Repository safety
 
 1. **Backup before destructive goals.** Before a goal whose tasks move, rename, or delete
@@ -914,7 +918,7 @@ installs have no kit skills tree (no protocol copy on disk).
 ├── skills/
 │   ├── feature/       # Feature coordination
 │   │   ├── SKILL.md
-│   │   ├── reference/{continuation-ladder.md,preflight.md,ready-groups.md,memory-protocol.md,memory-capture.md}
+│   │   ├── reference/{continuation-ladder.md,preflight.md,ready-groups.md,degraded-mode.md,memory-protocol.md,memory-capture.md}
 │   │   └── templates/{goal.md,task.md}
 │   │
 │   ├── memory-capture/SKILL.md       # Session transcript distillation
@@ -962,7 +966,7 @@ _loop/{loop.sh,loop.ps1,breaker.sh,breaker.ps1,PROMPT.md}  # Headless loop drive
 ├── skills/
 │   ├── feature/       # Feature coordination
 │   │   ├── SKILL.md
-│   │   ├── reference/{continuation-ladder.md,preflight.md,ready-groups.md,memory-protocol.md,memory-capture.md}
+│   │   ├── reference/{continuation-ladder.md,preflight.md,ready-groups.md,degraded-mode.md,memory-protocol.md,memory-capture.md}
 │   │   └── templates/{goal.md,task.md}
 │   │
 │   ├── memory-capture/SKILL.md       # Session transcript distillation
@@ -1007,7 +1011,7 @@ _memory/.index/ · _memory/raw/  # Derived index; capture output, ledgers and dr
 ├── skills/
 │   ├── feature/       # Feature coordination
 │   │   ├── SKILL.md
-│   │   ├── reference/{continuation-ladder.md,preflight.md,ready-groups.md,memory-protocol.md,memory-capture.md}
+│   │   ├── reference/{continuation-ladder.md,preflight.md,ready-groups.md,degraded-mode.md,memory-protocol.md,memory-capture.md}
 │   │   └── templates/{goal.md,task.md}
 │   │
 │   ├── memory-capture/SKILL.md       # Session transcript distillation
@@ -1050,7 +1054,7 @@ _loop/{loop.sh,loop.ps1,breaker.sh,breaker.ps1,PROMPT.md}  # Headless loop drive
 ├── skills/
 │   ├── feature/       # Feature coordination
 │   │   ├── SKILL.md
-│   │   ├── reference/{continuation-ladder.md,preflight.md,ready-groups.md,memory-protocol.md,memory-capture.md}
+│   │   ├── reference/{continuation-ladder.md,preflight.md,ready-groups.md,degraded-mode.md,memory-protocol.md,memory-capture.md}
 │   │   └── templates/{goal.md,task.md}
 │   │
 │   ├── memory-capture/SKILL.md       # Session transcript distillation

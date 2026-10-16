@@ -11,6 +11,7 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 - **Ready groups** — Phase 4 may run up to three concurrent write-disjoint tasks (default on; `parallel: false` in `goal.md` opts out); read-only parallel evaluators when no writer is in flight; parallel fix cycles; group repository check; self-contained try-then-fall-back on every harness; see `reference/ready-groups.md`.
 - **Pre-flight** — `reference/preflight.md` runs once before Phase 3 evaluation attempt 1 (read-only, unscored); optional bootstrap id `preflight-extra` adds project-specific checks.
 - **Line-patch fix routing** — evaluator tags required fixes `[line-patch]` or `[structural]`; line-patch-only cycles resume the same executor (implementer or test-writer) in apply-verbatim mode on any cycle without model rotation, still counting toward the 3-cycle limit and always re-evaluated.
+- **Degraded mode** — when a spawn's `model` argument is rejected, re-spawn the same agent with `inherit` and log it; when no spawn tool exists, the orchestrator performs roles inside write fences with `self` / non-independent ledger notes and discloses self-evaluated gates to the user and in the PR draft (`reference/degraded-mode.md`; harness-matrix degraded row + Cursor emitter caveat).
 
 ### Upgrade notes
 
