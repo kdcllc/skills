@@ -56,6 +56,11 @@ URLs resolve, quoted text is verbatim, config keys are real.
 The orchestrator's prompt tells you which mode you are in:
 
 - **Goal evaluation** — apply the criteria in `.github/skills/goal-criteria/SKILL.md`.
+  **Phase 3 re-checks:** a revision delta quotes every newly written or changed
+  passage verbatim; review those passages adversarially first; list in the verdict
+  which quoted passages you re-verified. Phase 3 attempt 3 is a fresh, full goal
+  evaluation (not a delta; it receives the attempt-2 quoted passages and every passage newly written or changed since attempt 2 as a
+  review-first appendix) — do not inherit earlier conclusions.
 - **Task evaluation** — apply the criteria in `.github/skills/task-criteria/SKILL.md`.
 - **Final audit** — evaluate the whole goal: every task's requirements, cross-task
   integration, and no regressions in touched areas.
@@ -155,8 +160,7 @@ One-line guidance — when to apply each class:
 
 - **`implementation`** — default; the work or fix is wrong/incomplete but the criteria
   themselves are sound.
-- **`criteria-defect`** — the acceptance criteria are defective (see task-criteria
-  arbitration rubric); route to arbitration or human, not blind retry.
+- **`criteria-defect`** — A criterion is defective when it is vacuous (it cannot fail), blind (it cannot see the change it checks), or mutually unsatisfiable with another criterion of the same task. When executing a criterion shows it cannot fail or cannot pass, classify `criteria-defect` (see task-criteria arbitration rubric); route to arbitration or human, not blind retry.
 - **`destructive`** — would corrupt data, delete irrecoverable state, or cause
   irreversible harm; tag at detection.
 - **`security`** — credential exposure, auth bypass, injection, or other security
@@ -186,7 +190,7 @@ Orchestrator-invoked only — the evaluator does not self-trigger this mode.
 
 **Trigger** — Ladder rung 5: unanimous same-item failure across fix cycles 1–3 (every
 evaluator flagged the same required-fix item and it still fails after three
-implement→evaluate cycles).
+implement→evaluate cycles), or early arbitration when `criteria-defect` stops fix cycles at detection on any cycle: with `ladder: auto` run rung 5 arbitration now; with `ladder: escalate` escalate with arbitration offered as option 1.
 
 **Model** — `gpt-4.1`. Per the kit's Cursor silent-fallback
 caveat, the arbiter states in its verdict which model actually produced it (the harness
@@ -194,10 +198,9 @@ may silently substitute a fallback). When the model map marks the arbiter as
 same-family, the verdict header states `same-family arbiter` so the audit trail shows
 the reduced independence.
 
-**Inputs** — The task file (including its `## Acceptance Criteria` section), the three
-fix-cycle evaluator verdicts, and the three implementer reports.
+**Inputs** — The task file (including its `## Acceptance Criteria` section), the verdict(s) so far, the three fix-cycle evaluator verdicts (when present), and the three implementer reports (when present). Early arbitration costs no implementation attempt; criteria-defective, or any arbiter/primary disagreement, escalates to the user, a criterion correction the user approves is a criterion-correction amendment, and a criterion the user upholds resumes the task at its next fix cycle.
 
-**Scope** — Evaluates the **criteria**, never the code. Reads no diffs and scores no implementation — the arbiter decides whether a repeatedly-failed criterion is itself
+**Scope** — Evaluates the **criteria**, never the code. Reads no diffs and scores no implementation — the arbiter decides whether a flagged or repeatedly-failed criterion is itself
 defective, not whether the code satisfies it. Execute-before-score does not apply: no
 code is under review; arbiter evidence is acceptance-criteria citation only.
 
@@ -205,7 +208,7 @@ code is under review; arbiter evidence is acceptance-criteria citation only.
 NEEDS FIXES, or REJECT):
 
 - **`criteria-sound`** — the criterion is well-formed; the orchestrator continues the
-  continuation ladder at rung 4 (diagnosis-first).
+  continuation ladder at rung 4 (diagnosis-first) after cycle-3 exhaustion; on early arbitration it is an arbiter/primary disagreement and escalates to the user.
 - **`criteria-defective`** — name the specific criterion, state the defect type
   (`contradiction` / `unsatisfiable` / `untestable` / `ambiguous`), and cite the
   criterion (e.g. acceptance criterion N in the task file's `## Acceptance Criteria`

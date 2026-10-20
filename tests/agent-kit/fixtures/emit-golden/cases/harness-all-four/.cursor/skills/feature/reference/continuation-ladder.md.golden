@@ -1,10 +1,18 @@
 # Continuation ladder (cycle-3 exhaustion)
 
-This ladder runs only when `goal.md`'s `phases.ladder` is `auto` (loop-created goals
-set it; interactive goals default to `escalate`, where the user is offered the ladder
-as an explicit option). Enter when Phase 4 task execution reaches **cycle-3 exhaustion**
-(NEEDS FIXES after three implement→evaluate cycles without PASS). Apply rungs in
-order; every ladder fix attempt is re-evaluated — there is no exception.
+When `goal.md`'s `phases.ladder` is `auto` (loop-created goals set it; interactive
+goals default to `escalate`, where the user is offered the ladder as an explicit
+option), this ladder applies after **cycle-3 exhaustion** (NEEDS FIXES after three
+implement→evaluate cycles without PASS). **Early arbitration at detection** is the
+exception — see below. Apply rungs in order; every ladder fix attempt is
+re-evaluated — there is no exception.
+
+## Early `criteria-defect` routing (detection)
+
+`criteria-defect` stops fix cycles at detection on any cycle: with `ladder: auto` run rung 5 arbitration now; with `ladder: escalate` escalate with arbitration offered as option 1.
+Early arbitration costs no implementation attempt; criteria-defective, or any arbiter/primary disagreement, escalates to the user, a criterion correction the user approves is a criterion-correction amendment, and a criterion the user upholds resumes the task at its next fix cycle.
+The unanimity heuristic does **not** gate this path. Pass the verdict(s) so far into
+arbitration. `criteria-defect` routing wins over line-patch-only resume.
 
 ## Rung 5 — arbitration (unanimity check)
 

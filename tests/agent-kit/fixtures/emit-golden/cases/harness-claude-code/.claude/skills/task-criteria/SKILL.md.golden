@@ -46,15 +46,16 @@ flagged.
 
 **Write fence — execution.** The task's ownership block declares a `writes` set; that set
 is the executor's fence. Verify it from the repository, never from the report:
-`git status` / `git diff --name-only` must show every change confined to the declared
-paths. Where declared paths lie outside git's view (gitignored install artifacts,
-generated state), `git status` proves nothing — verify those by content hash against a
-recorded baseline or by an mtime window covering the executor's run, and state which
-method you used. A file changed outside the fence is ❌ Contradicted scope whatever the
-justification. The healthy opposite is a reported escalation — the executor naming the
-exact out-of-fence path it needed and stopping instead of editing it; score that as a
-correct outcome that routes back to the orchestrator for re-planned ownership, not as a
-scope failure.
+`git status --porcelain --untracked-files=all` / `git diff --name-only` must show every
+change confined to the declared paths. Where paths lie in the hash-baseline
+scope (untracked, ignored, outside the work tree, or any path in a repository with no
+commits) — including unfenced paths in that scope the executor could have touched —
+verify by content hash against a recorded baseline or by an mtime window covering the
+executor's run, and state which method you used. A file changed outside the fence is ❌
+Contradicted scope whatever the justification. The healthy opposite is a reported
+escalation — the executor naming the exact out-of-fence path it needed and stopping
+instead of editing it; score that as a correct outcome that routes back to the
+orchestrator for re-planned ownership, not as a scope failure. A criterion that requires writing outside the task's `writes` is an ownership gap, not a criteria defect: the orchestrator re-plans ownership as an amendment.
 
 **Write fence — delivery.** Confirm the fence actually reached the executor: the context
 package carried a `## Write fence` section, cross-checked against the `writes` claim the
@@ -112,8 +113,7 @@ evaluator's Verdict format section for output shape and bypass consequence).
 
 - **`implementation`** — default when the work is wrong or incomplete but the criteria
   themselves are sound; fix and retry.
-- **`criteria-defect`** — the acceptance criteria are defective; route to arbitration
-  (ladder rung 5) or human escalation, not blind retry.
+- **`criteria-defect`** — A criterion is defective when it is vacuous (it cannot fail), blind (it cannot see the change it checks), or mutually unsatisfiable with another criterion of the same task. `criteria-defect` stops fix cycles at detection on any cycle: with `ladder: auto` run rung 5 arbitration now; with `ladder: escalate` escalate with arbitration offered as option 1. Name the defective criterion (and its conflicting partner, if any) verbatim in the verdict; route to arbitration (ladder rung 5) or human escalation, not blind retry.
 - **`destructive`** — would corrupt data, delete irrecoverable state, or cause
   irreversible harm; bypass — stop all retrying at detection, escalate.
 - **`security`** — credential exposure, auth bypass, injection, or other security
@@ -131,12 +131,14 @@ When ladder rung 5 invokes arbitration, the arbiter applies these defect types t
 - **Unsatisfiable** — no implementation could satisfy the criterion as written, even
   with perfect code.
 - **Untestable** — the criterion has no verifiable check (no command, test, or observable
-  outcome named).
+  outcome named), or its named check is vacuous or blind.
 - **Ambiguous** — reasonable engineers would interpret the criterion differently and
   reach conflicting PASS/FAIL verdicts.
 
 Example — **contradiction**: AC 2 requires "all errors return 400" and AC 5 requires
 "auth failures return 401"; both cannot hold for the same auth-error path.
+
+A vacuous criterion (it cannot fail) or a blind one (it cannot see the change it checks) is reported as **untestable**; a mutually unsatisfiable pair is a **contradiction**.
 
 Example — **unsatisfiable**: AC 3 demands "response time under 1 ms" on a network-bound
 endpoint with no caching allowance stated in the task file.

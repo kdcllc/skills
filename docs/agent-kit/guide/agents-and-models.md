@@ -47,7 +47,9 @@ commands_run: <N>
 - Talk itself into a PASS after finding an issue (identified issues must appear in the verdict).
 - Treat unverified claims as verified.
 
-The evaluator also has an orchestrator-invoked **arbitration mode** (continuation-ladder rung 5, pinned to `{{MODEL_FRONTIER_ALT_FAMILY}}`) that reviews criteria rather than code — semantics in [evaluation-system.md](evaluation-system.md).
+The evaluator also has an orchestrator-invoked **arbitration mode** (continuation-ladder rung 5, pinned to `{{MODEL_FRONTIER_ALT_FAMILY}}`) that reviews criteria rather than code — triggered on unanimous same-item failure across fix cycles 1–3, or early at detection when `criteria-defect` stops fix cycles (with `ladder: auto`, rung 5 now; with `ladder: escalate`, escalate with arbitration as option 1). Semantics in [evaluation-system.md](evaluation-system.md).
+
+**Phase 3 re-checks:** attempts 1→2 resume the same evaluator with a delta that quotes every newly written or changed passage verbatim for adversarial review; attempt 3 is a fresh, full goal evaluation (not a delta) on `{{MODEL_FRONTIER_ALT_FAMILY}}`, with attempt-2 quoted passages plus every passage newly written or changed since attempt 2 appended for review first.
 
 Evaluation criteria — verdict vocabulary, confidence ladder, anti-fabrication rules, auto-fail triggers — are owned by [evaluation-system.md](evaluation-system.md), not repeated here.
 
@@ -340,7 +342,7 @@ For the full capability comparison, see [`harness-matrix.md`](../../../skills/ag
 
 Each subagent is spawned at specific moments in the orchestration lifecycle:
 
-- **Goal and task evaluation** — `evaluator` after goal creation, after each task, and at final audit; `evaluator` in **arbitration mode** at continuation-ladder rung 5 on unanimous same-item failure across fix cycles 1–3. Criteria and verdict mechanics: [evaluation-system.md](evaluation-system.md).
+- **Goal and task evaluation** — `evaluator` after goal creation, after each task, and at final audit; Phase 3 attempt 3 is a fresh goal evaluation pinned to `{{MODEL_FRONTIER_ALT_FAMILY}}` (see Phase 3 re-checks above). `evaluator` in **arbitration mode** at continuation-ladder rung 5 on unanimous same-item failure across fix cycles 1–3, or early at detection when a verdict carries `criteria-defect`. Criteria and verdict mechanics: [evaluation-system.md](evaluation-system.md).
 - **Post-exhaustion diagnosis** — `diagnostician` at continuation-ladder rung 4 after Phase 4 fix cycles exhaust.
 - **Implementation and fixes** — `implementer` for each task and fix cycle (model rotates per the fix-cycle table above, except line-patch-only and degraded-mode cycles).
 - **Dedicated test tasks** — `test-writer` when a goal includes a test-only task.

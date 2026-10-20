@@ -6,20 +6,20 @@ An `""` answer deletes the comment silently; a missing key deletes it with a war
 
 | id | template path:line | class | what the LLM writes |
 |----|-------------------|-------|---------------------|
-| auto-fail-sins-evaluator | agents/evaluator.md:68 | a text | project-specific evaluator auto-fail sins (replacing the examples) |
+| auto-fail-sins-evaluator | agents/evaluator.md:73 | a text | project-specific evaluator auto-fail sins (replacing the examples) |
 | auto-fail-sins-qa | agents/qa-evaluator.md:47 | a text | project-specific QA behavioral auto-fail sins (replacing the examples) |
-| auto-fail-triggers | ORCHESTRATION.md:1217 | a text | auto-fail cell text for the Subagent Behaviors table |
-| critical-reference-rows | ORCHESTRATION.md:1121 | a text | one table row per canonical reference routed into context packages |
+| auto-fail-triggers | ORCHESTRATION.md:1250 | a text | auto-fail cell text for the Subagent Behaviors table |
+| critical-reference-rows | ORCHESTRATION.md:1154 | a text | one table row per canonical reference routed into context packages |
 | doc-buckets | skills/align-docs/SKILL.template.md:41 | a text | this project's doc buckets and code-area → doc mapping |
-| domain-skill-rows | ORCHESTRATION.md:177 | a text | extra Orchestrator & Reference Skills table rows for domain/supporting skills |
-| execution-layers | ORCHESTRATION.md:490 | a text | note on the dependency-ordered layer chain (token fills the diagram) |
-| existing-agents | ORCHESTRATION.md:244 | a text | existing project agents and which kit role each overlaps, or deletion when none |
+| domain-skill-rows | ORCHESTRATION.md:184 | a text | extra Orchestrator & Reference Skills table rows for domain/supporting skills |
+| execution-layers | ORCHESTRATION.md:514 | a text | note on the dependency-ordered layer chain (token fills the diagram) |
+| existing-agents | ORCHESTRATION.md:251 | a text | existing project agents and which kit role each overlaps, or deletion when none |
 | fallback-chains | models.map.md:76 | a text | fallback-chain table filled with current per-harness model IDs |
 | frontier-alt-family | models.map.md:150 | a text | continuation-ladder pin table plus the frontier alt-family ID |
 | full-suite-commands | skills/test-ladder/SKILL.template.md:84 | a text | extra per-stack full-suite and cycle-end lint commands |
 | greenfield-practices | ORCHESTRATION.md:19 | a text | Engineering practices subsection (test-first + SOLID; stack-agnostic) |
 | kit-meta | ORCHESTRATION.md:3 | d always-deleted | (none — template meta instruction) |
-| layer-skill-map | skills/feature/SKILL.template.md:74 | a text | layer → additional skills routing table |
+| layer-skill-map | skills/feature/SKILL.template.md:71 | a text | layer → additional skills routing table |
 | loop-fallback | models.map.md:109 | a text | loop fallback-chain table and {{LOOP_MODEL_CHAIN}} resolution |
 | mock-boundary | agents/test-writer.md:22 | a text | the mock boundary and available fixtures/tools |
 | models-map-caveats | models.map.md:179 | a text | harness caveat bullets for the targeted install |
@@ -28,14 +28,14 @@ An `""` answer deletes the comment silently; a missing key deletes it with a war
 | models-map-live-check | models.map.md:8 | a text | live-checked model-list confirmation note |
 | models-map-title | models.map.md:1 | a text | Model Map heading, optionally with a resolved subtitle |
 | path-test-conventions | skills/test-ladder/SKILL.template.md:64 | a text | changed-path → first-impacted-tests convention map |
-| preflight-extra | skills/feature/reference/preflight.md:8 | a text | project-specific pre-flight checks (one bullet each) or deletion when none |
+| preflight-extra | skills/feature/reference/preflight.md:11 | a text | project-specific pre-flight checks (one bullet each) or deletion when none |
 | qa-evaluator-surfaces | agents/qa-evaluator.md:36 | a text | this project's surfaces and the evidence each must include |
-| qa-surfaces | ORCHESTRATION.md:566 | a text | user-facing surfaces and the evidence each produces |
+| qa-surfaces | ORCHESTRATION.md:590 | a text | user-facing surfaces and the evidence each produces |
 | qa-surfaces-keep | skills/qa-criteria/SKILL.template.md:22 | a text | per-surface criteria kept and sharpened for this project |
-| quality-check-commands | ORCHESTRATION.md:1128 | a text | extra Quality Checks rows beyond the test/lint/typecheck flags |
+| quality-check-commands | ORCHESTRATION.md:1161 | a text | extra Quality Checks rows beyond the test/lint/typecheck flags |
 | rendered-siblings | skills/align-docs/SKILL.template.md:30 | a text | rendered-sibling guardrail naming the pair(s), or deletion |
 | shared-libs | agents/implementer.md:22 | a text | names of shared infrastructure the implementer must reuse |
-| skills-tree | ORCHESTRATION.md:1111 | a text | extra domain/supporting skill entries in the File Locations tree |
+| skills-tree | ORCHESTRATION.md:1144 | a text | extra domain/supporting skill entries in the File Locations tree |
 | stack-note | ORCHESTRATION.md:12 | a text | extra stack-note sentences beyond {{STACK_SUMMARY}} |
 
 | flag | meaning | governs (paths) |

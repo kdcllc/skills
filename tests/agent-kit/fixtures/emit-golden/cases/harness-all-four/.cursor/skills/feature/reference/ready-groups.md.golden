@@ -64,16 +64,16 @@ Never re-run implementation when artifacts already exist.
 
 ## Group repository check
 
-Members share one checkout; fences cover tracked paths only. After **all members** of
+Members share one checkout; `git status` sees tracked and untracked paths, but content changes it cannot show (untracked, ignored, outside the work tree, or any path in a repository with no commits) use the hash baseline below. After **all members** of
 the group return (and silent-success checks finish), run **one** repository check for
 the whole group instead of per-member checks between parallel work.
 
 **Baseline (before the group):** record `HEAD`, the current branch, and `git config
 --local` user entries. Snapshot the working tree with
-`git status --porcelain --untracked-files=all`.
+`git status --porcelain --untracked-files=all`. In a repository with no commits record `no HEAD`; for the paths git cannot show (listed above), also record the sha256/mtime baseline (scope and method as in `.cursor/ORCHESTRATION.md` § Repository safety).
 
 **After the group:** compare `HEAD`, branch, and local git user entries to the baseline.
-Compare the working tree to the snapshot. For every path that is new or changed since
+Compare the working tree to the snapshot (and the hash baseline). For every path that is new or changed since
 the snapshot, map it to **exactly one** member's `writes` fence. Cross-check each
 member's report: a path that appears in one member's fence but another member's report
 claims, or that the owning member's report omits, counts as attributable to two

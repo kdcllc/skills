@@ -34,6 +34,7 @@ PREFLIGHT_CHECK_NAMES=(
   "Missed callers"
   "Scope drift"
   "Default-value semantics"
+  "Stated facts"
 )
 
 fail_count=0
@@ -106,9 +107,9 @@ check_evaluator_task_criteria_tags() { # check_evaluator_task_criteria_tags <eva
 # 1. Canonical preflight.md anchors.
 # ===========================================================================
 if check_canonical_preflight "$PREFLIGHT_REF"; then
-  report PASS "canonical preflight.md: once-before-attempt-1, four checks, bootstrap, log prefix"
+  report PASS "canonical preflight.md: once-before-attempt-1, five checks, bootstrap, log prefix"
 else
-  report FAIL "canonical preflight.md: once-before-attempt-1, four checks, bootstrap, log prefix" \
+  report FAIL "canonical preflight.md: once-before-attempt-1, five checks, bootstrap, log prefix" \
     "missing file or anchor in $PREFLIGHT_REF"
 fi
 
@@ -220,9 +221,9 @@ for inst_pair in \
     continue
   fi
   if check_emitted_preflight "$inst_path"; then
-    report PASS "emitted $inst_label/skills/feature/reference/preflight.md: four checks, log prefix, no BOOTSTRAP"
+    report PASS "emitted $inst_label/skills/feature/reference/preflight.md: five checks, log prefix, no BOOTSTRAP"
   else
-    report FAIL "emitted $inst_label/skills/feature/reference/preflight.md: four checks, log prefix, no BOOTSTRAP" \
+    report FAIL "emitted $inst_label/skills/feature/reference/preflight.md: five checks, log prefix, no BOOTSTRAP" \
       "regression in $inst_path"
   fi
 done

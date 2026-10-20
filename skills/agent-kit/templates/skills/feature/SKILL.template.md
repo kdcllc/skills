@@ -21,7 +21,7 @@ to `implementer`/`test-writer`; verification to `evaluator`. Read
   `inherit` only when a tier is unpinned.
 - Transient subagent-launch failure: retry the same subagent up to 3 times (backoff
   2s/4s/8s). Never substitute a different agent type.
-- Model arg rejected / no spawn tool → `reference/degraded-mode.md` (relaxes product-code, model-pin, terminal only; re-eval + cycle caps hold).
+- Model arg rejected / no spawn tool → `reference/degraded-mode.md` (relaxes product-code/model-pin/terminal only; caps hold).
 
 ### Terminal spawn rule
 
@@ -29,23 +29,20 @@ Spawn `terminal` for **any Bash or PowerShell command** whose raw output should 
 land here — pass the exact command, shell (`bash` or `pwsh`), and the result needed;
 it returns **only** that result. Never run `{{FULL_TEST_COMMAND}}` yourself — spawn
 `terminal` for rung 3. Rungs 1–2 stay with `implementer`/`test-writer` when output is
-small; they may spawn `terminal` for noisy commands where the harness allows (not
-Copilot — L1 only). Exception: `_kit/log-spawn.*` is run
+small; they may spawn `terminal` for noisy commands where the harness allows. Exception: `_kit/log-spawn.*` is run
 inline by the orchestrator (single-line output), never via `terminal`.
 
 ### Resume policy
 
-Re-evaluations (Phase 3 revisions, Phase 4 fix cycles, Phase 5 re-audits) RESUME the
-same evaluator with a delta prompt listing only the applied fixes. The implementer MAY
-be resumed for fix cycle 1; cycles 2–3 are fresh spawns (rotation applies) except
-line-patch-only (Phase 4 step 4).
+Re-evaluations RESUME the same evaluator with a delta: Phase 4/5 list only applied fixes; Phase 3 quotes newly written passages verbatim, attempt 3 fresh (`reference/goal-revisions.md`). Implementer MAY be resumed for fix cycle 1; cycles 2–3 fresh spawns
+(rotation applies) except line-patch-only (Phase 4 step 4).
 
 Update ORCHESTRATION.md Orchestration Progress after each step.
 
 ## Phase 1 — Alignment (no files)
 
 Ask 5–20 MCQs: problem, layer ({{EXECUTION_LAYERS}}), surfaces, auth, errors, interface,
-patterns, priority — Phase 6 docs? (default **no**; yes when user-facing docs change) and Phase 7 PR? (default yes). "My
+patterns, priority; Phase 6 default **no** (yes when user-facing docs change), Phase 7 default yes. "My
 Understanding" + **wait for explicit confirmation** before Phase 2. Record Phase 6/7, `ladder:` (default `escalate`), `qa:` in
 `goal.md` `phases:`.
 
@@ -63,13 +60,13 @@ Create `_memory/work/goals/[goal-name]/` containing:
 Every task file carries the ownership contract (`writes`/`reads`/`depends_on`/`owner`/
 `rewrite_semantics` — see `templates/task.md`), `## Acceptance Criteria` (criterion +
 verification method each; Phase 3 validates once), disjoint `writes` for unordered pairs. `eval_depth`
-default `light`; set `full` with reason for contract/scaffold tasks / tasks with interface consumers (mirror/doc/test excluded) / tasks writing agents, criteria, drivers, shared infra. Contract-first: shared boundary → contract/scaffold task FIRST, `depends_on` on every consumer.
+default `light`; set `full` with reason for contract/scaffold, tasks with interface consumers (mirror/doc/test excluded), tasks writing agents/criteria/drivers/shared infra. Contract-first: shared boundary → contract/scaffold FIRST, `depends_on` on every consumer.
 
 Decision gate: multiple approaches → present tradeoffs and **wait**.
 
 ### Supporting skills routing
 
-`test-ladder` in **every** implement/test package — rungs 1–2; rung 3 **authority** here at cycle end, **execution** via spawned `terminal`, never `{{FULL_TEST_COMMAND}}` inline.
+`test-ladder` every implement/test package — rungs 1–2; rung 3 via spawned `terminal` (never `{{FULL_TEST_COMMAND}}` inline).
 
 <!-- BOOTSTRAP[layer-skill-map]: map layers → skills, e.g.
 | Layer touched | Skills to include in context package |
@@ -81,7 +78,7 @@ Plus domain skill + ground-truth ({{GROUND_TRUTH_DOC}}) for any domain task. -->
 
 ## Phase 3 — Goal evaluation (loop until PASS)
 
-Run `reference/preflight.md` once before attempt 1 (fix and log failures, then evaluate).
+Run `reference/preflight.md` once before attempt 1; `reference/goal-revisions.md` governs re-checks and post-PASS amendments.
 
 Launch `evaluator` with goal.md, all task files, Phase 1 Q&A, and
 `{{IDE_DIR}}/skills/goal-criteria/SKILL.md`; it validates every task's
@@ -101,7 +98,7 @@ For each ready group (`reference/ready-groups.md`; `parallel: false` → one tas
 4. **PASS** or **PASS (with notes)** → next task (notes via `--note`). **NEEDS FIXES** → fix cycle + re-evaluate (max 3). **REJECT** → escalate.
    **Line-patch-only** (all `[line-patch]`): resume same executor (`implementer`/`test-writer`) apply-verbatim any cycle (fresh spawn on same model if harness can't resume), no rotation, counts toward 3, re-evaluated; any `[structural]` → normal fix with patches verbatim. `NOT APPLIED` → re-evaluate; next cycle normal.
 
-   **Bypass at detection (every verdict, cycles 1–3).** Verdicts tagged `destructive`,
+   **`criteria-defect`** (not bypass): route at detection per `reference/continuation-ladder.md`. Out-of-fence defect in a completed task's files → `reference/corrective-tasks.md`. **Bypass at detection (every verdict, cycles 1–3).** Verdicts tagged `destructive`,
    `security`, or `infra` stop all cycles immediately and escalate — from cycle 1.
 
    **On cycle-3 exhaustion**, read `goal.md`'s `phases.ladder`: `escalate` (default, or
@@ -112,7 +109,7 @@ For each ready group (`reference/ready-groups.md`; `parallel: false` → one tas
    **Fix-cycle model rotation**: cycle 1 normal; cycle 2 **different family** at comparable tier; cycle 3
    **frontier** (model map). Log each rotation (skipped on line-patch-only).
 
-Ladder rungs 1–2 only (`test-ladder`); never rung 3. The headless loop inherits this.
+`test-ladder` rungs 1–2 only; never rung 3. Headless loop inherits this.
 
 ## Phase 5 — Final audit (loop until APPROVED)
 
@@ -141,10 +138,7 @@ Read `{{IDE_DIR}}/skills/align-docs/SKILL.md` and execute. Docs-only — never c
 
 ## Phase 7 — Pull request (gated on user approval)
 
-Read `{{IDE_DIR}}/skills/ship-pr/SKILL.md` and execute: analyze commits/diff, draft PR,
-**show draft and wait for approval**, push if needed. Report PR URL or hand-over
-artifact. Skip on the default branch (say so), if the user declines, or on
-`pull_request: false`.
+Read `{{IDE_DIR}}/skills/ship-pr/SKILL.md`: draft PR, **wait for approval**, push if needed; report URL. Skip on default branch (say so) or user decline.
 
 ## Orchestration log (append-only spawn ledger)
 
@@ -179,7 +173,7 @@ CURRENT_DATETIME: [literal ISO timestamp — never guess dates]
 [≤ 5 per `reference/memory-protocol.md`; implementer/test-writer/diagnostician only — never evaluator/qa-evaluator/terminal; omit when none]
 
 ## Write fence
-[the task's `writes` list — the ONLY paths this subagent may create or modify]
+[the task's `writes` block copied verbatim — the ONLY paths this subagent may create or modify]
 
 ## Model
 requested: [resolved ID from the model map for this agent's tier] · tier: [fast|light|frontier] · rotation: [cycle N or n/a]

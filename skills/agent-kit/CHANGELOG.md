@@ -8,6 +8,12 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 
 ### Added
 
+- **Executable acceptance criteria evidence** — pre-flight and goal-criteria require shell-command criteria to be run against the current tree with output recorded in `criteria-evidence.md` (including true-negative and true-positive demonstrations for content-inspecting checks).
+- **Reference sweep artifact** — pre-flight check 2 writes `reference-sweep.md`; the Phase 3 evaluator verifies every hit is owned or justified.
+- **Corrective tasks reference** — `reference/corrective-tasks.md` defines lettered corrective tasks for defects found in completed tasks' files.
+- **Goal-revisions reference** — `reference/goal-revisions.md` covers plan amendments (material vs additive vs criterion correction), cross-reference audit (`xref-audit.md`), and Phase 3 attempt-3 fresh arbiter review.
+- **Pre-flight check 5 Stated facts** — verifies prose counts, Files-to-Read coverage, and that `writes` prose matches the task's `writes` YAML block (the block context packages copy verbatim).
+- **Phase-boundary cost notes and compaction recommendation** — orchestration log `note` entries record spawn count, dispatch-volume totals, and main-session size; Phase 4 boundaries past ~60% prompt the user to compact or start a fresh session (recommendation only).
 - **Existing project agents** — Step 2 inventories agents under each harness's agent paths (plus Codex `[agents.*]` tables), reports name collisions with the seven kit agents and role overlaps, and Step 4 records the note in `bootstrap.existing-agents`.
 - **Path-scoped rule detection** — Step 2 finds Claude Code `paths:`, Cursor `globs:` (except the kit's `orchestration.mdc`), and Copilot `applyTo:` rule files; Step 4 adds each to `bootstrap.critical-reference-rows` and `bootstrap.layer-skill-map` so the orchestrator routes matching rules into task context packages.
 - **Same-family fix-cycle rotation** — Step 3 and the model map document using a different same-family model (label `same-family rotation (reduced diversity)`) when no cross-family light-tier model exists; emit warns when `alt_family` equals `light` (`warning: models.<h>.alt_family equals light; fix cycle 2 would not rotate models`).
@@ -15,10 +21,14 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 
 ### Changed
 
+- **`criteria-defect` routing** — verdicts tagged `criteria-defect` route at detection (early rung 5 arbitration or escalation) instead of waiting for fix-cycle exhaustion.
+- **Context packages** — the write fence copies each task's `writes` YAML block verbatim from the task file.
+- **Phase 3 re-check deltas** — evaluator delta prompts quote newly written or changed passages verbatim; attempt 3 is a fresh full evaluation on the arbiter model.
 - **Exit 4 scope** — covers user-modified kit files and pre-existing files at kit paths with no previous-manifest entry (stderr: `emit: blocked <path> (exists; not written by a previous emit)`); `--force` overrides both classes. `.codex/config.toml` appends are unchanged.
 
 ### Fixed
 
+- **Post-spawn fence check** — single-task and group repository checks use `git status --porcelain --untracked-files=all`, and the orchestrator records hash baselines for paths git cannot show before dispatch.
 - **Pre-existing file overwrite** — emit no longer silently replaces a project's own file at a kit path on first install or when a path was never written by a prior emit.
 - **Memory-workflow table guards** — emitted ORCHESTRATION.md omits the Research row when `research` is false and Loop rows when `loop` is false (IF-guards in the template).
 

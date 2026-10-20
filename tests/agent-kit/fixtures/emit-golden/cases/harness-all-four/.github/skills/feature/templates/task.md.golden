@@ -18,7 +18,8 @@ reads:               # [interface briefs this task depends on, read-only]
   - [path]           # [exported symbols and signatures only, never edited here]
 depends_on:          # [task ids that must land before this one, or [] for none — always
                      #  QUOTE each id so it stays the task file's name prefix; unquoted
-                     #  numerics parse as YAML integers and break id comparisons]
+                     #  numerics parse as YAML integers and break id comparisons;
+                     #  corrective tasks use NN<letter> ids (e.g. 09a-fix-api)]
   - "NN-name"
 owner: [implementer|test-writer]     # [one writer for every path above]
 rewrite_semantics: [whole-file|targeted-insertion]
@@ -41,6 +42,8 @@ eval_depth: [light|full]
 - [ ] [...]
 
 ## Acceptance Criteria
+
+Command criteria need a `criteria-evidence.md` entry (run output; true negative and true positive for content-inspecting checks).
 
 1. [Specific, verifiable criterion] — verification: [unit test | integration test | command output | live interaction | screenshot]
 2. [Specific, verifiable criterion] — verification: [unit test | integration test | command output | live interaction | screenshot]

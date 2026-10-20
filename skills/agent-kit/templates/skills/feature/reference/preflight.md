@@ -2,7 +2,10 @@
 
 The orchestrator runs this checklist **once** after Phase 2 goal and task files exist
 and **before Phase 3 evaluation attempt 1**. Never run it between evaluation attempts.
-Pre-flight is **read-only** toward product code: it reads goal/task files and the workspace, and changes only goal/task files.
+Pre-flight is **read-only** toward product code: it reads goal/task files and the workspace.
+It may write goal artifacts under `_memory/work/goals/<goal>/` (`criteria-evidence.md`,
+`reference-sweep.md`) and scratch samples outside the repo; other changes stay in goal/task
+files only. Material amendments re-run pre-flight and the full Phase 3 evaluation with a fresh evaluator and reset the cycle count; additive amendments and criterion corrections run pre-flight checks 1, 2 and 5 on the changed tasks, then a targeted evaluation.
 It produces **no score or verdict** and **never replaces** the evaluator.
 
 <!-- BOOTSTRAP[preflight-extra]: List project-specific pre-flight checks here, one bullet each (e.g. "migration file paired with its model change"), or answer "" when there are none. -->
@@ -17,20 +20,40 @@ Count all of them when forming the log line (N in `Pre-flight: N/N pass`).
 For each task, confirm every acceptance criterion's verification method can run in
 this workspace — no live service, credential, or unshipped feature required.
 
+For every shell-command criterion, run it against the current tree and record the exact
+command and its output in `_memory/work/goals/<goal>/criteria-evidence.md`, or
+`not runnable yet — created by task NN` when the criterion depends on files a later
+task creates. For **content-inspecting** checks (grep/rg/awk/sed/wc/diff/count assertions)
+also record a true negative (passes on the correct shape) and a true positive (fires on
+an injected violation); use a minimal scratch sample outside the repo when the code does
+not exist yet.
+
+Flag criteria in one task that cannot both pass (mutually unsatisfiable pairs). Flag any
+file a criterion requires the task to create or change that is missing from that task's
+`writes` — A criterion that requires writing outside the task's `writes` is an ownership gap, not a criteria defect: the orchestrator re-plans ownership as an amendment.
+Flag any fence or unchanged check that uses `git status` without `--untracked-files=all`.
+
 For every path in the task's `reads` list and every path in `writes` that the task
 **modifies** rather than creates, run `test -e <path>`. Skip paths that are
 placeholders containing `<`, `>`, `[`, `]`, or `*`.
 
-**Failure:** a criterion cannot be verified locally, or `test -e` fails for a
-non-placeholder path the task depends on or modifies.
+**Failure:** a criterion cannot be verified locally, evidence is missing or wrong,
+mutually unsatisfiable criteria, an ownership gap, a bad `git status` fence check,
+or `test -e` fails for a non-placeholder path the task depends on or modifies.
 
 ### 2. Missed callers
 
-For every symbol a task renames or re-signs, search the repo with
-`rg -n '\b<symbol>\b'` (fallback `grep -rnw '<symbol>' .` when `rg` is unavailable).
+For every public symbol a task renames, re-signs, or changes in shape (fields,
+nullability, types, visibility, wire/serialized format), search the repo with
+`rg -n '\b<symbol>\b'` (exact uses) and `rg -n '<symbol>'` without word boundaries
+(derived identifiers such as `Get<symbol>Async`; fallback `grep -rnw` / `grep -rn`
+when `rg` is unavailable). Where the stack provides one, run a trial build or
+type-checker scoped to affected modules. Write every command and every hit to
+`_memory/work/goals/<goal>/reference-sweep.md`, each hit tagged with the owning task
+or an "unaffected because …" line.
 
-**Failure:** any file with a hit is **not** inside some task's `writes` set (every
-caller must be owned by a task that updates it).
+**Failure:** any hit is not accounted for in some task's `writes`/`reads` or justified,
+or `reference-sweep.md` is missing for a task that renames, re-signs, or reshapes a symbol.
 
 ### 3. Scope drift
 
@@ -47,6 +70,17 @@ explicitly in the task requirements.
 
 **Failure:** a default is missing, or "absent" is treated as meaning "all" without
 saying so.
+
+### 5. Stated facts
+
+Prose counts (e.g. "ten files") must equal the enumerated list they describe. Every
+value a requirement cites (default, constant, path, line number) must appear in a path
+listed in that task's Files to Read — locate each with `rg -n`. The task file's
+`writes` YAML block is the single source the orchestrator copies verbatim into context
+packages; drift between prose and that block is a failure.
+
+**Failure:** count mismatch, a cited value not found in Files-to-Read paths, or
+`writes` prose that does not match the YAML block.
 
 ## On failure
 
