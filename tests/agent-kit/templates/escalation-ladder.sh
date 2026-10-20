@@ -30,6 +30,9 @@ FEATURE_SKILL="$TEMPLATES/skills/feature/SKILL.template.md"
 LADDER_REF="$TEMPLATES/skills/feature/reference/continuation-ladder.md"
 LADDER_CLAUDE="$REPO_ROOT/.claude/skills/feature/reference/continuation-ladder.md"
 LADDER_CURSOR="$REPO_ROOT/.cursor/skills/feature/reference/continuation-ladder.md"
+FIX_CYCLES_REF="$TEMPLATES/skills/feature/reference/fix-cycles.md"
+FIX_CYCLES_CLAUDE="$REPO_ROOT/.claude/skills/feature/reference/fix-cycles.md"
+FIX_CYCLES_CURSOR="$REPO_ROOT/.cursor/skills/feature/reference/fix-cycles.md"
 FEATURE_CLAUDE="$REPO_ROOT/.claude/skills/feature/SKILL.md"
 FEATURE_CURSOR="$REPO_ROOT/.cursor/skills/feature/SKILL.md"
 EVALUATOR="$TEMPLATES/agents/evaluator.md"
@@ -179,6 +182,7 @@ model_id_files=(
   "$DIAGNOSTICIAN"
   "$EVALUATOR"
   "$FEATURE_SKILL"
+  "$FIX_CYCLES_REF"
   "$ORCH_TEMPLATE"
   "$MODELS_MAP"
 )
@@ -297,14 +301,14 @@ for ladder in "$LADDER_REF" "$LADDER_CLAUDE" "$LADDER_CURSOR"; do
   fi
 done
 if [[ $check8_ok -eq 1 ]]; then
-  for feat in "$FEATURE_SKILL" "$FEATURE_CLAUDE" "$FEATURE_CURSOR"; do
-    rel="${feat#"$REPO_ROOT"/}"
-    if [[ ! -f "$feat" ]]; then
+  for fc in "$FIX_CYCLES_REF" "$FIX_CYCLES_CLAUDE" "$FIX_CYCLES_CURSOR"; do
+    rel="${fc#"$REPO_ROOT"/}"
+    if [[ ! -f "$fc" ]]; then
       check8_ok=0
       check8_detail="missing $rel"
       break
     fi
-    grep -qF 'reference/continuation-ladder.md' "$feat" || {
+    grep -qF 'reference/continuation-ladder.md' "$fc" || {
       check8_ok=0
       check8_detail="$rel: continuation-ladder pointer missing"
       break
@@ -312,20 +316,35 @@ if [[ $check8_ok -eq 1 ]]; then
   done
 fi
 if [[ $check8_ok -eq 1 ]]; then
-  report PASS "continuation-ladder guard anchors in reference file (canonical + instances) and pointer in feature skill(s)"
+  for feat in "$FEATURE_SKILL" "$FEATURE_CLAUDE" "$FEATURE_CURSOR"; do
+    rel="${feat#"$REPO_ROOT"/}"
+    if [[ ! -f "$feat" ]]; then
+      check8_ok=0
+      check8_detail="missing $rel"
+      break
+    fi
+    grep -qF 'reference/fix-cycles.md' "$feat" || {
+      check8_ok=0
+      check8_detail="$rel: fix-cycles pointer missing"
+      break
+    }
+  done
+fi
+if [[ $check8_ok -eq 1 ]]; then
+  report PASS "continuation-ladder guard anchors in reference file (canonical + instances), fix-cycles reference pointer in feature skill(s)"
 else
-  report FAIL "continuation-ladder guard anchors in reference file (canonical + instances) and pointer in feature skill(s)" \
+  report FAIL "continuation-ladder guard anchors in reference file (canonical + instances), fix-cycles reference pointer in feature skill(s)" \
     "$check8_detail"
 fi
 
 # ===========================================================================
 # 9. Bypass classes in canonical feature skill and ORCHESTRATION ladder section.
 # ===========================================================================
-feat_bypass_region="$(awk '/Bypass at detection/{p=1} p&&/On cycle-3 exhaustion/{exit} p' "$FEATURE_SKILL" 2>/dev/null)"
+fix_cycles_bypass_region="$(awk '/Bypass at detection/{p=1} p&&/On cycle-3 exhaustion/{exit} p' "$FIX_CYCLES_REF" 2>/dev/null)"
 orch_ladder="$(extract_ladder_section "$ORCH_TEMPLATE")"
 check9_ok=1
 for term in destructive security infra; do
-  if ! grep -qF "$term" <<<"${feat_bypass_region:-}"; then
+  if ! grep -qF "$term" <<<"${fix_cycles_bypass_region:-}"; then
     check9_ok=0
     break
   fi
@@ -335,9 +354,9 @@ for term in destructive security infra; do
   fi
 done
 if [[ $check9_ok -eq 1 ]]; then
-  report PASS "bypass classes in canonical feature skill and ORCHESTRATION ladder section"
+  report PASS "bypass classes in canonical fix-cycles reference and ORCHESTRATION ladder section"
 else
-  report FAIL "bypass classes in canonical feature skill and ORCHESTRATION ladder section"
+  report FAIL "bypass classes in canonical fix-cycles reference and ORCHESTRATION ladder section"
 fi
 
 # ===========================================================================
@@ -377,18 +396,12 @@ fi
 # ===========================================================================
 check_ladder_ok=1
 check_ladder_detail=""
-for feat in \
-  "$FEATURE_SKILL" \
-  "$FEATURE_CLAUDE" \
-  "$FEATURE_CURSOR"; do
-  rel="${feat#"$REPO_ROOT"/}"
-  if [[ "$rel" == .claude/* || "$rel" == .cursor/* ]]; then
-    inst="${rel%%/*}"
-    if [[ ! -d "$REPO_ROOT/$inst" ]]; then
-      continue
-    fi
-  fi
-  if [[ ! -f "$feat" ]] || ! grep -qF 'phases.ladder' "$feat"; then
+for fc in \
+  "$FIX_CYCLES_REF" \
+  "$FIX_CYCLES_CLAUDE" \
+  "$FIX_CYCLES_CURSOR"; do
+  rel="${fc#"$REPO_ROOT"/}"
+  if [[ ! -f "$fc" ]] || ! grep -qF 'phases.ladder' "$fc"; then
     check_ladder_ok=0
     check_ladder_detail="$rel: phases.ladder missing"
     break
@@ -411,9 +424,9 @@ if [[ $check_ladder_ok -eq 1 ]]; then
   done
 fi
 if [[ $check_ladder_ok -eq 1 ]]; then
-  report PASS "phases.ladder gate in feature skills and continuation-ladder reference"
+  report PASS "phases.ladder gate in fix-cycles reference and continuation-ladder reference"
 else
-  report FAIL "phases.ladder gate in feature skills and continuation-ladder reference" \
+  report FAIL "phases.ladder gate in fix-cycles reference and continuation-ladder reference" \
     "$check_ladder_detail"
 fi
 

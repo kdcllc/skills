@@ -24,6 +24,7 @@ IMPLEMENTER="$TEMPLATES/agents/implementer.md"
 TEST_WRITER="$TEMPLATES/agents/test-writer.md"
 TASK_CRITERIA="$TEMPLATES/skills/task-criteria/SKILL.template.md"
 LADDER_REF="$TEMPLATES/skills/feature/reference/continuation-ladder.md"
+FIX_CYCLES_REF="$TEMPLATES/skills/feature/reference/fix-cycles.md"
 FEATURE_SKILL="$TEMPLATES/skills/feature/SKILL.template.md"
 ORCH_TEMPLATE="$TEMPLATES/ORCHESTRATION.md"
 PREFLIGHT_CURSOR="$REPO_ROOT/.cursor/skills/feature/reference/preflight.md"
@@ -179,17 +180,21 @@ fi
 check6_ok=1
 if [[ ! -f "$FEATURE_SKILL" ]]; then
   check6_ok=0
-else
-  grep -qF 'reference/preflight.md' "$FEATURE_SKILL" || check6_ok=0
-  grep -qF 'Line-patch-only' "$FEATURE_SKILL" || check6_ok=0
-  grep -qF 'no rotation' "$FEATURE_SKILL" || check6_ok=0
-  grep -qF 'counts toward 3' "$FEATURE_SKILL" || check6_ok=0
-  grep -qF 'apply-verbatim any cycle' "$FEATURE_SKILL" || check6_ok=0
+elif ! grep -qF 'reference/preflight.md' "$FEATURE_SKILL"; then
+  check6_ok=0
+fi
+if [[ $check6_ok -eq 1 ]] && [[ ! -f "$FIX_CYCLES_REF" ]]; then
+  check6_ok=0
+elif [[ $check6_ok -eq 1 ]]; then
+  grep -qF 'Line-patch-only' "$FIX_CYCLES_REF" || check6_ok=0
+  grep -qF 'no rotation' "$FIX_CYCLES_REF" || check6_ok=0
+  grep -qF 'counts toward 3' "$FIX_CYCLES_REF" || check6_ok=0
+  grep -qF 'apply-verbatim any cycle' "$FIX_CYCLES_REF" || check6_ok=0
 fi
 if [[ $check6_ok -eq 1 ]]; then
-  report PASS "feature skill: reference/preflight.md and line-patch-only resume rule"
+  report PASS "feature skill: reference/preflight.md; fix-cycles reference: line-patch-only resume rule"
 else
-  report FAIL "feature skill: reference/preflight.md and line-patch-only resume rule"
+  report FAIL "feature skill: reference/preflight.md; fix-cycles reference: line-patch-only resume rule"
 fi
 
 # ===========================================================================

@@ -34,7 +34,7 @@
     ".codex/agents/test-writer.md": "a85e76d008d0a1a3bb385f0bd84805f6b8a8e4407fb6e4fda4dbc3e1ae779c42",
     ".codex/agents/test-writer.toml": "4092fe6c250c290e8ca3b43ef5998904f0965247e5aff3d837d486395d06241b",
     ".codex/config.toml": "9623edb8c9e8afa393d129047a4c795a8b55567b8c01f15320056da4b4541b1b",
-    "ORCHESTRATION.md": "66fafee0f20aebcd9f48f43467ead4a458345d0c7807b344dbe88d1051379107",
+    "ORCHESTRATION.md": "99d9d2596b67d6a31d38ac93a37f1c170ed75187ed793f2c085ef7e29961da8f",
     "_kit/log-spawn.cmd": "ae9541294a03f741311ff8bc0d5c6f9985d6947fb42f7aaeaf6613088e34bf7e",
     "_kit/log-spawn.sh": "5b288ff4db2274eb807e748b3abb2fce2f442148c378458f07198c4c5b262dd5",
     "_kit/memory.cmd": "ae9541294a03f741311ff8bc0d5c6f9985d6947fb42f7aaeaf6613088e34bf7e",

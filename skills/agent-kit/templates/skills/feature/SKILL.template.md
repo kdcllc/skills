@@ -14,9 +14,7 @@ to `implementer`/`test-writer`; verification to `evaluator`. Read
 - Every subagent gets a complete context package.
 - No phase advances without evaluator PASS / PASS (with notes) / APPROVED.
 - Fixes and revisions are ALWAYS re-evaluated. No exception.
-- Max 3 evaluation cycles per phase/task; on Phase 4 cycle-3 exhaustion, read
-  `phases.ladder` (`escalate` default or key absent → escalate with "Run the
-  continuation ladder" as option 1; `auto` → continuation ladder). Other phases escalate.
+- Max 3 evaluation cycles per phase/task; Phase 4 fix cycles and cycle-3 exhaustion follow `reference/fix-cycles.md`. Other phases escalate.
 - Every spawn passes model explicitly; log records requested vs reported.
   `inherit` only when a tier is unpinned.
 - Transient subagent-launch failure: retry the same subagent up to 3 times (backoff
@@ -34,8 +32,7 @@ inline by the orchestrator (single-line output), never via `terminal`.
 
 ### Resume policy
 
-Re-evaluations RESUME the same evaluator with a delta: Phase 4/5 list only applied fixes; Phase 3 quotes newly written passages verbatim, attempt 3 fresh (`reference/goal-revisions.md`). Implementer MAY be resumed for fix cycle 1; cycles 2–3 fresh spawns
-(rotation applies) except line-patch-only (Phase 4 step 4).
+Re-evaluations RESUME the same evaluator with a delta: Phase 4/5 list only applied fixes; Phase 3 quotes newly written passages verbatim, attempt 3 fresh (`reference/goal-revisions.md`). Implementer resume and rotation per fix cycle: `reference/fix-cycles.md`.
 
 Update ORCHESTRATION.md Orchestration Progress after each step.
 
@@ -95,18 +92,8 @@ For each ready group (`reference/ready-groups.md`; `parallel: false` → one tas
    ("report lost, files verified"); absent ⇒ failed, respawn once. Never re-run when artifacts exist.
 3. Launch `evaluator` with task file, report, matching rule files, `{{IDE_DIR}}/skills/task-criteria/SKILL.md`; if read-only (evaluator.md `readonly` or refused shell), first spawn `terminal` per acceptance-criterion command, attach output.
 4. **PASS** or **PASS (with notes)** → next task (notes via `--note`). **NEEDS FIXES** → fix cycle + re-evaluate (max 3). **REJECT** → escalate.
-   **Line-patch-only** (all `[line-patch]`): resume same executor (`implementer`/`test-writer`) apply-verbatim any cycle (fresh spawn on same model if harness can't resume), no rotation, counts toward 3, re-evaluated; any `[structural]` → normal fix with patches verbatim. `NOT APPLIED` → re-evaluate; next cycle normal.
-
-   **`criteria-defect`** (not bypass): route at detection per `reference/continuation-ladder.md`. Out-of-fence defect in a completed task's files → `reference/corrective-tasks.md`. **Bypass at detection (every verdict, cycles 1–3).** Verdicts tagged `destructive`,
-   `security`, or `infra` stop all cycles immediately and escalate — from cycle 1.
-
-   **On cycle-3 exhaustion**, read `goal.md`'s `phases.ladder`: `escalate` (default, or
-   key absent) → escalate with "Run the continuation ladder" as option 1 (log "ladder:
-   escalate per goal.md"); `auto` → Read `reference/continuation-ladder.md` and follow
-   it. Every ladder fix attempt is re-evaluated.
-
-   **Fix-cycle model rotation**: cycle 1 normal; cycle 2 **different family** at comparable tier; cycle 3
-   **frontier** (model map). Log each rotation (skipped on line-patch-only).
+   Before any fix cycle, bypass escalation, `criteria-defect` route, or cycle-3 action, **Read `reference/fix-cycles.md`** and follow it (line-patch resume, bypass tags, ladder, rotation).
+   Out-of-fence defect in a completed task's files → `reference/corrective-tasks.md`.
 
 `test-ladder` rungs 1–2 only; never rung 3. Headless loop inherits this.
 

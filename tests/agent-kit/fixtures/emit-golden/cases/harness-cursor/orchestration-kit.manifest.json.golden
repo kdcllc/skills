@@ -19,7 +19,7 @@
     "_memory/loop/backlog.md"
   ],
   "files": {
-    ".cursor/ORCHESTRATION.md": "c228bbc8d535bd3e0dc996f70208c4443d66254ad0a628557e37f29f9e9e8236",
+    ".cursor/ORCHESTRATION.md": "6a4890456b3b72c9a51e6fea2d14a6ea7897295efc5f0934b8e279c7d4cfc075",
     ".cursor/agents/diagnostician.md": "a84c21e39e873d2f5a0a2dd2fbd821407467178e1eda172a1b64a3e08bf87233",
     ".cursor/agents/evaluator.md": "678d398c9f50d4356da2e2301fbe18bfa4f40161b48754445d5e90fff1ba9694",
     ".cursor/agents/evidence-collector.md": "681a2ee685962cd275e19e49138e179abcfe11f982f3c9f0e9d5d8f92f5386a6",
@@ -31,10 +31,11 @@
     ".cursor/skills/agent-kit-models.map.md": "7c2d3c232406e3991df1bca2687c5b2258f77a5fc498b239e08b6aab3555c151",
     ".cursor/skills/align-docs/SKILL.md": "659aa132dcd182256fb5f77ac5fac8d33998ede811c9eca9d50caeb3542ff35c",
     ".cursor/skills/auto-loop/SKILL.md": "a2c34e76be3bfed113fd195c5b0d9b6f06eb9fc92b31daab36efd11c04b4a474",
-    ".cursor/skills/feature/SKILL.md": "4fc932f5bea11e097d1d5e8fb5c1e836039750a9c004189f31613265cb6977a5",
+    ".cursor/skills/feature/SKILL.md": "e1b38b7b3a43ddc96807606e8d3367d4bbc24af808bdfe513611c21eff92db38",
     ".cursor/skills/feature/reference/continuation-ladder.md": "da22ec3103c21d9e4f8322d57073da2a8f8a134c2d47203a58d5de910ebfad58",
     ".cursor/skills/feature/reference/corrective-tasks.md": "c91dd483b9f09f5ab04c8abc7cfdee05c961393b8c426b39418c0251a319b673",
     ".cursor/skills/feature/reference/degraded-mode.md": "507e33a94f66de38db4e31ea3e51d7c3a32d5f411740bc7400b0c1ebc16304ab",
+    ".cursor/skills/feature/reference/fix-cycles.md": "33c73be598f292b843cb7ddf733166c731fefcb749cf2748b346d676c333565f",
     ".cursor/skills/feature/reference/goal-revisions.md": "519640b8b8e914aa66814e8559e5792ae151fd383aa467578921a6f7cc3d6374",
     ".cursor/skills/feature/reference/memory-capture.md": "9cef97d7a882f3510d97a8fb2e4b870a8db7708df2c7196fba068269ff24db0b",
     ".cursor/skills/feature/reference/memory-protocol.md": "a159baebe817cdfb1ac658370b2e7986452d442cf9f3aaa74c6b8ce8136a6e06",

@@ -20,6 +20,7 @@ PREFLIGHT_REF="$TEMPLATES/skills/feature/reference/preflight.md"
 GOAL_REVISIONS="$TEMPLATES/skills/feature/reference/goal-revisions.md"
 CORRECTIVE_TASKS="$TEMPLATES/skills/feature/reference/corrective-tasks.md"
 LADDER_REF="$TEMPLATES/skills/feature/reference/continuation-ladder.md"
+FIX_CYCLES_REF="$TEMPLATES/skills/feature/reference/fix-cycles.md"
 FEATURE_SKILL="$TEMPLATES/skills/feature/SKILL.template.md"
 ORCH_TEMPLATE="$TEMPLATES/ORCHESTRATION.md"
 
@@ -156,10 +157,12 @@ check_f() {
 }
 
 check_g() {
-  local ok=1 sz
+  local ok=1 sz n_fix
   assert_anchor "$FEATURE_SKILL" 'reference/corrective-tasks.md' 1 || ok=0
   assert_anchor "$FEATURE_SKILL" '`reference/goal-revisions.md` governs re-checks and post-PASS amendments' 1 || ok=0
-  assert_anchor "$FEATURE_SKILL" 'route at detection per `reference/continuation-ladder.md`' 1 || ok=0
+  n_fix="$(count_fixed "$FEATURE_SKILL" 'reference/fix-cycles.md')"
+  [[ "${n_fix:-0}" -ge 1 ]] || ok=0
+  assert_anchor "$FIX_CYCLES_REF" 'route at detection per `reference/continuation-ladder.md`' 1 || ok=0
   assert_anchor "$FEATURE_SKILL" "[the task's \`writes\` block copied verbatim" 1 || ok=0
   sz="$(wc -c < "$FEATURE_SKILL" | tr -d ' ')"
   [[ "$sz" -le 11264 ]] || ok=0

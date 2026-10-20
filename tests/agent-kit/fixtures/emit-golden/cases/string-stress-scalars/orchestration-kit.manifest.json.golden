@@ -19,7 +19,7 @@
     "_memory/loop/backlog.md"
   ],
   "files": {
-    ".claude/ORCHESTRATION.md": "9ca753aa957a9bc9aa08ffa72f7067f99f16bb1e1aa7462d923ed738dc072be9",
+    ".claude/ORCHESTRATION.md": "1eecb0c3d1b59fefdadfff3974149a16b673df1f091921b6d1222b45c8280005",
     ".claude/agents/diagnostician.md": "d54f68eaa9a0c69699ddfdd384663db578cc526eb90e0e5bd3424fdaa20278af",
     ".claude/agents/evaluator.md": "1308daebb92bbf5b1a8a9b8af33fa997fbd1bddabdc64952a47b347d02a9849a",
     ".claude/agents/evidence-collector.md": "1e73d369a9fb92b7aa7f017b9f43c6d24b6151cfb5ad8526d752b3bcec55bf45",
@@ -31,10 +31,11 @@
     ".claude/skills/agent-kit-models.map.md": "ee497a40cc3f9df55f72387f95482a8b9ae7ff54ae889dcc6e73b94edb6e724a",
     ".claude/skills/align-docs/SKILL.md": "9e6eeec9447e5ad3556f5fb66da13d73954b83535997a3e017ce20f75f9042bc",
     ".claude/skills/auto-loop/SKILL.md": "ae8ef01e50feaea9d88d9db70cefb8aba889f4895eef60fca77415705e112d72",
-    ".claude/skills/feature/SKILL.md": "7401391f26be0ea7d12aadac0523c274e206d51d488938dfb936453179fdfa6e",
+    ".claude/skills/feature/SKILL.md": "d2ab8b929580eb9b2370e59ee123667966eb06d4a37db20a05a8d33df9cb463e",
     ".claude/skills/feature/reference/continuation-ladder.md": "2a27dc9d4e01e975da90a336b0b9ab432ca9c931ab519fa465ead6a3cb2374cc",
     ".claude/skills/feature/reference/corrective-tasks.md": "c91dd483b9f09f5ab04c8abc7cfdee05c961393b8c426b39418c0251a319b673",
     ".claude/skills/feature/reference/degraded-mode.md": "15d43cf56e6aa0a38f6d9db6d3fb92fded3d9e408fe20f5f8d4283646d0ad19a",
+    ".claude/skills/feature/reference/fix-cycles.md": "33c73be598f292b843cb7ddf733166c731fefcb749cf2748b346d676c333565f",
     ".claude/skills/feature/reference/goal-revisions.md": "4a0c3e70050158244d1c231c005e51e91491dfc67a9f0fcb6cdba9d8c0840e7f",
     ".claude/skills/feature/reference/memory-capture.md": "9cef97d7a882f3510d97a8fb2e4b870a8db7708df2c7196fba068269ff24db0b",
     ".claude/skills/feature/reference/memory-protocol.md": "c48bdff5e6cb22d06f2a611959f4a24330b6d2fbb227b7d77a84a7f12c812de8",

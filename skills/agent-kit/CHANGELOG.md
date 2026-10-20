@@ -31,6 +31,7 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 - **Layer-map example** — `bootstrap.layer-skill-map` uses a `Rule files to cite` column; Step 4 lists detected rule files there per layer.
 - **Table-cell pipes** — Step 4 requires escaping a literal `|` as `\|` in any table cell the kit writes (bootstrap rows included).
 - **Harness matrix** — Claude Code VS Code extension 2.1.241 path-scoped subagent-delivery field observation (2026-08-25 probe) with re-probe-after-upgrade note; Cursor and Copilot subagent delivery marked unknown.
+- **Feature skill fix-cycle reference** — Phase 4 fix-cycle mechanics (line-patch resume, `criteria-defect`/bypass routing, cycle-3 ladder, model rotation) moved verbatim to `reference/fix-cycles.md`; the skill keeps pointers; the template now has ≥ 1 KiB of its 11264-byte budget free.
 
 ### Fixed
 

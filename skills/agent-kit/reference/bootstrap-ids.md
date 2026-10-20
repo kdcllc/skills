@@ -19,7 +19,7 @@ An `""` answer deletes the comment silently; a missing key deletes it with a war
 | full-suite-commands | skills/test-ladder/SKILL.template.md:84 | a text | extra per-stack full-suite and cycle-end lint commands |
 | greenfield-practices | ORCHESTRATION.md:19 | a text | Engineering practices subsection (test-first + SOLID; stack-agnostic) |
 | kit-meta | ORCHESTRATION.md:3 | d always-deleted | (none — template meta instruction) |
-| layer-skill-map | skills/feature/SKILL.template.md:71 | a text | layer → skills and path-scoped rule files (Rule files to cite column) routing table |
+| layer-skill-map | skills/feature/SKILL.template.md:68 | a text | layer → skills and path-scoped rule files (Rule files to cite column) routing table |
 | loop-fallback | models.map.md:109 | a text | loop fallback-chain table and {{LOOP_MODEL_CHAIN}} resolution |
 | mock-boundary | agents/test-writer.md:22 | a text | the mock boundary and available fixtures/tools |
 | models-map-caveats | models.map.md:179 | a text | harness caveat bullets for the targeted install |
