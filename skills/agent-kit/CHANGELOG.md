@@ -6,6 +6,8 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-10-20
+
 ### Added
 
 - **Executable acceptance criteria evidence** — pre-flight and goal-criteria require shell-command criteria to be run against the current tree with output recorded in `criteria-evidence.md` (including true-negative and true-positive demonstrations for content-inspecting checks).
