@@ -3,7 +3,7 @@ name: agent-kit
 description: "Install the orchestrator/worker/evaluator multi-agent system into the current project, compiled for its AI coding harness(es) — Claude Code, Cursor, GitHub Copilot (VS Code), and/or OpenAI Codex. Generates the seven subagents (evaluator, qa-evaluator, implementer, test-writer, evidence-collector, terminal, diagnostician) with tiered model pins — evidence-collector gathers optional-gate QA evidence — terminal is fast-tier (light when an install omits `fast`): it runs any Bash or PowerShell command and returns only the result the caller asked for — plus the orchestrator skills (feature, research, memory-capture), the criteria skills, an optional autonomous feature loop, and a project-specific ORCHESTRATION.md. On empty or near-empty (greenfield) directories it first asks whether to scaffold a project tree and creates nothing until the user confirms. After inspect, suggests skills.sh skills from inspection signals. Run once per project; re-run to upgrade or re-target."
 license: MIT
 metadata:
-  version: "1.1.1"
+  version: "1.1.2"
 ---
 
 # Setup (Orchestration Kit Compiler)
@@ -137,6 +137,24 @@ Establish from the code (do not ask what you can read):
 - External services the code talks to (these must be mocked in tests)
 - Enumerate `git remote -v` and classify each remote per the forge taxonomy in
   `templates/ORCHESTRATION.md` § Forge adapter (Phase 7 delivery)
+- **Existing project agents** — enumerate agent definitions under
+  `.claude/agents/*.md`, `.cursor/agents/*.md`, `.github/agents/*.agent.md`,
+  `.codex/agents/*.toml` and `*.md`, and Codex `[agents.*]` tables in `.codex/config.toml`,
+  excluding paths listed in an existing `orchestration-kit.manifest.json`
+  `files` map. Report to the user (a) **name collisions** with the seven kit
+  agents (`evaluator`, `qa-evaluator`, `evidence-collector`, `implementer`,
+  `test-writer`, `terminal`, `diagnostician`) — Step 5 blocks colliding agent
+  **files** (exit 4) until the user decides; a colliding Codex
+  `[agents.<name>]` table in `.codex/config.toml` is not blocked (the kit
+  appends its own tables), so call it out for manual resolution — and (b)
+  **role overlaps** (e.g. a project `backend-engineer` vs kit `implementer`).
+- **Path-scoped rules** — detect rule files that load only when a touched file
+  matches a glob: Claude Code `.claude/rules/**/*.md` with `paths:` frontmatter,
+  Cursor `.cursor/rules/**/*.mdc` with `globs:` (excluding the kit's own
+  `orchestration.mdc`), Copilot `.github/instructions/*.instructions.md` with
+  `applyTo:`. Fresh-context subagents may not receive these rules, so they are
+  not guaranteed to reach `implementer` / `test-writer` / `evaluator` unless
+  routed in Step 4.
 
 ## Step 2b — Skill suggestions
 
@@ -227,14 +245,26 @@ Ask (multiple-choice where possible) only what you could not infer:
    **same-family arbiter (reduced independence)** into the `frontier-alt-family`
    bootstrap answer, and tell the user the arbiter is same-family. Claude Code is
    always in this case (Anthropic models only). Never set `frontier_alt_family`
-   equal to `alt_family` (the emitter warns). Never put `best` or `fable` in a
-   loop chain (emit exits 3).
+   equal to `alt_family` unless both are the frontier ID (same-family arbiter);
+   otherwise the emitter warns. When no different-family model at
+   light-comparable tier is reachable (Claude Code always), set `alt_family` to a
+   different same-family model (for example the frontier ID, or the light model
+   at higher effort where the harness pins effort) and label the fix-cycle-2 row
+   `same-family rotation (reduced diversity)`; never set `alt_family` equal to
+   `light` (emit warns: no rotation). Targeting a second harness such as Copilot
+   or Codex is the way to obtain cross-family models for rotation and arbitration.
+   Never put `best` or `fable` in a loop chain (emit exits 3).
 4. **QA gate surfaces** — which user-facing surfaces qa-evaluator covers; any existing
    evidence-producing skills (API smoke, visual QA)?
 5. **Research workflow** — wanted? Record `flags.research`.
 6. **Autonomous loop** — wanted? If yes: confirm sandbox strategy (worktree/container),
    max iterations, and that commits stay local (no auto-push) unless they say otherwise.
-   Record `flags.loop`.
+   Record `flags.loop`. Persist the sandbox answer: worktree ⇒
+   `flags.loop_worktree: true` (emitted `_loop/*` drivers then default
+   `LOOP_WORKTREE=1`; an explicit `LOOP_WORKTREE` env value, including `0`, still
+   wins); container or none ⇒ `false`. Warn that worktree mode needs a **tracked**
+   instance (`_memory/loop/backlog.md` and the harness directory committed) or the
+   driver stops with exit 5 at preflight.
 7. **Delivery forge (Phase 7)** — present the detected forge and the chosen remote.
    Confirm or override with any of `github` / `azuredevops` / `gitlab` / `none`
    (plus `forgeHost` for self-hosted). The `ship-pr` skill is always emitted;
@@ -255,8 +285,9 @@ Write `orchestration-kit.answers.json` at the repo root (`schema: 1`). Id table:
   "projectName": "…",
   "harnesses": ["claude-code"],
   "primary": "claude-code",
-  "flags": { "research": true, "loop": true, "greenfield": false,
-             "lint": true, "typecheck": false, "models_pinned": true },
+  "flags": { "research": true, "loop": true, "loop_worktree": false,
+             "greenfield": false, "lint": true, "typecheck": false,
+             "models_pinned": true },
   "forge": { "kind": "github", "host": "" },
   "tokens": { "PROJECT_NAME": "…", "STACK_SUMMARY": "…", "EXECUTION_LAYERS": "…" },
   "models": { "claude-code": { "frontier": "opus", "light": "sonnet", "fast": "haiku",
@@ -274,6 +305,15 @@ Skills installed in Step 2b are recorded through the existing bootstrap ids:
 Only skills actually installed in this session or already present count as installed; printed fail-open commands do not.
 When no project skills exist, those two ids are answered per the existing rules (`""`
 deletes the comment).
+
+Each detected path-scoped rule file (Step 2) gets one
+`bootstrap.critical-reference-rows` row (file, purpose, "when a task's `writes` match
+`<globs>`") and is listed in the `Rule files to cite` column of
+`bootstrap.layer-skill-map` for its layer(s). Write the
+existing-agents finding to `bootstrap.existing-agents` (which project agent covers
+which role and which agent the orchestrator uses for kit work), or `""` when no project
+agents exist. In `flags`, `loop_worktree` is optional (absent ⇒ false).
+In any table cell the kit writes, bootstrap rows included, escape a literal `|` as `\|`; never emit a bare `|` inside a cell.
 
 Do **not** put derived keys in `tokens` (marked "derived — do not set" below).
 `projectName` fills `PROJECT_NAME` when that token is absent. Omit `LINT_COMMAND` /
@@ -307,6 +347,7 @@ rung-5 arbiter — the emitter warns if the IDs match without this flag).
 | `{{MODEL_ALT_FAMILY}}` | derived — do not set. Different-family model at light-comparable tier, used by fix-cycle rotation (model map) |
 | `{{MODEL_FRONTIER_ALT_FAMILY}}` | derived — do not set. Different-family model at frontier tier, used by evaluator arbitration mode after cycle 3 (model map) |
 | `{{LOOP_MODEL_CHAIN}}` | derived — do not set. Comma-separated loop fallback chain, first = preferred (from the model map's "Loop fallback chain" row); empty ⇒ the breaker still tracks state but never passes a model flag |
+| `{{LOOP_WORKTREE_DEFAULT}}` | derived — do not set. `1` when `flags.loop_worktree` is true, else `0`; default for `LOOP_WORKTREE` in `_loop/*` when the env var is unset |
 | `{{EXECUTION_LAYERS}}` | Dependency-ordered layer chain |
 | `{{GROUND_TRUTH_DOC}}` | Committed domain ground-truth doc path |
 | `{{QA_SURFACES}}` | User-facing surfaces + evidence each produces |
@@ -333,7 +374,7 @@ This kit repo's own dogfood uses `scripts/agent-kit/self-install.sh`. If `orches
 | 0 | ok | continue to Step 6 |
 | 2 | usage / answers unreadable | fix the path or answers file permissions |
 | 3 | answers invalid **or** `--check-answers` found unanswered ids | fix answers |
-| 4 | user-modified files (listed on stderr) | show the user the listed files, ask, `--force` |
+| 4 | user-modified kit files **or** pre-existing files at kit paths that a previous emit did not write (first installs included; listed on stderr — pre-existing class: `emit: blocked <path> (exists; not written by a previous emit)`) | show the user the listed files, ask, `--force` |
 | 5 | verify failed | report the listed verify hits as a kit bug |
 | 6 | template syntax | kit bug |
 
@@ -353,15 +394,19 @@ A script-only `--upgrade` never runs Step 2b. A full interactive `/agent-kit` re
 does run it (skipping installed skills).
 
 `bash $SETUP/bin/emit.sh --upgrade` (answers come from the manifest; add
-`--answers` only when the interview changed). Exit 4 lists user-modified files
-and upgrade target conflicts; show the user, then `--force` if they confirm.
+`--answers` only when the interview changed). Exit 4 lists user-modified files,
+pre-existing kit-path files, and upgrade target conflicts; show the user, then
+`--force` if they confirm. A kit path newly added in an upgrade that already
+exists on disk with other content is blocked the same way.
 `--dry-run` prints planned actions and still exits 4 when any path is blocked.
 
 Prune: kit-owned paths in the previous manifest that are not in the new emit set
 are deleted when unchanged, else kept and warned; seeds are never pruned.
 
 Emit warns for a reused or unacknowledged same-family arbiter (fix:
-set `arbiter_same_family: true` or pick a different arbiter) and exits 3 for
+set `arbiter_same_family: true` or pick a different arbiter), when
+`models.<h>.alt_family` equals `models.<h>.light` (fix: pick a different
+`alt_family` so fix cycle 2 rotates models), and exits 3 for
 `best`/`fable` in a loop chain (fix: replace the entry).
 
 On every re-run, re-detect the forge from the current remotes. If detection agrees

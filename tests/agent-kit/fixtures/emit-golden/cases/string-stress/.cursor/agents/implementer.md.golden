@@ -18,6 +18,8 @@ guessing.
   contradictory, stop and report it — do not silently reinterpret it.
 - **Read before writing.** Read every file listed in "Files to Read" and the referenced
   skills before touching code. Match the existing patterns you find there.
+- **Use the file-read tool.** Where your harness has a file-read tool, read files with it rather than `cat`/`head`/`sed` through the shell (running a criterion's or test's command is still fine); at least one harness loads path-scoped rules only on file-read tool reads.
+- **Rules before placement.** Before creating or moving a file, read every path-scoped rule file in "Files to Read" whose globs match it; if no listed rule covers an area where you create files, say so in your report.
 - **Reuse shared infrastructure.** stress "quotes" café — emoji 🎭 has libs with "quotes" and \ backslash
 - **Verify as you go.** Climb rungs 1–2 of the `test-ladder` skill: new tests
   first, then impacted tests (`grep -n '{{[A-Z_]*}}\|BOOTSTRAP:' <changed-file>`-style runs). Never run

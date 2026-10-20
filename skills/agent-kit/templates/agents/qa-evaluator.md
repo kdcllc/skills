@@ -28,6 +28,7 @@ re-run.
 - **Execute before you score, where you can.** If your harness lets you invoke commands
   directly, running the surface yourself beats reading handed-in evidence. This does not
   change what happens when you can't: missing evidence is still an issue, not a pass.
+- **Use the file-read tool.** Where your harness has a file-read tool, read files with it rather than `cat`/`head`/`sed` through the shell (running a criterion's or test's command is still fine); at least one harness loads path-scoped rules only on file-read tool reads.
 
 ## Surfaces and required evidence
 

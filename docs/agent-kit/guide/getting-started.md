@@ -13,7 +13,7 @@ The skill is published from the public [kdcllc/skills](https://github.com/kdcllc
 npx skills add kdcllc/skills --skill agent-kit
 
 # Pin to a release tag
-npx skills add kdcllc/skills#agent-kit/v1.1.1 --skill agent-kit
+npx skills add kdcllc/skills#agent-kit/v1.1.2 --skill agent-kit
 
 # Option B — agent-skills-cli
 npx agent-skills-cli install https://github.com/kdcllc/skills.git
@@ -35,10 +35,10 @@ After any install path, open a session inside your project. The agent-kit skill 
 [`skills/agent-kit/SKILL.md`](../../../skills/agent-kit/SKILL.md) defines the compile pipeline. In order:
 
 1. **Detect target harness(es)** — evidence from existing `.claude/`, `.cursor/`, `.github/copilot-instructions.md` or `.github/agents/`, `.codex/` or `AGENTS.md`, plus the session you are running in. Multiple harnesses is normal.
-2. **Inspect the repo** — language(s), test commands, layers, user-facing surfaces, existing skills/agents/rules, external services (must be mocked in tests). Establish what you can read from code; do not ask what is already inferable.
+2. **Inspect the repo** — language(s), test commands, layers, user-facing surfaces, existing skills/agents/rules, external services (must be mocked in tests), **existing project agents** (name collisions and role overlaps with kit agents), and **path-scoped rules** (Claude `paths:`, Cursor `globs:` except the kit orchestration rule, Copilot `applyTo:`). Establish what you can read from code; do not ask what is already inferable.
 2b. **Skill suggestions** — runs for **every project** (greenfield accept, decline, or existing repo) **once per** interactive `/agent-kit` session, after Step 2 inspect; derives queries from inspection signals, offers optional project-local skills (1000+ installs, at most 8 candidates). See [Skill suggestions (Step 2b)](#skill-suggestions-step-2b).
-3. **Interview the user** — project name, execution layer order, model tiers, QA surfaces, research workflow, autonomous loop, delivery forge, ground-truth doc — only what Steps 1–2 could not infer.
-4. **Write the answers file** — `orchestration-kit.answers.json` at the repo root (`schema: 1`; bootstrap id table in [`bootstrap-ids.md`](../../../skills/agent-kit/reference/bootstrap-ids.md)). Loop `bash .claude/skills/agent-kit/bin/emit.sh --answers orchestration-kit.answers.json --check-answers` (or `.cursor/skills/agent-kit`, `.github/skills/agent-kit`) until exit 0, filling each listed bootstrap id.
+3. **Interview the user** — project name, execution layer order, model tiers (including same-family fix-cycle-2 rotation when no cross-family model is reachable), QA surfaces, research workflow, autonomous loop (sandbox choice persisted as `flags.loop_worktree` for `_loop/*` defaults), delivery forge, ground-truth doc — only what Steps 1–2 could not infer.
+4. **Write the answers file** — `orchestration-kit.answers.json` at the repo root (`schema: 1`; bootstrap id table in [`bootstrap-ids.md`](../../../skills/agent-kit/reference/bootstrap-ids.md)). Loop `bash .claude/skills/agent-kit/bin/emit.sh --answers orchestration-kit.answers.json --check-answers` (or `.cursor/skills/agent-kit`, `.github/skills/agent-kit`) until exit 0, filling each listed bootstrap id. Each detected path-scoped rule file (Step 2) is recorded as a Critical Reference Files row and in the layer → skills map's `Rule files to cite` column so the orchestrator routes matching rule files into implementer, test-writer, and evaluator context packages; in any table cell the kit writes, escape a literal `|` as `\|`.
 5. **Emit** — run the emitter (output is one line; run inline, not via `terminal`):
 
    ```bash
@@ -49,10 +49,12 @@ After any install path, open a session inside your project. The agent-kit skill 
 
    Runs on Bash 3.2+ with POSIX `awk` (no `jq`). If
    `orchestration-kit.manifest.json` already exists, run with `--dry-run` first. Exit
-   code 4 lists user-modified files — confirm with `--force`. The answers file may set
-   optional per-harness `fast` (fast-tier model ID; defaults to `light`) and
-   `arbiter_same_family`; emit may print same-family arbiter warnings (still exit 0) and
-   exits 3 when `best`, `fable`, or `claude-fable*` appears in a `loop_chain`.
+   code 4 lists user-modified kit files **or** pre-existing files at kit paths no
+   previous emit recorded (first installs included) — confirm with `--force`. The answers
+   file may set optional `flags.loop_worktree` and per-harness `fast` (fast-tier model ID;
+   defaults to `light`) and `arbiter_same_family`; emit may warn when `alt_family` equals
+   `light` or for same-family arbiter settings (still exit 0) and exits 3 when `best`,
+   `fable`, or `claude-fable*` appears in a `loop_chain`.
 6. **Report** — read the summary line (`emit: written N · unchanged M · pruned P · seeds-kept S · migrated U · warnings W · manifest orchestration-kit.manifest.json · kit <VERSION>`), delete the answers file (the manifest holds `answers`), and start with `/feature`.
 
 ```mermaid
@@ -187,7 +189,7 @@ The public skill is **`agent-kit`** from [kdcllc/skills](https://github.com/kdcl
 
 1. **Install the new skill** — for example `npx skills add kdcllc/skills --skill agent-kit` (see [Install the agent-kit skill](#install-the-agent-kit-skill) above) and read the 1.0.0 upgrade notes in [`skills/agent-kit/CHANGELOG.md`](../../../skills/agent-kit/CHANGELOG.md).
 2. **Remove old copies** — delete every `skills/setup/` tree from harness skill directories (`.claude/skills/setup`, `.cursor/skills/setup`, `.github/skills/setup`, and similar).
-3. **Re-emit with `--upgrade`** — `bash .claude/skills/agent-kit/bin/emit.sh --upgrade` (or the path for your harness). If the manifest has no embedded `answers` snapshot, run `/agent-kit` Steps 1–4 once, then `bash …/bin/emit.sh --answers orchestration-kit.answers.json --upgrade`. Use `--dry-run` first; exit **4** lists user-modified paths — confirm with `--force` when intentional.
+3. **Re-emit with `--upgrade`** — `bash .claude/skills/agent-kit/bin/emit.sh --upgrade` (or the path for your harness). If the manifest has no embedded `answers` snapshot, run `/agent-kit` Steps 1–4 once, then `bash …/bin/emit.sh --answers orchestration-kit.answers.json --upgrade`. Use `--dry-run` first; exit **4** lists user-modified kit files, pre-existing kit-path files with no previous-manifest entry, or migration target conflicts — confirm with `--force` when intentional.
 
 **Layout migration:** `--upgrade` also moves legacy top-level **`_goals/`** and **`_research/`** into gitignored **`_memory/work/`** (`_goals/<goal>/` → `_memory/work/goals/<goal>/`; `_research/` → `_memory/work/research/`; loop files such as `_goals/backlog.md` → tracked `_memory/loop/`). Moved goal and research folders become untracked scratch; loop markdown stays tracked. The emit summary's **`migrated U`** count is non-zero when moves ran. After upgrading, run `_kit/memory.sh backfill --plan` to review import candidates. Full mapping, `--dry-run` / exit **4** / `--force` semantics, and teammate coordination warnings: [`skills/agent-kit/templates/memory/README.md`](../../../skills/agent-kit/templates/memory/README.md) § Upgrade migration.
 

@@ -24,6 +24,7 @@ IMPLEMENTER="$TEMPLATES/agents/implementer.md"
 TEST_WRITER="$TEMPLATES/agents/test-writer.md"
 TASK_CRITERIA="$TEMPLATES/skills/task-criteria/SKILL.template.md"
 LADDER_REF="$TEMPLATES/skills/feature/reference/continuation-ladder.md"
+FIX_CYCLES_REF="$TEMPLATES/skills/feature/reference/fix-cycles.md"
 FEATURE_SKILL="$TEMPLATES/skills/feature/SKILL.template.md"
 ORCH_TEMPLATE="$TEMPLATES/ORCHESTRATION.md"
 PREFLIGHT_CURSOR="$REPO_ROOT/.cursor/skills/feature/reference/preflight.md"
@@ -34,6 +35,7 @@ PREFLIGHT_CHECK_NAMES=(
   "Missed callers"
   "Scope drift"
   "Default-value semantics"
+  "Stated facts"
 )
 
 fail_count=0
@@ -106,9 +108,9 @@ check_evaluator_task_criteria_tags() { # check_evaluator_task_criteria_tags <eva
 # 1. Canonical preflight.md anchors.
 # ===========================================================================
 if check_canonical_preflight "$PREFLIGHT_REF"; then
-  report PASS "canonical preflight.md: once-before-attempt-1, four checks, bootstrap, log prefix"
+  report PASS "canonical preflight.md: once-before-attempt-1, five checks, bootstrap, log prefix"
 else
-  report FAIL "canonical preflight.md: once-before-attempt-1, four checks, bootstrap, log prefix" \
+  report FAIL "canonical preflight.md: once-before-attempt-1, five checks, bootstrap, log prefix" \
     "missing file or anchor in $PREFLIGHT_REF"
 fi
 
@@ -178,17 +180,21 @@ fi
 check6_ok=1
 if [[ ! -f "$FEATURE_SKILL" ]]; then
   check6_ok=0
-else
-  grep -qF 'reference/preflight.md' "$FEATURE_SKILL" || check6_ok=0
-  grep -qF 'Line-patch-only' "$FEATURE_SKILL" || check6_ok=0
-  grep -qF 'no rotation' "$FEATURE_SKILL" || check6_ok=0
-  grep -qF 'counts toward 3' "$FEATURE_SKILL" || check6_ok=0
-  grep -qF 'apply-verbatim any cycle' "$FEATURE_SKILL" || check6_ok=0
+elif ! grep -qF 'reference/preflight.md' "$FEATURE_SKILL"; then
+  check6_ok=0
+fi
+if [[ $check6_ok -eq 1 ]] && [[ ! -f "$FIX_CYCLES_REF" ]]; then
+  check6_ok=0
+elif [[ $check6_ok -eq 1 ]]; then
+  grep -qF 'Line-patch-only' "$FIX_CYCLES_REF" || check6_ok=0
+  grep -qF 'no rotation' "$FIX_CYCLES_REF" || check6_ok=0
+  grep -qF 'counts toward 3' "$FIX_CYCLES_REF" || check6_ok=0
+  grep -qF 'apply-verbatim any cycle' "$FIX_CYCLES_REF" || check6_ok=0
 fi
 if [[ $check6_ok -eq 1 ]]; then
-  report PASS "feature skill: reference/preflight.md and line-patch-only resume rule"
+  report PASS "feature skill: reference/preflight.md; fix-cycles reference: line-patch-only resume rule"
 else
-  report FAIL "feature skill: reference/preflight.md and line-patch-only resume rule"
+  report FAIL "feature skill: reference/preflight.md; fix-cycles reference: line-patch-only resume rule"
 fi
 
 # ===========================================================================
@@ -220,9 +226,9 @@ for inst_pair in \
     continue
   fi
   if check_emitted_preflight "$inst_path"; then
-    report PASS "emitted $inst_label/skills/feature/reference/preflight.md: four checks, log prefix, no BOOTSTRAP"
+    report PASS "emitted $inst_label/skills/feature/reference/preflight.md: five checks, log prefix, no BOOTSTRAP"
   else
-    report FAIL "emitted $inst_label/skills/feature/reference/preflight.md: four checks, log prefix, no BOOTSTRAP" \
+    report FAIL "emitted $inst_label/skills/feature/reference/preflight.md: five checks, log prefix, no BOOTSTRAP" \
       "regression in $inst_path"
   fi
 done

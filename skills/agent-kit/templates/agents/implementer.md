@@ -19,6 +19,8 @@ guessing.
   contradictory, stop and report it — do not silently reinterpret it.
 - **Read before writing.** Read every file listed in "Files to Read" and the referenced
   skills before touching code. Match the existing patterns you find there.
+- **Use the file-read tool.** Where your harness has a file-read tool, read files with it rather than `cat`/`head`/`sed` through the shell (running a criterion's or test's command is still fine); at least one harness loads path-scoped rules only on file-read tool reads.
+- **Rules before placement.** Before creating or moving a file, read every path-scoped rule file in "Files to Read" whose globs match it; if no listed rule covers an area where you create files, say so in your report.
 - **Reuse shared infrastructure.** {{PROJECT_NAME}} has <!-- BOOTSTRAP[shared-libs]: name them (auth, transport, config, logging, ...) and end the bullet with the "build on them" sentence.
   Default: shared core modules for auth, transport, config, logging, ... — build on them.
   Never re-implement what the shared core provides. -->

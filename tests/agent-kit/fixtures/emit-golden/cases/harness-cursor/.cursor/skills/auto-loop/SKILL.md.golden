@@ -36,8 +36,9 @@ preflights that the project's instance is tracked and fails loudly, never fallin
 silently, if it is not. Relative paths used throughout this skill (`_memory/loop/backlog.md`,
 `ORCHESTRATION.md`, `_memory/loop/ESCALATIONS.md`) resolve to their tracked versions —
 anything untracked is simply absent in the worktree, which is exactly what the preflight
-and the tracked-instance requirement exist to guarantee. At the default
-`LOOP_WORKTREE=0`, nothing changes: cwd is the main tree, exactly as today. The
+and the tracked-instance requirement exist to guarantee. When `LOOP_WORKTREE` is unset,
+the install default is `0` (chosen at install); at `0`, cwd is
+the main tree, exactly as today. The
 protected-path and commit rules above are unchanged in both modes. The design default is
 2 slots — not more — because subagent fan-out multiplies per-slot load, all slots share
 one account's rate-limit budget, and a provider-global breaker cooldown stalls every

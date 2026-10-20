@@ -91,7 +91,7 @@ bash scripts/agent-kit/self-install.sh
 | `--symlink` | Places the canonical real tree at `.agents/skills/<name>/` and makes `.claude/skills/<name>` and `.cursor/skills/<name>` symlinks pointing there. Fails loudly on symlink failure; **never** falls back to copy. |
 | `--force` | Accepted and ignored — overwrite is already the default. |
 | `--no-emit` | Copy skills only; skip emit (legacy behaviour). |
-| `--force-emit` | Pass `--force` to `emit.sh` (overwrite user-modified instance files). |
+| `--force-emit` | Pass `--force` to `emit.sh` (overwrite user-modified instance files and pre-existing files at kit paths). |
 
 ### What self-install emits
 
@@ -102,6 +102,8 @@ Nothing the self-install script writes reaches git — all destination paths are
 ## Editing templates
 
 All canonical orchestration content lives under [`skills/agent-kit/templates/`](../../../skills/agent-kit/templates/) in Claude Code format. `skills/agent-kit/bin/emit.*` resolves and translates templates deterministically.
+
+New feature-skill detail goes into `templates/skills/feature/reference/`; `SKILL.template.md` gets a one-line pointer, and its 11264-byte budget stays.
 
 ### Template grammar (authoring)
 
@@ -182,9 +184,9 @@ In this repo the manifest is gitignored (instance layer). See the live example s
 For installed projects (including dogfood in this repo):
 
 1. **Re-pull** the kit — for example `npx skills add kdcllc/skills --skill agent-kit` again, or `npx agent-skills-cli update` (run `npx agent-skills-cli check` first to see installed skills).
-2. **Re-emit** — `bash .claude/skills/agent-kit/bin/emit.sh --upgrade` (or `.cursor/skills/agent-kit`, `.github/skills/agent-kit`; answers come from the manifest; add `--answers` only when the interview changed). Manifests from the private **`setup`** kit have no embedded `answers` snapshot — see [getting-started.md](getting-started.md) § Upgrading from the private setup kit. Exit 4 lists user-modified files; confirm with `--force`. Use `--dry-run` to preview.
+2. **Re-emit** — `bash .claude/skills/agent-kit/bin/emit.sh --upgrade` (or `.cursor/skills/agent-kit`, `.github/skills/agent-kit`; answers come from the manifest; add `--answers` only when the interview changed). Manifests from the private **`setup`** kit have no embedded `answers` snapshot — see [getting-started.md](getting-started.md) § Upgrading from the private setup kit. Exit 4 lists user-modified files and pre-existing files at kit paths with no previous-manifest entry (stderr distinguishes the two); confirm with `--force`. Use `--dry-run` to preview.
 
-**Hash diff protects local modifications:** Unmodified emitted files update silently; modified files require confirmation before overwrite.
+**Hash diff protects local modifications:** Unmodified emitted files update silently; modified files require confirmation before overwrite; pre-existing files at kit paths with no previous-manifest entry also need `--force`.
 
 **`seedFiles` semantics:** When loop is enabled, the manifest lists `_memory/loop/backlog.md` in `seedFiles` only (not in `files`). Seeds are created only when missing, never overwritten on upgrade, and are exempt from the hash-diff overwrite flow.
 
@@ -221,13 +223,15 @@ Tracked structural guards live under `tests/agent-kit/templates/`. Each script l
 | [`degraded-mode.sh`](../../../tests/agent-kit/templates/degraded-mode.sh) | Degraded-mode reference, feature-skill and ORCHESTRATION wiring, harness-matrix and Cursor emitter caveats, ship-pr self-evaluated gates section, emitted degraded-mode instances, negative self-test on a copied template |
 | [`evidence-collector.sh`](../../../tests/agent-kit/templates/evidence-collector.sh) | Evidence-collector agent template, models map, emit wiring, QA flow docs, emit smoke, optional `QA_SURFACES` token, negative self-test on a copied template |
 | [`invocation-flags.sh`](../../../tests/agent-kit/templates/invocation-flags.sh) | Seven `disable-model-invocation: true` skill flags plus `terminal` agent wiring (frontmatter, models map, test-ladder, ORCHESTRATION, emitters, Codex registration) |
-| [`escalation-ladder.sh`](../../../tests/agent-kit/templates/escalation-ladder.sh) | Phase 4 continuation-ladder prose, failure-class taxonomy alignment, diagnostician wiring, `{{MODEL_FRONTIER_ALT_FAMILY}}` docs |
+| [`escalation-ladder.sh`](../../../tests/agent-kit/templates/escalation-ladder.sh) | Phase 4 continuation-ladder prose, failure-class taxonomy alignment, diagnostician wiring, `{{MODEL_FRONTIER_ALT_FAMILY}}` docs, fix-cycles reference anchors (continuation-ladder pointer, bypass classes, `phases.ladder`, model-ID scan) |
 | [`phase-handoffs.sh`](../../../tests/agent-kit/templates/phase-handoffs.sh) | Align-docs working-tree change set and snapshot scope literals; research path-Read handoff to `feature` Phase 3; mutation proofs under mktemp |
 | [`template-currency.sh`](../../../tests/agent-kit/templates/template-currency.sh) | Seven shipped template claims (research handoff at Phase 3, escalation **Ladder** line, closer-task rung-3 carve-out, loop dispatch/exit/merge gates, Feature Flow mermaid byte-identical to [feature-workflow.md](feature-workflow.md)) plus optional instance mirrors |
-| [`skill-slimming.sh`](../../../tests/agent-kit/templates/skill-slimming.sh) | Feature skill template byte budget |
+| [`skill-slimming.sh`](../../../tests/agent-kit/templates/skill-slimming.sh) | Feature skill template byte budget, feature skill pointers to `reference/fix-cycles.md`, that file's intro line and moved anchors, and four ORCHESTRATION reference trees listing it |
 | [`forge-adapter.sh`](../../../tests/agent-kit/templates/forge-adapter.sh) | Ship-PR / forge adapter strings |
 | [`model-enforcement.sh`](../../../tests/agent-kit/templates/model-enforcement.sh) | Model tier policy strings in templates and agents |
 | [`model-currency.sh`](../../../tests/agent-kit/templates/model-currency.sh) | Fast tier, arbiter warnings, loop model denylist, upgrade compatibility, dogfood pins |
+| [`install-feedback.sh`](../../../tests/agent-kit/templates/install-feedback.sh) | Pre-existing emit paths, bootstrap ids, alt_family-equals-light warning, model-map same-family rotation, loop_worktree, path-scoped routing, Codex append, memory-table IF guards, frozen rule-file wording in agent, ORCHESTRATION, feature templates and the install skill (`SKILL.md`), harness-matrix delivery observation, table-cell `\|` escaping, emitted rule-file wording |
+| [`feature-feedback.sh`](../../../tests/agent-kit/templates/feature-feedback.sh) | Goal-criteria (executable-criteria evidence, reference sweep, corrective-task and xref-audit anchors), criteria-defect at-detection routing and Phase 3 re-checks in task-criteria and evaluator, preflight five checks, goal-revisions and corrective-tasks reference anchors, continuation-ladder early routing, feature skill reference pointers and size cap, criteria-defect route anchor in the fix-cycles reference, ORCHESTRATION repository-safety baseline and orchestration-log volume notes, frozen wording identity across listed templates, emitted `goal-revisions.md` and `corrective-tasks.md` under feature/reference |
 | [`ready-groups.sh`](../../../tests/agent-kit/templates/ready-groups.sh) | Ready-groups reference, feature-skill and ORCHESTRATION wiring, goal template `parallel` flag, harness-matrix and emitter caveats, emitted ready-groups instances, negative self-test on a copied template |
 | [`log-spawn.sh`](../../../tests/agent-kit/templates/log-spawn.sh) | Canonical `log-spawn.sh` ledger behavior, Footprint ingestion, OUTCOME `model_check`, `_kit/log-spawn.*` emit wiring |
 | [`memory.sh`](../../../tests/agent-kit/templates/memory.sh) | Memory CLI twins, redact/check/rm/capture, quarantine, `_memory/` emit wiring; helpers [`memory-release-c.sh`](../../../tests/agent-kit/lib/memory-release-c.sh) and [`memory-redaction-behavioral.sh`](../../../tests/agent-kit/lib/memory-redaction-behavioral.sh); pwsh legs assert bash-only stubs exit **2** |
@@ -236,11 +240,11 @@ Tracked structural guards live under `tests/agent-kit/templates/`. Each script l
 | [`research-layout.sh`](../../../tests/agent-kit/templates/research-layout.sh) | Canonical `/research` templates and memory wiring for tracked `_memory/research/`; mutation proofs under mktemp |
 | [`emit-determinism.sh`](../../../tests/agent-kit/templates/emit-determinism.sh) | Byte-identical re-emit and Bash 3.2 / jq-free portability |
 | [`emit-golden.sh`](../../../tests/agent-kit/templates/emit-golden.sh) | Golden corpus for `bin/emit.sh` (use `--update` only with reviewed diff) |
-| [`emit-portability.sh`](../../../tests/agent-kit/templates/emit-portability.sh) | sha256 tools, JSON edges; Docker `bash:3.2` emit-golden leg **skips by default**, `AGENT_KIT_DOCKER=1` opts in and **FAILs** when docker or the `bash:3.2` image is missing; CI pulls `bash:3.2` and sets the opt-in |
+| [`emit-portability.sh`](../../../tests/agent-kit/templates/emit-portability.sh) | sha256 tools, JSON edges; Docker `bash:3.2` emit-golden leg **skips by default**, `AGENT_KIT_DOCKER=1` opts in and **FAILs** when docker or the `bash:3.2` image is missing; CI does not run this leg (it runs only `run-all.sh --quick`), so run it locally before touching Bash 3.2-sensitive code |
 | [`emit-migrate.sh`](../../../tests/agent-kit/templates/emit-migrate.sh) | Legacy layout migration on `--upgrade` (private fixtures; cases run in parallel via [`parallel.sh`](../../../tests/agent-kit/lib/parallel.sh) / `AGENT_KIT_CASE_JOBS`) |
 | [`emit-perf.sh`](../../../tests/agent-kit/templates/emit-perf.sh) | Default: structural checks + in-suite mutation proofs (no timing); `EMIT_PERF=1` adds three timed self-answers emits (median vs `EMIT_PERF_MAX`, default **4.0**) and optional strace fork budget (`EMIT_PERF_MAX_FORKS`, default **589**) |
 | [`legacy-paths.sh`](../../../tests/agent-kit/templates/legacy-paths.sh) | No stray legacy `_goals` / `_research` tokens outside the allow-list |
-| [`line-patch-preflight.sh`](../../../tests/agent-kit/templates/line-patch-preflight.sh) | Pre-flight reference, bootstrap id, evaluator/implementer/task-criteria line-patch wording, continuation-ladder tag-stripping, feature-skill and ORCHESTRATION wiring, emitted preflight instances, negative self-test on copied templates |
+| [`line-patch-preflight.sh`](../../../tests/agent-kit/templates/line-patch-preflight.sh) | Pre-flight reference, bootstrap id, evaluator/implementer/task-criteria line-patch wording, continuation-ladder tag-stripping, feature-skill, fix-cycles reference and ORCHESTRATION wiring, emitted preflight instances, negative self-test on copied templates |
 | [`memory-backfill.sh`](../../../tests/agent-kit/templates/memory-backfill.sh) | `memory.sh backfill` plan/apply semantics |
 | [`windows-launcher.sh`](../../../tests/agent-kit/templates/windows-launcher.sh) | Windows `.cmd` launcher static checks everywhere; behavior checks only under Git Bash on Windows, otherwise **SKIP** |
 
@@ -313,5 +317,5 @@ Install and user-side usage topics belong in [getting-started.md](getting-starte
 - [`tests/agent-kit/loop-harness/run.sh`](../../../tests/agent-kit/loop-harness/run.sh) — behavioral harness header and coverage scope
 - [`tests/agent-kit/run-all.sh`](../../../tests/agent-kit/run-all.sh) — full kit suite driver (options, env, timing summary)
 - [`tests/agent-kit/templates/`](../../../tests/agent-kit/templates/) — guard script header comments (what each guard locks)
-- [`.github/workflows/agent-kit.yml`](../../../.github/workflows/agent-kit.yml) — CI agent-kit workflow (`run-all.sh --quick` on pull requests; the full suite with the bash:3.2 pull and `AGENT_KIT_DOCKER` on `master` pushes and manual runs)
+- [`.github/workflows/agent-kit.yml`](../../../.github/workflows/agent-kit.yml) — CI agent-kit workflow (`run-all.sh --quick` on every trigger — pull requests, `master` pushes, and manual runs; the full suite and the bash:3.2 Docker check run only locally)
 - `orchestration-kit.manifest.json` — manifest shape and `seedFiles` (instance file; gitignored in this repo)

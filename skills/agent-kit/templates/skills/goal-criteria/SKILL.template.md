@@ -89,6 +89,20 @@ must name a verification method (unit test, integration test, command output, li
 interaction, screenshot, or equivalent). A missing section, an empty section, or any
 criterion without a stated verification method is NEEDS REVISION.
 
+**Executable criteria (hard rules — each violation is NEEDS REVISION):**
+
+1. Every shell-command criterion has an entry in `_memory/work/goals/<goal>/criteria-evidence.md` with the command and its current-tree output, or `not runnable yet — created by task NN`.
+2. For **content-inspecting** checks (grep/rg/awk/sed/wc/diff/count assertions) the entry also shows a **true negative** (passes on the correct shape) and a **true positive** (fails on an injected violation); before the code exists both may be shown on a minimal scratch sample outside the repo. A content check that cannot show both directions is vacuous. Criteria that only run an existing tracked suite or check an exit code need no TN/TP.
+3. Criteria within one task are checked pairwise for **mutual satisfiability** (e.g. a forbidden-pattern grep against text another criterion mandates in the same file).
+4. Every file a criterion requires the task to create or change is in that task's `writes`; otherwise: A criterion that requires writing outside the task's `writes` is an ownership gap, not a criteria defect: the orchestrator re-plans ownership as an amendment.
+5. A fence or "unchanged" check that uses `git status` uses `--untracked-files=all`; paths in the hash-baseline scope (untracked, ignored, outside the work tree, or any path in a repository with no commits) are verified by a recorded sha256 baseline or mtime window, and the criterion says which.
+
+**Reference sweep (Phase 3 gate).** When any task renames, re-signs, or changes the shape of a public symbol (fields, nullability, type, visibility, wire/serialized format), `_memory/work/goals/<goal>/reference-sweep.md` exists, lists the exact search commands (exact-word and derived-identifier searches) and every hit, and each hit is in some task's `writes` or `reads` or carries an "unaffected because …" line. Missing artifact or unaccounted hit → NEEDS REVISION.
+
+**Corrective tasks (Phase 3 gate).** A corrective task named `NN<letter>-<name>.md` that `depends_on` the completed task whose files it fixes may list those files in `writes` (the ordering satisfies checks 3–4); the `depends_on` edges that order unstarted readers or writers of those files after it are part of the same additive amendment; its Acceptance Criteria follow every rule above. See `reference/corrective-tasks.md` in the feature skill.
+
+**Plan amendments (Phase 3 gate).** Material amendments re-run pre-flight and the full Phase 3 evaluation with a fresh evaluator and reset the cycle count; additive amendments and criterion corrections run pre-flight checks 1, 2 and 5 on the changed tasks, then a targeted evaluation. After any renumbering the evaluator checks `xref-audit.md` exists and reports zero unresolved references. See `reference/goal-revisions.md` in the feature skill.
+
 This is where the former Phase 4 contract gate's rigor now lives — validated once at
 Phase 3 for all tasks before any implementation dispatch.
 

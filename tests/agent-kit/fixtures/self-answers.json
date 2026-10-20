@@ -57,6 +57,7 @@
     "critical-reference-rows": "",
     "doc-buckets": "",
     "domain-skill-rows": "",
+    "existing-agents": "",
     "execution-layers": "",
     "fallback-chains": "| Tier | Chain (first available wins) |\n|------|------------------------------|\n| `frontier` | `claude-opus-5-5` → `claude-sonnet-5-5` → (omit pin — harness default) |\n| `light` | `claude-sonnet-5-5` → `claude-haiku-5-5` → (omit pin — harness default) |\n| `fast` | `claude-haiku-5-5` → `claude-sonnet-5-5` → (omit pin — harness default) |\n\nCursor fallback (same policy, Cursor IDs): `claude-opus-5-5-high` → `composer-2.5-fast`\n→ (omit pin); light: `composer-2.5-fast` → (omit pin). Cursor silently substitutes a\ncompatible model under team-admin/plan restrictions, or when the resolved ID is\nunknown/stale (a rotated-out or misspelled model name) — evaluators must report which\nmodel produced the verdict.",
     "frontier-alt-family": "| Ladder step | Model pin |\n|-------------|-----------|\n| Diagnosis-driven implementation attempt (rung 4) | Claude Code `claude-opus-5-5` / Cursor `claude-opus-5-5-high` |\n| Evaluator arbitration mode (rung 5) | Claude Code `claude-opus-5-5` / Cursor `claude-opus-5-5-high` — same-family arbiter (reduced independence) |",

@@ -1,6 +1,6 @@
 {
   "kit": "agent-kit",
-  "kitVersion": "1.1.1",
+  "kitVersion": "1.1.2",
   "installedAt": "2026-09-03",
   "harnesses": [
     "codex"
@@ -19,22 +19,22 @@
     "_memory/loop/backlog.md"
   ],
   "files": {
-    ".codex/agents/diagnostician.md": "7d0121fb18ee3c128bc3884acd8aee1796c3ae5161d5f3506315d1614a52f1f2",
+    ".codex/agents/diagnostician.md": "505b49b4c3bc68fa9e41e26b1a048754a0ba977d31481efca84598183c3af49c",
     ".codex/agents/diagnostician.toml": "e0e4d37c81f763b18f09b0440c01714f80ed7f82c8bf7104e406cccb4c720e96",
-    ".codex/agents/evaluator.md": "02b19a93230bdc739956717b6ad2e29118413ec35e9c0a45425b939c6c0af2e9",
+    ".codex/agents/evaluator.md": "4753aa50c434a1bae5c6d6edc6a52475c2a8d6c2bfb849cbc235d7fd50a0615e",
     ".codex/agents/evaluator.toml": "e0e4d37c81f763b18f09b0440c01714f80ed7f82c8bf7104e406cccb4c720e96",
     ".codex/agents/evidence-collector.md": "ea049198ab8063a7b5fcdb7046e6a5efe68353dbbc3b3eb0441f9fdd8e92ca18",
     ".codex/agents/evidence-collector.toml": "4092fe6c250c290e8ca3b43ef5998904f0965247e5aff3d837d486395d06241b",
-    ".codex/agents/implementer.md": "da0c77195345ce6ec0dad877dd7cbab7139463733bac880eea63b61a6368c62b",
+    ".codex/agents/implementer.md": "8b6ec045f6e77d09719201361c437cc41e6ab46003962822f13cee084dc20584",
     ".codex/agents/implementer.toml": "4092fe6c250c290e8ca3b43ef5998904f0965247e5aff3d837d486395d06241b",
-    ".codex/agents/qa-evaluator.md": "a5b0b9905199b3169d55bfa10ed2834a73e86b60e0bf2abac701c9bb1ebc153f",
+    ".codex/agents/qa-evaluator.md": "1fa430ab26f439b74992e14adc10a2e00f66b1579437fe2c96fb8db69c4fa778",
     ".codex/agents/qa-evaluator.toml": "e0e4d37c81f763b18f09b0440c01714f80ed7f82c8bf7104e406cccb4c720e96",
     ".codex/agents/terminal.md": "7cba02abd1113c8eb6d9b867fa1793c8b0d8e062fb2d524d4ce0e8b26a750c30",
     ".codex/agents/terminal.toml": "4092fe6c250c290e8ca3b43ef5998904f0965247e5aff3d837d486395d06241b",
-    ".codex/agents/test-writer.md": "1346d59f9f439ab69ca4cb610dc91b53bc39422d40762ce912f7164d0d0f1cdd",
+    ".codex/agents/test-writer.md": "a85e76d008d0a1a3bb385f0bd84805f6b8a8e4407fb6e4fda4dbc3e1ae779c42",
     ".codex/agents/test-writer.toml": "4092fe6c250c290e8ca3b43ef5998904f0965247e5aff3d837d486395d06241b",
     ".codex/config.toml": "9623edb8c9e8afa393d129047a4c795a8b55567b8c01f15320056da4b4541b1b",
-    "ORCHESTRATION.md": "33317f8b17281ea93e60c708513dd4849c8e44171af07354fee79f04d4cb46da",
+    "ORCHESTRATION.md": "99d9d2596b67d6a31d38ac93a37f1c170ed75187ed793f2c085ef7e29961da8f",
     "_kit/log-spawn.cmd": "ae9541294a03f741311ff8bc0d5c6f9985d6947fb42f7aaeaf6613088e34bf7e",
     "_kit/log-spawn.sh": "5b288ff4db2274eb807e748b3abb2fce2f442148c378458f07198c4c5b262dd5",
     "_kit/memory.cmd": "ae9541294a03f741311ff8bc0d5c6f9985d6947fb42f7aaeaf6613088e34bf7e",
@@ -43,8 +43,8 @@
     "_loop/PROMPT.md": "fdce88d9b733e1018c13ba9fdec03e4cd0a83f5c3ba85e84f87d728b96c0d250",
     "_loop/breaker.ps1": "aca26dccdd9110c7da79aef8d2369401fec4b07d98e8fe3d19eaa9f4e6c47750",
     "_loop/breaker.sh": "92d762f93a3a76db1f8176f454c4ad401f65b5449a8bd8bbbd0c690344a6c686",
-    "_loop/loop.ps1": "3c70e1e2f42cf485c5f60c0997cdd84e6174de7ba7014c2cf51c6cc7885e8723",
-    "_loop/loop.sh": "93e4c5a968b1620f3ca15f8f34d5139d1a5e262f5a8cb818911eae54338c1db1",
+    "_loop/loop.ps1": "0c8ab850dd9b1e6562e77a50782c260421e8e852f7e7a5c1affb735f85e8a1ad",
+    "_loop/loop.sh": "38c3b45f29b1963a1751c092e9b50b9227eba4d19f886008f2d6ec25e0870991",
     "_memory/README.md": "591cb77f6a1293fd6fa39c93ab258549f6dc58af900de99b2b00e6d5bd7dedd4"
   },
   "answers": {

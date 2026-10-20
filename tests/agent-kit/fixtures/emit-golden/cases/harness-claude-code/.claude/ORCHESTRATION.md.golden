@@ -66,7 +66,7 @@ Each subagent invocation:
 This eliminates fatigue and bias completely.
 
 Exception for re-checks: the evaluator is resumed with a delta prompt listing only
-the applied fixes; the implementer may be resumed for fix cycle 1 only (cycles 2–3
+the applied fixes; Phase 3 deltas quote newly written passages and Phase 3 attempt 3 is a fresh spawn per `reference/goal-revisions.md`. The implementer may be resumed for fix cycle 1 only (cycles 2–3
 are fresh spawns) except a line-patch-only NEEDS FIXES verdict (every required fix
 tagged `[line-patch]`) resumes the same executor (`implementer`/`test-writer`) in
 apply-verbatim mode on any cycle without model rotation, still counting toward the
@@ -100,13 +100,20 @@ non-independent and disclosed to the user and in the PR draft).
    is in the orchestration log.
 2. **Post-spawn repository check.** After every subagent returns, before trusting its
    report, compare `HEAD`, the current branch, and `git config --local` user entries with
-   the values from before the spawn. Also compare the changed-file set
-   (`git status --porcelain`) with the task's write fence. Anything unexpected stops the
+   the values from before the spawn. In a repository with no commits, record `no HEAD`
+   instead of comparing `HEAD`. Also compare the changed-file set
+   (`git status --porcelain --untracked-files=all`) with the task's write fence. Before
+   dispatch, for paths whose content changes git cannot show (untracked, ignored,
+   outside the work tree, or any path in a repository with no commits) — the fenced paths
+   and the unfenced paths the spawn must not touch (in a repository with no commits, the
+   whole working tree minus ignored build output) — record a sha256 baseline (or the
+   run's mtime window), compare after the spawn, and map every changed hash to the fence;
+   name the method in the log note. Anything unexpected stops the
    goal: log it, restore from git or the backup, and fix the cause before continuing.
    **Group variant:** for a ready group (`reference/ready-groups.md`), record baseline
-   once before any member runs (`HEAD`, branch, local git user) and snapshot the working
+   once before any member runs (`HEAD` or `no HEAD`, branch, local git user, and the sha256/mtime baseline above for paths git cannot show) and snapshot the working
    tree with `git status --porcelain --untracked-files=all`. After all members return,
-   compare to that baseline and snapshot; map each path new or changed since the snapshot
+   compare to that baseline and snapshot; map each path new or changed since the snapshot (or whose hash changed)
    to exactly one member's `writes` fence, cross-checked against each member's report. A
    path in no fence, or attributable to two members, stops the goal. Members share one
    checkout — tasks that write shared unfenced state (build outputs, caches, instances)
@@ -256,6 +263,10 @@ flowchart TD
 
 ### Phase notes
 
+At each phase completion, log a phase-boundary `note` with spawn count, running
+dispatch-volume totals (`io_est_tokens` / `work_est_tokens`), and harness-reported
+main-session size (see **Orchestration log**).
+
 **Phase 1 — Alignment (structured discovery).** Stay in Agent Mode and ask structured
 questions (5-20 MCQs), with follow-up rounds if needed; then summarize "My
 Understanding" and wait for the user to confirm before Phase 2. IMPORTANT: no files
@@ -270,11 +281,17 @@ user and WAIT for the decision; only then create the task file. Each task file c
 validates these once for all tasks.
 
 **Phase 3 — Goal evaluation (mandatory re-evaluate loop).** Once before evaluation
-attempt 1, run the read-only pre-flight in `reference/preflight.md` (no score); the
-orchestrator fixes failures and logs them, then launches the evaluator with the Phase 1
-Q&A included (for the Discovery Coverage check). PASS → Phase 4; NEEDS REVISION →
+attempt 1, run the read-only pre-flight in `reference/preflight.md` (no score); it
+records `criteria-evidence.md` and `reference-sweep.md` and runs check 5 Stated facts.
+The orchestrator fixes failures and logs them, then launches the evaluator with the Phase 1
+Q&A included (for the Discovery Coverage check). The Phase 3 evaluator checks both
+artifacts when applicable. PASS → Phase 4; NEEDS REVISION →
 revise the goal + tasks and re-evaluate (3 max); REJECT → escalate to the user.
-INVARIANT: The ONLY exit to Phase 4 is a PASS verdict from the evaluator subagent.
+Re-checks follow `reference/goal-revisions.md` (delta prompts quote newly written text
+verbatim; attempt 3 is a fresh full evaluation on the arbiter model, pinned in that reference).
+After a Phase 3 PASS, plan amendments are **material** (full pre-flight and Phase 3
+re-run, cycle reset) or **additive** / **criterion correction** (each: logged rationale, pre-flight checks 1, 2 and 5, then targeted evaluation);
+renumbering requires `xref-audit.md`. INVARIANT: The ONLY exit to Phase 4 is a PASS verdict from the evaluator subagent.
 Revisions MUST be re-evaluated.
 
 **Phase 4 — Task execution (mandatory re-evaluate after every fix).** For each ready
@@ -285,7 +302,7 @@ only when read-only and no writer is in flight. The next group starts only after
 member reaches task-evaluation PASS or PASS (with notes).
 
 - Step 1: Launch implementer (or test-writer for the test task) — the context
-  package includes the task file (including its Acceptance Criteria)
+  package includes the task file (including its Acceptance Criteria); record the pre-dispatch baseline first (Repository safety item 2)
 - Step 2: Receive completion report
 - Step 3: Launch evaluator
 - Step 4: Handle verdict — PASS or PASS (with notes) → next task (`PASS (with notes)`
@@ -293,7 +310,8 @@ member reaches task-evaluation PASS or PASS (with notes).
   rotation) and re-evaluate, 3 max, then read `goal.md`'s `phases.ladder`: `auto` → the
   continuation ladder (rungs 5→4→6 — see Evaluation & Retry Mechanisms) before
   escalation; `escalate` (default) → escalate to the user with the ladder offered as
-  option 1; REJECT → escalate to the user. A line-patch-only verdict (all fixes
+  option 1; REJECT → escalate to the user; `criteria-defect` routes at detection (winning over line-patch-only resume) per
+  `reference/continuation-ladder.md`. A line-patch-only verdict (all fixes
   `[line-patch]`) resumes the same executor (`implementer`/`test-writer`) in apply-verbatim
   mode on any cycle (fresh spawn on the same model when the harness cannot resume), skips
   rotation, counts
@@ -305,7 +323,13 @@ member reaches task-evaluation PASS or PASS (with notes).
 
 INVARIANT: A task is only marked complete after the evaluator returns PASS or
 PASS (with notes) (`PASS (with notes)` counts as PASS). There is no path where
-fixes are made and the orchestrator proceeds without re-verification.
+fixes are made and the orchestrator proceeds without re-verification. A reported
+out-of-fence defect in a completed task's files becomes a corrective task per
+`reference/corrective-tasks.md`. At each task or ready-group boundary, when the harness
+reports the main session past ~60% of its context window, recommend compaction or a fresh
+session to the user (e.g. Claude Code `/compact`; other harnesses: start a new chat and
+resume from `goal.md` and the orchestration log) — never compact automatically; log the
+recommendation via `note`.
 
 **Phase 5 — Final audit (mandatory re-audit loop).** All tasks complete → final
 evaluator audit. APPROVED → Quality Checks (ladder rung 3: full suites, via a
@@ -527,7 +551,7 @@ Every subagent invocation requires a complete context package:
 │  only; never evaluator / qa-evaluator / terminal                  │
 ├───────────────────────────────────────────────────────────────────┤
 │  SECTION 4: CONSTRAINTS                                           │
-│  "## Write fence" (the task's writes list)                        │
+│  "## Write fence" (the task's `writes` block copied verbatim)     │
 │  "## Model" (requested ID · tier · rotation)                      │
 │  "## Rules" or "## Critical Requirements"                         │
 │  - Must do X (e.g. reuse shared core modules)                     │
@@ -546,6 +570,12 @@ through the emitted tool `_kit/log-spawn.sh` (Windows outside Git Bash:
 `_kit\log-spawn.cmd` — Git for Windows required; same flags, byte-identical output). The orchestrator runs it inline (one-line output;
 exempt from the `terminal` spawn rule). The header's running io_est_tokens /
 work_est_tokens totals are "see latest entry" — the script never rewrites a line.
+`io_est_tokens` and `work_est_tokens` measure dispatch volume only — they do not count
+cache reads or main-session growth. At every phase boundary, append a `note` in this
+format: `Phase N complete: spawns=K · running io=X · running work=Y · main session=<harness-reported %|unknown>`.
+At Phase 4 task or ready-group boundaries, when the harness shows the main session past
+~60% of its context window, recommend compaction or a fresh session to the user (never
+compact automatically) and log that recommendation in a `note`.
 Every entry references artifact files rather than inlining them:
 
 - `_memory/work/goals/<goal>/spawns/NN-context.md` — the full context package as sent (NN = next
@@ -595,8 +625,11 @@ terminal human escalation. Apply in this order:
 
 1. **Bypass check (every verdict, every cycle).** A verdict tagged with a bypass failure
    class (`destructive`, `security`, `infra`) stops all retrying immediately — including
-   cycles 1–3 — and escalates to the human. Requirement ambiguity routes through rung 5,
-   not the bypass — it is not a bypass class.
+   cycles 1–3 — and escalates to the human. `criteria-defect` is not a bypass class;
+   `criteria-defect` stops fix cycles at detection on any cycle: with `ladder: auto` run rung 5 arbitration now; with `ladder: escalate` escalate with arbitration offered as option 1.
+   Early-arbitration outcomes are in `reference/continuation-ladder.md` (requirement
+   ambiguity is not bypass — route through `criteria-defect` or rung 5 arbitration, not
+   cycle-3 exhaustion alone).
 
 2. **Rung 5 — arbitration (conditional, checked first on exhaustion).** If cycles 1–3 all
    failed on the *same* required-fix item (unanimous-failure heuristic; compare items
@@ -655,7 +688,7 @@ backstop.
 
 | Phase | Max Cycles | On Exhaust |
 |-------|------------|------------|
-| Goal Evaluation (Phase 3) | 3 revise→re-evaluate | Escalate to user |
+| Goal Evaluation (Phase 3) | 3 revise→re-evaluate (attempt 3: fresh arbiter evaluator; material amendments reset the cycle) | Escalate to user |
 | Task Execution (Phase 4) | 3 implement→evaluate per task | phases.ladder=auto: continuation ladder (rungs 5→4→6) then escalate; escalate (default): escalate to user, ladder offered |
 | Final Audit (Phase 5) | 3 fix→re-audit | Escalate to user |
 | Align Docs (Phase 6) | 3 per doc + 3 for plan and final doc audit | Escalate to user |
@@ -664,9 +697,9 @@ backstop.
 
 ### Mandatory Re-Evaluate Invariants
 
-- **Phase 3**: Goal evaluation loop ONLY exits to Phase 4 via a PASS verdict. Revisions without re-evaluate are forbidden.
+- **Phase 3**: Goal evaluation loop ONLY exits to Phase 4 via a PASS verdict. Revisions without re-evaluate are forbidden. Attempt 3 uses a fresh arbiter evaluator; material plan amendments reset the cycle and re-run full evaluation; additive amendments and criterion corrections run targeted evaluation after pre-flight checks 1, 2, and 5.
 - **Phase 4**: A task is ONLY marked complete after the evaluator returns PASS or PASS (with notes) (`PASS (with notes)` counts as PASS). Fixes without re-evaluate are forbidden.
-  Fix cycles rotate models — cycle 2 uses a different model family, cycle 3 the frontier tier (see the model map) — except line-patch-only cycles, which do not rotate — and every spawn is recorded in the goal's append-only orchestration log.
+  Fix cycles rotate models — cycle 2 uses a different model family (or a different same-family model per the model map when no different family is reachable), cycle 3 the frontier tier (see the model map) — except line-patch-only cycles, which do not rotate — and every spawn is recorded in the goal's append-only orchestration log.
 - **Phase 5**: Audit loop ONLY exits to Quality Checks via an APPROVED verdict. Remediations without re-audit are forbidden.
 - **Phase 6**: A doc is ONLY complete after the evaluator returns PASS; the doc set ONLY ships after the final doc audit returns APPROVED. `_memory/` and code are never touched.
 - **Phase 7**: The PR/MR is ONLY created, or the hand-over printed, after the user approves the drafted title and body.
@@ -842,7 +875,7 @@ installs have no kit skills tree (no protocol copy on disk).
 ├── skills/
 │   ├── feature/       # Feature coordination
 │   │   ├── SKILL.md
-│   │   ├── reference/{continuation-ladder.md,preflight.md,ready-groups.md,degraded-mode.md,memory-protocol.md,memory-capture.md}
+│   │   ├── reference/{continuation-ladder.md,preflight.md,ready-groups.md,degraded-mode.md,memory-protocol.md,memory-capture.md,goal-revisions.md,corrective-tasks.md,fix-cycles.md}
 │   │   └── templates/{goal.md,task.md}
 │   │
 │   ├── memory-capture/SKILL.md       # Session transcript distillation
@@ -877,6 +910,9 @@ _loop/{loop.sh,loop.ps1,breaker.sh,breaker.ps1,PROMPT.md}  # Headless loop drive
 ```
 
 ### Critical Reference Files
+
+Path-scoped rule files listed here are not guaranteed to load in subagents — put every rule file whose globs match a task's `writes` into that task's implementer/test-writer and evaluator context packages (`## Files to Read`), final audit included.
+Scoped-rule delivery to subagents varies by harness; in a Claude Code field observation they injected only after the subagent read a matching file with its file-read tool (shell `cat` did not trigger it), so a subagent placing a new file before opening anything in that area worked without them.
 
 | File | Purpose | When to Include |
 |------|---------|-----------------|

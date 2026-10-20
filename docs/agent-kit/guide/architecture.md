@@ -87,7 +87,7 @@ sequenceDiagram
 | **0** | Success |
 | **2** | Usage error, unreadable answers, or `--help` |
 | **3** | Invalid answers, unanswered `--check-answers` ids, or invalid loop model chain |
-| **4** | Upgrade blocked (user-modified kit files or migration target conflict); `--force` overrides file blocks |
+| **4** | Emit blocked: user-modified kit files, pre-existing kit-path files with no previous-manifest entry (first installs included; stderr distinguishes both), or migration target conflict; `--force` overrides file blocks |
 | **5** | Post-emit verify failed |
 | **6** | Template syntax error |
 
@@ -171,7 +171,7 @@ Protected paths: **no loop story in any mode** may list `_memory/records/` or `_
 
 ## Spawn lifecycle
 
-Every subagent dispatch is auditable: the orchestrator writes **`spawns/NN-context.md`**, logs **`log-spawn.sh spawn`**, runs the subagent, saves **`spawns/NN-report.md`**, logs **`log-spawn.sh outcome`** (including **`model_check`**: `match`, `MISMATCH`, or `unverified`), then spawns an **evaluator** when the phase requires it. After return, **repository safety** compares `HEAD`, branch, local git user config, and `git status --porcelain` against pre-spawn snapshots and the task write fence; unexpected changes stop the goal until restored.
+Every subagent dispatch is auditable: the orchestrator writes **`spawns/NN-context.md`**, logs **`log-spawn.sh spawn`**, runs the subagent, saves **`spawns/NN-report.md`**, logs **`log-spawn.sh outcome`** (including **`model_check`**: `match`, `MISMATCH`, or `unverified`), then spawns an **evaluator** when the phase requires it. Before dispatch, **repository safety** records a sha256 (or mtime) baseline for paths whose content changes git cannot show (untracked, ignored, outside the work tree, or any path when there is no commit), covering both the fenced paths and the unfenced paths the spawn must not touch (with no commits, the whole working tree minus ignored build output); with no commits it records `no HEAD` instead of comparing `HEAD`. After return, **repository safety** compares `HEAD` (or `no HEAD`), branch, local git user config, and `git status --porcelain --untracked-files=all` against pre-spawn snapshots and the task write fence, and re-checks the hash baseline; unexpected changes stop the goal until restored.
 
 Phase 4 may launch **ready groups** — up to three write-disjoint tasks concurrently when enabled (default; `parallel: false` in `goal.md` forces groups of one) — with pre-assigned spawn numbers and a group-level repository check before evaluation. **Degraded mode** keeps the same ledger shape in both cases: when a model argument is rejected (Case 1), the orchestrator re-spawns the same agent with `inherit`; when there is no subagent spawn tool (Case 2), the orchestrator performs worker and verdict roles itself inside write fences, one task at a time, and discloses every self-evaluated gate to the user, in the final report, and in the PR draft. Fix-cycle **model rotation** is skipped and logged in both degraded cases.
 
@@ -205,7 +205,7 @@ Spawn ledger format: [`templates/tools/log-spawn.sh`](../../../skills/agent-kit/
 
 ## Task verdict states
 
-Phase 4 tasks move through dispatch and evaluation until a terminal verdict. **NEEDS FIXES** triggers up to **three** implement→evaluate **fix cycles** with **model rotation**: cycle **1** re-runs on the normal **light** tier, cycle **2** pins a **different model family** at comparable tier, cycle **3** pins **frontier** ([`models.map.md`](../../../skills/agent-kit/templates/models.map.md) · [`feature` skill template](../../../skills/agent-kit/templates/skills/feature/SKILL.template.md)). A **line-patch-only** verdict (every required fix tagged `[line-patch]`) resumes the same executor (`implementer` / `test-writer`) in apply-verbatim mode on any cycle **without** rotation, still counts toward the cap, and is always re-evaluated; any `[structural]` fix uses the normal cycle with line patches applied verbatim. In **degraded mode**, fix-cycle rotation is **skipped** (logged once per skipped rotation) in both Case 1 (model argument rejected) and Case 2 (no spawn tool). **Bypass** failure classes (`destructive`, `security`, `infra`) escalate immediately on any cycle. After cycle-3 exhaustion, `goal.md`'s `phases.ladder` chooses **`escalate`** (offer continuation ladder to the human) or **`auto`** (run ladder rungs **5 → 4 → 6**, then human escalation if still stuck).
+Phase 4 tasks move through dispatch and evaluation until a terminal verdict. **NEEDS FIXES** triggers up to **three** implement→evaluate **fix cycles** with **model rotation**: cycle **1** re-runs on the normal **light** tier, cycle **2** pins a **different model family** at comparable tier (or a different same-family model labelled `same-family rotation (reduced diversity)` when none is reachable), cycle **3** pins **frontier** ([`models.map.md`](../../../skills/agent-kit/templates/models.map.md) · [`fix-cycles.md`](../../../skills/agent-kit/templates/skills/feature/reference/fix-cycles.md)). A **line-patch-only** verdict (every required fix tagged `[line-patch]`) resumes the same executor (`implementer` / `test-writer`) in apply-verbatim mode on any cycle **without** rotation, still counts toward the cap, and is always re-evaluated; any `[structural]` fix uses the normal cycle with line patches applied verbatim. In **degraded mode**, fix-cycle rotation is **skipped** (logged once per skipped rotation) in both Case 1 (model argument rejected) and Case 2 (no spawn tool). **Bypass** failure classes (`destructive`, `security`, `infra`) escalate immediately on any cycle. **`criteria-defect`** is not a bypass class but stops fix cycles at detection on any cycle — with `ladder: auto`, rung 5 arbitration now; with `ladder: escalate`, escalate with arbitration offered as option 1 (winning over line-patch-only resume). After cycle-3 exhaustion, `goal.md`'s `phases.ladder` chooses **`escalate`** (offer continuation ladder to the human) or **`auto`** (run ladder rungs **5 → 4 → 6**, then human escalation if still stuck).
 
 ```mermaid
 stateDiagram-v2
@@ -217,6 +217,9 @@ stateDiagram-v2
     Evaluating --> NeedsFixes: NEEDS FIXES
     Evaluating --> Reject: REJECT
     Evaluating --> BypassEsc: bypass destructive security infra
+    Evaluating --> CritDefRoute: criteria-defect at detection
+    CritDefRoute --> Rung5: ladder auto
+    CritDefRoute --> HumanEsc: ladder escalate
     PassState --> [*]
     PassNotes --> [*]
     Reject --> HumanEsc: escalate to user
@@ -230,7 +233,8 @@ stateDiagram-v2
     LadderChoice --> LadderAuto: phases.ladder auto
     LadderChoice --> LadderEsc: phases.ladder escalate default
     LadderAuto --> Rung5: arbitration
-    Rung5 --> Rung4: diagnosis-first
+    Rung5 --> Rung4: criteria-sound after cycle 3
+    Rung5 --> HumanEsc: criteria-defective, disagreement, or early criteria-sound
     Rung4 --> Evaluating: re-evaluate after ladder fix
     Rung4 --> Rung6: decomposition optional
     Rung6 --> Evaluating: subtask implement then evaluate
@@ -413,6 +417,7 @@ Stop on first failing rung; after a fix, restart at rung 1 for that fix.
 - [`skills/agent-kit/templates/memory/README.md`](../../../skills/agent-kit/templates/memory/README.md) — `_memory/` layout, CLI exit codes, capture
 - [`skills/agent-kit/templates/skills/feature/reference/memory-protocol.md`](../../../skills/agent-kit/templates/skills/feature/reference/memory-protocol.md) — recall, fence, archive, brief status updates
 - [`skills/agent-kit/templates/skills/feature/reference/continuation-ladder.md`](../../../skills/agent-kit/templates/skills/feature/reference/continuation-ladder.md) — rungs 5, 4, 6 after fix-cycle exhaustion
+- [`skills/agent-kit/templates/skills/feature/reference/fix-cycles.md`](../../../skills/agent-kit/templates/skills/feature/reference/fix-cycles.md) — Phase 4 fix cycles: line-patch resume, bypass and criteria-defect routing, cycle-3 ladder, model rotation
 - [`skills/agent-kit/templates/tools/log-spawn.sh`](../../../skills/agent-kit/templates/tools/log-spawn.sh) — spawn/outcome/note ledger
 - [`skills/agent-kit/templates/skills/research/SKILL.template.md`](../../../skills/agent-kit/templates/skills/research/SKILL.template.md) — research scratch vs brief promotion
 - [`skills/agent-kit/templates/skills/memory-capture/SKILL.template.md`](../../../skills/agent-kit/templates/skills/memory-capture/SKILL.template.md) — capture/distillation pipeline

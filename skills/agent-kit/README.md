@@ -1,6 +1,6 @@
 # AI Orchestration Kit (`agent-kit`)
 
-> Kit version: **1.1.1** (`metadata.version` in [SKILL.md](SKILL.md)) · Version history: [CHANGELOG.md](CHANGELOG.md)
+> Kit version: **1.1.2** (`metadata.version` in [SKILL.md](SKILL.md)) · Version history: [CHANGELOG.md](CHANGELOG.md)
 
 A portable orchestrator/worker/evaluator multi-agent system for AI coding harnesses —
 **Claude Code, Cursor, GitHub Copilot (VS Code), and OpenAI Codex** — packaged as one
@@ -109,7 +109,7 @@ Maintainer material lives in the [kdcllc/skills](https://github.com/kdcllc/skill
 npx skills add kdcllc/skills --skill agent-kit
 
 # Pin to a release
-npx skills add kdcllc/skills#agent-kit/v1.1.1 --skill agent-kit
+npx skills add kdcllc/skills#agent-kit/v1.1.2 --skill agent-kit
 
 # Option B — agent-skills-cli
 npx agent-skills-cli install https://github.com/kdcllc/skills.git
@@ -145,7 +145,7 @@ skills table and the feature skill's layer → skills map.
 
 Then, in a session inside that project, run `/agent-kit`. It detects which harnesses to
 target (multiple is normal), inspects the repo (stack, test commands, layers,
-user-facing surfaces), suggests skills.sh skills from what it found (Step 2b),
+user-facing surfaces, existing project agents), suggests skills.sh skills from what it found (Step 2b),
 interviews you for what it can't infer (project name, model
 tiers, QA surfaces, research workflow, autonomous loop, delivery forge), writes
 `orchestration-kit.answers.json`, and runs the emitter:
@@ -220,7 +220,8 @@ Re-run `/agent-kit` when providers rotate model names.
    # (Cursor: .cursor/skills/agent-kit; Copilot: .github/skills/agent-kit)
    ```
 
-   Exit code 4 lists user-modified files; confirm with `--force`. Use `--dry-run` to
+   Exit code 4 lists user-modified kit files, pre-existing kit-path files with no
+   previous-manifest entry (first installs included), or legacy migration target conflicts; confirm with `--force`. Use `--dry-run` to
    preview planned actions. Seed files like `_memory/loop/backlog.md` are never
    overwritten.
 

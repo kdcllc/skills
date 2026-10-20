@@ -16,21 +16,33 @@ Runs on **Bash 3.2+** with POSIX `awk` (no `jq`). On Windows outside Git Bash, u
 ## Exit codes
 
 `0` ok · `2` usage / answers unreadable · `3` answers invalid or
-unanswered `--check-answers` ids · `4` upgrade blocked (user-modified kit files or
-legacy migration target exists; `--force` overrides file blocks and skips conflicting
-moves with a warning) · `5` verify failed · `6` template syntax. `--help` → stderr, exit 2.
+unanswered `--check-answers` ids · `4` emit blocked: user-modified kit files (disk
+bytes differ from the last manifest hash), pre-existing files at kit paths that no
+previous emit recorded (stderr distinguishes the two; `--dry-run` prints `blocked
+<path>` for both), or a legacy migration target that already exists (`--force`
+overrides file blocks and skips conflicting moves with a warning) · `5` verify failed ·
+`6` template syntax. Pre-existing `.codex/config.toml` appends (user bytes plus kit
+agent tables) are exempt from the no-manifest-entry block. `--help` → stderr, exit 2.
 
 ## Answers
 
 JSON `schema: 1` per `SKILL.md` Step 4. `--check-answers` prints
-`<id>\t<template-path>` for missing class-a bootstrap keys.
+`<id>\t<template-path>` for missing class-a bootstrap keys. Optional
+`flags.loop_worktree` (boolean): absent ⇒ false; a present non-boolean ⇒ exit **3**
+(`flags.loop_worktree must be a boolean`).
+
+Emit warnings (stderr, counted in `warnings W`, exit unchanged) include unanswered bootstrap
+ids, same-family / reused arbiter model lines from the model map, and
+`warning: models.<h>.alt_family equals light; fix cycle 2 would not rotate models`
+when `alt_family` equals that harness's `light` tier.
 
 ## Manifest
 
 Top-level key order: `kit`, `kitVersion`, `installedAt`, `harnesses`, `primary`,
 `options`, `seedFiles`, `files`, `answers`. `options` is flat: `forge` (string),
-optional `forgeHost`, and booleans `greenfield`, `lint`, `typecheck`,
-`models_pinned`, `research`, `loop`. `files` maps emit-set paths → sha256
+optional `forgeHost`, booleans `greenfield`, `lint`, `typecheck`,
+`models_pinned`, `research`, `loop`, and optional `loop_worktree` (copied from
+answers only when `flags.loop_worktree` is present). `files` maps emit-set paths → sha256
 (compiler copies and seeds excluded; foreign entries carried). `seedFiles`
 lists seeds written only if absent. Nested object keys are ordinal-sorted.
 Rewriting the manifest never counts toward `written`.

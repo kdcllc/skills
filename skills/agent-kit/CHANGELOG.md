@@ -6,6 +6,48 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 
 ## [Unreleased]
 
+## [1.1.2] - 2026-10-20
+
+### Added
+
+- **Executable acceptance criteria evidence** — pre-flight and goal-criteria require shell-command criteria to be run against the current tree with output recorded in `criteria-evidence.md` (including true-negative and true-positive demonstrations for content-inspecting checks).
+- **Reference sweep artifact** — pre-flight check 2 writes `reference-sweep.md`; the Phase 3 evaluator verifies every hit is owned or justified.
+- **Corrective tasks reference** — `reference/corrective-tasks.md` defines lettered corrective tasks for defects found in completed tasks' files.
+- **Goal-revisions reference** — `reference/goal-revisions.md` covers plan amendments (material vs additive vs criterion correction), cross-reference audit (`xref-audit.md`), and Phase 3 attempt-3 fresh arbiter review.
+- **Pre-flight check 5 Stated facts** — verifies prose counts, Files-to-Read coverage, and that `writes` prose matches the task's `writes` YAML block (the block context packages copy verbatim).
+- **Phase-boundary cost notes and compaction recommendation** — orchestration log `note` entries record spawn count, dispatch-volume totals, and main-session size; Phase 4 boundaries past ~60% prompt the user to compact or start a fresh session (recommendation only).
+- **Existing project agents** — Step 2 inventories agents under each harness's agent paths (plus Codex `[agents.*]` tables), reports name collisions with the seven kit agents and role overlaps, and Step 4 records the note in `bootstrap.existing-agents`.
+- **Path-scoped rule detection** — Step 2 finds Claude Code `paths:`, Cursor `globs:` (except the kit's `orchestration.mdc`), and Copilot `applyTo:` rule files; Step 4 adds each to `bootstrap.critical-reference-rows` and `bootstrap.layer-skill-map` so the orchestrator routes matching rules into task context packages.
+- **Same-family fix-cycle rotation** — Step 3 and the model map document using a different same-family model (label `same-family rotation (reduced diversity)`) when no cross-family light-tier model exists; emit warns when `alt_family` equals `light` (`warning: models.<h>.alt_family equals light; fix cycle 2 would not rotate models`).
+- **`flags.loop_worktree`** — Step 3 persists the loop sandbox choice; when true, emitted `_loop/*` drivers default `LOOP_WORKTREE` to `1` (via derived `{{LOOP_WORKTREE_DEFAULT}}`); an explicit `LOOP_WORKTREE` env value still wins. Worktree mode requires a tracked loop instance or preflight exits 5.
+- **File-read tool caveat** — implementer, test-writer, evaluator, qa-evaluator, and diagnostician prefer the harness file-read tool over shell `cat`/`head`/`sed` (criterion and test commands unchanged); at least one harness loads path-scoped rules only on file-read tool reads.
+- **Rule-file placement checks** — workers report areas where no routed rule covers a new file; evaluator checks created or moved files against routed path-scoped rules.
+
+### Changed
+
+- **`criteria-defect` routing** — verdicts tagged `criteria-defect` route at detection (early rung 5 arbitration or escalation) instead of waiting for fix-cycle exhaustion.
+- **Context packages** — the write fence copies each task's `writes` YAML block verbatim from the task file.
+- **Phase 3 re-check deltas** — evaluator delta prompts quote newly written or changed passages verbatim; attempt 3 is a fresh full evaluation on the arbiter model.
+- **Exit 4 scope** — covers user-modified kit files and pre-existing files at kit paths with no previous-manifest entry (stderr: `emit: blocked <path> (exists; not written by a previous emit)`); `--force` overrides both classes. `.codex/config.toml` appends are unchanged.
+- **Rule-file routing** — matching path-scoped rule files go to implementer/test-writer and evaluator context packages (final audit included); Critical Reference Files and install Step 2 explain subagent delivery limits; ready-group evaluation inputs name matching rule files.
+- **Layer-map example** — `bootstrap.layer-skill-map` uses a `Rule files to cite` column; Step 4 lists detected rule files there per layer.
+- **Table-cell pipes** — Step 4 requires escaping a literal `|` as `\|` in any table cell the kit writes (bootstrap rows included).
+- **Harness matrix** — Claude Code VS Code extension 2.1.241 path-scoped subagent-delivery field observation (2026-08-25 probe) with re-probe-after-upgrade note; Cursor and Copilot subagent delivery marked unknown.
+- **Feature skill fix-cycle reference** — Phase 4 fix-cycle mechanics (line-patch resume, `criteria-defect`/bypass routing, cycle-3 ladder, model rotation) moved verbatim to `reference/fix-cycles.md`; the skill keeps pointers; the template now has ≥ 1 KiB of its 11264-byte budget free.
+
+### Fixed
+
+- **Post-spawn fence check** — single-task and group repository checks use `git status --porcelain --untracked-files=all`, and the orchestrator records hash baselines for paths git cannot show before dispatch.
+- **Pre-existing file overwrite** — emit no longer silently replaces a project's own file at a kit path on first install or when a path was never written by a prior emit.
+- **Memory-workflow table guards** — emitted ORCHESTRATION.md omits the Research row when `research` is false and Loop rows when `loop` is false (IF-guards in the template).
+
+### Upgrade notes
+
+- Re-emit lists `existing-agents` under `--check-answers` and raises `warnings` by one until answered (`""` clears it).
+- Installs that relied on emit overwriting a hand-placed file at a kit path now get exit 4; pass `--force` to restore the old overwrite behavior.
+- If the manifest was lost while emitted files remain, every differing kit-path file is blocked on re-emit — review the list, then `--force` if appropriate.
+- `.codex/config.toml` appends (existing bytes plus kit agent tables) are unchanged on upgrade.
+
 ## [1.1.1] - 2026-10-16
 
 ### Fixed

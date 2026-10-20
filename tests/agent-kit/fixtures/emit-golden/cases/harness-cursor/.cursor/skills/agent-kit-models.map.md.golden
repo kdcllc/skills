@@ -96,6 +96,12 @@ A model blind to its own class of mistake rarely fixes it on retry. Rotate:
 | 2 | Claude Code `claude-opus-5-5`; Cursor `claude-sonnet-5-5-xhigh` |
 | 3 | Claude Code `claude-opus-5-5` with effort `xhigh`; Cursor `claude-opus-5-5-high` |
 
+**Same-family rotation.** When no different-family model at comparable tier is reachable
+on a harness, fix cycle 2 may pin a different same-family model (see the table above) and
+label the row `same-family rotation (reduced diversity)`. A second harness such as Copilot
+or Codex provides cross-family models when targeted. Repeated same-shaped failures across
+fix cycle 2 and continuation-ladder rung 4 should escalate to a human sooner.
+
 ### After cycle 3 — continuation ladder pins
 
 When fix cycles 1–3 exhaust, the continuation ladder (see ORCHESTRATION.md) applies:
