@@ -69,11 +69,10 @@ Decision gate: multiple approaches → present tradeoffs and **wait**.
 `test-ladder` every implement/test package — rungs 1–2; rung 3 via spawned `terminal` (never `{{FULL_TEST_COMMAND}}` inline).
 
 <!-- BOOTSTRAP[layer-skill-map]: map layers → skills, e.g.
-| Layer touched | Skills to include in context package |
-|---------------|--------------------------------------|
-| Backend module | TDD workflow skill |
-| API routes | api-smoke-testing |
-| Frontend | frontend best-practices, visual-qa-testing |
+| Layer touched | Skills | Rule files to cite |
+|---------------|--------|---------------------|
+| Backend module | TDD skill | rules for src/** |
+| API routes | api-smoke-testing | rules for src/api/** |
 Plus domain skill + ground-truth ({{GROUND_TRUTH_DOC}}) for any domain task. -->
 
 ## Phase 3 — Goal evaluation (loop until PASS)
@@ -94,7 +93,7 @@ For each ready group (`reference/ready-groups.md`; `parallel: false` → one tas
 1. Launch `implementer` (`test-writer` for the test task) with a full context package.
 2. **Silent-success check**: empty/missing report ⇒ verify artifacts: present ⇒ done
    ("report lost, files verified"); absent ⇒ failed, respawn once. Never re-run when artifacts exist.
-3. Launch `evaluator` with task file, report, `{{IDE_DIR}}/skills/task-criteria/SKILL.md`; if read-only (evaluator.md `readonly` or refused shell), first spawn `terminal` per acceptance-criterion command, attach output.
+3. Launch `evaluator` with task file, report, matching rule files, `{{IDE_DIR}}/skills/task-criteria/SKILL.md`; if read-only (evaluator.md `readonly` or refused shell), first spawn `terminal` per acceptance-criterion command, attach output.
 4. **PASS** or **PASS (with notes)** → next task (notes via `--note`). **NEEDS FIXES** → fix cycle + re-evaluate (max 3). **REJECT** → escalate.
    **Line-patch-only** (all `[line-patch]`): resume same executor (`implementer`/`test-writer`) apply-verbatim any cycle (fresh spawn on same model if harness can't resume), no rotation, counts toward 3, re-evaluated; any `[structural]` → normal fix with patches verbatim. `NOT APPLIED` → re-evaluate; next cycle normal.
 
@@ -113,7 +112,7 @@ For each ready group (`reference/ready-groups.md`; `parallel: false` → one tas
 
 ## Phase 5 — Final audit (loop until APPROVED)
 
-Launch `evaluator` in audit mode: every task's requirements, cross-task integration, regressions; if read-only, gather `terminal` evidence as Phase 4 step 3.
+Launch `evaluator` in audit mode with matching rule files: every task's requirements, cross-task integration, regressions; if read-only, gather `terminal` evidence as Phase 4 step 3.
 **APPROVED** → Quality Checks (rung 3: full suite + lint/type) via spawned
 `terminal` with `{{FULL_TEST_COMMAND}}`. **ISSUES** → fix via executor + re-evaluate
 (rungs 1–2), re-audit (max 3).

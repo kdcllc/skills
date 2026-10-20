@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Behavioral guard for agent-kit install-feedback: pre-existing emit paths, bootstrap
-# ids, loop_worktree, memory-table IF guards, path-scoped routing prose, Codex append.
+# ids, loop_worktree, memory-table IF guards, path-scoped routing prose, Codex append,
+# and frozen rule-file wording R1–R6 in agent/ORCHESTRATION/feature/SKILL templates.
 # Scratch roots only (fixture-root.sh); no network.
 set -u
 
@@ -80,6 +81,47 @@ WARN_ALT_LIGHT='emit: warning: models.claude-code.alt_family equals light; fix c
 ORCH_PHRASE='Path-scoped rule files listed here are not guaranteed to load in subagents'
 FEATURE_PHRASE='matching path-scoped rules'
 MODEL_MAP_PHRASE='Same-family rotation'
+
+ORCH_TEMPLATE="$KIT/templates/ORCHESTRATION.md"
+FEATURE_SKILL="$KIT/templates/skills/feature/SKILL.template.md"
+SKILL_MD="$KIT/SKILL.md"
+HARNESS_MATRIX="$KIT/reference/harness-matrix.md"
+AGENTS_DIR="$KIT/templates/agents"
+
+count_fixed() {
+  local f="$1" needle="$2" n
+  [[ -f "$f" ]] || { echo 0; return; }
+  n="$(grep -cF -- "$needle" "$f" 2>/dev/null || true)"
+  [[ -n "$n" ]] || n=0
+  echo "$n"
+}
+
+count_line_fixed() {
+  local f="$1" needle="$2" n
+  [[ -f "$f" ]] || { echo 0; return; }
+  n="$(grep -cxF -- "$needle" "$f" 2>/dev/null || true)"
+  [[ -n "$n" ]] || n=0
+  echo "$n"
+}
+
+read -r -d '' FROZEN_R1 <<'EOF' || true
+- **Use the file-read tool.** Where your harness has a file-read tool, read files with it rather than `cat`/`head`/`sed` through the shell (running a criterion's or test's command is still fine); at least one harness loads path-scoped rules only on file-read tool reads.
+EOF
+read -r -d '' FROZEN_R2 <<'EOF' || true
+- **Rules before placement.** Before creating or moving a file, read every path-scoped rule file in "Files to Read" whose globs match it; if no listed rule covers an area where you create files, say so in your report.
+EOF
+read -r -d '' FROZEN_R3 <<'EOF' || true
+- **Placement against routed rules.** When the package lists path-scoped rule files, check every created or moved file against them; a placement that violates a routed rule is an issue, not a note.
+EOF
+read -r -d '' FROZEN_R4 <<'EOF' || true
+Scoped-rule delivery to subagents varies by harness; in a Claude Code field observation they injected only after the subagent read a matching file with its file-read tool (shell `cat` did not trigger it), so a subagent placing a new file before opening anything in that area worked without them.
+EOF
+read -r -d '' FROZEN_R5 <<'EOF' || true
+put every rule file whose globs match a task's `writes` into that task's implementer/test-writer and evaluator context packages (`## Files to Read`), final audit included.
+EOF
+read -r -d '' FROZEN_R6 <<'EOF' || true
+In any table cell the kit writes, bootstrap rows included, escape a literal `|` as `\|`; never emit a bare `|` inside a cell.
+EOF
 
 answers_base() { # outfile
   jq '
@@ -304,6 +346,59 @@ model = "gpt-test"
   head -c "${#prefix}" "$cf" | diff -q - <(printf '%s' "$prefix") >/dev/null || return 1
 }
 
+check_l() {
+  local ok=1 f name
+  for name in implementer test-writer evaluator qa-evaluator diagnostician; do
+    f="$AGENTS_DIR/$name.md"
+    [[ "$(count_line_fixed "$f" "$FROZEN_R1")" == 1 ]] || ok=0
+  done
+  for name in terminal evidence-collector; do
+    f="$AGENTS_DIR/$name.md"
+    [[ "$(count_line_fixed "$f" "$FROZEN_R1")" == 0 ]] || ok=0
+  done
+  [[ "$(count_line_fixed "$AGENTS_DIR/implementer.md" "$FROZEN_R2")" == 1 ]] || ok=0
+  [[ "$(count_line_fixed "$AGENTS_DIR/test-writer.md" "$FROZEN_R2")" == 1 ]] || ok=0
+  [[ "$(count_line_fixed "$AGENTS_DIR/evaluator.md" "$FROZEN_R3")" == 1 ]] || ok=0
+  [[ $ok -eq 1 ]]
+}
+
+check_m() {
+  local ok=1
+  [[ "$(count_fixed "$ORCH_TEMPLATE" "$ORCH_PHRASE")" == 1 ]] || ok=0
+  [[ "$(count_fixed "$ORCH_TEMPLATE" "$FROZEN_R5")" == 1 ]] || ok=0
+  [[ "$(count_line_fixed "$ORCH_TEMPLATE" "$FROZEN_R4")" == 1 ]] || ok=0
+  [[ "$(count_fixed "$ORCH_TEMPLATE" "into that task's context package")" == 0 ]] || ok=0
+  [[ "$(count_fixed "$FEATURE_SKILL" '| Layer touched | Skills | Rule files to cite |')" == 1 ]] || ok=0
+  [[ "$(count_fixed "$FEATURE_SKILL" 'report, matching rule files,')" == 1 ]] || ok=0
+  [[ "$(count_fixed "$FEATURE_SKILL" 'in audit mode with matching rule files:')" == 1 ]] || ok=0
+  [[ $ok -eq 1 ]]
+}
+
+check_n() {
+  local ok=1 n
+  [[ "$(count_line_fixed "$SKILL_MD" "$FROZEN_R6")" == 1 ]] || ok=0
+  n="$(count_fixed "$SKILL_MD" 'Rule files to cite')"
+  [[ "$n" -ge 1 ]] || ok=0
+  [[ "$(count_fixed "$SKILL_MD" 'receive only their context package')" == 0 ]] || ok=0
+  [[ "$(count_fixed "$SKILL_MD" '`implementer` / `test-writer` / `evaluator`')" == 1 ]] || ok=0
+  [[ "$(count_fixed "$HARNESS_MATRIX" 'Path-scoped subagent delivery observation 2026-10-20')" == 1 ]] || ok=0
+  [[ "$(count_fixed "$HARNESS_MATRIX" 'no harness documents subagent delivery')" == 0 ]] || ok=0
+  [[ $ok -eq 1 ]]
+}
+
+check_o() {
+  local root ans
+  alloc_path ansfile
+  answers_base "$ALLOC_PATH"
+  ans="$ALLOC_PATH"
+  alloc_root; root="$ALLOC_PATH"
+  emit_cache_copy "$root" "$ans" || return 1
+  grep -qF -- "$FROZEN_R1" "$root/.claude/agents/implementer.md" || return 1
+  grep -qF -- "$FROZEN_R1" "$root/.claude/agents/evaluator.md" || return 1
+  grep -qF -- "$FROZEN_R3" "$root/.claude/agents/evaluator.md" || return 1
+  grep -qF -- "$FROZEN_R4" "$root/.claude/ORCHESTRATION.md" || return 1
+}
+
 run_check() {
   local letter="$1" fn="$2" title="$3"
   if [[ "$HAVE_JQ" -ne 1 ]]; then
@@ -331,6 +426,10 @@ run_check h check_h 'research/loop false omits memory rows; true includes all th
 run_check i check_i 'ORCHESTRATION path-scoped sentence, feature rules phrase, model map rotation'
 run_check j check_j '--check-answers lists existing-agents when missing, not when ""'
 run_check k check_k 'Codex pre-existing config.toml append without block'
+run_check l check_l 'agent templates: R1 five agents, absent terminal/evidence-collector; R2 workers; R3 evaluator'
+run_check m check_m 'ORCHESTRATION R4/R5 + feature layer-map and evaluator rule-file phrases'
+run_check n check_n 'SKILL Step 4 R6, rule routing prose, harness-matrix delivery observation'
+run_check o check_o 'emit: R1 implementer/evaluator, R3 evaluator, R4 ORCHESTRATION'
 
 emit_cache_verify
 

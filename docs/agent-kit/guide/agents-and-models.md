@@ -46,6 +46,7 @@ commands_run: <N>
 - Score from the report or diff alone without executing targeted tests first.
 - Talk itself into a PASS after finding an issue (identified issues must appear in the verdict).
 - Treat unverified claims as verified.
+- Read files through shell `cat`/`head`/`sed` where the harness has a file-read tool (running a criterion's or test's command is still fine).
 
 The evaluator also has an orchestrator-invoked **arbitration mode** (continuation-ladder rung 5, pinned to `{{MODEL_FRONTIER_ALT_FAMILY}}`) that reviews criteria rather than code — triggered on unanimous same-item failure across fix cycles 1–3, or early at detection when `criteria-defect` stops fix cycles (with `ladder: auto`, rung 5 now; with `ladder: escalate`, escalate with arbitration as option 1). Semantics in [evaluation-system.md](evaluation-system.md).
 
@@ -66,6 +67,7 @@ Evaluation criteria — verdict vocabulary, confidence ladder, anti-fabrication 
 - Fix anything.
 - Describe behavior not seen in the evidence — verdicts cite observed output only.
 - Pass when evidence for a claimed surface was not provided.
+- Read files through shell `cat`/`head`/`sed` where the harness has a file-read tool (running a criterion's or test's command is still fine).
 
 The QA evaluator evaluates **behavior a user actually experiences**, not the code. Missing evidence is an issue, not a pass.
 
@@ -102,6 +104,8 @@ When the goal asks for visual QA but no browser-automation tool exists, record t
 - Touch live external services from tests (all network/service access is mocked).
 - Guess when the context package is missing something — report it instead.
 
+Where the harness has a file-read tool, read files with it rather than `cat`/`head`/`sed` through the shell (running a criterion's or test's command is still fine); at least one harness loads path-scoped rules only on file-read tool reads. Before creating or moving a file, read every path-scoped rule file in "Files to Read" whose globs match it; if no listed rule covers an area where you create files, say so in the report.
+
 For noisy Bash or PowerShell commands whose raw output is not needed, spawn `terminal` with the exact command and the result you want back (where the harness allows — not Copilot).
 
 **Apply-verbatim mode:** When the context package marks the fix cycle **line-patch-only**, apply exactly the evaluator's listed substitutions — bottom-up per file, report `NOT APPLIED` for patches whose old text is missing, no refactors — then run rung 1–2 verification and report it. The orchestrator resumes the same implementer on the same model (fresh spawn on that model when the harness cannot resume; no fix-cycle rotation) for that cycle.
@@ -120,6 +124,8 @@ For noisy Bash or PowerShell commands whose raw output is not needed, spawn `ter
 - Edit out-of-fence files (source fixes, shared fixtures) to make tests pass — escalate instead.
 - Write tests that assert nothing or mock the unit under test.
 - Run rung 3 (full suites) — rungs 1–2 only during the task.
+
+Where the harness has a file-read tool, read files with it rather than `cat`/`head`/`sed` through the shell (running a criterion's or test's command is still fine); at least one harness loads path-scoped rules only on file-read tool reads. Before creating or moving a file, read every path-scoped rule file in "Files to Read" whose globs match it; if no listed rule covers an area where you create files, say so in the report.
 
 For noisy commands, spawn `terminal` where the harness allows (not Copilot).
 
@@ -161,6 +167,7 @@ The terminal is the **shell-output shield**: noisy test runs, builds, and git op
 - Propose skipping evaluation.
 - Re-litigate whether the contract is sound (defer to rung-5 arbitration).
 - Invent command output (quoted output must come from commands it ran).
+- Read files through shell `cat`/`head`/`sed` where the harness has a file-read tool (running a criterion's or test's command is still fine).
 
 You supply the report — the orchestrator routes (signature match → rung 6 or escalate; otherwise ONE diagnosis-driven implementation attempt). Routing details in [feature-workflow.md](feature-workflow.md).
 
@@ -311,7 +318,7 @@ Three outcomes when a model choice conflicts with a plan or admin ceiling:
 
 ## Harness caveats
 
-These caveats shape tiering and emitter behavior. They are drawn from [`models.map.md`](../../../skills/agent-kit/templates/models.map.md), [`harness-matrix.md`](../../../skills/agent-kit/reference/harness-matrix.md), and the emitter caveats in [`emitters/cursor.md`](../../../skills/agent-kit/emitters/cursor.md) and [`emitters/claude-code.md`](../../../skills/agent-kit/emitters/claude-code.md); the `model_check` note follows [`templates/tools/log-spawn.sh`](../../../skills/agent-kit/templates/tools/log-spawn.sh).
+These caveats shape tiering, emitter behavior, and what subagents receive at start. They are drawn from [`models.map.md`](../../../skills/agent-kit/templates/models.map.md), [`harness-matrix.md`](../../../skills/agent-kit/reference/harness-matrix.md), and the emitter caveats in [`emitters/cursor.md`](../../../skills/agent-kit/emitters/cursor.md) and [`emitters/claude-code.md`](../../../skills/agent-kit/emitters/claude-code.md); the `model_check` note follows [`templates/tools/log-spawn.sh`](../../../skills/agent-kit/templates/tools/log-spawn.sh).
 
 ### Copilot cost ceiling
 
@@ -333,6 +340,7 @@ This obligation applies at `/agent-kit` emit time; it is not tied to a specific 
 
 ### Other harness notes (brief)
 
+- **Path-scoped rules at subagent start:** Whether a fresh subagent receives path-scoped rule files varies by harness (Claude Code VS Code extension field observation: scoped rules inject only after a file-read tool read of a matching path; shell reads did not trigger; Cursor/Copilot unknown). The kit still routes rule files through Critical Reference Files and task context packages — see [`harness-matrix.md`](../../../skills/agent-kit/reference/harness-matrix.md).
 - **Claude Code:** `CLAUDE_CODE_SUBAGENT_MODEL` and `CLAUDE_CODE_EFFORT_LEVEL` env vars override frontmatter; org `availableModels` allowlists can cause pins to be ignored. Claude Code runs **Anthropic models only** — a cross-family arbiter is unreachable natively (use `arbiter_same_family: true` when the arbiter ID equals frontier). Aliases such as `opus` resolve per provider — prefer full IDs and record the minimum Claude Code version each pin needs. Headless loop chains must not include `best`, `fable`, or `claude-fable*` — emit exits 3 when they appear (usage-credit billing).
 - **Codex:** Model pins are committable in `.codex/config.toml`, but `model_provider` / `model_providers` / `profile(s)` are ignored at project level.
 

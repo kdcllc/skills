@@ -17,6 +17,7 @@ research report's legend.
 **Concurrent-spawn row 2026-10-16** — marks follow the top legend; 🔎 = live page spot-checked that day.
 **Degraded-spawn row 2026-10-16** — marks follow the top legend; 🔎 = live page spot-checked that day.
 **Path-scoped guidance row 2026-10-19** — Claude Code `.claude/rules/` `paths:` added; D = code.claude.com/docs/en/memory § Path-specific rules, spot-checked that day.
+**Path-scoped subagent delivery observation 2026-10-20** — field report from a downstream install (Claude Code VS Code extension 2.1.241; probed 2026-08-25); IDE-extension-scoped, not CLI-probed and not 3-vote adversarial; re-probe after a Claude Code upgrade before relying on it.
 
 ## The interchange finding
 
@@ -123,9 +124,12 @@ Full sources and the kit skill-by-skill verdict:
 | `/context` equivalent | `/context` + `/doctor` (D) | Customize panel; dashboard usage (D; no token breakdown) | Cache Explorer + Diagnostics view (D) |
 | Subagent nesting | subagents spawn subagents (D) | L1 + direct subagents spawn; grandchildren can't (D) | off by default; `chat.subagents.allowInvocationsFromSubagents` (D) |
 
-Path-scoped guidance is injected based on files the session touches, so it is not
-guaranteed to reach fresh-context subagents (I — inferred kit policy; no harness documents subagent delivery) — the kit routes such files through
-Critical Reference Files and task context packages (`## Files to Read`).
+In the Claude Code VS Code extension (field observation, 2.1.241; probed 2026-08-25) a
+fresh subagent loaded root `CLAUDE.md` and unscoped rules at start, and scoped rules
+injected only after it read a matching file with the Read tool (shell `cat`/`head`/`sed`
+and the user opening the file in the editor did not trigger it). Cursor and Copilot
+subagent delivery is unknown (U). The kit's policy stays routing through Critical
+Reference Files and task context packages (`## Files to Read`).
 
 ## Empirical validation (2026-08-18, CLI-observed)
 

@@ -18,6 +18,8 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 - **Path-scoped rule detection** — Step 2 finds Claude Code `paths:`, Cursor `globs:` (except the kit's `orchestration.mdc`), and Copilot `applyTo:` rule files; Step 4 adds each to `bootstrap.critical-reference-rows` and `bootstrap.layer-skill-map` so the orchestrator routes matching rules into task context packages.
 - **Same-family fix-cycle rotation** — Step 3 and the model map document using a different same-family model (label `same-family rotation (reduced diversity)`) when no cross-family light-tier model exists; emit warns when `alt_family` equals `light` (`warning: models.<h>.alt_family equals light; fix cycle 2 would not rotate models`).
 - **`flags.loop_worktree`** — Step 3 persists the loop sandbox choice; when true, emitted `_loop/*` drivers default `LOOP_WORKTREE` to `1` (via derived `{{LOOP_WORKTREE_DEFAULT}}`); an explicit `LOOP_WORKTREE` env value still wins. Worktree mode requires a tracked loop instance or preflight exits 5.
+- **File-read tool caveat** — implementer, test-writer, evaluator, qa-evaluator, and diagnostician prefer the harness file-read tool over shell `cat`/`head`/`sed` (criterion and test commands unchanged); at least one harness loads path-scoped rules only on file-read tool reads.
+- **Rule-file placement checks** — workers report areas where no routed rule covers a new file; evaluator checks created or moved files against routed path-scoped rules.
 
 ### Changed
 
@@ -25,6 +27,10 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 - **Context packages** — the write fence copies each task's `writes` YAML block verbatim from the task file.
 - **Phase 3 re-check deltas** — evaluator delta prompts quote newly written or changed passages verbatim; attempt 3 is a fresh full evaluation on the arbiter model.
 - **Exit 4 scope** — covers user-modified kit files and pre-existing files at kit paths with no previous-manifest entry (stderr: `emit: blocked <path> (exists; not written by a previous emit)`); `--force` overrides both classes. `.codex/config.toml` appends are unchanged.
+- **Rule-file routing** — matching path-scoped rule files go to implementer/test-writer and evaluator context packages (final audit included); Critical Reference Files and install Step 2 explain subagent delivery limits; ready-group evaluation inputs name matching rule files.
+- **Layer-map example** — `bootstrap.layer-skill-map` uses a `Rule files to cite` column; Step 4 lists detected rule files there per layer.
+- **Table-cell pipes** — Step 4 requires escaping a literal `|` as `\|` in any table cell the kit writes (bootstrap rows included).
+- **Harness matrix** — Claude Code VS Code extension 2.1.241 path-scoped subagent-delivery field observation (2026-08-25 probe) with re-probe-after-upgrade note; Cursor and Copilot subagent delivery marked unknown.
 
 ### Fixed
 

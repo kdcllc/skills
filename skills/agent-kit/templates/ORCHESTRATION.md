@@ -1145,9 +1145,8 @@ _memory/.index/ · _memory/raw/  # Derived index; capture output, ledgers and dr
 
 ### Critical Reference Files
 
-Path-scoped rule files listed here are not guaranteed to load in subagents — put every
-rule file whose globs match a task's `writes` into that task's context package
-(`## Files to Read`).
+Path-scoped rule files listed here are not guaranteed to load in subagents — put every rule file whose globs match a task's `writes` into that task's implementer/test-writer and evaluator context packages (`## Files to Read`), final audit included.
+Scoped-rule delivery to subagents varies by harness; in a Claude Code field observation they injected only after the subagent read a matching file with its file-read tool (shell `cat` did not trigger it), so a subagent placing a new file before opening anything in that area worked without them.
 
 | File | Purpose | When to Include |
 |------|---------|-----------------|

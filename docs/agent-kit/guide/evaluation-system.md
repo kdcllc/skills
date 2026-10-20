@@ -137,6 +137,10 @@ Task evaluation applies the ladder per requirement ([`task-criteria/SKILL.templa
 
 Evaluators must **run** targeted tests and commands before writing a verdict. Reading the report or diff alone is insufficient. When the harness runs the evaluator **read-only** (shell refused, or `readonly: true` in the emitted evaluator agent), use **orchestrator-supplied verbatim evidence** — each acceptance criterion's command plus its output — mark those items in **What I verified** as **orchestrator evidence**, and treat any criterion with **no** evidence as an issue, never a pass ([`agents/evaluator.md`](../../../skills/agent-kit/templates/agents/evaluator.md)). The feature orchestrator **first** spawns **`terminal`** per acceptance-criterion command (Phase 5 final audit: the audit's commands) and attaches the output before launching the evaluator ([`feature/SKILL.template.md`](../../../skills/agent-kit/templates/skills/feature/SKILL.template.md) Phase 4 step 3, Phase 5). Otherwise, if **What I verified** shows no execution evidence (a command you ran plus its output), the verdict is invalid. Arbitration mode is the exception: no code is under review, so execute-before-score does not apply; arbiter evidence is acceptance-criterion citation only ([`agents/evaluator.md`](../../../skills/agent-kit/templates/agents/evaluator.md) § Arbitration mode).
 
+### Placement against routed rules
+
+When the context package lists path-scoped rule files, the evaluator checks every created or moved file against them; a placement that violates a routed rule is an issue, not a note ([`agents/evaluator.md`](../../../skills/agent-kit/templates/agents/evaluator.md)). Where the harness has a file-read tool, the evaluator reads files with it (at least one harness loads path-scoped rules only on file-read tool reads) rather than `cat`/`head`/`sed` through the shell (running a criterion's or test's command is still fine).
+
 ### Calibration exemplars
 
 The evaluator agent file includes two **illustrative shape** exemplars — not verbatim scripts to copy:
@@ -371,7 +375,7 @@ Canonical template paths (relative to repo root):
 - [`skills/agent-kit/templates/skills/feature/reference/degraded-mode.md`](../../../skills/agent-kit/templates/skills/feature/reference/degraded-mode.md) — self-evaluated gates, QA evidence under Case 2, fix-cycle rotation skip
 - [`skills/agent-kit/templates/skills/feature/reference/memory-protocol.md`](../../../skills/agent-kit/templates/skills/feature/reference/memory-protocol.md) — prior-knowledge fence, recall/archive, loop memory proposals
 - [`skills/agent-kit/templates/skills/test-ladder/SKILL.template.md`](../../../skills/agent-kit/templates/skills/test-ladder/SKILL.template.md) — rung definitions and role ownership
-- [`skills/agent-kit/templates/agents/evaluator.md`](../../../skills/agent-kit/templates/agents/evaluator.md) — stance, confidence ladder, anti-fabrication, execute-before-score, calibration exemplars, failure-class taxonomy, arbitration mode
+- [`skills/agent-kit/templates/agents/evaluator.md`](../../../skills/agent-kit/templates/agents/evaluator.md) — stance, confidence ladder, anti-fabrication, execute-before-score, routed-rule placement check, calibration exemplars, failure-class taxonomy, arbitration mode
 - [`skills/agent-kit/templates/agents/evidence-collector.md`](../../../skills/agent-kit/templates/agents/evidence-collector.md) — QA evidence gathering, no verdicts, no ladder rungs
 - [`skills/agent-kit/templates/agents/qa-evaluator.md`](../../../skills/agent-kit/templates/agents/qa-evaluator.md) — behavioral-evidence stance; reads collector index
 - [`skills/agent-kit/templates/agents/implementer.md`](../../../skills/agent-kit/templates/agents/implementer.md) and [`agents/test-writer.md`](../../../skills/agent-kit/templates/agents/test-writer.md) — apply-verbatim mode for line-patch-only cycles

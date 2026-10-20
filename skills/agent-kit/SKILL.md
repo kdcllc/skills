@@ -152,8 +152,8 @@ Establish from the code (do not ask what you can read):
   matches a glob: Claude Code `.claude/rules/**/*.md` with `paths:` frontmatter,
   Cursor `.cursor/rules/**/*.mdc` with `globs:` (excluding the kit's own
   `orchestration.mdc`), Copilot `.github/instructions/*.instructions.md` with
-  `applyTo:`. Fresh-context subagents receive only their context package, so
-  these rules are not guaranteed to reach `implementer` / `test-writer` unless
+  `applyTo:`. Fresh-context subagents may not receive these rules, so they are
+  not guaranteed to reach `implementer` / `test-writer` / `evaluator` unless
   routed in Step 4.
 
 ## Step 2b — Skill suggestions
@@ -308,10 +308,12 @@ deletes the comment).
 
 Each detected path-scoped rule file (Step 2) gets one
 `bootstrap.critical-reference-rows` row (file, purpose, "when a task's `writes` match
-`<globs>`") and is mapped to its layer(s) in `bootstrap.layer-skill-map`. Write the
+`<globs>`") and is listed in the `Rule files to cite` column of
+`bootstrap.layer-skill-map` for its layer(s). Write the
 existing-agents finding to `bootstrap.existing-agents` (which project agent covers
 which role and which agent the orchestrator uses for kit work), or `""` when no project
 agents exist. In `flags`, `loop_worktree` is optional (absent ⇒ false).
+In any table cell the kit writes, bootstrap rows included, escape a literal `|` as `\|`; never emit a bare `|` inside a cell.
 
 Do **not** put derived keys in `tokens` (marked "derived — do not set" below).
 `projectName` fills `PROJECT_NAME` when that token is absent. Omit `LINT_COMMAND` /

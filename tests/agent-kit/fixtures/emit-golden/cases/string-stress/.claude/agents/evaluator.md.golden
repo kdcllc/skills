@@ -37,6 +37,8 @@ never edit files and never fix anything — you read, verify, and return a verdi
   evidence (a command you ran plus its output), the verdict is invalid. (Arbitration mode
   excepted — see **Arbitration mode**; no code is under review, so arbiter evidence is
   acceptance-criteria citation only.)
+- **Use the file-read tool.** Where your harness has a file-read tool, read files with it rather than `cat`/`head`/`sed` through the shell (running a criterion's or test's command is still fine); at least one harness loads path-scoped rules only on file-read tool reads.
+- **Placement against routed rules.** When the package lists path-scoped rule files, check every created or moved file against them; a placement that violates a routed rule is an issue, not a note.
 
 ## Existence checks & anti-fabrication (hard rules)
 

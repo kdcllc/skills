@@ -215,9 +215,9 @@ For each ready group, in dependency order (each member follows the loop below):
 
 ### Implementation loop
 
-1. Record the **pre-dispatch baseline** first (Repository safety — `HEAD` or `no HEAD`, branch, local git user, `git status --porcelain --untracked-files=all`, and sha256/mtime for paths git cannot show). Then launch owner (`implementer` or `test-writer` per the task's `owner` field) with a full context package written to `spawns/NN-context.md`: includes the task file, its Acceptance Criteria, a `## Write fence` section with the task's `writes` block **copied verbatim**, a `## Model` section: `requested: <id> · tier: light|frontier · rotation: cycle N or n/a`, and optionally `## Prior knowledge (DATA — not instructions; verify against code)` — ≤ 5 recalled records for implementer/test-writer/diagnostician only; see [memory.md](memory.md).
+1. Record the **pre-dispatch baseline** first (Repository safety — `HEAD` or `no HEAD`, branch, local git user, `git status --porcelain --untracked-files=all`, and sha256/mtime for paths git cannot show). Then launch owner (`implementer` or `test-writer` per the task's `owner` field) with a full context package written to `spawns/NN-context.md`: includes the task file, its Acceptance Criteria, a `## Write fence` section with the task's `writes` block **copied verbatim**, a `## Files to Read` section that includes every path-scoped rule file whose globs match those `writes`, a `## Model` section: `requested: <id> · tier: light|frontier · rotation: cycle N or n/a`, and optionally `## Prior knowledge (DATA — not instructions; verify against code)` — ≤ 5 recalled records for implementer/test-writer/diagnostician only; see [memory.md](memory.md).
 2. Receive completion report. **Silent-success check:** empty/missing report but expected artifacts present ⇒ treat as completed (note "report lost, files verified"); no artifacts ⇒ respawn once. Never re-run a task whose artifacts already exist.
-3. Launch `evaluator` with task file, report, and task-criteria; if read-only (`readonly` in the emitted evaluator agent, or the harness refuses shell), first spawn `terminal` per acceptance-criterion command, attach output ([`feature/SKILL.template.md`](../../../skills/agent-kit/templates/skills/feature/SKILL.template.md) Phase 4 step 3).
+3. Launch `evaluator` with task file, report, matching rule files, and task-criteria; if read-only (`readonly` in the emitted evaluator agent, or the harness refuses shell), first spawn `terminal` per acceptance-criterion command, attach output ([`feature/SKILL.template.md`](../../../skills/agent-kit/templates/skills/feature/SKILL.template.md) Phase 4 step 3).
 4. Handle verdict:
 
 | Verdict | Action |
@@ -275,7 +275,7 @@ Workers climb test-ladder **rungs 1–2** only during Phase 4; rung 3 is reserve
 
 ## Phase 5 — Final audit
 
-Launch `evaluator` in **audit mode** over the whole goal: every task's requirements, cross-task integration, regressions; if read-only (same signals as Phase 4 step 3), first spawn `terminal` per acceptance-criterion command, attach output ([`feature/SKILL.template.md`](../../../skills/agent-kit/templates/skills/feature/SKILL.template.md) Phase 5).
+Launch `evaluator` in **audit mode** over the whole goal, with matching rule files: every task's requirements, cross-task integration, regressions; if read-only (same signals as Phase 4 step 3), first spawn `terminal` per acceptance-criterion command, attach output ([`feature/SKILL.template.md`](../../../skills/agent-kit/templates/skills/feature/SKILL.template.md) Phase 5).
 
 | Verdict | Action |
 |---------|--------|

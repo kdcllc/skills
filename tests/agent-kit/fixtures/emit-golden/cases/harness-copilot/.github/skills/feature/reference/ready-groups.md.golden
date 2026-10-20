@@ -93,7 +93,7 @@ writers while executors or fix-cycle writers in this group are still running.
 ## Evaluation
 
 When every member has passed silent-success and the group repository check, evaluate
-each member's work (task evaluator with task file, report, and task-criteria skill).
+each member's work (task evaluator with task file, report, matching rule files, and task-criteria skill).
 
 - Evaluators for members of the same group may run **in parallel** only when the
   evaluator is **read-only** (emitted `readonly`, or the harness refuses its shell)
