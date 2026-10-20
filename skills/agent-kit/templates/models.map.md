@@ -126,12 +126,22 @@ takes over (no hardcoded model IDs outside this file).
 A model blind to its own class of mistake rarely fixes it on retry. Rotate:
 
 <!-- BOOTSTRAP[models-map-fix-cycle]: fill per targeted harness with CURRENT model IDs.
+     When no different-family model at comparable tier is reachable on the harness (single-provider
+     installs always), cycle 2 uses a different same-family model — e.g. `{{MODEL_FRONTIER}}`, or
+     the light model at higher effort where effort is pinnable — and labels the row
+     `same-family rotation (reduced diversity)`; never cycle 2 = `{{MODEL_LIGHT}}` (emit warns).
 | Fix cycle | Implementer model |
 |-----------|-------------------|
 | 1 | `{{MODEL_LIGHT}}` (normal) |
 | 2 | `{{MODEL_ALT_FAMILY}}` — a different model **family** at comparable tier (analytical diversity) |
 | 3 | `{{MODEL_FRONTIER}}` |
 -->
+
+**Same-family rotation.** When no different-family model at comparable tier is reachable
+on a harness, fix cycle 2 may pin a different same-family model (see the table above) and
+label the row `same-family rotation (reduced diversity)`. A second harness such as Copilot
+or Codex provides cross-family models when targeted. Repeated same-shaped failures across
+fix cycle 2 and continuation-ladder rung 4 should escalate to a human sooner.
 
 ### After cycle 3 — continuation ladder pins
 

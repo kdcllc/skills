@@ -252,7 +252,7 @@ Retries rotate models to escape self-review blindness (skipped on **line-patch-o
 | Cycle | Model choice |
 |-------|--------------|
 | 1 | Normal implementer (light tier) |
-| 2 | **Different model family** at comparable tier |
+| 2 | **Different model family** at comparable tier (or a different same-family model labelled `same-family rotation (reduced diversity)` when none is reachable) |
 | 3 | **Frontier tier** |
 
 Each rotation is recorded in the orchestration log. Tier and family details live in [agents-and-models.md](agents-and-models.md). Degraded-mode rotation skips are documented in [`reference/degraded-mode.md`](../../../skills/agent-kit/templates/skills/feature/reference/degraded-mode.md).

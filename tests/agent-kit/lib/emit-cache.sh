@@ -210,7 +210,7 @@ _emit_cache_tool_path() {
 _emit_cache_compute_key() {
   local answers="$1"
   shift
-  local tmp kit_list
+  local tmp kit_list f
   tmp="$(mktemp 2>/dev/null || mktemp -t eck)"
   kit_list="$(mktemp 2>/dev/null || mktemp -t eckit)"
   if [ -d "$KIT" ]; then
@@ -274,6 +274,7 @@ _emit_cache_write_manifest() {
 _emit_cache_verify_entry() {
   local root="$1"
   local man="$2"
+  local line
   [ -f "$man" ] || return 1
   while IFS= read -r line; do
     [ -z "$line" ] && continue

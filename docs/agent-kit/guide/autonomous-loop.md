@@ -48,7 +48,7 @@ flowchart TD
 
 **Write-set admission.** Before dispatch, the driver checks the story's declared `writes:` globs against other in-flight claims and refuses stories that would touch **protected paths** (see below). Refused stories are skipped for this run, not silently widened.
 
-**Iteration in main tree or worktree.** At `LOOP_WORKTREE=0` (default), every slot runs in the main checkout. At `LOOP_WORKTREE=1`, each slot gets its own git worktree under `.loop-worktrees/` after a tracked-instance preflight.
+**Iteration in main tree or worktree.** The emitted default follows the install's `flags.loop_worktree` (`0` unless worktree was chosen at install); an explicit `LOOP_WORKTREE` env value, including `0`, wins. At `LOOP_WORKTREE=0`, every slot runs in the main checkout. At `LOOP_WORKTREE=1`, each slot gets its own git worktree under `.loop-worktrees/` after a tracked-instance preflight.
 
 **Evaluation-gated commit.** The iteration follows `/feature` Phases 2–6 with the story's acceptance criteria replacing Phase 1 alignment. Phase 7 (`pull_request`) is deferred to the end of the whole run — the loop never pushes during per-story iterations. A commit lands only on evaluator PASS (or APPROVED for audits) plus green test-ladder rungs 1–2; rung 3 runs per story after that story's Phase 5 audit. Details of verdicts and the ladder live in [evaluation-system.md](evaluation-system.md). Iterations inherit Phase 4's continuation ladder (rungs 5→4→6 on fix-cycle exhaustion, before terminal escalation) because each iteration runs the phased flow; the drivers' per-story attempt cap and circuit breakers stay the unchanged outer backstop. Ladder mechanics are documented in [feature-workflow.md](feature-workflow.md).
 
@@ -85,10 +85,12 @@ Both drivers honor the same environment variables. **`loop.ps1` is a behaviorall
 
 ### `LOOP_WORKTREE`
 
+Default follows install `flags.loop_worktree`; an explicit env var overrides it (including `0`).
+
 | Value | Meaning |
 |-------|---------|
-| **0** (default) | Every iteration runs in the **main tree** — today's serial behavior. |
-| **1** | Each iteration runs in its own git worktree under `.loop-worktrees/`. |
+| **0** | Every iteration runs in the **main tree** — install default unless worktree sandboxing was chosen at install. |
+| **1** | Each iteration runs in its own git worktree under `.loop-worktrees/` — install default when worktree sandboxing was chosen. |
 
 When `LOOP_WORKTREE=1`, the driver runs a **tracked-instance preflight** immediately after `git worktree add`: the worktree must contain a tracked `_memory/loop/backlog.md` and a tracked harness directory (`{{IDE_DIR}}` at install time). If either is missing — typical when the loop instance is gitignored in this repo — the driver removes the worktree, deletes the branch, prints a loud error, and exits **5**. There is **no fallback to the main tree**.
 

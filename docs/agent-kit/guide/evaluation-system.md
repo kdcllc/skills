@@ -298,7 +298,7 @@ flowchart TD
 On task **NEEDS FIXES**, fix cycles rotate models ([`feature/SKILL.template.md`](../../../skills/agent-kit/templates/skills/feature/SKILL.template.md)) — a model blind to its own mistake rarely fixes it on retry:
 
 - **Cycle 1** — re-run the implementer normally.
-- **Cycle 2** — pin a **different model family** at comparable tier.
+- **Cycle 2** — pin a **different model family** at comparable tier (or a different same-family model labelled `same-family rotation (reduced diversity)` when none is reachable).
 - **Cycle 3** — pin the **frontier tier** (see the model map's rotation table).
 
 **Exceptions — no rotation:** a **line-patch-only** verdict (see § Required-fix tags) skips rotation on that cycle; **degraded mode** also skips fix-cycle rotation in both cases — Case 1 (model argument rejected, so later spawns run on `inherit`) and Case 2 (orchestrator performing worker roles when no spawn tool exists) — with one orchestration-log note per skipped rotation ([`feature/reference/degraded-mode.md`](../../../skills/agent-kit/templates/skills/feature/reference/degraded-mode.md)).

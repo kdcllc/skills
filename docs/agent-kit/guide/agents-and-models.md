@@ -275,8 +275,10 @@ After evaluator rejections, rotate the implementer's model — a model blind to 
 | Fix cycle | Implementer model |
 |-----------|-------------------|
 | 1 | `{{MODEL_LIGHT}}` (normal) |
-| 2 | `{{MODEL_ALT_FAMILY}}` — a different model **family** at comparable tier (analytical diversity) |
+| 2 | `{{MODEL_ALT_FAMILY}}` — a different model **family** at comparable tier (analytical diversity), or a different same-family model labelled `same-family rotation (reduced diversity)` when none is reachable |
 | 3 | `{{MODEL_FRONTIER}}` |
+
+**Same-family rotation.** When no different-family model at comparable tier is reachable on a harness, fix cycle 2 may pin a different same-family model (see the table above) and label the row `same-family rotation (reduced diversity)`. A second harness such as Copilot or Codex provides cross-family models when targeted. When `alt_family` equals `light`, emit warns that fix cycle 2 would not rotate models (counted in emit warnings, stderr, exit 0).
 
 **Exceptions — no rotation:** A **line-patch-only** NEEDS FIXES verdict (every required fix tagged `[line-patch]`) resumes the same executor (`implementer` or `test-writer`) in apply-verbatim mode on the **same model** — fresh spawn on that model when the harness cannot resume — and the cycle still counts toward the three-cycle cap. Evaluators tag each required fix `[line-patch]` or `[structural]`; any `[structural]` item routes a normal fix cycle with line patches applied verbatim. **`NOT APPLIED`** patches trigger re-evaluation; rotation resumes on the next normal cycle.
 

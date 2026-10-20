@@ -19,7 +19,7 @@
     "_memory/loop/backlog.md"
   ],
   "files": {
-    ".cursor/ORCHESTRATION.md": "2f34bf99f381484f9239b448167a033d71ebea4ee9e0917a26056804a9613985",
+    ".cursor/ORCHESTRATION.md": "33b77d328c968ae1d270bf5534efde539e8a190b91d202c837c45141124406ee",
     ".cursor/agents/diagnostician.md": "2d5ae7b8ef9c19a5d2726acf62aeffb7c50cb33ccd2bf6af5ab697131756d1d1",
     ".cursor/agents/evaluator.md": "4b62cc89f0b2f0e5855b22a70335bb6886216e028ab86dc850d9ebac65bf5a48",
     ".cursor/agents/evidence-collector.md": "681a2ee685962cd275e19e49138e179abcfe11f982f3c9f0e9d5d8f92f5386a6",
@@ -28,10 +28,10 @@
     ".cursor/agents/terminal.md": "67c5e49dd06bf285b58d4860476acec945b0f0920df2f149365bde53867dc09c",
     ".cursor/agents/test-writer.md": "a0a86da2f228ee80cbec89f2fc9a538c7a09fa51dfa5abe90ce0eea1d7225772",
     ".cursor/rules/orchestration.mdc": "8cc1fcf97d283460fed60da4ef0259dfff2379646bed820cb5a1bf3bb4a65ceb",
-    ".cursor/skills/agent-kit-models.map.md": "9366d85f0d14e7b7df7b02c22341d1c2ca717de4ca9dba88c19e82f94bb24084",
+    ".cursor/skills/agent-kit-models.map.md": "7c2d3c232406e3991df1bca2687c5b2258f77a5fc498b239e08b6aab3555c151",
     ".cursor/skills/align-docs/SKILL.md": "659aa132dcd182256fb5f77ac5fac8d33998ede811c9eca9d50caeb3542ff35c",
-    ".cursor/skills/auto-loop/SKILL.md": "c7c5a6e6b03430ca88e2ace070dd74ca0b3ee429c28eb8581442e487c02829c6",
-    ".cursor/skills/feature/SKILL.md": "6ad1e6dff3adf27e35b313c6fd2be72fe88686800fe29b2a18a04a2884d89f27",
+    ".cursor/skills/auto-loop/SKILL.md": "a2c34e76be3bfed113fd195c5b0d9b6f06eb9fc92b31daab36efd11c04b4a474",
+    ".cursor/skills/feature/SKILL.md": "1de01547a919e43755284dcae2a2017cc546f85babc30220a17ac0ecbdfb259f",
     ".cursor/skills/feature/reference/continuation-ladder.md": "2a894357c88be56d78a62dcb91f8c90af466ee88052f596cbd1e755ad0ab13eb",
     ".cursor/skills/feature/reference/degraded-mode.md": "507e33a94f66de38db4e31ea3e51d7c3a32d5f411740bc7400b0c1ebc16304ab",
     ".cursor/skills/feature/reference/memory-capture.md": "9cef97d7a882f3510d97a8fb2e4b870a8db7708df2c7196fba068269ff24db0b",
@@ -59,8 +59,8 @@
     "_loop/PROMPT.md": "fdce88d9b733e1018c13ba9fdec03e4cd0a83f5c3ba85e84f87d728b96c0d250",
     "_loop/breaker.ps1": "aca26dccdd9110c7da79aef8d2369401fec4b07d98e8fe3d19eaa9f4e6c47750",
     "_loop/breaker.sh": "92d762f93a3a76db1f8176f454c4ad401f65b5449a8bd8bbbd0c690344a6c686",
-    "_loop/loop.ps1": "873a503fb67b8b588b7afa269ba6becf57bcbd88dd4663977944ea42d898a81a",
-    "_loop/loop.sh": "76e29b79adf6452cb46dcb5dcdfcac99d256c31fcbbc2bda49e0dfdfd81e6872",
+    "_loop/loop.ps1": "9e6e63b0d536feb95294f4a2aa7865ff2677148c33947627b1de2cca5686f007",
+    "_loop/loop.sh": "64fc3fdfb6bddbbc8b41264067e43541fda288b6f873442f300b5bcb85a438c7",
     "_memory/README.md": "591cb77f6a1293fd6fa39c93ab258549f6dc58af900de99b2b00e6d5bd7dedd4"
   },
   "answers": {

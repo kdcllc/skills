@@ -110,6 +110,7 @@ emit_cc_base() { # outfile — minimal claude-code answers from fixture
 }
 
 emit_v028_answers() { # outfile — no fast, no arbiter_same_family, alt arbiter slot
+  # alt_family / frontier_alt_family must differ from light (else emit adds alt_family-equals-light warn).
   jq '
     .harnesses = ["claude-code"] |
     .primary = "claude-code" |
@@ -117,8 +118,8 @@ emit_v028_answers() { # outfile — no fast, no arbiter_same_family, alt arbiter
     .models["claude-code"].frontier = "claude-opus-5-5" |
     .models["claude-code"].light = "claude-sonnet-5-5" |
     del(.models["claude-code"].fast) |
-    .models["claude-code"].alt_family = "claude-sonnet-5-5" |
-    .models["claude-code"].frontier_alt_family = "claude-sonnet-5-5" |
+    .models["claude-code"].alt_family = "claude-haiku-5-5" |
+    .models["claude-code"].frontier_alt_family = "claude-haiku-5-5" |
     del(.models["claude-code"].arbiter_same_family) |
     .models["claude-code"].loop_chain = "claude-sonnet-5-5,claude-haiku-5-5"
   ' "$FIXTURE" > "$1"
@@ -237,8 +238,8 @@ case_4() {
   emit_cc_base "$ans"
   jq '
     .models["claude-code"].frontier = "claude-opus-5-5" |
-    .models["claude-code"].alt_family = "claude-sonnet-5-5" |
-    .models["claude-code"].frontier_alt_family = "claude-sonnet-5-5" |
+    .models["claude-code"].alt_family = "claude-haiku-5-5" |
+    .models["claude-code"].frontier_alt_family = "claude-haiku-5-5" |
     .models["claude-code"].arbiter_same_family = true
   ' "$ans" > "${ans}.tmp" && mv "${ans}.tmp" "$ans"
   alloc_root

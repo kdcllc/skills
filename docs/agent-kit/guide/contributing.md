@@ -91,7 +91,7 @@ bash scripts/agent-kit/self-install.sh
 | `--symlink` | Places the canonical real tree at `.agents/skills/<name>/` and makes `.claude/skills/<name>` and `.cursor/skills/<name>` symlinks pointing there. Fails loudly on symlink failure; **never** falls back to copy. |
 | `--force` | Accepted and ignored — overwrite is already the default. |
 | `--no-emit` | Copy skills only; skip emit (legacy behaviour). |
-| `--force-emit` | Pass `--force` to `emit.sh` (overwrite user-modified instance files). |
+| `--force-emit` | Pass `--force` to `emit.sh` (overwrite user-modified instance files and pre-existing files at kit paths). |
 
 ### What self-install emits
 
@@ -182,9 +182,9 @@ In this repo the manifest is gitignored (instance layer). See the live example s
 For installed projects (including dogfood in this repo):
 
 1. **Re-pull** the kit — for example `npx skills add kdcllc/skills --skill agent-kit` again, or `npx agent-skills-cli update` (run `npx agent-skills-cli check` first to see installed skills).
-2. **Re-emit** — `bash .claude/skills/agent-kit/bin/emit.sh --upgrade` (or `.cursor/skills/agent-kit`, `.github/skills/agent-kit`; answers come from the manifest; add `--answers` only when the interview changed). Manifests from the private **`setup`** kit have no embedded `answers` snapshot — see [getting-started.md](getting-started.md) § Upgrading from the private setup kit. Exit 4 lists user-modified files; confirm with `--force`. Use `--dry-run` to preview.
+2. **Re-emit** — `bash .claude/skills/agent-kit/bin/emit.sh --upgrade` (or `.cursor/skills/agent-kit`, `.github/skills/agent-kit`; answers come from the manifest; add `--answers` only when the interview changed). Manifests from the private **`setup`** kit have no embedded `answers` snapshot — see [getting-started.md](getting-started.md) § Upgrading from the private setup kit. Exit 4 lists user-modified files and pre-existing files at kit paths with no previous-manifest entry (stderr distinguishes the two); confirm with `--force`. Use `--dry-run` to preview.
 
-**Hash diff protects local modifications:** Unmodified emitted files update silently; modified files require confirmation before overwrite.
+**Hash diff protects local modifications:** Unmodified emitted files update silently; modified files require confirmation before overwrite; pre-existing files at kit paths with no previous-manifest entry also need `--force`.
 
 **`seedFiles` semantics:** When loop is enabled, the manifest lists `_memory/loop/backlog.md` in `seedFiles` only (not in `files`). Seeds are created only when missing, never overwritten on upgrade, and are exempt from the hash-diff overwrite flow.
 
@@ -228,6 +228,7 @@ Tracked structural guards live under `tests/agent-kit/templates/`. Each script l
 | [`forge-adapter.sh`](../../../tests/agent-kit/templates/forge-adapter.sh) | Ship-PR / forge adapter strings |
 | [`model-enforcement.sh`](../../../tests/agent-kit/templates/model-enforcement.sh) | Model tier policy strings in templates and agents |
 | [`model-currency.sh`](../../../tests/agent-kit/templates/model-currency.sh) | Fast tier, arbiter warnings, loop model denylist, upgrade compatibility, dogfood pins |
+| [`install-feedback.sh`](../../../tests/agent-kit/templates/install-feedback.sh) | Pre-existing emit paths, bootstrap ids, alt_family-equals-light warning, model-map same-family rotation, loop_worktree, path-scoped routing, Codex append, memory-table IF guards |
 | [`ready-groups.sh`](../../../tests/agent-kit/templates/ready-groups.sh) | Ready-groups reference, feature-skill and ORCHESTRATION wiring, goal template `parallel` flag, harness-matrix and emitter caveats, emitted ready-groups instances, negative self-test on a copied template |
 | [`log-spawn.sh`](../../../tests/agent-kit/templates/log-spawn.sh) | Canonical `log-spawn.sh` ledger behavior, Footprint ingestion, OUTCOME `model_check`, `_kit/log-spawn.*` emit wiring |
 | [`memory.sh`](../../../tests/agent-kit/templates/memory.sh) | Memory CLI twins, redact/check/rm/capture, quarantine, `_memory/` emit wiring; helpers [`memory-release-c.sh`](../../../tests/agent-kit/lib/memory-release-c.sh) and [`memory-redaction-behavioral.sh`](../../../tests/agent-kit/lib/memory-redaction-behavioral.sh); pwsh legs assert bash-only stubs exit **2** |

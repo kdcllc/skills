@@ -17,7 +17,7 @@
 #   --upgrade     explicit upgrade path (optional when a manifest exists).
 #   --dry-run     print one action line per planned write|skip|prune|keep|seed|warn|blocked
 #                 path; touch nothing. Any blocked line ⇒ exit 4, else 0.
-#   --force       overwrite user-modified kit files.
+#   --force       overwrite user-modified kit files and pre-existing files at kit paths.
 #   --check-answers  print <id>\t<template path relative to <kit>/templates> for every
 #                 class-a BOOTSTRAP id missing from answers.bootstrap (empty string
 #                 counts as answered; kit-* never listed). Exit 3 if any line, else 0.
@@ -27,12 +27,16 @@
 #   same-family rung-5 arbiter when frontier_alt_family equals frontier). Arbiter
 #   reuse warnings (stderr `emit: warning: …`, counted in warnings W, exit unchanged)
 #   when frontier_alt_family equals frontier without the flag, or equals alt_family
-#   (≠ frontier) regardless of the flag.
+#   (≠ frontier) regardless of the flag; also when alt_family equals light (no rotation).
+#
+#   Optional flags.loop_worktree (boolean): absent ⇒ false; non-boolean ⇒ exit 3. Persists as
+#   options.loop_worktree when present; drives derived token LOOP_WORKTREE_DEFAULT (1/0).
 #
 #   Exit codes: 0 ok · 2 usage / no sha256 tool / answers file unreadable · 3 answers
 #   invalid, unanswered ids under --check-answers, loop_chain usage-credit denylist
-#   entry, or models.<h>.fast / arbiter_same_family wrong JSON type · 4 upgrade blocked by
-#   user-modified files (listed on stderr; --force overrides) · 5 verify failed ·
+#   entry, flags.loop_worktree wrong type, or models.<h>.fast / arbiter_same_family wrong
+#   JSON type · 4 emit blocked by user-modified kit files or pre-existing files at kit paths
+#   with no prior manifest entry (listed on stderr; --force overrides file writes) · 5 verify failed ·
 #   6 template syntax error. Errors: one stderr line each, prefixed `emit: `.
 #   --help prints usage to stderr and exits 2.
 #
@@ -66,7 +70,7 @@ usage: emit.sh [--answers F] [--upgrade] [--dry-run] [--force] [--check-answers]
   --answers F  answers JSON (schema 1). omitted ⇒ read from manifest
   --upgrade    upgrade using answers embedded in the manifest
   --dry-run    print planned actions; touch nothing
-  --force      overwrite user-modified kit files
+  --force      overwrite user-modified kit files and pre-existing kit-path files
   --check-answers  list unanswered class-a bootstrap ids; exit 3 if any
 exit: 0 ok · 2 usage/sha256/unreadable · 3 answers invalid · 4 blocked · 5 verify · 6 template syntax
 EOF
@@ -1440,6 +1444,14 @@ is_seed_path() {
   return 1
 }
 
+# Emit-set paths that may exist before the first manifest entry (append / create-only).
+is_emit_preexisting_exempt() {
+  case "$1" in
+    .codex/config.toml) return 0 ;;
+  esac
+  return 1
+}
+
 is_kit_owned() {
   local p="$1" dir skill
   case "$p" in
@@ -1687,11 +1699,15 @@ validate_models_contract() {
 }
 
 warn_models_arbiter() {
-  local h="$1" frontier alt fam arb
+  local h="$1" frontier alt fam arb light
+  ans_model_into alt "$h" alt_family
+  ans_model_into light "$h" light
+  if [ -n "$alt" ] && [ "$alt" = "$light" ]; then
+    record_warn_line "warning: models.$h.alt_family equals light; fix cycle 2 would not rotate models"
+  fi
   ans_model_into fam "$h" frontier_alt_family
   [ -z "$fam" ] && return 0
   ans_model_into frontier "$h" frontier
-  ans_model_into alt "$h" alt_family
   if [ "$fam" = "$frontier" ]; then
     jt_q_into arb "$ANSWERS" istrue models "$h" arbiter_same_family
     if [ "$arb" != true ]; then
@@ -1735,6 +1751,12 @@ load_global_tokens() {
   done
   ans_model_into v "$PRIMARY" loop_chain
   map_set TOKENS LOOP_MODEL_CHAIN "$v"
+  jt_q_into ty "$ANSWERS" istrue flags loop_worktree
+  if [ "$ty" = true ]; then
+    map_set TOKENS LOOP_WORKTREE_DEFAULT 1
+  else
+    map_set TOKENS LOOP_WORKTREE_DEFAULT 0
+  fi
 }
 
 tok_put() { # <name> <value> — set when non-empty, else remove
@@ -2044,6 +2066,12 @@ EOF
       fi
     fi
   done
+  jt_q_into ty "$ANSWERS" type flags loop_worktree
+  if [ "$ty" != missing ]; then
+    if [ "$ty" != boolean ]; then
+      add_problem "flags.loop_worktree must be a boolean"
+    fi
+  fi
   jt_q_into FORGE_KIND "$ANSWERS" rawe forge kind
   jt_q_into FORGE_HOST "$ANSWERS" rawe forge host
   case "$FORGE_KIND" in
@@ -2499,10 +2527,12 @@ UNCHANGED_M=0
 PRUNED_P=0
 SEEDS_KEPT=0
 BLOCKED_PATHS=()
+map_clear BLOCKED_CLASS   # path → modified|preexisting (stderr wording for exit 4)
 map_clear NEWF   # path → hash (emit-set + foreign)
 
 plan_and_maybe_write() {
   BLOCKED_PATHS=()
+  map_clear BLOCKED_CLASS
   WRITTEN_N=0
   UNCHANGED_M=0
   local p disk_hash old new_hash
@@ -2526,11 +2556,19 @@ plan_and_maybe_write() {
       continue
     fi
     # bytes differ or absent
-    if [ "$OLD_HAS_MANIFEST" -eq 1 ] && [ -n "$disk_hash" ]; then
+    if [ -n "$disk_hash" ] && [ "$FORCE" -eq 0 ]; then
       map_get OLDH "$p" || true
       old="$MV"
-      if [ -n "$old" ] && [ "$disk_hash" != "$old" ] && [ "$FORCE" -eq 0 ]; then
+      if [ "$OLD_HAS_MANIFEST" -eq 1 ] && [ -n "$old" ]; then
+        if [ "$disk_hash" != "$old" ]; then
+          BLOCKED_PATHS+=("$p")
+          map_set BLOCKED_CLASS "$p" modified
+          dry_action blocked "$p"
+          continue
+        fi
+      elif ! is_emit_preexisting_exempt "$p"; then
         BLOCKED_PATHS+=("$p")
+        map_set BLOCKED_CLASS "$p" preexisting
         dry_action blocked "$p"
         continue
       fi
@@ -2855,7 +2893,7 @@ mt_str() { # <table path: US + segments> <raw string value> — append one strin
 }
 
 write_manifest() {
-  local installed p f
+  local installed p f ty
   if [ -n "$OLD_INSTALLED_AT" ]; then
     installed="$OLD_INSTALLED_AT"
   elif [ -n "${EMIT_DATE:-}" ]; then
@@ -2876,6 +2914,10 @@ write_manifest() {
   mt_str "${J_US}options${J_US}forge" "$FORGE_KIND"
   if [ -n "$FORGE_HOST" ]; then
     mt_str "${J_US}options${J_US}forgeHost" "$FORGE_HOST"
+  fi
+  jt_q_into ty "$ANSWERS" type flags loop_worktree
+  if [ "$ty" != missing ]; then
+    MT+="$(jt_sub "$ANSWERS" "${J_US}flags${J_US}loop_worktree" "${J_US}options${J_US}loop_worktree")"$'\n'
   fi
   MT+="${J_US}seedFiles"$'\t'array$'\t\n'
   if [ -n "$SEED_CONTENT" ]; then
@@ -3146,7 +3188,11 @@ run_emit() {
       combined+=("$w")
     done
     for p in ${BLOCKED_PATHS[@]+"${BLOCKED_PATHS[@]}"}; do
-      combined+=("blocked $p")
+      if map_get BLOCKED_CLASS "$p" && [ "$MV" = preexisting ]; then
+        combined+=("blocked $p (exists; not written by a previous emit)")
+      else
+        combined+=("blocked $p")
+      fi
     done
     if [ ${#combined[@]} -gt 0 ]; then
       printf 'emit: %s\n' "${combined[@]}" | LC_ALL=C sort >&2

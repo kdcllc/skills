@@ -16,7 +16,7 @@
 #              Fails loudly on symlink failure; never falls back to copy.
 #   --force    Accepted and ignored (overwrite is already the default).
 #   --no-emit  Copy skills only; skip emit (legacy behaviour).
-#   --force-emit  Pass --force to emit.sh (overwrite user-modified instance files).
+#   --force-emit  Pass --force to emit.sh (overwrite user-modified instance files and pre-existing files at kit paths).
 #
 # Exit codes: 0 = success (including dry-run); non-zero = any error.
 set -euo pipefail
@@ -86,7 +86,7 @@ _run_emit() {
   bash "$REPO_ROOT/skills/agent-kit/bin/emit.sh" "${_emit_args[@]}"
   local _rc=$?
   if (( _rc == 4 )); then
-    echo "re-run with --force-emit to overwrite user-modified instance files" >&2
+    echo "re-run with --force-emit to overwrite user-modified or pre-existing instance files" >&2
   fi
   return "$_rc"
 }

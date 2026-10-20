@@ -6,6 +6,29 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 
 ## [Unreleased]
 
+### Added
+
+- **Existing project agents** — Step 2 inventories agents under each harness's agent paths (plus Codex `[agents.*]` tables), reports name collisions with the seven kit agents and role overlaps, and Step 4 records the note in `bootstrap.existing-agents`.
+- **Path-scoped rule detection** — Step 2 finds Claude Code `paths:`, Cursor `globs:` (except the kit's `orchestration.mdc`), and Copilot `applyTo:` rule files; Step 4 adds each to `bootstrap.critical-reference-rows` and `bootstrap.layer-skill-map` so the orchestrator routes matching rules into task context packages.
+- **Same-family fix-cycle rotation** — Step 3 and the model map document using a different same-family model (label `same-family rotation (reduced diversity)`) when no cross-family light-tier model exists; emit warns when `alt_family` equals `light` (`warning: models.<h>.alt_family equals light; fix cycle 2 would not rotate models`).
+- **`flags.loop_worktree`** — Step 3 persists the loop sandbox choice; when true, emitted `_loop/*` drivers default `LOOP_WORKTREE` to `1` (via derived `{{LOOP_WORKTREE_DEFAULT}}`); an explicit `LOOP_WORKTREE` env value still wins. Worktree mode requires a tracked loop instance or preflight exits 5.
+
+### Changed
+
+- **Exit 4 scope** — covers user-modified kit files and pre-existing files at kit paths with no previous-manifest entry (stderr: `emit: blocked <path> (exists; not written by a previous emit)`); `--force` overrides both classes. `.codex/config.toml` appends are unchanged.
+
+### Fixed
+
+- **Pre-existing file overwrite** — emit no longer silently replaces a project's own file at a kit path on first install or when a path was never written by a prior emit.
+- **Memory-workflow table guards** — emitted ORCHESTRATION.md omits the Research row when `research` is false and Loop rows when `loop` is false (IF-guards in the template).
+
+### Upgrade notes
+
+- Re-emit lists `existing-agents` under `--check-answers` and raises `warnings` by one until answered (`""` clears it).
+- Installs that relied on emit overwriting a hand-placed file at a kit path now get exit 4; pass `--force` to restore the old overwrite behavior.
+- If the manifest was lost while emitted files remain, every differing kit-path file is blocked on re-emit — review the list, then `--force` if appropriate.
+- `.codex/config.toml` appends (existing bytes plus kit agent tables) are unchanged on upgrade.
+
 ## [1.1.1] - 2026-10-16
 
 ### Fixed

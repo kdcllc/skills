@@ -16,6 +16,7 @@ community/secondary sources cited there).
 research report's legend.
 **Concurrent-spawn row 2026-10-16** — marks follow the top legend; 🔎 = live page spot-checked that day.
 **Degraded-spawn row 2026-10-16** — marks follow the top legend; 🔎 = live page spot-checked that day.
+**Path-scoped guidance row 2026-10-19** — Claude Code `.claude/rules/` `paths:` added; D = code.claude.com/docs/en/memory § Path-specific rules, spot-checked that day.
 
 ## The interchange finding
 
@@ -113,7 +114,7 @@ Full sources and the kit skill-by-skill verdict:
 | Block auto-invoke, keep `/name` | `disable-model-invocation: true` (D) | `disable-model-invocation: true` (D) | `disable-model-invocation: true` (D) |
 | “Only model invokes” | `user-invocable: false` (D) | via `paths` / agent-decides; no skill `user-invocable` doc (I) | `user-invocable: false` on skills (D); on `.agent.md` hides from picker but still spawnable |
 | Manual-only prompt file | `.claude/commands/*.md` (D) | `.cursor/commands` / migrate-to-skills (D) | `.prompt.md` (D) |
-| Path-scoped guidance | skill `paths:` + nested CLAUDE.md (D) | `.mdc` `globs:` (D) | `.github/instructions/*.instructions.md` `applyTo` (D) |
+| Path-scoped guidance | `.claude/rules/**/*.md` `paths:` frontmatter; skill `paths:`; nested CLAUDE.md (D) | `.mdc` `globs:` (D) | `.github/instructions/*.instructions.md` `applyTo` (D) |
 | Skill body model pin | `model:` on skill (D) | **no skill model key** — pin on agent (D) | pin on agent/prompt (D) |
 | Command-output isolation | subagent + `model: haiku`; `context: fork` (D) | built-in Bash subagent; custom agent model ID (D) | `runSubagent` (summary only); **model ≤ parent tier** — pinning *down* is valid (D) |
 | Output size cap | `BASH_MAX_OUTPUT_LENGTH` 30,000 default (D) | none (U) | none documented — only `outputLocation` / timeout (D) |
@@ -121,6 +122,10 @@ Full sources and the kit skill-by-skill verdict:
 | Cache-bust events | model, effort, fast-mode, compact, >1h, MCP change (D) | model/effort/context/tools change, inactivity (D) | model switch mid-session, instruction/agent change, inactivity (D) |
 | `/context` equivalent | `/context` + `/doctor` (D) | Customize panel; dashboard usage (D; no token breakdown) | Cache Explorer + Diagnostics view (D) |
 | Subagent nesting | subagents spawn subagents (D) | L1 + direct subagents spawn; grandchildren can't (D) | off by default; `chat.subagents.allowInvocationsFromSubagents` (D) |
+
+Path-scoped guidance is injected based on files the session touches, so it is not
+guaranteed to reach fresh-context subagents (I — inferred kit policy; no harness documents subagent delivery) — the kit routes such files through
+Critical Reference Files and task context packages (`## Files to Read`).
 
 ## Empirical validation (2026-08-18, CLI-observed)
 

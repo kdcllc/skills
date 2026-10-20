@@ -666,7 +666,7 @@ backstop.
 
 - **Phase 3**: Goal evaluation loop ONLY exits to Phase 4 via a PASS verdict. Revisions without re-evaluate are forbidden.
 - **Phase 4**: A task is ONLY marked complete after the evaluator returns PASS or PASS (with notes) (`PASS (with notes)` counts as PASS). Fixes without re-evaluate are forbidden.
-  Fix cycles rotate models — cycle 2 uses a different model family, cycle 3 the frontier tier (see the model map) — except line-patch-only cycles, which do not rotate — and every spawn is recorded in the goal's append-only orchestration log.
+  Fix cycles rotate models — cycle 2 uses a different model family (or a different same-family model per the model map when no different family is reachable), cycle 3 the frontier tier (see the model map) — except line-patch-only cycles, which do not rotate — and every spawn is recorded in the goal's append-only orchestration log.
 - **Phase 5**: Audit loop ONLY exits to Quality Checks via an APPROVED verdict. Remediations without re-audit are forbidden.
 - **Phase 6**: A doc is ONLY complete after the evaluator returns PASS; the doc set ONLY ships after the final doc audit returns APPROVED. `_memory/` and code are never touched.
 - **Phase 7**: The PR/MR is ONLY created, or the hand-over printed, after the user approves the drafted title and body.
@@ -877,6 +877,10 @@ _loop/{loop.sh,loop.ps1,breaker.sh,breaker.ps1,PROMPT.md}  # Headless loop drive
 ```
 
 ### Critical Reference Files
+
+Path-scoped rule files listed here are not guaranteed to load in subagents — put every
+rule file whose globs match a task's `writes` into that task's context package
+(`## Files to Read`).
 
 | File | Purpose | When to Include |
 |------|---------|-----------------|

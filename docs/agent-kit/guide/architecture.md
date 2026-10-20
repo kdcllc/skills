@@ -87,7 +87,7 @@ sequenceDiagram
 | **0** | Success |
 | **2** | Usage error, unreadable answers, or `--help` |
 | **3** | Invalid answers, unanswered `--check-answers` ids, or invalid loop model chain |
-| **4** | Upgrade blocked (user-modified kit files or migration target conflict); `--force` overrides file blocks |
+| **4** | Emit blocked: user-modified kit files, pre-existing kit-path files with no previous-manifest entry (first installs included; stderr distinguishes both), or migration target conflict; `--force` overrides file blocks |
 | **5** | Post-emit verify failed |
 | **6** | Template syntax error |
 
@@ -205,7 +205,7 @@ Spawn ledger format: [`templates/tools/log-spawn.sh`](../../../skills/agent-kit/
 
 ## Task verdict states
 
-Phase 4 tasks move through dispatch and evaluation until a terminal verdict. **NEEDS FIXES** triggers up to **three** implement→evaluate **fix cycles** with **model rotation**: cycle **1** re-runs on the normal **light** tier, cycle **2** pins a **different model family** at comparable tier, cycle **3** pins **frontier** ([`models.map.md`](../../../skills/agent-kit/templates/models.map.md) · [`feature` skill template](../../../skills/agent-kit/templates/skills/feature/SKILL.template.md)). A **line-patch-only** verdict (every required fix tagged `[line-patch]`) resumes the same executor (`implementer` / `test-writer`) in apply-verbatim mode on any cycle **without** rotation, still counts toward the cap, and is always re-evaluated; any `[structural]` fix uses the normal cycle with line patches applied verbatim. In **degraded mode**, fix-cycle rotation is **skipped** (logged once per skipped rotation) in both Case 1 (model argument rejected) and Case 2 (no spawn tool). **Bypass** failure classes (`destructive`, `security`, `infra`) escalate immediately on any cycle. After cycle-3 exhaustion, `goal.md`'s `phases.ladder` chooses **`escalate`** (offer continuation ladder to the human) or **`auto`** (run ladder rungs **5 → 4 → 6**, then human escalation if still stuck).
+Phase 4 tasks move through dispatch and evaluation until a terminal verdict. **NEEDS FIXES** triggers up to **three** implement→evaluate **fix cycles** with **model rotation**: cycle **1** re-runs on the normal **light** tier, cycle **2** pins a **different model family** at comparable tier (or a different same-family model labelled `same-family rotation (reduced diversity)` when none is reachable), cycle **3** pins **frontier** ([`models.map.md`](../../../skills/agent-kit/templates/models.map.md) · [`feature` skill template](../../../skills/agent-kit/templates/skills/feature/SKILL.template.md)). A **line-patch-only** verdict (every required fix tagged `[line-patch]`) resumes the same executor (`implementer` / `test-writer`) in apply-verbatim mode on any cycle **without** rotation, still counts toward the cap, and is always re-evaluated; any `[structural]` fix uses the normal cycle with line patches applied verbatim. In **degraded mode**, fix-cycle rotation is **skipped** (logged once per skipped rotation) in both Case 1 (model argument rejected) and Case 2 (no spawn tool). **Bypass** failure classes (`destructive`, `security`, `infra`) escalate immediately on any cycle. After cycle-3 exhaustion, `goal.md`'s `phases.ladder` chooses **`escalate`** (offer continuation ladder to the human) or **`auto`** (run ladder rungs **5 → 4 → 6**, then human escalation if still stuck).
 
 ```mermaid
 stateDiagram-v2

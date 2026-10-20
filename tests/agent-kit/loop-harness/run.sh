@@ -2264,8 +2264,8 @@ fi
 # ===========================================================================
 # STORY-010/011 slot-supervision + driver-dispatch coverage (assertions
 # 37-53, extended by task 05's 54+). Shared fixture helpers: sandbox_write_loop
-# substitutes the three instance tokens ({{PROJECT_NAME}}/{{LOOP_MODEL_CHAIN}}/
-# {{IDE_DIR}}) into COPIES of the CANONICAL loop.sh/breaker.sh BEFORE any run
+# substitutes the four instance tokens ({{PROJECT_NAME}}/{{LOOP_MODEL_CHAIN}}/
+# {{IDE_DIR}}/{{LOOP_WORKTREE_DEFAULT}}) into COPIES of the CANONICAL loop.sh/breaker.sh BEFORE any run
 # (pinned) -- these fixtures never drive the instance _loop/ files (that
 # remains assertion 15's own lane, and the goal's extraction-survival
 # requirement is already proven by assertions 13/14/13b/13c/16/33/35 above,
@@ -2297,6 +2297,7 @@ sandbox_write_loop() { # sandbox_write_loop <dest_dir> <ide_dir_name>
   mkdir -p "$dest/_loop"
   sed -e 's/{{PROJECT_NAME}}/sandbox-project/g' \
       -e 's/{{LOOP_MODEL_CHAIN}}/sonnet/g' \
+      -e 's/{{LOOP_WORKTREE_DEFAULT}}/0/g' \
       -e "s/{{IDE_DIR}}/$ide/g" \
       "$LOOP_SH" > "$dest/_loop/loop.sh"
   chmod +x "$dest/_loop/loop.sh"
@@ -2348,6 +2349,7 @@ sandbox_write_loop_ps1() { # sandbox_write_loop_ps1 <dest_dir> <ide_dir_name>
   local dest="$1" ide="$2"
   sed -e 's/{{PROJECT_NAME}}/sandbox-project/g' \
       -e 's/{{LOOP_MODEL_CHAIN}}/sonnet/g' \
+      -e 's/{{LOOP_WORKTREE_DEFAULT}}/0/g' \
       -e "s/{{IDE_DIR}}/$ide/g" \
       "$LOOP_PS1" > "$dest/_loop/loop.ps1"
   sed -e 's/{{PROJECT_NAME}}/sandbox-project/g' \

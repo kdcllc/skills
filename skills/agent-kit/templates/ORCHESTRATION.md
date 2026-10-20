@@ -241,6 +241,11 @@ The roster is seven subagents — `evaluator`, `qa-evaluator`, `evidence-collect
 `implementer`, `test-writer`, `terminal`, and `diagnostician` — each with a dedicated
 agent file under `{{IDE_DIR}}/agents/`.
 
+<!-- BOOTSTRAP[existing-agents]: write a short **Existing project agents** note — which
+     project agents exist, which kit role each overlaps, and which agent the orchestrator
+     uses for kit work (kit agents for every orchestrated spawn) — or `""` when none.
+     Example: "Project `reviewer` overlaps evaluator; orchestrator uses kit agents only." -->
+
 The orchestrator (and any worker that can spawn) sends `terminal` an exact Bash or
 PowerShell command plus the result shape it needs; `terminal` executes it and returns
 only that result, so the raw stream never lands in the caller. Rung 3 is always a
@@ -755,7 +760,7 @@ backstop.
 
 - **Phase 3**: Goal evaluation loop ONLY exits to Phase 4 via a PASS verdict. Revisions without re-evaluate are forbidden.
 - **Phase 4**: A task is ONLY marked complete after the evaluator returns PASS or PASS (with notes) (`PASS (with notes)` counts as PASS). Fixes without re-evaluate are forbidden.
-  Fix cycles rotate models — cycle 2 uses a different model family, cycle 3 the frontier tier (see the model map) — except line-patch-only cycles, which do not rotate — and every spawn is recorded in the goal's append-only orchestration log.
+  Fix cycles rotate models — cycle 2 uses a different model family (or a different same-family model per the model map when no different family is reachable), cycle 3 the frontier tier (see the model map) — except line-patch-only cycles, which do not rotate — and every spawn is recorded in the goal's append-only orchestration log.
 - **Phase 5**: Audit loop ONLY exits to Quality Checks via an APPROVED verdict. Remediations without re-audit are forbidden.
 - **Phase 6**: A doc is ONLY complete after the evaluator returns PASS; the doc set ONLY ships after the final doc audit returns APPROVED. `_memory/` and code are never touched.
 - **Phase 7**: The PR/MR is ONLY created, or the hand-over printed, after the user approves the drafted title and body.
@@ -886,9 +891,13 @@ flowchart TD
 | Workflow | Read | Write |
 |----------|------|-------|
 | **Feature** | Once before Phase 2; ids in `goal.md` `## Recalled memory` | After Phase 5 APPROVED + green QC — one `goal-summary` + 0–3 `decision`/`pitfall` via `_kit/memory.*` |
+<!-- IF research -->
 | **Research** | Phase 1 → `_memory/work/research/<topic>/recalled-memory.md`; Phase 4 copies ids into the new goal | One `research-ingest` after Phase 2 ingestion review |
+<!-- ENDIF research -->
+<!-- IF loop -->
 | **Loop (manual)** | Feature recall once before Phase 2 in the iteration | Direct `_kit/memory.sh add`; new record paths in the story commit |
 | **Loop (dispatched)** | At `LOOP_WORKTREE=0`: feature recall once before Phase 2 in the slot; at `LOOP_WORKTREE=1`: empty recall (no `_kit/` in slot worktrees) | Proposals in `<outbox>/memory/*.md`; integrator **step 3b** at reap end |
+<!-- ENDIF loop -->
 | **Capture** | Optional recall when distilling a session | `memory-capture` skill: `_kit/memory.sh capture` → scope confirm → distill → `add` → `check`; gitignored `_memory/raw/` |
 | **Back-fill** | Optional recall before a one-time legacy import | `_kit/memory.sh backfill --plan` (no writes), review output, then `--apply`; sources under `_memory/work/goals/`, `_memory/work/research/`, and `_memory/loop/ESCALATIONS.md` plus `_memory/loop/archive/`; closed signals — the kit writes the `ARCHIVED:` note and `_memory/work/research/<topic>/ingested`; a human adds the escalation `resolved:` line — see `_memory/README.md` (`backfill`, **Closed signals**); one-time transcript import via `memory-capture` (runbook: `{{IDE_DIR}}/skills/feature/reference/memory-capture.md`; Codex-only installs: run `capture` per `_memory/README.md` and distill from a Claude Code, Cursor or Copilot session) |
 
@@ -1103,11 +1112,16 @@ _memory/.index/ · _memory/raw/  # Derived index; capture output, ledgers and dr
 
 ### Critical Reference Files
 
+Path-scoped rule files listed here are not guaranteed to load in subagents — put every
+rule file whose globs match a task's `writes` into that task's context package
+(`## Files to Read`).
+
 | File | Purpose | When to Include |
 |------|---------|-----------------|
 <!-- BOOTSTRAP[critical-reference-rows]: one row per canonical reference the orchestrator must route into
      subagent context packages — domain skills, ground-truth docs, per-directory
-     AGENTS.md/CLAUDE.md files, supporting skill SKILL.md files. -->
+     AGENTS.md/CLAUDE.md files, supporting skill SKILL.md files, and path-scoped rule
+     files (rules that load only when a touched file matches a glob). -->
 
 ### Quality Checks
 
