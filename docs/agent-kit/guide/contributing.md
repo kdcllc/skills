@@ -240,7 +240,7 @@ Tracked structural guards live under `tests/agent-kit/templates/`. Each script l
 | [`research-layout.sh`](../../../tests/agent-kit/templates/research-layout.sh) | Canonical `/research` templates and memory wiring for tracked `_memory/research/`; mutation proofs under mktemp |
 | [`emit-determinism.sh`](../../../tests/agent-kit/templates/emit-determinism.sh) | Byte-identical re-emit and Bash 3.2 / jq-free portability |
 | [`emit-golden.sh`](../../../tests/agent-kit/templates/emit-golden.sh) | Golden corpus for `bin/emit.sh` (use `--update` only with reviewed diff) |
-| [`emit-portability.sh`](../../../tests/agent-kit/templates/emit-portability.sh) | sha256 tools, JSON edges; Docker `bash:3.2` emit-golden leg **skips by default**, `AGENT_KIT_DOCKER=1` opts in and **FAILs** when docker or the `bash:3.2` image is missing; CI pulls `bash:3.2` and sets the opt-in |
+| [`emit-portability.sh`](../../../tests/agent-kit/templates/emit-portability.sh) | sha256 tools, JSON edges; Docker `bash:3.2` emit-golden leg **skips by default**, `AGENT_KIT_DOCKER=1` opts in and **FAILs** when docker or the `bash:3.2` image is missing; CI does not run this leg (it runs only `run-all.sh --quick`), so run it locally before touching Bash 3.2-sensitive code |
 | [`emit-migrate.sh`](../../../tests/agent-kit/templates/emit-migrate.sh) | Legacy layout migration on `--upgrade` (private fixtures; cases run in parallel via [`parallel.sh`](../../../tests/agent-kit/lib/parallel.sh) / `AGENT_KIT_CASE_JOBS`) |
 | [`emit-perf.sh`](../../../tests/agent-kit/templates/emit-perf.sh) | Default: structural checks + in-suite mutation proofs (no timing); `EMIT_PERF=1` adds three timed self-answers emits (median vs `EMIT_PERF_MAX`, default **4.0**) and optional strace fork budget (`EMIT_PERF_MAX_FORKS`, default **589**) |
 | [`legacy-paths.sh`](../../../tests/agent-kit/templates/legacy-paths.sh) | No stray legacy `_goals` / `_research` tokens outside the allow-list |
@@ -317,5 +317,5 @@ Install and user-side usage topics belong in [getting-started.md](getting-starte
 - [`tests/agent-kit/loop-harness/run.sh`](../../../tests/agent-kit/loop-harness/run.sh) — behavioral harness header and coverage scope
 - [`tests/agent-kit/run-all.sh`](../../../tests/agent-kit/run-all.sh) — full kit suite driver (options, env, timing summary)
 - [`tests/agent-kit/templates/`](../../../tests/agent-kit/templates/) — guard script header comments (what each guard locks)
-- [`.github/workflows/agent-kit.yml`](../../../.github/workflows/agent-kit.yml) — CI agent-kit workflow (`run-all.sh --quick` on pull requests; the full suite with the bash:3.2 pull and `AGENT_KIT_DOCKER` on `master` pushes and manual runs)
+- [`.github/workflows/agent-kit.yml`](../../../.github/workflows/agent-kit.yml) — CI agent-kit workflow (`run-all.sh --quick` on every trigger — pull requests, `master` pushes, and manual runs; the full suite and the bash:3.2 Docker check run only locally)
 - `orchestration-kit.manifest.json` — manifest shape and `seedFiles` (instance file; gitignored in this repo)
