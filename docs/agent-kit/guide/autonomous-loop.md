@@ -83,6 +83,16 @@ Known failure mode: loops can burn large budgets without converging — prefer m
 
 Both drivers honor the same environment variables. **`loop.ps1` is a behaviorally identical twin of `loop.sh`** — same defaults, guards, and exit codes; any divergence is a bug.
 
+### CLI recipes
+
+**Claude Code:** The default `LOOP_CLI` is `claude -p`. Unattended iterations need a **permission mode** — configure project settings such as `permissions.defaultMode` and allow rules, or pass `--permission-mode` in `LOOP_CLI`. Newer CLI releases may start `-p` in a manual mode when nothing sets one; iterations may then stall or refuse edits until a mode is configured.
+
+**Opt-in `--bare`:** For a headless session without project hooks, use for example `LOOP_CLI="claude --bare -p --append-system-prompt-file <file>"`. `--bare` skips project hooks, plugin sync, and `CLAUDE.md` auto-discovery, so context must be passed explicitly. It authenticates only via `ANTHROPIC_API_KEY` or `apiKeyHelper`, never **OAuth** or subscription login. It is opt-in — never the default.
+
+**Codex:** Use `LOOP_CLI="codex exec --sandbox danger-full-access"` only inside an **external** container or VM sandbox. The general SAFETY note at the top of this guide (worktree or container) still applies to every loop run; for `danger-full-access` specifically, a plain git worktree (`LOOP_WORKTREE=1`) is not enough on its own, because it gives no filesystem, network, or credential isolation. The `--sandbox workspace-write` mode reportedly keeps `.git` read-only, so slot commits fail and slots are retired. The exec default may be read-only.
+
+**Cursor:** Use `agent -p` or `cursor-agent -p`. Unattended runs need commands allowed — for example `--force` — and only inside a sandbox.
+
 ### `LOOP_WORKTREE`
 
 Default follows install `flags.loop_worktree`; an explicit env var overrides it (including `0`).
@@ -220,7 +230,7 @@ _loop/loop.sh 10
 pwsh _loop/loop.ps1 10
 ```
 
-(PowerShell **7+** required.) The numeric argument is `max-iterations` (default **10** when omitted). Override the CLI with `LOOP_CLI` (for example `LOOP_CLI="claude -p"` or `LOOP_CLI="codex exec"`). Example with worktree isolation and two slots:
+(PowerShell **7+** required.) The numeric argument is `max-iterations` (default **10** when omitted). Override the CLI with `LOOP_CLI` (for example `LOOP_CLI="claude -p"` or `LOOP_CLI="codex exec --sandbox danger-full-access"` (only inside an external sandbox; see [CLI recipes](#cli-recipes))). Example with worktree isolation and two slots:
 
 ```bash
 LOOP_WORKTREE=1 LOOP_SLOTS=2 _loop/loop.sh 10

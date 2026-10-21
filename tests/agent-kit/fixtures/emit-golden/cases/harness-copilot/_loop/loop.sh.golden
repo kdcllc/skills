@@ -6,7 +6,7 @@
 # same defaults, guards, and exit codes; any divergence is a bug.
 #
 # Usage:   _loop/loop.sh [max-iterations]        (default 10)
-# CLI:     override with LOOP_CLI, e.g. LOOP_CLI="codex exec" or LOOP_CLI="claude -p"
+# CLI:     override with LOOP_CLI, e.g. LOOP_CLI="codex exec --sandbox danger-full-access" or LOOP_CLI="claude -p"
 # USAGE:   LOOP_USAGE_FORMAT = auto (default) | claude | codex | cursor | none —
 #          auto resolves from the basename of the first word of LOOP_CLI once at
 #          startup; splices machine-readable flags into LOOP_CLI before dispatch.

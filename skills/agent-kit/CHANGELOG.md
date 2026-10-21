@@ -6,6 +6,10 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 
 ## [Unreleased]
 
+### Fixed
+
+- **Documented `LOOP_CLI` recipes** — Codex examples now use `codex exec --sandbox danger-full-access` with an external-sandbox caveat; the autonomous-loop guide adds permission-mode guidance for Claude Code `-p`, plus an opt-in `claude --bare -p` recipe with explicit auth and context-loading limits.
+
 ## [1.1.2] - 2026-10-20
 
 ### Added

@@ -7,7 +7,7 @@
 # defaults, guards, and exit codes; any divergence is a bug.
 #
 # Usage:   pwsh _loop/loop.ps1 [MaxIterations]   (default 10)
-# CLI:     override with $env:LOOP_CLI, e.g. $env:LOOP_CLI = "codex exec" or "claude -p"
+# CLI:     override with $env:LOOP_CLI, e.g. $env:LOOP_CLI = "codex exec --sandbox danger-full-access" or "claude -p"
 # USAGE:   $env:LOOP_USAGE_FORMAT = auto (default) | claude | codex | cursor | none —
 #          auto resolves from the basename of the first word of LOOP_CLI once at
 #          startup; splices machine-readable flags into cli args before dispatch.
