@@ -15,6 +15,7 @@ update brief status; **worker tasks never write here** — only orchestrator-own
 | [agent-memory-store.md](agent-memory-store.md) | shipped | 2026-10-08 | — | Git-tracked `_memory/` records, search CLI, loop integrator proposals, and capture/backfill. |
 | [model-currency-2026-10.md](model-currency-2026-10.md) | shipped | 2026-10-08 | 2026-11-08 | Oct 2026 model-map audit and harness-native orchestration developments. |
 | [runtime-language.md](runtime-language.md) | shipped | 2026-10-12 | 2027-04-12 | Bash as single script source of truth; retire PowerShell twins incrementally. |
+| [orchestration-loop-review.md](orchestration-loop-review.md) | adopted | 2026-10-20 | 2027-01-20 | Loop hardening: driver budgets and timeouts, run ledger, test-tamper check, retry dossier, structured breaker recovery. |
 
 Scratch reports and prompts stay gitignored under `_memory/work/research/<topic>/`
 (for example `<topic>/report.md`, `<topic>/prompt.md`).
