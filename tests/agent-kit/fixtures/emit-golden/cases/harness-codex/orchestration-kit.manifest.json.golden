@@ -19,9 +19,9 @@
     "_memory/loop/backlog.md"
   ],
   "files": {
-    ".codex/agents/diagnostician.md": "505b49b4c3bc68fa9e41e26b1a048754a0ba977d31481efca84598183c3af49c",
+    ".codex/agents/diagnostician.md": "7ac34cac1566ec4b07102c53146d0ba38af177970a1328781b740944a6c13beb",
     ".codex/agents/diagnostician.toml": "e0e4d37c81f763b18f09b0440c01714f80ed7f82c8bf7104e406cccb4c720e96",
-    ".codex/agents/evaluator.md": "4753aa50c434a1bae5c6d6edc6a52475c2a8d6c2bfb849cbc235d7fd50a0615e",
+    ".codex/agents/evaluator.md": "e1096166fbb2132cc5fabb9f15e5a97aa050ff2e75ebcd53b369b3d462a7dc93",
     ".codex/agents/evaluator.toml": "e0e4d37c81f763b18f09b0440c01714f80ed7f82c8bf7104e406cccb4c720e96",
     ".codex/agents/evidence-collector.md": "ea049198ab8063a7b5fcdb7046e6a5efe68353dbbc3b3eb0441f9fdd8e92ca18",
     ".codex/agents/evidence-collector.toml": "4092fe6c250c290e8ca3b43ef5998904f0965247e5aff3d837d486395d06241b",
@@ -34,7 +34,7 @@
     ".codex/agents/test-writer.md": "a85e76d008d0a1a3bb385f0bd84805f6b8a8e4407fb6e4fda4dbc3e1ae779c42",
     ".codex/agents/test-writer.toml": "4092fe6c250c290e8ca3b43ef5998904f0965247e5aff3d837d486395d06241b",
     ".codex/config.toml": "9623edb8c9e8afa393d129047a4c795a8b55567b8c01f15320056da4b4541b1b",
-    "ORCHESTRATION.md": "91d9714578e8284fb578c530633513853a347aa944633ee49c3033e961c328ad",
+    "ORCHESTRATION.md": "839c216175058e64473773d509d5e3d097734fbc194810b0b57824d556241a9a",
     "_kit/log-spawn.cmd": "ae9541294a03f741311ff8bc0d5c6f9985d6947fb42f7aaeaf6613088e34bf7e",
     "_kit/log-spawn.sh": "5b288ff4db2274eb807e748b3abb2fce2f442148c378458f07198c4c5b262dd5",
     "_kit/memory.cmd": "ae9541294a03f741311ff8bc0d5c6f9985d6947fb42f7aaeaf6613088e34bf7e",

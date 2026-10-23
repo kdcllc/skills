@@ -32,7 +32,7 @@ inline by the orchestrator (single-line output), never via `terminal`.
 
 ### Resume policy
 
-Re-evaluations RESUME the same evaluator with a delta: Phase 4/5 list only applied fixes; Phase 3 quotes newly written passages verbatim, attempt 3 fresh (`reference/goal-revisions.md`). Implementer resume and rotation per fix cycle: `reference/fix-cycles.md`.
+Re-evaluations RESUME the same evaluator with a delta: Phase 4/5 list applied fixes and carry earlier required-fix lists; Phase 3 quotes newly written passages verbatim, attempt 3 fresh (`reference/goal-revisions.md`). Implementer resume and rotation per fix cycle: `reference/fix-cycles.md`.
 
 Update ORCHESTRATION.md Orchestration Progress after each step.
 
@@ -95,7 +95,7 @@ For each ready group (`reference/ready-groups.md`; `parallel: false` → one tas
 Launch `evaluator` in audit mode with matching rule files: every task's requirements, cross-task integration, regressions; if read-only, gather `terminal` evidence as Phase 4 step 3.
 **APPROVED** → Quality Checks (rung 3: full suite + lint/type) via spawned
 `terminal` with `bash scripts/validate-skills.sh && bash tests/agent-kit/run-all.sh`. **ISSUES** → fix via executor + re-evaluate
-(rungs 1–2), re-audit (max 3).
+(rungs 1–2), re-audit (max 3); re-audits follow `reference/fix-cycles.md` § Provenance.
 
 **Quality Checks failure**: non-zero exit with truncated excerpt ⇒ **Read** the log path
 (failure section or last ≤80 lines), route to `implementer`, re-spawn `terminal`

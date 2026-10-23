@@ -105,8 +105,7 @@ Each subagent invocation:
 
 This eliminates fatigue and bias completely.
 
-Exception for re-checks: the evaluator is resumed with a delta prompt listing only
-the applied fixes; Phase 3 deltas quote newly written passages and Phase 3 attempt 3 is a fresh spawn per `reference/goal-revisions.md`. The implementer may be resumed for fix cycle 1 only (cycles 2–3
+Exception for re-checks: the evaluator is resumed with a delta prompt listing the applied fixes (Phase 4/5 deltas list the applied fixes plus every earlier required-fixes list); Phase 3 deltas quote newly written passages and Phase 3 attempt 3 is a fresh spawn per `reference/goal-revisions.md`. The implementer may be resumed for fix cycle 1 only (cycles 2–3
 are fresh spawns) except a line-patch-only NEEDS FIXES verdict (every required fix
 tagged `[line-patch]`) resumes the same executor (`implementer`/`test-writer`) in
 apply-verbatim mode on any cycle without model rotation, still counting toward the
@@ -409,6 +408,7 @@ member reaches task-evaluation PASS or PASS (with notes).
   re-evaluated; the next cycle follows the normal path.
   A verdict tagged with a bypass failure class (destructive/security/infra)
   escalates at detection, on any cycle.
+  On re-evaluation, each required fix is tagged `[carried]` / `[regression]` / `[new]` after its kind tag; context packages carry every earlier required-fixes list; the orchestrator logs a `late finding:` note per `[new]` item; a reversal (`reverses cycle N:`) is a `criteria-defect`; see `reference/fix-cycles.md` § Provenance.
 
 INVARIANT: A task is only marked complete after the evaluator returns PASS or
 PASS (with notes) (`PASS (with notes)` counts as PASS). There is no path where
@@ -425,6 +425,7 @@ evaluator audit. APPROVED → Quality Checks (ladder rung 3: full suites, via a
 `terminal` spawn); ISSUES → fix (ladder rungs 1–2), then re-audit (3 max). When
 `goal.md` has `qa: run`, after Quality Checks spawn `evidence-collector` then
 `qa-evaluator` with its index (`qa: skip` or absent key omits the gate).
+Re-audits carry the same provenance tags and late-finding notes, and a re-audit reversal escalates to the user at detection.
 INVARIANT: The ONLY exit to Quality Checks is an APPROVED verdict from the audit
 subagent. Remediations MUST be re-audited.
 
@@ -727,7 +728,9 @@ terminal human escalation. Apply in this order:
 
 2. **Rung 5 — arbitration (conditional, checked first on exhaustion).** If cycles 1–3 all
    failed on the *same* required-fix item (unanimous-failure heuristic; compare items
-   tag-stripped of trailing `[line-patch]` / `[structural]`), spawn the
+   tag-stripped of trailing `[line-patch]` / `[structural]` and trailing provenance tags,
+   with the justification clause (from its start (` — missed earlier:` or
+   ` — reverses cycle `) through the end of the item) removed when present), or when the **drift trigger** fires (≥ 2 `[new]` items across the cycle 2–3 verdicts recorded in the orchestration log), spawn the
    evaluator in **arbitration mode** on `{{MODEL_FRONTIER_ALT_FAMILY}}` before any
    further fixing. Outcomes: `criteria-defective` → escalate to the human carrying the
    specific defect; arbiter/primary **disagreement → escalate (never auto-resolve)**;
@@ -767,7 +770,7 @@ orchestrator compares the failing-subtask count against the remaining budget —
 count exceeds the remaining budget, escalate instead of splitting. **Signature identity:**
 the evaluator's required-fixes list as recorded in the orchestration log, identical to an
 earlier cycle's list item-for-item after normalizing whitespace and list numbering and
-stripping trailing `[line-patch]` / `[structural]` tags from each item.
+stripping trailing `[line-patch]` / `[structural]` tags from each item and trailing provenance tags (`[carried]` / `[regression]` / `[new]`) from each item and the justification clause (from its start (` — missed earlier:` or ` — reverses cycle `) through the end of the item) from each item when present.
 
 **Deferred future rungs (out of scope):**
 

@@ -12,6 +12,7 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 - **Loop iteration timeout and budgets** — bash-only knobs `LOOP_ITER_TIMEOUT`, `LOOP_RUN_BUDGET_TOKENS`, `LOOP_STORY_BUDGET_TOKENS`, `LOOP_RUN_BUDGET_USD`, `LOOP_STORY_BUDGET_USD`, and `LOOP_ITER_BUDGET_USD` (Claude Code per-dispatch cap); run budgets stop claiming new stories (exit 1 when eligible work remains); story budgets block the story and append `_memory/loop/ESCALATIONS.md`; missing usage/cost fails open.
 - **Loop tamper check** — `LOOP_TAMPER_CHECK` (`warn` default, `fail` worktree-only, `off`) with optional `LOOP_TEST_PATTERNS`; `fail` quarantines with reason `tamper`.
 - **Loop backlog lint** — `_loop/loop.sh --lint [backlog-path]` reports errors and warnings with no side effects (exit 0/1/5).
+- **Fix-cycle provenance tags** — re-evaluation and re-audit required fixes are tagged `[carried]` / `[regression]` / `[new]`; late `[new]` items need a reason and are logged; task reversals route as `criteria-defect` and re-audit reversals escalate to the user; rung 5 arbitration also runs when ≥ 2 `[new]` items appear across cycles 2–3; re-evaluation packages carry every earlier required-fixes list.
 
 ### Changed
 

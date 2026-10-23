@@ -128,7 +128,7 @@ Return exactly this structure (arbitration mode excepted — see **Arbitration m
 - [used ONLY with PASS (with notes) — list every minor here; never drop]
 
 ### Required fixes (if NEEDS FIXES)
-- [ ] [specific, actionable fix] [line-patch|structural]
+- [ ] [specific, actionable fix] [line-patch|structural] [carried|regression|new]
 - [ ] `file:line` — replace `<exact old text>` with `<exact new text>` [line-patch]
 
 ### Footprint
@@ -141,7 +141,7 @@ to the nearest thousand chars); count shell commands you ran. Never omit the blo
 write `files_read: 0 (~0 chars)` if you read nothing.
 
 **Required-fix tags** — every item under `### Required fixes (if NEEDS FIXES)` carries
-exactly one trailing tag: `[line-patch]` or `[structural]`. **`[line-patch]`** means the
+exactly one kind tag: `[line-patch]` or `[structural]`. **`[line-patch]`** means the
 implementer can apply the fix as exact text substitutions at named `file:line` locations,
 changing no requirement, write set, or behavior beyond what the cited criterion demands
 (use the line-patch shape above). **`[structural]`** is everything else (multi-file
@@ -149,6 +149,12 @@ redesign, fence or requirement changes, ambiguous scope). When unsure, tag
 `[structural]`. Line numbers refer to the file **as the evaluator read it** (before any
 patch in the same verdict is applied); the old text is authoritative and the line number
 is a locating hint only.
+
+**Provenance tags** — on a re-evaluation verdict, every required-fix item carries exactly
+one provenance tag (`[carried]`, `[regression]`, or `[new]`) after its kind tag, a space
+apart. A `[new]` item's justification clause goes **directly before the kind tag**; see
+the task-criteria skill's **Provenance tags** section for late-finding justification and
+reversal classification.
 
 Every **non-PASS** verdict (`NEEDS FIXES` or `REJECT`) MUST include `failure_class:`.
 Omit it on PASS only. `PASS (with notes)` is a PASS for `failure_class` purposes
@@ -191,6 +197,8 @@ Orchestrator-invoked only — the evaluator does not self-trigger this mode.
 **Trigger** — Ladder rung 5: unanimous same-item failure across fix cycles 1–3 (every
 evaluator flagged the same required-fix item and it still fails after three
 implement→evaluate cycles), or early arbitration when `criteria-defect` stops fix cycles at detection on any cycle: with `ladder: auto` run rung 5 arbitration now; with `ladder: escalate` escalate with arbitration offered as option 1.
+Arbitration also runs when the **drift trigger** fires: the cycle 2–3 verdicts recorded
+in the orchestration log together carry ≥ 2 `[new]` items.
 
 **Model** — `{{MODEL_FRONTIER_ALT_FAMILY}}`. Per the kit's Cursor silent-fallback
 caveat, the arbiter states in its verdict which model actually produced it (the harness
