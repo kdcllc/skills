@@ -2,7 +2,7 @@
 title: "Research: Hardening the Unattended Loop (budgets, retry context, verification, harness-native options)"
 topic: orchestration-loop-review
 date: 2026-10-20
-status: adopted
+status: shipped
 recheck_by: 2027-01-20
 shipped_in: []
 goals: [loop-cli-recipes, loop-guards]

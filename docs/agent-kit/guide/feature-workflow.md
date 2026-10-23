@@ -251,7 +251,7 @@ When three implement→evaluate cycles end without **PASS**, read `goal.md`'s `p
 - At most **3 additional implementation attempts** after cycle 3, summed across rungs 4 and 6 (the diagnosis-driven attempt costs 1; each rung-6 subtask cycle costs 1; evaluator spawns never consume the budget; if failing-subtask count exceeds the remaining budget, escalate instead of splitting).
 - A **repeated failure signature** (required-fixes list identical item-for-item after normalizing whitespace and numbering) stops the ladder immediately.
 - Every rung transition, spawn, and guard trip is an orchestration-log entry recording the rung name.
-- Token/cost budgets are **not** a guard in this kit.
+- Token/cost budgets are **not** a ladder guard (interactive mode); the bash loop driver's opt-in `LOOP_*_BUDGET_*` knobs are a separate loop-level guard — see [autonomous-loop.md](autonomous-loop.md).
 
 **Deferred future rungs:** high-effort pin and best-of-N are named as future rungs but **not** implemented.
 

@@ -24,18 +24,19 @@ _memory/
     ESCALATIONS.md
     archive/ESCALATIONS-<YYYY-MM>.md
     breaker-state.json   # GITIGNORED (runtime)
+    ledger.jsonl         # GITIGNORED (runtime; bash driver — one JSON line per reaped/killed slot)
   .index/                # GITIGNORED (derived)
   raw/                   # GITIGNORED
     <harness>/<session>.md   # redacted compact transcripts
     .captured · drafts/ · .distilled
 ```
 
-**Tracked:** `README.md`, `records/`, `quarantine/`, `research/`, `loop/` except `breaker-state.json`.
+**Tracked:** `README.md`, `records/`, `quarantine/`, `research/`, `loop/` except `breaker-state.json` and `ledger.jsonl`.
 Research briefs under `research/` are mutable (their status changes), orchestrator-owned,
 not records, and not scanned by `check`, `index`, or `search`.
-**Gitignored:** all of `work/`; `loop/breaker-state.json`; derived `.index/` and `raw/`.
+**Gitignored:** all of `work/`; `loop/breaker-state.json`; `loop/ledger.jsonl` (bash driver run ledger); derived `.index/` and `raw/`.
 Every emit adds `.gitignore` `_memory/work/`, `_memory/.index/`, and `_memory/raw/`; loop
-emits also add `_memory/loop/breaker-state.json` and `.gitattributes`
+emits also add `_memory/loop/breaker-state.json`, `_memory/loop/ledger.jsonl`, and `.gitattributes`
 `_memory/loop/LEARNINGS.md merge=union` and `_memory/loop/ESCALATIONS.md merge=union`.
 `_memory/** text eol=lf` always.
 

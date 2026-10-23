@@ -70,4 +70,4 @@ Character-consistent with `.cursor/ORCHESTRATION.md`:
 
 Token/cost budgets are not a guard in interactive mode (no harness exposes true usage to the
 orchestrator); the headless loop records real usage per iteration via
-`LOOP_USAGE_FORMAT` — gating on it is a future knob, not this ladder's.
+`LOOP_USAGE_FORMAT` — the bash loop driver's opt-in `LOOP_*_BUDGET_*` knobs gate on it at loop level, not in this ladder.

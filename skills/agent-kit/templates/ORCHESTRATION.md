@@ -759,7 +759,7 @@ terminal human escalation. Apply in this order:
 - Every rung transition is an orchestration-log entry recording agent, model, rung, and
   trigger.
 - Token/cost budgets are not a guard in interactive mode (no harness exposes true usage to the
-  orchestrator); the headless loop records real usage per iteration via `LOOP_USAGE_FORMAT` — gating on it is a future knob, not this ladder's.
+  orchestrator); the headless loop records real usage per iteration via `LOOP_USAGE_FORMAT` — the bash loop driver's opt-in `LOOP_*_BUDGET_*` knobs gate on it at loop level, not in this ladder.
 
 **Attempt accounting:** The diagnosis-driven implementation attempt costs 1 of the 3.
 Each rung-6 subtask implement→evaluate cycle costs 1 of the 3. Before splitting, the
@@ -879,13 +879,23 @@ flowchart TD
 | Memory gates | `_memory/loop/LEARNINGS.md` ≥ 15 KB → compact; `_memory/loop/ESCALATIONS.md` ≥ 20 KB → archive resolved entries |
 | Shipping | the loop never pushes; at run end, `ship-pr` (Phase 7) drafts and creates the PR/MR on the project's forge, or hand over, with the user approving the draft |
 | Sandbox | run in a worktree/container with minimal credentials; never skip permission prompts outside a sandbox |
+| Iteration timeout / budgets | opt-in (`LOOP_ITER_TIMEOUT`, `LOOP_RUN_BUDGET_TOKENS`, `LOOP_STORY_BUDGET_TOKENS`, `LOOP_RUN_BUDGET_USD`, `LOOP_STORY_BUDGET_USD`, `LOOP_ITER_BUDGET_USD`); **bash driver only** (`loop.sh`); run-budget stop exits 1 when eligible work remains; missing usage/cost data fails open |
+| Tamper check | `LOOP_TAMPER_CHECK` = `warn` (default) \| `fail` (worktree only — requires `LOOP_WORKTREE=1`) \| `off`; optional `LOOP_TEST_PATTERNS`; **bash driver only**; `fail` quarantines with reason `tamper` |
+
+**bash-only knobs** (`loop.sh` only; `loop.ps1` frozen at 1.1.2): `LOOP_LEDGER` (default on → `$PWD/_memory/loop/ledger.jsonl`, set `off` to disable); `--lint [backlog-path]` (readiness check, exit 0/1/5, no side effects); plus the timeout, budget, and tamper knobs above.
 
 **Exit funnel** (driver-aggregated across slots; precedence **4>3>2>1>0** — exit 4 and
 exit 5 short-circuit): **exit 1** = max-iterations reached with eligible stories
-remaining, or drained backlog with quarantined branches retained; **exit 5** = setup or
+remaining, or (**bash driver only**) a run budget (`LOOP_RUN_BUDGET_TOKENS` /
+`LOOP_RUN_BUDGET_USD`) stopped claiming new stories while eligible work remains, or
+drained backlog with quarantined branches retained; **exit 5** = setup or
 integration failure (tracked-instance preflight, missing/unreadable backlog, PROMPT.md
-substitution point, non-fast-forward integration). Quarantine markers
-`.loop-worktrees/QUARANTINE-<branch>.md` (reasons: `mismatch|abnormal|subset|killed`)
+substitution point, non-fast-forward integration; **bash driver only**: invalid
+`LOOP_ITER_TIMEOUT`, budget (`LOOP_*_BUDGET_*`) or `LOOP_TAMPER_CHECK` value, missing
+`timeout`/`gtimeout` when `LOOP_ITER_TIMEOUT` is set, a `timeout` without `-s`/`-k` support,
+`LOOP_TAMPER_CHECK=fail` without `LOOP_WORKTREE=1`, **`--lint`** on a missing, unreadable,
+or directory backlog). Quarantine markers
+`.loop-worktrees/QUARANTINE-<branch>.md` (reasons: `mismatch|abnormal|subset|tamper|killed`)
 block exit 0 until inspected.
 
 Known failure mode: loops can burn large budgets without converging — prefer more,
@@ -1001,12 +1011,13 @@ _memory/work/goals/<goal>/orchestration-log.md  # Append-only spawn ledger per g
 _memory/work/goals/<goal>/spawns/NN-context.md  # Context package sent to spawn #NN (verbatim)
 _memory/work/goals/<goal>/spawns/NN-report.md   # Report returned by spawn #NN (verbatim)
 _memory/loop/breaker-state.json       # Model circuit breaker state (runtime, gitignored)
+_memory/loop/ledger.jsonl             # Run ledger — one JSON line per reaped/killed slot (runtime, gitignored; bash driver)
 _kit/{log-spawn.sh,log-spawn.cmd}  # Single-copy tools: orchestration-log writer + Windows launcher
 _kit/{memory.sh,memory.ps1}  # Single-copy tools: memory store (add / index / search / show / redact / check / rm / capture / backfill)
 _memory/records/ · _memory/quarantine/  # Tracked memory records (immutable, one per file) — see _memory/README.md
 _memory/research/               # Tracked research briefs (<topic>.md) + README.md status index (orchestrator-owned)
 _memory/work/                   # Gitignored in-flight goal and research scratch (research: work/research/<topic>/) — see _memory/README.md
-_memory/loop/                   # Tracked loop ledgers and archive (breaker-state.json gitignored)
+_memory/loop/                   # Tracked loop ledgers and archive (breaker-state.json, ledger.jsonl gitignored)
 _memory/.index/ · _memory/raw/  # Derived index; capture output, ledgers and drafts (gitignored)
 _loop/{loop.sh,loop.ps1,breaker.sh,breaker.ps1,PROMPT.md}  # Headless loop driver (if enabled)
 ```
@@ -1092,11 +1103,12 @@ _memory/work/goals/<goal>/orchestration-log.md  # Append-only spawn ledger per g
 _memory/work/goals/<goal>/spawns/NN-context.md  # Context package sent to spawn #NN (verbatim)
 _memory/work/goals/<goal>/spawns/NN-report.md   # Report returned by spawn #NN (verbatim)
 _memory/loop/breaker-state.json       # Model circuit breaker state (runtime, gitignored)
+_memory/loop/ledger.jsonl             # Run ledger — one JSON line per reaped/killed slot (runtime, gitignored; bash driver)
 _kit/{log-spawn.sh,log-spawn.cmd}  # Single-copy tools: orchestration-log writer + Windows launcher
 _kit/{memory.sh,memory.ps1}  # Single-copy tools: memory store (add / index / search / show / redact / check / rm / capture / backfill)
 _memory/records/ · _memory/quarantine/  # Tracked memory records (immutable, one per file) — see _memory/README.md
 _memory/work/                   # Gitignored in-flight goal and research scratch — see _memory/README.md
-_memory/loop/                   # Tracked loop ledgers and archive (breaker-state.json gitignored)
+_memory/loop/                   # Tracked loop ledgers and archive (breaker-state.json, ledger.jsonl gitignored)
 _memory/.index/ · _memory/raw/  # Derived index; capture output, ledgers and drafts (gitignored)
 _loop/{loop.sh,loop.ps1,breaker.sh,breaker.ps1,PROMPT.md}  # Headless loop driver (if enabled)
 ```

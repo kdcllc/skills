@@ -64,7 +64,11 @@ Optional: start an unattended run (sandboxed!) with `_loop/loop.sh 10` or
   breakers enforced in the loop drivers (not prose), optional parallel slots in
   driver-managed worktrees, a six-code exit contract, real per-iteration token usage
   capture when the headless CLI exposes it (`LOOP_USAGE_FORMAT`), and a single
-  human-approved PR at run end. Knobs, exit codes, and the safety model are documented in
+  human-approved PR at run end. The bash driver adds **bash-only** guards: iteration
+  timeout and token/USD budgets (`LOOP_ITER_TIMEOUT`, `LOOP_*_BUDGET_*`), test tamper
+  check (`LOOP_TAMPER_CHECK`), append-only run ledger + stderr summary (`LOOP_LEDGER`), and
+  backlog readiness lint (`loop.sh --lint`); `loop.ps1` stays frozen at 1.1.2. Knobs, exit
+  codes, and the safety model are documented in
   [autonomous-loop.md](https://github.com/kdcllc/skills/blob/master/docs/agent-kit/guide/autonomous-loop.md).
 - A **deterministic emitter** (`bin/emit.sh`; Windows outside Git Bash: `bin\emit.cmd`; Git for Windows required) in the installed `agent-kit` skill: after the LLM
   interview, one answers file and one script command compile canonical templates into

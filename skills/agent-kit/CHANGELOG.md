@@ -6,9 +6,24 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 
 ## [Unreleased]
 
+### Added
+
+- **Loop run ledger and summary** — the bash driver appends one JSON line per reaped or killed slot to `_memory/loop/ledger.jsonl` by default (`LOOP_LEDGER=off` disables); after at least one reap or kill it prints an outcome and token/cost summary on stderr (not in `--lint` mode).
+- **Loop iteration timeout and budgets** — bash-only knobs `LOOP_ITER_TIMEOUT`, `LOOP_RUN_BUDGET_TOKENS`, `LOOP_STORY_BUDGET_TOKENS`, `LOOP_RUN_BUDGET_USD`, `LOOP_STORY_BUDGET_USD`, and `LOOP_ITER_BUDGET_USD` (Claude Code per-dispatch cap); run budgets stop claiming new stories (exit 1 when eligible work remains); story budgets block the story and append `_memory/loop/ESCALATIONS.md`; missing usage/cost fails open.
+- **Loop tamper check** — `LOOP_TAMPER_CHECK` (`warn` default, `fail` worktree-only, `off`) with optional `LOOP_TEST_PATTERNS`; `fail` quarantines with reason `tamper`.
+- **Loop backlog lint** — `_loop/loop.sh --lint [backlog-path]` reports errors and warnings with no side effects (exit 0/1/5).
+
+### Changed
+
+- **Loop PowerShell drivers frozen** — `loop.ps1` and `breaker.ps1` stay at agent-kit 1.1.2 behavior; timeout, budget, tamper, ledger, and lint knobs are bash-only. Re-emit adds gitignored `_memory/loop/ledger.jsonl` for the run ledger.
+
 ### Fixed
 
 - **Documented `LOOP_CLI` recipes** — Codex examples now use `codex exec --sandbox danger-full-access` with an external-sandbox caveat; the autonomous-loop guide adds permission-mode guidance for Claude Code `-p`, plus an opt-in `claude --bare -p` recipe with explicit auth and context-loading limits.
+
+### Upgrade notes
+
+- Re-emit adds `_memory/loop/ledger.jsonl` to `.gitignore` and refreshes the bash loop driver; PowerShell-only loop users (`pwsh _loop/loop.ps1`) do not receive the new timeout, budget, tamper, ledger, or `--lint` knobs — use Git Bash `_loop/loop.sh` on Windows for them.
 
 ## [1.1.2] - 2026-10-20
 

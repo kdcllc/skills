@@ -4,8 +4,8 @@
 # HALF-OPEN state machine that degrades to cheaper models on rate limits and
 # self-heals. Dot-sourced by the loop driver (`loop.ps1`); never executed directly.
 #
-# Twin: breaker.sh (bash) — behaviorally identical —
-# same states, thresholds, transitions, and schema; any divergence is a bug.
+# Twin: breaker.sh (bash) — breaker.ps1 is frozen at agent-kit 1.1.2
+# behavior; knobs added after it (ledger, budgets, timeout, tamper, lint) are bash-only.
 # Function-name mapping (PowerShell -> bash):
 #   Breaker-Load          -> breaker_load
 #   Breaker-ShouldSkip     -> breaker_should_skip

@@ -3,8 +3,8 @@
 # Autonomous feature loop for {{PROJECT_NAME}} — drives one `auto-loop` iteration per
 # fresh-context CLI run. State lives in _memory/loop/backlog.md + git, never in memory.
 #
-# Twin: loop.sh (bash) — behaviorally identical — same
-# defaults, guards, and exit codes; any divergence is a bug.
+# Twin: loop.sh (bash) — loop.ps1 is frozen at agent-kit 1.1.2
+# behavior; knobs added after it (ledger, budgets, timeout, tamper, lint) are bash-only.
 #
 # Usage:   pwsh _loop/loop.ps1 [MaxIterations]   (default 10)
 # CLI:     override with $env:LOOP_CLI, e.g. $env:LOOP_CLI = "codex exec --sandbox danger-full-access" or "claude -p"

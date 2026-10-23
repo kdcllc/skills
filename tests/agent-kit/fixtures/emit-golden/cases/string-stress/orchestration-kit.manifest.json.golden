@@ -20,7 +20,7 @@
     "_memory/loop/backlog.md"
   ],
   "files": {
-    ".claude/ORCHESTRATION.md": "6123afc00258a293cee269e7a9d6e57c605b45d460ab06396e892bd898541a56",
+    ".claude/ORCHESTRATION.md": "37c7154e0cc1a6c4d3a3c653a20bc38366503d9bd36f9fb77b4c006df824abf3",
     ".claude/agents/diagnostician.md": "59ed2d6686fe1a36d381a796bc6c12a913405b0c7636f1a2bd08ede75dffdaa5",
     ".claude/agents/evaluator.md": "0911dfe6b0aeffe1546e2a8d31d7f07121a3f155410e154cd46723543b694d9d",
     ".claude/agents/evidence-collector.md": "a630ada9902d0e1e883d040019752a0a310fef839c224f14847d7c87bd1844e2",
@@ -31,9 +31,9 @@
     ".claude/settings.json": "a3fb9ca4fc62ecb39c7d8e0b7b88d05fbfd8a3c046df8e344ff82e3f8c381ae4",
     ".claude/skills/agent-kit-models.map.md": "e23e5b92ac790c520677b9fa6989f09652aa81b7f00513a050d2ffa543a2a563",
     ".claude/skills/align-docs/SKILL.md": "5b416755f8ea8432fe3beb440daa74793e1f91ad9eeba337c7ed6a658ddc42d3",
-    ".claude/skills/auto-loop/SKILL.md": "986fd1b22bfb20e3b5946aabaab7361586f0d09e89b6f183afb488e158dd5466",
+    ".claude/skills/auto-loop/SKILL.md": "e8444795fcd61c69b3254aac18faed0cc94ac022e520aaddfe3b576f862075fb",
     ".claude/skills/feature/SKILL.md": "26216431037ba1a76d7d5d66abd026968cf25008273fecc856cb7b0413785f13",
-    ".claude/skills/feature/reference/continuation-ladder.md": "2a27dc9d4e01e975da90a336b0b9ab432ca9c931ab519fa465ead6a3cb2374cc",
+    ".claude/skills/feature/reference/continuation-ladder.md": "4c9015563260da5fee840997a55a32f607b3c31a91e618708461a61f45ed5975",
     ".claude/skills/feature/reference/corrective-tasks.md": "c91dd483b9f09f5ab04c8abc7cfdee05c961393b8c426b39418c0251a319b673",
     ".claude/skills/feature/reference/degraded-mode.md": "15d43cf56e6aa0a38f6d9db6d3fb92fded3d9e408fe20f5f8d4283646d0ad19a",
     ".claude/skills/feature/reference/fix-cycles.md": "33c73be598f292b843cb7ddf733166c731fefcb749cf2748b346d676c333565f",
@@ -55,7 +55,7 @@
     ".claude/skills/ship-pr/SKILL.md": "90f6271cd3a299b88149af6468aa850e43dd2fe44fcf68de1b7aeaf61bb7bc62",
     ".claude/skills/task-criteria/SKILL.md": "e471422104bbaff92007bad136de5e1eb0ddd0c4b299726beb79920a7b309383",
     ".claude/skills/test-ladder/SKILL.md": "643fa09dc76a29fc0d3cea67f878204bd2ddf4ed5843d19a0d9b28ad0735f2bb",
-    ".cursor/ORCHESTRATION.md": "50fb77163f5de16af321ea2d838186daa8e99064f93e87507ef0cb081a73f43c",
+    ".cursor/ORCHESTRATION.md": "a7a81072d628376d09fd6ada3e991be6a74f90b5c4ec047a229381c9ecf651b7",
     ".cursor/agents/diagnostician.md": "34199f280ea12585bc4e72d08e977669132c0146c1e8d37b909ad3b249ad8d1e",
     ".cursor/agents/evaluator.md": "db7492951470a75eeb7c3e08af7f66c0a55cd7ed07ad047d112fd3b83b509546",
     ".cursor/agents/evidence-collector.md": "504796bb266dae1998e7f9a369a3b9d6ed0d2497b7daead9a05396baa6cd2195",
@@ -66,9 +66,9 @@
     ".cursor/rules/orchestration.mdc": "8cc1fcf97d283460fed60da4ef0259dfff2379646bed820cb5a1bf3bb4a65ceb",
     ".cursor/skills/agent-kit-models.map.md": "e23e5b92ac790c520677b9fa6989f09652aa81b7f00513a050d2ffa543a2a563",
     ".cursor/skills/align-docs/SKILL.md": "719df93feac9c68d9796a7731c1164e3d095d58f1902a4bdebea0d50d7093424",
-    ".cursor/skills/auto-loop/SKILL.md": "a5904892bc8431225951287a2b0c373d009cf8f5b058cdc596edf3e1a4e5f0af",
+    ".cursor/skills/auto-loop/SKILL.md": "2d9919a86734e975250a4cf19c2fc8fa27752dc24e676bf7893b5b9733fa2ecc",
     ".cursor/skills/feature/SKILL.md": "82682fbc5bcd90d3076728cc3b3df8ede6f592f851304c739aa7a4a7f7ab37c8",
-    ".cursor/skills/feature/reference/continuation-ladder.md": "da22ec3103c21d9e4f8322d57073da2a8f8a134c2d47203a58d5de910ebfad58",
+    ".cursor/skills/feature/reference/continuation-ladder.md": "b9aaa564351859795bb9a5de23a839da1e977a26e2d88127d5ce2107b148ea11",
     ".cursor/skills/feature/reference/corrective-tasks.md": "c91dd483b9f09f5ab04c8abc7cfdee05c961393b8c426b39418c0251a319b673",
     ".cursor/skills/feature/reference/degraded-mode.md": "507e33a94f66de38db4e31ea3e51d7c3a32d5f411740bc7400b0c1ebc16304ab",
     ".cursor/skills/feature/reference/fix-cycles.md": "33c73be598f292b843cb7ddf733166c731fefcb749cf2748b346d676c333565f",
@@ -96,11 +96,11 @@
     "_kit/memory.ps1": "ab1972554d139c838c0908f78ac5619257faff4d24d6e2dbcb228ba8ceea63c6",
     "_kit/memory.sh": "9ee91e10d7207eb9f25b58e16c5b13ec54e09ef04f63155d3f682ff54d95023c",
     "_loop/PROMPT.md": "fdce88d9b733e1018c13ba9fdec03e4cd0a83f5c3ba85e84f87d728b96c0d250",
-    "_loop/breaker.ps1": "a6f5d590448b5403ccea0e609a3a848a2adf1dd0d0c7e5935140050d795b14cb",
+    "_loop/breaker.ps1": "35c434e1fbb2b4570779c4196f574596d8f90bede717712c0b9342f8d83d0a5a",
     "_loop/breaker.sh": "e2b4188bbf0aaab024d5aabad3a3bca3c4a6753c6c7ab2c441a97363a5ee297b",
-    "_loop/loop.ps1": "af46591b14b4b61f8cffa3a81eb2753876aa2dbf4ebe97ee9ed9dbfc5ab0b0a4",
-    "_loop/loop.sh": "20ae48c70435b1a3bd3ee2438130f8d919beaa503c8d8223cb8ab4c1757d41f1",
-    "_memory/README.md": "591cb77f6a1293fd6fa39c93ab258549f6dc58af900de99b2b00e6d5bd7dedd4"
+    "_loop/loop.ps1": "adac5adb672d9ba197de541e21ca32d955882adc18c27ed209f33cba4df1f913",
+    "_loop/loop.sh": "4032186f8780b23b6d96634ed0ca63c3e3e4ddaa0243a389a6785670c5e413f8",
+    "_memory/README.md": "2e5f38ce1eb5ca0a60ad7668e37d7b720b80443c4d622cf4be77acfa5c917785"
   },
   "answers": {
     "bootstrap": {

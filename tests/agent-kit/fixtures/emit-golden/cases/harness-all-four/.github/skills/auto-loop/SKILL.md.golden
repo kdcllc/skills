@@ -52,16 +52,17 @@ with exit 3 if any retirement was a signature match, else exit 2. A drained back
 eligible story remains) exits 0 only when no branch was quarantined this run; otherwise
 it exits 1 so the quarantined work gets inspected. Under `LOOP_WORKTREE=1`, a slot
 whose branch is quarantined — ITERATION-mismatch, abnormal exit, subset violation,
-or killed when another slot hit a protected path — leaves a
+tamper (test gaming), or killed when another slot hit a protected path — leaves a
 `.loop-worktrees/QUARANTINE-<branch>.md` marker (slashes in the branch become
 dashes) naming the story, slot, branch, status, quarantine reason (`mismatch`,
-`abnormal`, `subset`, or `killed`), the dirty paths, and the dispatched prompt.
+`abnormal`, `subset`, `tamper`, or `killed`), the dirty paths, and the dispatched prompt.
 
 ## Windows compatibility
 
 Both drivers exist — `_loop/loop.sh [max-iterations]` (bash) and `pwsh
-_loop/loop.ps1 [MaxIterations]` (PowerShell 7+) — with identical behavior and exit
-codes. Generated filenames never contain colons (ISO timestamps use `-`, not `:`).
+_loop/loop.ps1 [MaxIterations]` (PowerShell 7+) — but `loop.ps1` is frozen at
+agent-kit 1.1.2 behavior; timeout, budget, tamper, ledger, and lint features are
+bash-only (`loop.sh` under Git Bash on Windows). Generated filenames never contain colons (ISO timestamps use `-`, not `:`).
 Commit messages are single-line; anything longer uses `git commit -F <file>`, never a
 multi-line `-m`. Paths in stories/tasks use forward slashes (git and pwsh both accept
 them). **Line endings**: shell and PowerShell scripts must be checked out LF —
@@ -238,7 +239,7 @@ Phase 6 doc alignment is APPROVED (or skipped per story frontmatter):
   the next manual iteration instead of compacting inside a slot.
 - Subagent silent-success rule: an empty subagent response is verified by artifacts
   before being treated as failure (see the `feature` skill's Phase 4 step 2).
-- Never stage `_memory/loop/breaker-state.json` — runtime scratch, gitignored by setup.
+- Never stage `_memory/loop/breaker-state.json` or `_memory/loop/ledger.jsonl` — runtime scratch, gitignored by setup.
 
 Never push. Manual mode never touches stories other than the one you picked;
 driver-dispatched mode never touches any story but the one named in your prompt.
@@ -266,6 +267,12 @@ If evaluation cycles exhaust or the story is blocked:
 After each reaped slot's `tail -n 25` output, the driver prints a `usage:` line when a
 usage format is active (`usage: input=<n> output=<n> cache_read=<n|n/a>
 cache_write=<n|n/a> cost_usd=<x|n/a> format=<f>`, or `usage: unavailable (<reason>)`).
+When `LOOP_LEDGER` is on (default), the bash driver appends one JSON line per reaped or
+killed slot to `$PWD/_memory/loop/ledger.jsonl`; after at least one reap or kill it prints
+a stderr run summary on exit (never in `--lint` mode). With `LOOP_ITER_TIMEOUT` set, the
+bash driver may interrupt a long iteration; with `LOOP_TAMPER_CHECK=fail` in worktree mode
+(`LOOP_WORKTREE=1`) it may quarantine a branch that deletes, skips, or weakens tests — slots
+must never do that to pass.
 
 ## Output contract (the loop driver parses this)
 

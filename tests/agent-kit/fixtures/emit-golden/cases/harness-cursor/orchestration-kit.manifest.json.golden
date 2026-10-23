@@ -19,7 +19,7 @@
     "_memory/loop/backlog.md"
   ],
   "files": {
-    ".cursor/ORCHESTRATION.md": "6a4890456b3b72c9a51e6fea2d14a6ea7897295efc5f0934b8e279c7d4cfc075",
+    ".cursor/ORCHESTRATION.md": "0ad2d9a4663726cf48d706d4109109686c632d3451cc4a59c5fabfe8abb67804",
     ".cursor/agents/diagnostician.md": "a84c21e39e873d2f5a0a2dd2fbd821407467178e1eda172a1b64a3e08bf87233",
     ".cursor/agents/evaluator.md": "678d398c9f50d4356da2e2301fbe18bfa4f40161b48754445d5e90fff1ba9694",
     ".cursor/agents/evidence-collector.md": "681a2ee685962cd275e19e49138e179abcfe11f982f3c9f0e9d5d8f92f5386a6",
@@ -30,9 +30,9 @@
     ".cursor/rules/orchestration.mdc": "8cc1fcf97d283460fed60da4ef0259dfff2379646bed820cb5a1bf3bb4a65ceb",
     ".cursor/skills/agent-kit-models.map.md": "7c2d3c232406e3991df1bca2687c5b2258f77a5fc498b239e08b6aab3555c151",
     ".cursor/skills/align-docs/SKILL.md": "659aa132dcd182256fb5f77ac5fac8d33998ede811c9eca9d50caeb3542ff35c",
-    ".cursor/skills/auto-loop/SKILL.md": "a2c34e76be3bfed113fd195c5b0d9b6f06eb9fc92b31daab36efd11c04b4a474",
+    ".cursor/skills/auto-loop/SKILL.md": "6176cc3c74ff06dcc05abb5d1ef3e1348f96ebf4a221afaa2d158df614faa60c",
     ".cursor/skills/feature/SKILL.md": "e1b38b7b3a43ddc96807606e8d3367d4bbc24af808bdfe513611c21eff92db38",
-    ".cursor/skills/feature/reference/continuation-ladder.md": "da22ec3103c21d9e4f8322d57073da2a8f8a134c2d47203a58d5de910ebfad58",
+    ".cursor/skills/feature/reference/continuation-ladder.md": "b9aaa564351859795bb9a5de23a839da1e977a26e2d88127d5ce2107b148ea11",
     ".cursor/skills/feature/reference/corrective-tasks.md": "c91dd483b9f09f5ab04c8abc7cfdee05c961393b8c426b39418c0251a319b673",
     ".cursor/skills/feature/reference/degraded-mode.md": "507e33a94f66de38db4e31ea3e51d7c3a32d5f411740bc7400b0c1ebc16304ab",
     ".cursor/skills/feature/reference/fix-cycles.md": "33c73be598f292b843cb7ddf733166c731fefcb749cf2748b346d676c333565f",
@@ -60,11 +60,11 @@
     "_kit/memory.ps1": "ab1972554d139c838c0908f78ac5619257faff4d24d6e2dbcb228ba8ceea63c6",
     "_kit/memory.sh": "9ee91e10d7207eb9f25b58e16c5b13ec54e09ef04f63155d3f682ff54d95023c",
     "_loop/PROMPT.md": "fdce88d9b733e1018c13ba9fdec03e4cd0a83f5c3ba85e84f87d728b96c0d250",
-    "_loop/breaker.ps1": "aca26dccdd9110c7da79aef8d2369401fec4b07d98e8fe3d19eaa9f4e6c47750",
+    "_loop/breaker.ps1": "004d2e3e8e8ba6afb5ab916a33f25cf2401042d2a0255f5a48814c0d89ff0757",
     "_loop/breaker.sh": "92d762f93a3a76db1f8176f454c4ad401f65b5449a8bd8bbbd0c690344a6c686",
-    "_loop/loop.ps1": "494e37d99cfee7de74bef6ae18eb5741da3b763d00df5b78ad86a6ccc2bdc580",
-    "_loop/loop.sh": "3fd9b1c963cce9091e85199ece32e3d6e96b83bd615b0ac52247fd09086552a9",
-    "_memory/README.md": "591cb77f6a1293fd6fa39c93ab258549f6dc58af900de99b2b00e6d5bd7dedd4"
+    "_loop/loop.ps1": "88266c3fc35f610c319be3972149d04830ed9b00feb2081edb673b9f721c43d4",
+    "_loop/loop.sh": "68f08d6178e0c22ae4d31434c893e294dd30af1d435a11eab3f38c97e624e37c",
+    "_memory/README.md": "2e5f38ce1eb5ca0a60ad7668e37d7b720b80443c4d622cf4be77acfa5c917785"
   },
   "answers": {
     "bootstrap": {

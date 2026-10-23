@@ -120,7 +120,7 @@ flowchart TD
     subgraph memIgnored ["_memory/ gitignored"]
         Work["work/goals/ · work/research/"]
         Derive[".index/ · raw/"]
-        Brk["loop/breaker-state.json"]
+        Brk["loop/breaker-state.json · loop/ledger.jsonl"]
     end
 
     harnessTrees --> Kit
@@ -128,7 +128,7 @@ flowchart TD
     Kit --> Rec
 ```
 
-**Tracked:** `_memory/README.md`, `records/`, `quarantine/`, `research/` (curated briefs such as [`../../../_memory/research/agent-memory-store.md`](../../../_memory/research/agent-memory-store.md)), and `loop/` except `breaker-state.json`. **Gitignored:** all of `work/`, `.index/`, `raw/`, and `loop/breaker-state.json`. Goal and research scratch paths are **plain text** in docs — never hyperlinks — so CI link checks pass on a fresh clone.
+**Tracked:** `_memory/README.md`, `records/`, `quarantine/`, `research/` (curated briefs such as [`../../../_memory/research/agent-memory-store.md`](../../../_memory/research/agent-memory-store.md)), and `loop/` except `breaker-state.json` and `ledger.jsonl`. **Gitignored:** all of `work/`, `.index/`, `raw/`, `loop/breaker-state.json`, and `loop/ledger.jsonl`. Goal and research scratch paths are **plain text** in docs — never hyperlinks — so CI link checks pass on a fresh clone.
 
 Layout norm: [`templates/memory/README.md`](../../../skills/agent-kit/templates/memory/README.md) § Layout.
 
@@ -247,7 +247,7 @@ Verdict vocabulary and invariants: [`templates/ORCHESTRATION.md`](../../../skill
 
 ## Loop story states
 
-Backlog stories in `_memory/loop/backlog.md` carry `passes:`, `attempts:`, and `blocked:`. Eligible stories have **`passes: false`** and **`attempts < 3`**. The **`attempts`** counter increments when the story is **claimed** (driver, before dispatch) or at **iteration start** in manual mode — so a crashed iteration still counts. On evaluator-gated success the driver sets **`passes: true`** from the `ITERATION:` line (manual mode sets it in the story commit). At **`attempts` 3**, the story becomes **`blocked: true`** (driver from `ITERATION:` in dispatched mode; manual mode sets it on failure). **Quarantined** branches (ITERATION mismatch, subset violation, abnormal exit) stay out of integration. **Circuit breakers** **retire** a slot (CB1 no-progress, CB2 repeated signatures) while other slots may continue.
+Backlog stories in `_memory/loop/backlog.md` carry `passes:`, `attempts:`, and `blocked:`. Eligible stories have **`passes: false`** and **`attempts < 3`**. The **`attempts`** counter increments when the story is **claimed** (driver, before dispatch) or at **iteration start** in manual mode — so a crashed iteration still counts. On evaluator-gated success the driver sets **`passes: true`** from the `ITERATION:` line (manual mode sets it in the story commit). At **`attempts` 3**, the story becomes **`blocked: true`** (driver from `ITERATION:` in dispatched mode; manual mode sets it on failure). The bash driver also sets **`blocked: true`** when a story budget (`LOOP_STORY_BUDGET_TOKENS` / `LOOP_STORY_BUDGET_USD`) is reached on a non-passing reap. **Quarantined** branches (ITERATION mismatch, subset violation, abnormal exit, tamper fail with `LOOP_TAMPER_CHECK=fail`, or killed when another slot hit a protected path) stay out of integration. **Circuit breakers** **retire** a slot (CB1 no-progress, CB2 repeated signatures) while other slots may continue.
 
 ```mermaid
 stateDiagram-v2
