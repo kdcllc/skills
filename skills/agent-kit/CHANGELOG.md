@@ -6,6 +6,8 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 
 ## [Unreleased]
 
+## [1.1.3] - 2026-10-23
+
 ### Added
 
 - **Loop run ledger and summary** — the bash driver appends one JSON line per reaped or killed slot to `_memory/loop/ledger.jsonl` by default (`LOOP_LEDGER=off` disables); after at least one reap or kill it prints an outcome and token/cost summary on stderr (not in `--lint` mode).

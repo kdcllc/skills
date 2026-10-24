@@ -1,6 +1,6 @@
 # AI Orchestration Kit (`agent-kit`)
 
-> Kit version: **1.1.2** (`metadata.version` in [SKILL.md](SKILL.md)) · Version history: [CHANGELOG.md](CHANGELOG.md)
+> Kit version: **1.1.3** (`metadata.version` in [SKILL.md](SKILL.md)) · Version history: [CHANGELOG.md](CHANGELOG.md)
 
 A portable orchestrator/worker/evaluator multi-agent system for AI coding harnesses —
 **Claude Code, Cursor, GitHub Copilot (VS Code), and OpenAI Codex** — packaged as one
@@ -115,7 +115,7 @@ Maintainer material lives in the [kdcllc/skills](https://github.com/kdcllc/skill
 npx skills add kdcllc/skills --skill agent-kit
 
 # Pin to a release
-npx skills add kdcllc/skills#agent-kit/v1.1.2 --skill agent-kit
+npx skills add kdcllc/skills#agent-kit/v1.1.3 --skill agent-kit
 
 # Option B — agent-skills-cli
 npx agent-skills-cli install https://github.com/kdcllc/skills.git
