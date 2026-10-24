@@ -120,7 +120,7 @@ flowchart TD
     subgraph memIgnored ["_memory/ gitignored"]
         Work["work/goals/ · work/research/"]
         Derive[".index/ · raw/"]
-        Brk["loop/breaker-state.json · loop/ledger.jsonl"]
+        Brk["loop/breaker-state.json · loop/ledger.jsonl · loop/attempts/"]
     end
 
     harnessTrees --> Kit
@@ -128,7 +128,7 @@ flowchart TD
     Kit --> Rec
 ```
 
-**Tracked:** `_memory/README.md`, `records/`, `quarantine/`, `research/` (curated briefs such as [`../../../_memory/research/agent-memory-store.md`](../../../_memory/research/agent-memory-store.md)), and `loop/` except `breaker-state.json` and `ledger.jsonl`. **Gitignored:** all of `work/`, `.index/`, `raw/`, `loop/breaker-state.json`, and `loop/ledger.jsonl`. Goal and research scratch paths are **plain text** in docs — never hyperlinks — so CI link checks pass on a fresh clone.
+**Tracked:** `_memory/README.md`, `records/`, `quarantine/`, `research/` (curated briefs such as [`../../../_memory/research/agent-memory-store.md`](../../../_memory/research/agent-memory-store.md)), and `loop/` except `breaker-state.json`, `ledger.jsonl`, and `attempts/`. **Gitignored:** all of `work/`, `.index/`, `raw/`, `loop/breaker-state.json`, `loop/ledger.jsonl`, and `loop/attempts/`. Goal and research scratch paths are **plain text** in docs — never hyperlinks — so CI link checks pass on a fresh clone.
 
 Layout norm: [`templates/memory/README.md`](../../../skills/agent-kit/templates/memory/README.md) § Layout.
 

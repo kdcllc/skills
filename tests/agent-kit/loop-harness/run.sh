@@ -2613,7 +2613,7 @@ zero_litter=1
 if [[ -d "$LIFECYCLE_DIR/.loop-worktrees" ]]; then
   [[ -z "$(ls -A "$LIFECYCLE_DIR/.loop-worktrees" 2>/dev/null)" ]] || zero_litter=0
 fi
-litter_status="$(sandbox_git "$LIFECYCLE_DIR" status --porcelain -- . ':(exclude)_memory/loop/breaker-state.json' ':(exclude)_memory/loop/ledger.jsonl' ':(exclude)_memory/loop/backlog.md')"
+litter_status="$(sandbox_git "$LIFECYCLE_DIR" status --porcelain -- . ':(exclude)_memory/loop/breaker-state.json' ':(exclude)_memory/loop/ledger.jsonl' ':(exclude)_memory/loop/backlog.md' ':(exclude)_memory/loop/attempts')"
 [[ -n "$litter_status" ]] && zero_litter=0
 
 worktree_list_count="$(sandbox_git "$LIFECYCLE_DIR" worktree list | wc -l)"

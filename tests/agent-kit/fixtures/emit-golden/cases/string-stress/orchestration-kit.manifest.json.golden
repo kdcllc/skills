@@ -20,7 +20,7 @@
     "_memory/loop/backlog.md"
   ],
   "files": {
-    ".claude/ORCHESTRATION.md": "55b183e73c04e00b821f19187c2d1aa162deafa5aa5656f3c22bb9e15f77b329",
+    ".claude/ORCHESTRATION.md": "6857565009f51a1abc01d91e137f81121144f0f1e572d514e234af1dccfa418e",
     ".claude/agents/diagnostician.md": "73a732935b25a4126e68fe84837af1295f8845d75cbcab3fdbd59dc43eda834d",
     ".claude/agents/evaluator.md": "a4a2349c386a595e19462e23a549f555a92bce0d2c040965bd51de49f764b0e5",
     ".claude/agents/evidence-collector.md": "a630ada9902d0e1e883d040019752a0a310fef839c224f14847d7c87bd1844e2",
@@ -31,7 +31,7 @@
     ".claude/settings.json": "a3fb9ca4fc62ecb39c7d8e0b7b88d05fbfd8a3c046df8e344ff82e3f8c381ae4",
     ".claude/skills/agent-kit-models.map.md": "e23e5b92ac790c520677b9fa6989f09652aa81b7f00513a050d2ffa543a2a563",
     ".claude/skills/align-docs/SKILL.md": "5b416755f8ea8432fe3beb440daa74793e1f91ad9eeba337c7ed6a658ddc42d3",
-    ".claude/skills/auto-loop/SKILL.md": "e8444795fcd61c69b3254aac18faed0cc94ac022e520aaddfe3b576f862075fb",
+    ".claude/skills/auto-loop/SKILL.md": "7b6ca90dd26bd1fc1a442a5052a8febf80aa59cac6b543c6be61ececd618b044",
     ".claude/skills/feature/SKILL.md": "ce81a7ff296fcbc61c83ef9e28189f4a7e104c3e37eb0c5ae6c0b41976d366ac",
     ".claude/skills/feature/reference/continuation-ladder.md": "9a8b6749f28d15f9f3964a81ac4cf8acfcd6528617d0b19aef9661490300da11",
     ".claude/skills/feature/reference/corrective-tasks.md": "c91dd483b9f09f5ab04c8abc7cfdee05c961393b8c426b39418c0251a319b673",
@@ -55,7 +55,7 @@
     ".claude/skills/ship-pr/SKILL.md": "90f6271cd3a299b88149af6468aa850e43dd2fe44fcf68de1b7aeaf61bb7bc62",
     ".claude/skills/task-criteria/SKILL.md": "8ffd10eb8d9e2b65da42a9bc8a9604f51e725198fc1d919844c8ebefd5fccde4",
     ".claude/skills/test-ladder/SKILL.md": "643fa09dc76a29fc0d3cea67f878204bd2ddf4ed5843d19a0d9b28ad0735f2bb",
-    ".cursor/ORCHESTRATION.md": "eca59f3f0993164fb141068ad2a1e6d8ddee715c8e546b04c8d4f6c036f2542f",
+    ".cursor/ORCHESTRATION.md": "d3be9084ea7255cf5f2f1d3d42ec0d412547201d3af6a50a0160bd2a0c987f71",
     ".cursor/agents/diagnostician.md": "27b9cd6f0ce7a603b6265c97f2d503b9e89bf6672e2246774606e9444f5d2e6c",
     ".cursor/agents/evaluator.md": "269bc118822a747d8b6ee20e648033da9ba06b29140d30ce6aaebedc6dfc882a",
     ".cursor/agents/evidence-collector.md": "504796bb266dae1998e7f9a369a3b9d6ed0d2497b7daead9a05396baa6cd2195",
@@ -66,7 +66,7 @@
     ".cursor/rules/orchestration.mdc": "8cc1fcf97d283460fed60da4ef0259dfff2379646bed820cb5a1bf3bb4a65ceb",
     ".cursor/skills/agent-kit-models.map.md": "e23e5b92ac790c520677b9fa6989f09652aa81b7f00513a050d2ffa543a2a563",
     ".cursor/skills/align-docs/SKILL.md": "719df93feac9c68d9796a7731c1164e3d095d58f1902a4bdebea0d50d7093424",
-    ".cursor/skills/auto-loop/SKILL.md": "2d9919a86734e975250a4cf19c2fc8fa27752dc24e676bf7893b5b9733fa2ecc",
+    ".cursor/skills/auto-loop/SKILL.md": "0f5d7ca779ef89398e6ada9561a5e38feb0b3fb1972708dcca09becc98729cfe",
     ".cursor/skills/feature/SKILL.md": "d440efeba8b7a598da984b97f6dae19c686762efed4b58f0ed77d87714120fec",
     ".cursor/skills/feature/reference/continuation-ladder.md": "3005bdea55ff338cc41c570d9b3c0fac2dad1ba7b8ba81ddb0ec32391d9a0d44",
     ".cursor/skills/feature/reference/corrective-tasks.md": "c91dd483b9f09f5ab04c8abc7cfdee05c961393b8c426b39418c0251a319b673",
@@ -95,12 +95,12 @@
     "_kit/memory.cmd": "ae9541294a03f741311ff8bc0d5c6f9985d6947fb42f7aaeaf6613088e34bf7e",
     "_kit/memory.ps1": "ab1972554d139c838c0908f78ac5619257faff4d24d6e2dbcb228ba8ceea63c6",
     "_kit/memory.sh": "9ee91e10d7207eb9f25b58e16c5b13ec54e09ef04f63155d3f682ff54d95023c",
-    "_loop/PROMPT.md": "fdce88d9b733e1018c13ba9fdec03e4cd0a83f5c3ba85e84f87d728b96c0d250",
-    "_loop/breaker.ps1": "35c434e1fbb2b4570779c4196f574596d8f90bede717712c0b9342f8d83d0a5a",
-    "_loop/breaker.sh": "e2b4188bbf0aaab024d5aabad3a3bca3c4a6753c6c7ab2c441a97363a5ee297b",
-    "_loop/loop.ps1": "adac5adb672d9ba197de541e21ca32d955882adc18c27ed209f33cba4df1f913",
-    "_loop/loop.sh": "4032186f8780b23b6d96634ed0ca63c3e3e4ddaa0243a389a6785670c5e413f8",
-    "_memory/README.md": "2e5f38ce1eb5ca0a60ad7668e37d7b720b80443c4d622cf4be77acfa5c917785"
+    "_loop/PROMPT.md": "b1d5e2dde377179fa67edddd5a2d42981965bcc31f99762d9db298e39724a00c",
+    "_loop/breaker.ps1": "222bc525adda0bff7ba9a9da9effc6987e9da73c9abf04f33bafc40ddfd3f7c4",
+    "_loop/breaker.sh": "d07a5ecf8a14c0ddfc276ef4043e9dd5ace674618d2f0410f1580b58daf8c4e2",
+    "_loop/loop.ps1": "ac8e6d5bf85d1beee67145c5f8d7e36ec9c0079a23e16c012da1cd32fda66c34",
+    "_loop/loop.sh": "bb73dc75528bb60a38ee0d77d3c84a22b2c426a7f746a1f9ccd19874a6a35e27",
+    "_memory/README.md": "13beb4168bb47655e72a4b74e73138a560bc75ca73901a7c376cdd8aa8bf9611"
   },
   "answers": {
     "bootstrap": {

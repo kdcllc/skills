@@ -4,7 +4,7 @@
 # fresh-context CLI run. State lives in _memory/loop/backlog.md + git, never in memory.
 #
 # Twin: loop.sh (bash) — loop.ps1 is frozen at agent-kit 1.1.2
-# behavior; knobs added after it (ledger, budgets, timeout, tamper, lint) are bash-only.
+# behavior; knobs added after it (ledger, budgets, timeout, tamper, lint, dossier, claude-stream, breaker probe) are bash-only.
 #
 # Usage:   pwsh _loop/loop.ps1 [MaxIterations]   (default 10)
 # CLI:     override with $env:LOOP_CLI, e.g. $env:LOOP_CLI = "codex exec --sandbox danger-full-access" or "claude -p"

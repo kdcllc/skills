@@ -30,3 +30,4 @@ _memory/work/
 _memory/loop/
 _memory/loop/breaker-state.json
 _memory/loop/ledger.jsonl
+_memory/loop/attempts/

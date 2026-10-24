@@ -199,6 +199,10 @@ for f in "${model_id_files[@]}"; do
     filtered_hits=""
     while IFS= read -r line; do
       [[ -z "$line" ]] && continue
+      stripped="$(printf '%s\n' "$line" | sed -E 's/claude-stream([^0-9A-Za-z_-]|$)/\1/g')"
+      if ! grep -qE 'claude-|gpt-|gemini-' <<<"$stripped"; then
+        continue
+      fi
       if grep -qF 'BOOTSTRAP[' <<<"$line"; then
         continue
       fi
@@ -214,9 +218,19 @@ for f in "${model_id_files[@]}"; do
       break
     fi
   else
-    check5_ok=0
-    check5_detail="${rel}: $(head -1 <<<"$raw_hits")"
-    break
+    surviving=""
+    while IFS= read -r line; do
+      [[ -z "$line" ]] && continue
+      stripped="$(printf '%s\n' "$line" | sed -E 's/claude-stream([^0-9A-Za-z_-]|$)/\1/g')"
+      if grep -qE 'claude-|gpt-|gemini-' <<<"$stripped"; then
+        surviving+="${line}"$'\n'
+      fi
+    done <<<"$raw_hits"
+    if [[ -n "${surviving//[$'\n']/}" ]]; then
+      check5_ok=0
+      check5_detail="${rel}: $(head -1 <<<"$surviving")"
+      break
+    fi
   fi
 done
 if [[ $check5_ok -eq 1 ]]; then

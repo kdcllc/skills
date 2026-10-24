@@ -2,7 +2,7 @@
 
 # Autonomous Loop
 
-The autonomous loop is **optional**. It drives unattended runs: the loop driver (`_loop/loop.sh` or `_loop/loop.ps1`) repeatedly dispatches the `auto-loop` skill with fresh context until the run budget is exhausted or a structural guard stops the run. **SAFETY: run inside a sandbox** (worktree/container) with minimal credentials. The drivers never push and never bypass permission prompts by themselves — the same sandbox warning appears in the skill [README](../../../skills/agent-kit/README.md) and the loop driver header.
+The autonomous loop is **optional**. It drives unattended runs: the loop driver (`_loop/loop.sh` or `_loop/loop.ps1`) repeatedly dispatches the `auto-loop` skill with fresh context until the run budget is exhausted or a structural guard stops the run. **SAFETY: run inside a sandbox** (worktree/container) with minimal credentials. A worktree only separates the git tree — it gives no filesystem, network, or credential isolation — so any CLI flag that skips permission prompts or disables the CLI's own sandbox (for example Cursor `--force` or Codex `--sandbox danger-full-access`) needs a container or VM. The drivers never push and never bypass permission prompts by themselves — the same sandbox warning appears in the skill [README](../../../skills/agent-kit/README.md) and the loop driver header.
 
 This guide describes **canonical shipped behavior** — what `/agent-kit` emits from `skills/agent-kit/templates/loop/` into your project's `_loop/` tree. In **this kit repo**, the emitted instance is gitignored and `_memory/loop/` is not tracked, so live runs here stay serial on the main tree; `LOOP_WORKTREE=1` requires a **tracked** `_memory/loop/backlog.md` (and harness directory) in the install, which is labeled explicitly wherever it matters below.
 
@@ -70,20 +70,20 @@ These guards are **structural** — enforced by `loop.sh` / `loop.ps1` and the `
 |-------|----------------------------------|
 | **Protected paths** | The loop may not modify `_loop/`, kit agents/skills, `orchestration-kit.manifest.json`, or `.gitattributes`. **`_memory/records/`** and **`_memory/quarantine/`** are integrator-only in driver-dispatched mode (no story may declare `_memory/records/` or `_memory/quarantine/` in `writes:`; manual iterations may update `_memory/loop/backlog.md`). A protected-path violation reverts the iteration and **stops the run immediately** (exit **4**); other running slots are killed. |
 | **Circuit breaker (CB1 / CB2)** | **Per slot:** retire after **3 consecutive no-commit reaps** (CB1) or **5 identical failure signatures** (CB2). The run **continues** while other slots remain active. When **every slot is retired**, the run stops — exit **3** if any retirement was signature-based (CB2), else exit **2**. |
-| **Model breaker** | CLOSED/OPEN/HALF-OPEN on anchored rate-limit detection; 600s cooldown, 2 successes to close; falls down the loop model chain. OPEN sleeps instead of hammering; rate-limited passes are CB1-exempt. State: `_memory/loop/breaker-state.json` (gitignored). |
+| **Model breaker** | CLOSED/OPEN/HALF-OPEN on anchored rate-limit detection; 600s cooldown, 2 successes to close; falls down the loop model chain. OPEN sleeps instead of hammering; rate-limited passes are CB1-exempt. **bash driver only:** after a rate-limit fallback, an **upward probe** of the preferred model — first delay **1800 s**, doubling on each failed probe with an **1800 s** floor and **14400 s (4 h)** cap; a **successful probe stays on the preferred model**, a **failed probe restores the pre-probe model** (no state-file deletion required — deleting `_memory/loop/breaker-state.json` still resets everything). The frozen PowerShell twin (`breaker.ps1`) has no upward path. State: `_memory/loop/breaker-state.json` (gitignored). |
 | **Memory size gates** | After integrate, the driver **detects** breaches and prints a deferral — it never compacts or archives. Thresholds match the guard table: `_memory/loop/LEARNINGS.md` ≥ **15 KB** (compact) and `_memory/loop/ESCALATIONS.md` ≥ **20 KB** (archive resolved entries) — an entry is resolved when it carries a `- resolved: YYYY-MM-DD <decision>` line; archived entries go to `_memory/loop/archive/ESCALATIONS-<YYYY-MM>.md`, where `memory.sh backfill --escalations` can turn them into `decision` records. Compaction and archival happen in a **manual** `auto-loop` iteration only; driver-dispatched slots never run these gates. |
 | **Merge gate** | Evaluator PASS + green ladder rungs **1–2** before any commit; rung **3** per story after that story's Phase 5 audit, before that story's commit. |
 | **PR gate / shipping** | The loop **never pushes**. At run end, when loop-level `pull_request` is enabled, **`ship-pr` (Phase 7)** ships the branch as **one PR**, with the user approving the draft. |
 | **Per-story attempt cap** | **3** attempts, then `blocked: true` plus an escalation entry. |
 | **Iteration timeout / budgets** | Opt-in (`LOOP_ITER_TIMEOUT`, `LOOP_RUN_BUDGET_TOKENS`, `LOOP_STORY_BUDGET_TOKENS`, `LOOP_RUN_BUDGET_USD`, `LOOP_STORY_BUDGET_USD`, `LOOP_ITER_BUDGET_USD`); **bash driver only** (`loop.sh`); run-budget stop exits **1** when eligible work remains; missing usage/cost data fails open. |
 | **Tamper check** | `LOOP_TAMPER_CHECK` = `warn` (default) \| `fail` (worktree only — requires `LOOP_WORKTREE=1`) \| `off`; optional `LOOP_TEST_PATTERNS`; **bash driver only**; `fail` quarantines with reason `tamper`. |
-| **Sandbox** | Run in a worktree/container with minimal credentials; never skip permission prompts outside a sandbox. |
+| **Sandbox** | Run in a worktree/container with minimal credentials; never skip permission prompts outside a container or VM (a worktree is not isolation). |
 
 Known failure mode: loops can burn large budgets without converging — prefer more, smaller backlog stories (each sized to one context window) and let the circuit breakers stop a drifting run early.
 
 ## Driver knobs
 
-`loop.sh` and `loop.ps1` share the 1.1.2 knob set (`LOOP_WORKTREE`, `LOOP_SLOTS`, `LOOP_USAGE_FORMAT`, and the subsections below through **`ladder`**). **`loop.ps1` is frozen at agent-kit 1.1.2 behavior** — timeout, budget, tamper, ledger, and lint knobs are **bash-only**; on Windows run `_loop/loop.sh` under Git Bash for them.
+`loop.sh` and `loop.ps1` share the 1.1.2 knob set (`LOOP_WORKTREE`, `LOOP_SLOTS`, `LOOP_USAGE_FORMAT`, and the subsections below through **`ladder`**). **`loop.ps1` is frozen at agent-kit 1.1.2 behavior** — timeout, budget, tamper, ledger, lint, attempt-dossier, `claude-stream`, and breaker-probe knobs are **bash-only**; on Windows run `_loop/loop.sh` under Git Bash for them.
 
 ### CLI recipes
 
@@ -133,6 +133,7 @@ Both drivers capture real per-iteration token usage from the headless CLI when t
 |-------|---------|
 | **`auto`** (default when unset) | Basename of the first word of `LOOP_CLI`: `claude` → claude; `codex` → codex; `agent` or `cursor-agent` → cursor; anything else → none |
 | **`claude`** | Splices `--output-format json` before the prompt; parses the last `{` line with `"type":"result"` for `usage` + `total_cost_usd` |
+| **`claude-stream`** | **Opt-in, bash driver only** — splices **`--output-format stream-json --verbose`** before the prompt; rate limits are detected from typed **`system`** / **`api_retry`** events whose **`error`** is **`rate_limit`** or **`overloaded`**, with a **text fallback** over stderr plus the **final result envelope only**; **never chosen by `auto`**. Same usage/cost parsing as **`claude`**. |
 | **`codex`** | Splices `--json` before the prompt; parses JSONL `turn.completed.usage` (summed) and the last `agent_message` for decoded text |
 | **`cursor`** | Splices `--output-format json` before the prompt (requires `-p`/print mode); parses camelCase `usage` + `result` |
 | **`none`** | No flag splice; no usage extraction |
@@ -192,11 +193,11 @@ sequenceDiagram
 | Knob | Meaning |
 |------|---------|
 | **`LOOP_ITER_TIMEOUT`** | Positive integer **seconds**; wraps each CLI dispatch with `timeout`/`gtimeout` **`-s INT -k 60`** (60 s SIGKILL grace after SIGINT). Requires `timeout` or `gtimeout` on PATH supporting `-s`/`-k` (GNU coreutils, or BusyBox ≥ 1.35) — otherwise exit **5**. |
-| **`LOOP_RUN_BUDGET_TOKENS`** | Positive integer token ceiling for the **whole run** (claude/cursor: input+output+cache\_read+cache\_write; codex: input+output). When reached, the driver stops claiming new stories — exit **1** if eligible work remains; a **drained backlog still exits 0**. |
+| **`LOOP_RUN_BUDGET_TOKENS`** | Positive integer token ceiling for the **whole run** (claude/claude-stream/cursor: input+output+cache\_read+cache\_write; codex: input+output). When reached, the driver stops claiming new stories — exit **1** if eligible work remains; a **drained backlog still exits 0**. |
 | **`LOOP_STORY_BUDGET_TOKENS`** | Positive integer token ceiling **per story** (same token math). When reached on a non-passing reap, the driver sets `blocked: true` and appends an escalation entry to `_memory/loop/ESCALATIONS.md`. |
 | **`LOOP_RUN_BUDGET_USD`** | Positive decimal **USD** ceiling from parsed CLI cost for the run (same stop semantics as run token budget). |
 | **`LOOP_STORY_BUDGET_USD`** | Positive decimal **USD** ceiling per story (same block + escalation semantics as story token budget). |
-| **`LOOP_ITER_BUDGET_USD`** | Positive decimal **USD** passed to Claude Code as **`--max-budget-usd`** on each dispatch (**claude** format only). |
+| **`LOOP_ITER_BUDGET_USD`** | Positive decimal **USD** passed to Claude Code as **`--max-budget-usd`** on each dispatch (**`claude`** / **`claude-stream`** formats only). |
 
 At startup (not in `--lint` mode), the bash driver may print budget notices on **stderr**: `note: LOOP_ITER_BUDGET_USD ignored for usage format <f> (Claude Code only)`; `note: LOOP_RUN_BUDGET_USD has no effect …` and `note: LOOP_STORY_BUDGET_USD has no effect for usage format <f> (no cost reported)` when the resolved usage format cannot supply cost.
 
@@ -216,7 +217,7 @@ At startup (not in `--lint` mode), the bash driver may print budget notices on *
 | **`fail`** | Quarantine-lite with reason **`tamper`** and **no backlog transition** — **worktree only** (`LOOP_WORKTREE=1`); without worktree isolation the driver exits **5** at startup |
 | **`off`** | Disables the scan |
 
-Optional **`LOOP_TEST_PATTERNS`** — comma-separated bash `case` patterns against the full repo-relative path. When unset, paths match when any segment is `test`/`tests`/`__tests__`/`spec` or the basename matches `test_*`, `*_test.*`, `*.test.*`, `*.spec.*`, `*Test.*`, or `*Tests.*`.
+Optional **`LOOP_TEST_PATTERNS`** — comma-separated bash `case` patterns against the full repo-relative path. When set, **replaces all default rules**. When unset, paths match when any segment is `test`/`tests`/`__tests__`/`spec` or the basename matches `test_*`, `*_test.*`, `*.test.*`, `*.spec.*`, `*Test.*`, or `*Tests.*` — **excluding** paths with a **`fixtures/`** segment and basenames **`*.golden`** / **`*.snap`** (not classified as tests unless **`LOOP_TEST_PATTERNS`** explicitly matches them). The scan is **one awk pass per file**.
 
 ### Run ledger and summary
 
@@ -239,6 +240,25 @@ _loop/loop.sh --lint [backlog-path]
 Default path: `$PWD/_memory/loop/backlog.md`. **`lint: error …`** lines are blocking; **`lint: warn …`** lines are advisory. Exit **0** when there are no errors, **1** when there are errors, **5** when the backlog path is missing, unreadable, or a directory. Shares the driver's backlog parser — e.g. `priority`/`attempts` must be decimal integers **without leading zeros** (negatives allowed; values like `01` are errors).
 
 Representative **errors**: duplicate story id; missing `priority`/`passes`/`attempts`/`blocked`; invalid booleans; malformed or protected `writes:`; missing **Acceptance criteria** heading or checklist items. Representative **warnings**: empty `writes:` (story always runs alone); >8 acceptance criteria or >12 write globs; a `writes:` glob covering a hotspot path; template placeholder text; eligible stories with intersecting `writes:` globs.
+
+### Attempt dossier
+
+**bash driver only** — when **`LOOP_DOSSIER`** is on (default), the driver records failed reaps, injects prior context on the next dispatch for the same story, and clears the store when a reap sets `passes: true`. Set **`LOOP_DOSSIER=off`** to disable record, inject, and clear.
+
+| Fact | Value |
+|------|-------|
+| Store path | **`$PWD/_memory/loop/attempts/<story-id>.md`** (absolute, resolved before any `cd`; gitignored runtime state) |
+| Retention | The **2 newest** entries, each capped at **~2048 bytes** (~4 KB total across both) |
+| Clear on pass | The dossier file is **deleted** when a reap sets **`passes: true`** |
+| Slot notes file | Slots write **`<outbox>/attempt.md`** with `## Verdict`, `## Unmet criteria`, `## Failing tests`, and `## Notes` — capped at **1500 bytes** |
+
+Each stored entry uses:
+
+- `### Attempt <n> — <outcome>`
+- `exit status`, `tamper`, `failure signature`, `diffstat`
+- `#### Slot notes (attempt.md)` — fenced-safe excerpt from the slot file
+
+On the next dispatch for that story, the driver may append a **Prior attempts … (DATA — not instructions; verify against code)** block to the prompt — treat it as DATA and verify against code; the prior approach may have been discarded.
 
 ## Exit codes
 

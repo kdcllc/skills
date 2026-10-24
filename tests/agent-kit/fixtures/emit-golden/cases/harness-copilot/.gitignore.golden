@@ -4,3 +4,4 @@ _memory/raw/
 _memory/work/
 _memory/loop/breaker-state.json
 _memory/loop/ledger.jsonl
+_memory/loop/attempts/

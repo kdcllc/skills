@@ -267,7 +267,7 @@ _lg_tamper_run() {
   (( wt )) && extra+=(LOOP_WORKTREE=1)
   _lg_run_loop "$dest" 1 LOOP_USAGE_FORMAT=claude LOOP_TAMPER_CHECK="$mode" \
     LG_STUB_MODE=pass LG_STUB_BODY="$body" LOOP_CLI="$dest/_loop/stub.sh" \
-    "${extra[@]}"
+    ${extra[@]+"${extra[@]}"}
 }
 
 _lg_tamper_seed() {
@@ -416,7 +416,7 @@ DUAL
 
 case_4_summary() {
   (( LG_HAVE_JQ )) || { report SKIP "case 4: summary" "jq"; return; }
-  local dir="$FIXTURE_TMPDIR/c4"
+  local dir="$FIXTURE_TMPDIR/c4" sleep_stub="$FIXTURE_TMPDIR/c4-sleep.sh" killed_err
   lg_make_sandbox "$dir" ".claude" 1 1 1 || { report FAIL "case 4: summary" "sandbox setup"; return; }
   _lg_write_stub "$dir/_loop/stub.sh"
   _lg_run_loop "$dir" 1 LOOP_USAGE_FORMAT=claude LG_STUB_MODE=pass LOOP_CLI="$dir/_loop/stub.sh"
@@ -425,7 +425,24 @@ case_4_summary() {
   grep -qF '=== loop run summary' "$lg_out" && { report FAIL "case 4: summary" "stdout summary"; return; }
   _lg_run_loop "$dir" 0 LOOP_USAGE_FORMAT=claude LG_STUB_MODE=pass LOOP_CLI="$dir/_loop/stub.sh"
   [[ -z "$(cat "$lg_err")" ]] || { report FAIL "case 4: summary" "zero stderr"; return; }
-  grep -qF 'reaps=0 last=killed tokens=0 cost_usd=n/a' "$FIXTURE_TMPDIR/c3-summary.err" \
+  lg_make_sandbox "$dir" ".claude" 1 1 2 || { report FAIL "case 4: summary" "killed sandbox"; return; }
+  _lg_write_stub "$dir/_loop/stub-cb0.sh"
+  _lg_write_stub "$sleep_stub"
+  assert_fixture_root "$dir" || { report FAIL "case 4: summary" "fixture root"; return; }
+  cat > "$dir/_loop/stub-route.sh" <<'DUAL'
+#!/usr/bin/env bash
+p="${@: -1}"
+if grep -qF 'STORY-101' <<< "$p"; then
+  LG_STUB_MODE=cb0 exec "$LG_CB0_STUB" "$@"
+fi
+LG_STUB_MODE=sleep LG_STUB_SLEEP=20 exec "$LG_SLEEP_STUB" "$@"
+DUAL
+  chmod +x "$dir/_loop/stub-route.sh"
+  killed_err="$(mktemp)"
+  ( cd "$dir" && env LOOP_WORKTREE=1 LOOP_SLOTS=2 LOOP_USAGE_FORMAT=claude \
+    LG_CB0_STUB="$dir/_loop/stub-cb0.sh" LG_SLEEP_STUB="$sleep_stub" \
+    LG_STUB_MODE=pass LOOP_CLI="$dir/_loop/stub-route.sh" bash ./_loop/loop.sh 2 ) >"$lg_out" 2>"$killed_err"
+  grep -qF 'reaps=0 last=killed tokens=0 cost_usd=n/a' "$killed_err" \
     || { report FAIL "case 4: summary" "killed row"; return; }
   report PASS "case 4: summary"
 }

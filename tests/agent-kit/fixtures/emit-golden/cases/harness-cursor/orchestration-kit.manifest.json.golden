@@ -19,7 +19,7 @@
     "_memory/loop/backlog.md"
   ],
   "files": {
-    ".cursor/ORCHESTRATION.md": "90097fad6ec92ecaa6a3d12bf2eebbbb6bbccdb3325362d8fb4fc557751aa9c2",
+    ".cursor/ORCHESTRATION.md": "5408c6e257bf4e03978b35e63f3beaa5da614ca3c13f69e8a79270d2017a8c27",
     ".cursor/agents/diagnostician.md": "9d6a755d7c6a7e88e24250ee472b06e36b087126ffdba406e7fb0314022e2858",
     ".cursor/agents/evaluator.md": "4d53fe1dd5d59cd7cbc8fc75049deac6b3ef5343ac566a009fa14541cf1ff6fb",
     ".cursor/agents/evidence-collector.md": "681a2ee685962cd275e19e49138e179abcfe11f982f3c9f0e9d5d8f92f5386a6",
@@ -30,7 +30,7 @@
     ".cursor/rules/orchestration.mdc": "8cc1fcf97d283460fed60da4ef0259dfff2379646bed820cb5a1bf3bb4a65ceb",
     ".cursor/skills/agent-kit-models.map.md": "7c2d3c232406e3991df1bca2687c5b2258f77a5fc498b239e08b6aab3555c151",
     ".cursor/skills/align-docs/SKILL.md": "659aa132dcd182256fb5f77ac5fac8d33998ede811c9eca9d50caeb3542ff35c",
-    ".cursor/skills/auto-loop/SKILL.md": "6176cc3c74ff06dcc05abb5d1ef3e1348f96ebf4a221afaa2d158df614faa60c",
+    ".cursor/skills/auto-loop/SKILL.md": "cec4e56feb07d77b3b700bfcde2c4e32ab21b3fdc6f324540773576f5aeb4476",
     ".cursor/skills/feature/SKILL.md": "c227101363c14340d2b3dff387fa77d4fb3501402f218986260939543cadd70e",
     ".cursor/skills/feature/reference/continuation-ladder.md": "3005bdea55ff338cc41c570d9b3c0fac2dad1ba7b8ba81ddb0ec32391d9a0d44",
     ".cursor/skills/feature/reference/corrective-tasks.md": "c91dd483b9f09f5ab04c8abc7cfdee05c961393b8c426b39418c0251a319b673",
@@ -59,12 +59,12 @@
     "_kit/memory.cmd": "ae9541294a03f741311ff8bc0d5c6f9985d6947fb42f7aaeaf6613088e34bf7e",
     "_kit/memory.ps1": "ab1972554d139c838c0908f78ac5619257faff4d24d6e2dbcb228ba8ceea63c6",
     "_kit/memory.sh": "9ee91e10d7207eb9f25b58e16c5b13ec54e09ef04f63155d3f682ff54d95023c",
-    "_loop/PROMPT.md": "fdce88d9b733e1018c13ba9fdec03e4cd0a83f5c3ba85e84f87d728b96c0d250",
-    "_loop/breaker.ps1": "004d2e3e8e8ba6afb5ab916a33f25cf2401042d2a0255f5a48814c0d89ff0757",
-    "_loop/breaker.sh": "92d762f93a3a76db1f8176f454c4ad401f65b5449a8bd8bbbd0c690344a6c686",
-    "_loop/loop.ps1": "88266c3fc35f610c319be3972149d04830ed9b00feb2081edb673b9f721c43d4",
-    "_loop/loop.sh": "68f08d6178e0c22ae4d31434c893e294dd30af1d435a11eab3f38c97e624e37c",
-    "_memory/README.md": "2e5f38ce1eb5ca0a60ad7668e37d7b720b80443c4d622cf4be77acfa5c917785"
+    "_loop/PROMPT.md": "b1d5e2dde377179fa67edddd5a2d42981965bcc31f99762d9db298e39724a00c",
+    "_loop/breaker.ps1": "c96aca813cc5dcfec30c14864fc0da1eb2afbd0d5ed221d8532ac6e4be2cabe8",
+    "_loop/breaker.sh": "be5c7a57a6cd1f2391acfd71efd1feca893ce40625fbad619a8d0aaae9df23f6",
+    "_loop/loop.ps1": "b1bb01aab8d97144329c184b55bf7326b3cd6abc3bb50e5f4123bc6d88660af6",
+    "_loop/loop.sh": "8a80c63b8b95a2adc4857564bd439da3e9013ac0328d23f2834031473095b974",
+    "_memory/README.md": "13beb4168bb47655e72a4b74e73138a560bc75ca73901a7c376cdd8aa8bf9611"
   },
   "answers": {
     "bootstrap": {

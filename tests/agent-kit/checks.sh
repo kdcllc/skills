@@ -29,7 +29,7 @@
 #      `.claude/skills/agent-kit/` and `.cursor/skills/agent-kit/` are pruned (same
 #      reason as B: they are not emitted instance).
 #   E. No hardcoded model IDs (claude-*/gpt-*/gemini-*) in canonical templates
-#      outside models.map.md.
+#      outside models.map.md; the usage-format token claude-stream is exempt.
 #   F. Skip-aware pwsh parse check: if pwsh is on PATH, parse the canonical and
 #      instance loop.ps1 drivers via the .NET parser API. Parse errors FAIL;
 #      an invocation error (pwsh present but something else went wrong) WARNs
@@ -275,10 +275,20 @@ check_d() {
 # ---------------------------------------------------------------------------
 # Check E: no hardcoded model IDs in canonical templates outside models.map.md
 # ---------------------------------------------------------------------------
+_check_e_filter() {
+  while IFS= read -r line; do
+    [[ -z "$line" ]] && continue
+    stripped="$(printf '%s\n' "$line" | sed -E 's/claude-stream([^0-9A-Za-z_-]|$)/\1/g')"
+    if printf '%s\n' "$stripped" | grep -qE '(claude|gpt|gemini)-[0-9a-z]'; then
+      printf '%s\n' "$line"
+    fi
+  done
+}
+
 check_e() {
   local hits
   hits="$(grep -rnE '(claude|gpt|gemini)-[0-9a-z]' skills/agent-kit/templates/ \
-            --exclude='models.map.md' 2>/dev/null)"
+            --exclude='models.map.md' 2>/dev/null | _check_e_filter)"
   if [[ -n "$hits" ]]; then
     report FAIL "E: no hardcoded model IDs in templates" "model IDs belong in models.map.md"
     printf '%s\n' "$hits" >&2

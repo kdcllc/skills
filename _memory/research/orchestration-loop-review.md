@@ -5,7 +5,7 @@ date: 2026-10-20
 status: shipped
 recheck_by: 2027-01-20
 shipped_in: []
-goals: [loop-cli-recipes, loop-guards]
+goals: [loop-cli-recipes, loop-guards, loop-retry-breaker]
 supersedes: []
 memory: [20261020T231821Z-1e79114a]
 ---

@@ -34,18 +34,18 @@
     ".codex/agents/test-writer.md": "a85e76d008d0a1a3bb385f0bd84805f6b8a8e4407fb6e4fda4dbc3e1ae779c42",
     ".codex/agents/test-writer.toml": "4092fe6c250c290e8ca3b43ef5998904f0965247e5aff3d837d486395d06241b",
     ".codex/config.toml": "9623edb8c9e8afa393d129047a4c795a8b55567b8c01f15320056da4b4541b1b",
-    "ORCHESTRATION.md": "839c216175058e64473773d509d5e3d097734fbc194810b0b57824d556241a9a",
+    "ORCHESTRATION.md": "e005ba509b57fb9b122560333ccc4ef42d92f8ded9652f47d0ec118d39dd5e1b",
     "_kit/log-spawn.cmd": "ae9541294a03f741311ff8bc0d5c6f9985d6947fb42f7aaeaf6613088e34bf7e",
     "_kit/log-spawn.sh": "5b288ff4db2274eb807e748b3abb2fce2f442148c378458f07198c4c5b262dd5",
     "_kit/memory.cmd": "ae9541294a03f741311ff8bc0d5c6f9985d6947fb42f7aaeaf6613088e34bf7e",
     "_kit/memory.ps1": "ab1972554d139c838c0908f78ac5619257faff4d24d6e2dbcb228ba8ceea63c6",
     "_kit/memory.sh": "9ee91e10d7207eb9f25b58e16c5b13ec54e09ef04f63155d3f682ff54d95023c",
-    "_loop/PROMPT.md": "fdce88d9b733e1018c13ba9fdec03e4cd0a83f5c3ba85e84f87d728b96c0d250",
-    "_loop/breaker.ps1": "004d2e3e8e8ba6afb5ab916a33f25cf2401042d2a0255f5a48814c0d89ff0757",
-    "_loop/breaker.sh": "92d762f93a3a76db1f8176f454c4ad401f65b5449a8bd8bbbd0c690344a6c686",
-    "_loop/loop.ps1": "68398e5028efa4f961e5f5756b64bd9a4d9a481b8eafd5685762ff29311550a2",
-    "_loop/loop.sh": "41f420d36e2ccd2c9e8aaff646e9c9a3ddc5839b64c504370ffd0ffa469600d3",
-    "_memory/README.md": "2e5f38ce1eb5ca0a60ad7668e37d7b720b80443c4d622cf4be77acfa5c917785"
+    "_loop/PROMPT.md": "b1d5e2dde377179fa67edddd5a2d42981965bcc31f99762d9db298e39724a00c",
+    "_loop/breaker.ps1": "c96aca813cc5dcfec30c14864fc0da1eb2afbd0d5ed221d8532ac6e4be2cabe8",
+    "_loop/breaker.sh": "be5c7a57a6cd1f2391acfd71efd1feca893ce40625fbad619a8d0aaae9df23f6",
+    "_loop/loop.ps1": "064270b5edcfcb38356975fcccfe1cbac8b6c86096573f71ff50109c5330594f",
+    "_loop/loop.sh": "4b1ebe619862821ca8e1385696d705ca9c66f59359adb353ccf17c8a778e6813",
+    "_memory/README.md": "13beb4168bb47655e72a4b74e73138a560bc75ca73901a7c376cdd8aa8bf9611"
   },
   "answers": {
     "bootstrap": {

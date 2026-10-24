@@ -64,10 +64,12 @@ Optional: start an unattended run (sandboxed!) with `_loop/loop.sh 10` or
   breakers enforced in the loop drivers (not prose), optional parallel slots in
   driver-managed worktrees, a six-code exit contract, real per-iteration token usage
   capture when the headless CLI exposes it (`LOOP_USAGE_FORMAT`), and a single
-  human-approved PR at run end. The bash driver adds **bash-only** guards: iteration
-  timeout and token/USD budgets (`LOOP_ITER_TIMEOUT`, `LOOP_*_BUDGET_*`), test tamper
-  check (`LOOP_TAMPER_CHECK`), append-only run ledger + stderr summary (`LOOP_LEDGER`), and
-  backlog readiness lint (`loop.sh --lint`); `loop.ps1` stays frozen at 1.1.2. Knobs, exit
+  human-approved PR at run end. The bash driver adds **bash-only** guards: attempt dossier
+  (`LOOP_DOSSIER`), opt-in **`LOOP_USAGE_FORMAT=claude-stream`**, upward model-breaker **probe**
+  recovery after rate-limit fallback, iteration timeout and token/USD budgets
+  (`LOOP_ITER_TIMEOUT`, `LOOP_*_BUDGET_*`), test tamper check (`LOOP_TAMPER_CHECK`),
+  append-only run ledger + stderr summary (`LOOP_LEDGER`), and backlog readiness lint
+  (`loop.sh --lint`); `loop.ps1` stays frozen at 1.1.2. Knobs, exit
   codes, and the safety model are documented in
   [autonomous-loop.md](https://github.com/kdcllc/skills/blob/master/docs/agent-kit/guide/autonomous-loop.md).
 - A **deterministic emitter** (`bin/emit.sh`; Windows outside Git Bash: `bin\emit.cmd`; Git for Windows required) in the installed `agent-kit` skill: after the LLM
@@ -210,6 +212,35 @@ table, and the cost-ceiling policy. The research behind the split — including 
 Copilot cost-ceiling and Cursor silent-fallback caveats — is in
 [multi-harness-upgrade.md](https://github.com/kdcllc/skills/blob/master/_memory/research/multi-harness-upgrade.md).
 Re-run `/agent-kit` when providers rotate model names.
+
+## Security
+
+skills.sh shows security scans for every listing. Snyk passes `agent-kit` with no
+issues, and Socket finds no malicious payload, but two scanners flag the kit for what it
+is allowed to do. Gen Agent Trust Hub rates it **Medium** (command execution, indirect
+prompt injection, data exfiltration, external downloads, dynamic execution). Socket
+raises two **anomaly** alerts, on `SKILL.md` and `templates/agents/terminal.md`, and
+labels `SKILL.md` **Suspicious** (not confirmed malware). Those capabilities are
+deliberate. This section lists each one, why the kit needs it, and what limits it.
+
+Limits marked *Instruction* are rules the agents follow from their prompts, not checks
+in code. Your harness's permission and command-approval settings are the hard boundary.
+
+| Flagged capability | Why the kit has it | What limits it |
+|--------------------|--------------------|----------------|
+| **Command execution** — the `terminal` subagent runs any Bash or PowerShell command it is given | Test, build, and git output stays out of the frontier session; the caller gets back only the result it asked for | *Instruction:* `terminal` runs only the exact commands in its spawn prompt and adds none of its own. Claude Code and Copilot installs also withhold Edit/Write tools from it; Cursor and Codex installs have no per-agent tool list, so there that rule is prompt-only. Its shell commands can still write files, and it runs with the permissions your harness grants |
+| **Indirect prompt injection** — agents read repo code, backlog stories, research reports, and transcripts, and some of those agents have shell access | Workers need the code and the plan to do the work | Recalled memory, and loop attempt notes in the bash driver, reach workers inside fenced DATA blocks that are marked as data, not instructions. `memory.sh add` quarantines records that match a short fixed list of injection phrases (for example `new instructions:`). *Instruction:* evaluators verify claims against the code instead of trusting reports. These reduce the risk; they do not remove it |
+| **Transcript access** (Trust Hub: data exfiltration) — `_kit/memory.sh capture` reads chat transcripts under your home folder | The `memory-capture` skill turns finished sessions into searchable session summaries | It runs only when you or the `memory-capture` skill invoke it. By default it reads only the transcript folder for the current project's path (Codex: it checks each session's recorded working directory and keeps only this project's); `--from <dir>` points it elsewhere. Redaction is pattern-based (private-key blocks, `password=`/`token=`-style assignments, AWS, GitHub, Slack, and `sk-` keys, JWTs, Azure account keys), so secrets in other shapes are not caught. Output goes to gitignored `_memory/raw/` and nothing is uploaded, but the session summaries distilled from it are tracked records you commit |
+| **External downloads** — Step 2b suggests other skills from skills.sh | Stack-specific skills (testing, UI, infra) make the workers better at your project | *Instruction:* nothing installs without your pick, only skills with 1000+ installs are offered, and each installs alone with `--skill` (never the whole source repo), always project-local (never `-g`) |
+| **Dynamic execution** — `bin/emit.sh` writes agent files and shell scripts into your project | This is how the kit compiles one template source for each harness | Output is deterministic (same answers, byte-identical files), every kit-managed file's hash is in `orchestration-kit.manifest.json` (seed files are written only when missing), and emits stop with exit 4 before overwriting files you changed unless you pass `--force` |
+
+**The autonomous loop needs a sandbox.** `_loop/loop.sh` runs a headless agent CLI
+unattended. The drivers never push and never bypass permission prompts themselves, but
+the CLI flags that let a run proceed unattended do. Run the loop with minimal
+credentials, and never skip permission prompts outside a container or VM: a
+`LOOP_WORKTREE=1` worktree separates the git tree but gives no filesystem, network, or
+credential isolation. The loop's safety model and per-CLI permission flags are in
+[autonomous-loop.md](https://github.com/kdcllc/skills/blob/master/docs/agent-kit/guide/autonomous-loop.md).
 
 ## Upgrading an installed project
 
