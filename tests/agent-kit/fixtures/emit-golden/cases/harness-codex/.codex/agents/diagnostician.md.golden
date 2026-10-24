@@ -54,7 +54,10 @@ The orchestrator's spawn prompt supplies:
   fixed; you do not re-litigate or re-open them — defer criteria disputes to rung 5
   arbitration).
 - **All three fix-cycle histories**: each cycle's implementer report and evaluator
-  verdict, including required-fixes lists as recorded.
+  verdict, including required-fixes lists as recorded. Those lists carry **provenance
+  tags** (`[carried]` / `[regression]` / `[new]`, defined in the task-criteria skill).
+  Repeated `[carried]` items point to an unmet ask. `[new]` items and `reverses cycle N:`
+  quotes point to shifting asks — weigh them in your Root-Cause Hypothesis.
 - Pointers to the **current code** (and any verification commands named in the task
   file or its Acceptance Criteria).
 
@@ -107,7 +110,10 @@ The orchestrator applies your report per the Continuation ladder (rung 4):
 
 - **Signature match** — if your hypothesis matches a previously tried fix signature
   (the evaluator's required-fixes list from an earlier cycle, item-for-item after
-  normalizing whitespace and numbering): **skip to rung 6** if your Split
+  normalizing whitespace and numbering, stripping the justification clause (from its start
+  (` — missed earlier:` or ` — reverses cycle `) through the end of the item) when
+  present, and stripping trailing kind and provenance tags):
+  **skip to rung 6** if your Split
   Recommendation names subtasks; **otherwise escalate** to the human with the full
   ladder history.
 - **No signature match** — the orchestrator runs **one diagnosis-driven

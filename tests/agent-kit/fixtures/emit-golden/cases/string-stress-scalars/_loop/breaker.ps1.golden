@@ -4,8 +4,8 @@
 # HALF-OPEN state machine that degrades to cheaper models on rate limits and
 # self-heals. Dot-sourced by the loop driver (`loop.ps1`); never executed directly.
 #
-# Twin: breaker.sh (bash) — behaviorally identical —
-# same states, thresholds, transitions, and schema; any divergence is a bug.
+# Twin: breaker.sh (bash) — breaker.ps1 is frozen at agent-kit 1.1.2
+# behavior; knobs added after it (ledger, budgets, timeout, tamper, lint, dossier, claude-stream, breaker probe) are bash-only.
 # Function-name mapping (PowerShell -> bash):
 #   Breaker-Load          -> breaker_load
 #   Breaker-ShouldSkip     -> breaker_should_skip
@@ -16,8 +16,8 @@
 # Recovery threshold: HALF-OPEN closes at exactly 2 consecutive successes.
 #
 # State schema (flat JSON, one key per line — never nested, never minified/reflowed;
-# both twins hand-write this exact layout so the file stays a byte-for-byte parity
-# contract, not merely a JSON-equivalence one):
+# this frozen twin hand-writes the first nine keys; the bash twin adds four bash-only
+# probe keys, which this twin tolerates on read and drops on rewrite):
 #   {
 #   "state": "CLOSED"|"OPEN"|"HALF-OPEN",
 #   "chain": "<comma-separated model chain, first = preferred>",

@@ -20,7 +20,7 @@ Every gate has its **own** verdict set. Never collapse them into one triple.
 | **Align-docs plan evaluation** | Phase 6.3 — doc edit plan | **PASS**, **NEEDS REVISION**, **REJECT** | [`align-docs/SKILL.template.md`](../../../skills/agent-kit/templates/skills/align-docs/SKILL.template.md) |
 | **Doc audit** | Phase 6.5 — whole doc change set | **APPROVED**, **ISSUES** | [`align-docs/SKILL.template.md`](../../../skills/agent-kit/templates/skills/align-docs/SKILL.template.md) |
 | **QA gate** (optional behavioral) | When `qa: run` in `goal.md` (default `skip`); after Phase 5 **APPROVED** and Quality Checks — `evidence-collector` then `qa-evaluator` on user-facing surfaces | **PASS**, **ISSUES FOUND**, **REJECT** | [`qa-criteria/SKILL.template.md`](../../../skills/agent-kit/templates/skills/qa-criteria/SKILL.template.md); flow in [`feature/SKILL.template.md`](../../../skills/agent-kit/templates/skills/feature/SKILL.template.md) Phase 5 |
-| **Arbitration (rung 5)** | Phase 4 continuation ladder — orchestrator-invoked on unanimous same-item failure across fix cycles 1–3, or early at detection when `failure_class: criteria-defect` stops fix cycles on any cycle (run now with `ladder: auto`; offered as option 1 with `ladder: escalate`) | **criteria-sound**, **criteria-defective** (never PASS/NEEDS FIXES/REJECT) | [`agents/evaluator.md`](../../../skills/agent-kit/templates/agents/evaluator.md) § Arbitration mode |
+| **Arbitration (rung 5)** | Phase 4 continuation ladder — orchestrator-invoked on unanimous same-item failure across fix cycles 1–3, when the **drift trigger** fires (cycle 2–3 verdicts in the orchestration log together carry ≥ 2 `[new]` items), or early at detection when `failure_class: criteria-defect` stops fix cycles on any cycle (run now with `ladder: auto`; offered as option 1 with `ladder: escalate`) | **criteria-sound**, **criteria-defective** (never PASS/NEEDS FIXES/REJECT) | [`agents/evaluator.md`](../../../skills/agent-kit/templates/agents/evaluator.md) § Arbitration mode |
 
 ### Source precedence: `ISSUES` vs `ISSUES FOUND`
 
@@ -66,7 +66,7 @@ flowchart TD
 
 Orchestrator-invoked only — the evaluator does not self-trigger this mode ([`agents/evaluator.md`](../../../skills/agent-kit/templates/agents/evaluator.md) § Arbitration mode).
 
-**Trigger** — Ladder rung 5: unanimous same-item failure across fix cycles 1–3 (every evaluator flagged the same required-fix item and it still fails after three implement→evaluate cycles), or early arbitration when `criteria-defect` stops fix cycles at detection on any cycle: with `ladder: auto` run rung 5 arbitration now; with `ladder: escalate` escalate with arbitration offered as option 1.
+**Trigger** — Ladder rung 5: unanimous same-item failure across fix cycles 1–3 (every evaluator flagged the same required-fix item and it still fails after three implement→evaluate cycles), or early arbitration when `criteria-defect` stops fix cycles at detection on any cycle: with `ladder: auto` run rung 5 arbitration now; with `ladder: escalate` escalate with arbitration offered as option 1. Arbitration also runs when the **drift trigger** fires: the cycle 2–3 verdicts recorded in the orchestration log together carry ≥ 2 `[new]` items.
 
 **Model** — `{{MODEL_FRONTIER_ALT_FAMILY}}` (frontier tier, different family from the primary evaluator when reachable). When no different-family frontier model is reachable on the harness, setup may pin the same family with `arbiter_same_family: true` in the answers file (emit otherwise warns); the model map then labels the rung-5 row [`same-family arbiter (reduced independence)`](../../../skills/agent-kit/templates/models.map.md) and the arbiter's verdict header states `same-family arbiter`. Per the kit's Cursor silent-fallback caveat, the arbiter states in its verdict which model actually produced it ([`agents/evaluator.md`](../../../skills/agent-kit/templates/agents/evaluator.md) § Arbitration mode).
 
@@ -202,12 +202,28 @@ When every issue found is severity **`minor`**, the evaluator returns **`PASS (w
 
 ### Required-fix tags (`[line-patch]` / `[structural]`)
 
-On **NEEDS FIXES**, every item under `### Required fixes` carries exactly one trailing tag ([`agents/evaluator.md`](../../../skills/agent-kit/templates/agents/evaluator.md), [`task-criteria/SKILL.template.md`](../../../skills/agent-kit/templates/skills/task-criteria/SKILL.template.md) § Required-fix tags):
+On **NEEDS FIXES**, every item under `### Required fixes` carries exactly one kind tag ([`agents/evaluator.md`](../../../skills/agent-kit/templates/agents/evaluator.md), [`task-criteria/SKILL.template.md`](../../../skills/agent-kit/templates/skills/task-criteria/SKILL.template.md) § Required-fix tags):
 
 - **`[line-patch]`** — exact text substitutions at named `file:line` locations, changing no requirement, write set, or behavior beyond what the cited criterion demands. A **line-patch-only** cycle (every required fix tagged `[line-patch]`, any fix cycle) resumes the same executor (`implementer` or `test-writer`) in **apply-verbatim mode** with **no model rotation** (fresh spawn on the same model when the harness cannot resume); it still counts toward the 3-cycle cap and is **always re-evaluated**.
 - **`[structural]`** — everything else (multi-file redesign, fence or requirement changes, ambiguous scope). Any `[structural]` item routes the next cycle as a **normal** fix cycle, with line patches from the verdict included verbatim.
 
 If apply-verbatim mode reports `NOT APPLIED: <file:line> — old text not found`, the report is still re-evaluated; the next cycle follows the normal path. Mislabeled line patches (behavior or scope change disguised as `[line-patch]`) are **`major`** issues on the next evaluation.
+
+### Provenance tags (`[carried]` / `[regression]` / `[new]`)
+
+On a **re-evaluation verdict** — any task verdict after the first (fix cycles 2–3 and ladder re-evaluations included), and every final-audit **re-audit** after the first audit — every item under `### Required fixes` carries its kind tag (`[line-patch]` or `[structural]`), then exactly one provenance tag: **`[carried]`**, **`[regression]`**, or **`[new]`** ([`task-criteria/SKILL.template.md`](../../../skills/agent-kit/templates/skills/task-criteria/SKILL.template.md) § Provenance tags, [`agents/evaluator.md`](../../../skills/agent-kit/templates/agents/evaluator.md) § Verdict format).
+
+- **`[carried]`** — still unmet from an earlier verdict; wording may sharpen, the ask may not grow.
+- **`[regression]`** — introduced by the fix being re-evaluated; cite the changed `file:line`.
+- **`[new]`** — every other required-fix item on a re-evaluation verdict.
+
+A **`[new]`** item carries the justification clause ` — missed earlier: <reason>` **directly before the kind tag**. A **reversal** (a required fix that undoes or contradicts an earlier required fix) carries ` — reverses cycle N: <verbatim earlier item>` instead; the evaluator classifies the verdict `failure_class: criteria-defect` and names both items. **N** counts that task's evaluations from 1 (ladder re-evaluations continue the count; Phase 5 counts audits the same way, first audit = 1). In Phase 5, a re-audit reversal **escalates to the user at detection** ([`feature/reference/fix-cycles.md`](../../../skills/agent-kit/templates/skills/feature/reference/fix-cycles.md) § Provenance).
+
+**Orchestrator duties** ([`feature/reference/fix-cycles.md`](../../../skills/agent-kit/templates/skills/feature/reference/fix-cycles.md) § Provenance): every re-evaluation and re-audit package carries every earlier required-fixes list verbatim. Before routing, the orchestrator checks provenance tags; if a tag or justification clause is missing or misplaced, it resumes the same evaluator once to complete them — a round trip that **consumes no cycle** (verdicts tagged `destructive` / `security` / `infra` skip the check and escalate at detection first). It logs one `late finding:` note per `[new]` item; late findings get **no extra cycle**. Phase 3 goal re-checks are out of scope; Phase 5 re-audit packages also list the task-criteria skill.
+
+**Drift trigger** ([`feature/reference/continuation-ladder.md`](../../../skills/agent-kit/templates/skills/feature/reference/continuation-ladder.md) § Rung 5, [`feature/reference/fix-cycles.md`](../../../skills/agent-kit/templates/skills/feature/reference/fix-cycles.md) § On cycle-3 exhaustion): rung 5 arbitration also runs when the cycle 2–3 verdicts in the orchestration log together carry **≥ 2 `[new]` items** — an alternative to the unanimity heuristic, with unchanged outcomes. With `ladder: escalate`, the escalation's **Ladder** line reports the drift count and, when the count is ≥ 2, adds that rung 5 runs first; option 1 stays "Run the continuation ladder".
+
+**Normalization** ([`feature/reference/continuation-ladder.md`](../../../skills/agent-kit/templates/skills/feature/reference/continuation-ladder.md) § Rung 5 and § Hard guards): the unanimity comparison and the repeated-failure-signature hard guard strip trailing kind tags, trailing provenance tags, and the justification clause (from its start through the end of the item).
 
 ## Ownership-contract verification (goal evaluation)
 
@@ -269,7 +285,7 @@ A spawned `terminal` is **not** a designated closer task — the carve-out requi
 
 ## Evaluation loop (produce → evaluate → fix)
 
-Around each unit of work (goal, task, audit), the same loop applies. Max **3 cycles** before escalation — Phase 4 task execution enters the **continuation ladder** (rungs 5→4→6) on exhaustion before terminal escalation when `phases.ladder` is `auto` ([`ORCHESTRATION.md`](../../../skills/agent-kit/templates/ORCHESTRATION.md) § Continuation ladder); a bypass-class verdict (`destructive`, `security`, or `infra`) stops all retrying at detection from any cycle. `criteria-defect` is not a bypass class but also routes at detection on any cycle (early arbitration or human escalation per `phases.ladder`). All other loops (goal evaluation, final audit, align-docs) still escalate directly after 3 cycles. See [feature-workflow.md](feature-workflow.md) for rung mechanics.
+Around each unit of work (goal, task, audit), the same loop applies. Max **3 cycles** before escalation — Phase 4 task execution enters the **continuation ladder** (rungs 5→4→6) on exhaustion before terminal escalation when `phases.ladder` is `auto` ([`ORCHESTRATION.md`](../../../skills/agent-kit/templates/ORCHESTRATION.md) § Continuation ladder); a bypass-class verdict (`destructive`, `security`, or `infra`) stops all retrying at detection from any cycle. `criteria-defect` is not a bypass class but also routes at detection on any cycle (early arbitration or human escalation per `phases.ladder`); a Phase 5 re-audit **reversal** escalates to the user at detection. All other loops (goal evaluation, final audit, align-docs) still escalate directly after 3 cycles. See [feature-workflow.md](feature-workflow.md) for rung mechanics.
 
 ```mermaid
 flowchart TD
@@ -336,7 +352,7 @@ Each goal maintains `_memory/work/goals/[goal-name]/orchestration-log.md` ([`fea
 | `work_read_chars` / `work_est_tokens` W | Parsed from the Footprint `files_read: N (~C chars)` line (W = C/4); **`n/a`** when the line is absent or malformed — a report-format defect for the evaluator, not a ledger error. Optional `--work-chars C` overrides parsing |
 | `running io` / `running work` | Previous totals plus T / W (`running io` falls back to legacy `running total` when no `running io` exists; W=`n/a` adds 0) |
 
-Neither proxy field is billed usage — only the loop driver's `usage:` line (when `LOOP_USAGE_FORMAT` is active) records real token counts from the headless CLI. Never write placeholder pending lines (`"Outcome: (pending)"`, `"TBD"`) — a SPAWN with no OUTCOME yet **is** the pending state.
+Neither proxy field is billed usage — the loop driver's `usage:` line (when `LOOP_USAGE_FORMAT` is active) and the bash driver's run ledger (`_memory/loop/ledger.jsonl`), which stores the same decoded counts, are the only real token counts from the headless CLI (bash driver only for the ledger; the ledger writes `null` usage when no format is active). Never write placeholder pending lines (`"Outcome: (pending)"`, `"TBD"`) — a SPAWN with no OUTCOME yet **is** the pending state.
 
 Ladder transitions, guard trips, phase skips (e.g. Phase 6/7 declined via `goal.md`'s `phases:` block), phase-boundary summaries (`Phase N complete: spawns=K · running io=X · running work=Y · main session=<harness-reported %|unknown>`), and compaction recommendations (Phase 4 task or ready-group boundaries when the harness shows the main session past ~60% of its context window — recommend compaction or a fresh session to the user, never compact automatically) are logged as separate `note` entries.
 
@@ -372,11 +388,11 @@ Canonical template paths (relative to repo root):
 - [`skills/agent-kit/templates/skills/feature/reference/preflight.md`](../../../skills/agent-kit/templates/skills/feature/reference/preflight.md) — unscored pre–Phase 3 checklist
 - [`skills/agent-kit/templates/skills/feature/reference/goal-revisions.md`](../../../skills/agent-kit/templates/skills/feature/reference/goal-revisions.md) — Phase 3 re-checks, plan amendments, cross-reference audit
 - [`skills/agent-kit/templates/skills/feature/reference/corrective-tasks.md`](../../../skills/agent-kit/templates/skills/feature/reference/corrective-tasks.md) — corrective task naming, ordering, and ownership
-- [`skills/agent-kit/templates/skills/feature/reference/fix-cycles.md`](../../../skills/agent-kit/templates/skills/feature/reference/fix-cycles.md) — fix-cycle cap, line-patch-only resume, criteria-defect and bypass routing, cycle-3 ladder, model rotation
+- [`skills/agent-kit/templates/skills/feature/reference/fix-cycles.md`](../../../skills/agent-kit/templates/skills/feature/reference/fix-cycles.md) — fix-cycle cap, line-patch-only resume, criteria-defect and bypass routing, cycle-3 ladder, model rotation, provenance (re-evaluations and re-audits)
 - [`skills/agent-kit/templates/skills/feature/reference/degraded-mode.md`](../../../skills/agent-kit/templates/skills/feature/reference/degraded-mode.md) — self-evaluated gates, QA evidence under Case 2, fix-cycle rotation skip
 - [`skills/agent-kit/templates/skills/feature/reference/memory-protocol.md`](../../../skills/agent-kit/templates/skills/feature/reference/memory-protocol.md) — prior-knowledge fence, recall/archive, loop memory proposals
 - [`skills/agent-kit/templates/skills/test-ladder/SKILL.template.md`](../../../skills/agent-kit/templates/skills/test-ladder/SKILL.template.md) — rung definitions and role ownership
-- [`skills/agent-kit/templates/agents/evaluator.md`](../../../skills/agent-kit/templates/agents/evaluator.md) — stance, confidence ladder, anti-fabrication, execute-before-score, routed-rule placement check, calibration exemplars, failure-class taxonomy, arbitration mode
+- [`skills/agent-kit/templates/agents/evaluator.md`](../../../skills/agent-kit/templates/agents/evaluator.md) — stance, confidence ladder, anti-fabrication, execute-before-score, routed-rule placement check, calibration exemplars, failure-class taxonomy, arbitration mode, re-evaluation provenance tags
 - [`skills/agent-kit/templates/agents/evidence-collector.md`](../../../skills/agent-kit/templates/agents/evidence-collector.md) — QA evidence gathering, no verdicts, no ladder rungs
 - [`skills/agent-kit/templates/agents/qa-evaluator.md`](../../../skills/agent-kit/templates/agents/qa-evaluator.md) — behavioral-evidence stance; reads collector index
 - [`skills/agent-kit/templates/agents/implementer.md`](../../../skills/agent-kit/templates/agents/implementer.md) and [`agents/test-writer.md`](../../../skills/agent-kit/templates/agents/test-writer.md) — apply-verbatim mode for line-patch-only cycles

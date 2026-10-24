@@ -158,12 +158,51 @@ anything on the auto-fail list is never `minor`.
 
 ## Required-fix tags (`[line-patch]` / `[structural]`)
 
-The evaluator tags every required-fix item with exactly one trailing tag. **`[line-patch]`**
-means the implementer can apply exact text substitutions at named `file:line` locations,
-changing no requirement, write set, or behavior beyond what the cited criterion demands.
-**`[structural]`** is everything else. A fix tagged `[line-patch]` that actually changes
-behavior, requirements, or write sets beyond what the cited criterion demands (a **mislabeled** line patch) is a **`major`**
+The evaluator tags every required-fix item with exactly one kind tag, `[line-patch]` or
+`[structural]`; on a re-evaluation verdict each item is followed by one provenance tag
+(see **Provenance tags** below). **`[line-patch]`** means the implementer can apply exact
+text substitutions at named `file:line` locations, changing no requirement, write set, or
+behavior beyond what the cited criterion demands. **`[structural]`** is everything else.
+A fix tagged `[line-patch]` that actually changes behavior, requirements, or write sets
+beyond what the cited criterion demands (a **mislabeled** line patch) is a **`major`**
 issue in the next evaluation — not `minor`.
+
+## Provenance tags (`[carried]` / `[regression]` / `[new]`)
+
+A **re-evaluation verdict** is any task verdict after that task's first evaluation (fix
+cycles 2 and 3, and ladder re-evaluations), plus every final-audit re-audit after the
+first audit. A task's first verdict and the first audit carry no provenance tag.
+
+- **`[carried]`** — an item from an earlier verdict's required-fixes list that is still
+  unmet. Its wording may be sharpened, but its ask may not grow; an item whose ask grows
+  is **`[new]`**.
+- **`[regression]`** — a defect introduced by the fix being re-evaluated; cite the changed
+  `file:line`.
+- **`[new]`** — every other required-fix item on a re-evaluation verdict.
+
+Every **`[new]`** item states `missed earlier: <reason>`, giving why no earlier verdict
+listed it. That text is a **justification clause** — ` — missed earlier: <reason>` for a
+`[new]` item, or ` — reverses cycle N: <verbatim earlier item>` for a reversal — written
+at the end of the item, **directly before the kind tag** (example:
+`- [ ] <fix> — missed earlier: <reason> [structural] [new]`). **`[carried]`** and
+**`[regression]`** items carry no justification clause. Late findings are still allowed
+and earn no extra fix cycle. **Exemption:** a reversal item (below) carries
+`reverses cycle N: <verbatim earlier item>` instead of a `missed earlier:` reason.
+
+Signature and unanimity comparisons strip the **justification clause** from its start
+(` — missed earlier:` or ` — reverses cycle `) **through the end of the item**, removing
+the clause and all trailing kind and provenance tags (including any tags inside a
+reversal's verbatim quote).
+
+A required fix that undoes or contradicts a required fix from an earlier verdict of the
+same task or audit is a **reversal**. The evaluator tags it **`[new]`** and quotes the
+earlier item verbatim with its cycle number in the form `reverses cycle N: <verbatim
+earlier item>`. It classifies the verdict `failure_class: criteria-defect` and names both
+items. Two incompatible asks against the same criteria mean the criteria are ambiguous to
+the evaluator itself — an arbitration question, not a retry.
+
+A first verdict's required-fixes list must still be exhaustive. Provenance tags record
+drift; they do not license it.
 
 ## Verdicts
 

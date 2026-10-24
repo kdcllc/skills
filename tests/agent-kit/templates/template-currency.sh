@@ -111,7 +111,7 @@ check_g5() {
   grep -qF 'exit 1' "$file" || return 1
   grep -qF 'exit 5' "$file" || return 1
   grep -qF 'QUARANTINE-' "$file" || return 1
-  grep -qE 'mismatch\|abnormal\|subset\|killed' "$file"
+  grep -qE 'mismatch\|abnormal\|subset\|tamper\|killed' "$file"
 }
 
 # ---------------------------------------------------------------------------

@@ -30,7 +30,7 @@ commands_run: <N>
 
 `C` is the agent's estimate of total characters read (sum of file sizes opened; rounding to the nearest thousand is fine). `terminal` reports `files_read: 0` and `commands_run: 1` (or the count it ran). The block is never omitted — write `files_read: 0 (~0 chars)` when nothing was read.
 
-**Why it exists:** `_kit/log-spawn.* outcome` parses the `files_read: N (~C chars)` line and emits `work_read_chars: C · work_est_tokens: C/4` on the orchestration-log OUTCOME line (integer division), or `work_read_chars: n/a · work_est_tokens: n/a` when the line is absent or malformed. That **`work_est_tokens`** value is the subagent's self-reported working footprint — distinct from **`io_est_tokens`**, which measures only orchestrator↔subagent I/O chars/4. Neither is billed usage; the loop driver's `usage:` line (when `LOOP_USAGE_FORMAT` is active) is the only real token count. See [evaluation-system.md](evaluation-system.md) § Orchestration log.
+**Why it exists:** `_kit/log-spawn.* outcome` parses the `files_read: N (~C chars)` line and emits `work_read_chars: C · work_est_tokens: C/4` on the orchestration-log OUTCOME line (integer division), or `work_read_chars: n/a · work_est_tokens: n/a` when the line is absent or malformed. That **`work_est_tokens`** value is the subagent's self-reported working footprint — distinct from **`io_est_tokens`**, which measures only orchestrator↔subagent I/O chars/4. Neither is billed usage; the loop driver's `usage:` line (when `LOOP_USAGE_FORMAT` is active) and the bash driver's run ledger (`_memory/loop/ledger.jsonl`), which stores the same decoded counts, are the only real token counts. See [evaluation-system.md](evaluation-system.md) § Orchestration log.
 
 ## Evaluator
 
@@ -48,7 +48,7 @@ commands_run: <N>
 - Treat unverified claims as verified.
 - Read files through shell `cat`/`head`/`sed` where the harness has a file-read tool (running a criterion's or test's command is still fine).
 
-The evaluator also has an orchestrator-invoked **arbitration mode** (continuation-ladder rung 5, pinned to `{{MODEL_FRONTIER_ALT_FAMILY}}`) that reviews criteria rather than code — triggered on unanimous same-item failure across fix cycles 1–3, or early at detection when `criteria-defect` stops fix cycles (with `ladder: auto`, rung 5 now; with `ladder: escalate`, escalate with arbitration as option 1). Semantics in [evaluation-system.md](evaluation-system.md).
+The evaluator also has an orchestrator-invoked **arbitration mode** (continuation-ladder rung 5, pinned to `{{MODEL_FRONTIER_ALT_FAMILY}}`) that reviews criteria rather than code — triggered on unanimous same-item failure across fix cycles 1–3, or when the drift trigger fires (the cycle 2–3 verdicts recorded in the orchestration log together carry ≥ 2 `[new]` items), or early at detection when `criteria-defect` stops fix cycles (with `ladder: auto`, rung 5 now; with `ladder: escalate`, escalate with arbitration as option 1). Semantics in [evaluation-system.md](evaluation-system.md).
 
 **Phase 3 re-checks:** attempts 1→2 resume the same evaluator with a delta that quotes every newly written or changed passage verbatim for adversarial review; attempt 3 is a fresh, full goal evaluation (not a delta) on `{{MODEL_FRONTIER_ALT_FAMILY}}`, with attempt-2 quoted passages plus every passage newly written or changed since attempt 2 appended for review first.
 
@@ -151,7 +151,7 @@ The terminal is the **shell-output shield**: noisy test runs, builds, and git op
 
 **Role:** Fresh-context root-cause analyst spawned at continuation-ladder rung 4 after three implement→evaluate fix cycles exhaust without a PASS.
 
-**Inputs:** The task file (including its `## Acceptance Criteria` section), all three fix-cycle histories (implementer reports + evaluator verdicts), and pointers to the current code.
+**Inputs:** The task file (including its `## Acceptance Criteria` section), all three fix-cycle histories (implementer reports + evaluator verdicts, including required-fixes lists that carry `[carried]` / `[regression]` / `[new]` provenance tags), and pointers to the current code.
 
 **Tier:** `frontier` — frontmatter `model: {{MODEL_FRONTIER}}`, effort `xhigh`. Tools: Bash, Read, Grep, Glob — no Edit/Write.
 
@@ -350,7 +350,7 @@ For the full capability comparison, see [`harness-matrix.md`](../../../skills/ag
 
 Each subagent is spawned at specific moments in the orchestration lifecycle:
 
-- **Goal and task evaluation** — `evaluator` after goal creation, after each task, and at final audit; Phase 3 attempt 3 is a fresh goal evaluation pinned to `{{MODEL_FRONTIER_ALT_FAMILY}}` (see Phase 3 re-checks above). `evaluator` in **arbitration mode** at continuation-ladder rung 5 on unanimous same-item failure across fix cycles 1–3, or early at detection when a verdict carries `criteria-defect`. Criteria and verdict mechanics: [evaluation-system.md](evaluation-system.md).
+- **Goal and task evaluation** — `evaluator` after goal creation, after each task, and at final audit; Phase 3 attempt 3 is a fresh goal evaluation pinned to `{{MODEL_FRONTIER_ALT_FAMILY}}` (see Phase 3 re-checks above). `evaluator` in **arbitration mode** at continuation-ladder rung 5 on unanimous same-item failure across fix cycles 1–3, or when the drift trigger fires (the cycle 2–3 verdicts recorded in the orchestration log together carry ≥ 2 `[new]` items), or early at detection when a verdict carries `criteria-defect`. Criteria and verdict mechanics: [evaluation-system.md](evaluation-system.md).
 - **Post-exhaustion diagnosis** — `diagnostician` at continuation-ladder rung 4 after Phase 4 fix cycles exhaust.
 - **Implementation and fixes** — `implementer` for each task and fix cycle (model rotates per the fix-cycle table above, except line-patch-only and degraded-mode cycles).
 - **Dedicated test tasks** — `test-writer` when a goal includes a test-only task.
@@ -373,11 +373,11 @@ Never copy model IDs from kit documentation without checking — IDs rotate freq
 - [`skills/agent-kit/templates/agents/qa-evaluator.md`](../../../skills/agent-kit/templates/agents/qa-evaluator.md) — QA evaluator role, index and artifact evidence, prohibitions
 - [`skills/agent-kit/templates/agents/evidence-collector.md`](../../../skills/agent-kit/templates/agents/evidence-collector.md) — evidence collector role, qa write fence, smoke/visual/index, no verdicts
 - [`skills/agent-kit/templates/skills/feature/SKILL.template.md`](../../../skills/agent-kit/templates/skills/feature/SKILL.template.md) — `qa:` gate, Phase 5 QA spawn order
-- [`skills/agent-kit/templates/skills/feature/reference/fix-cycles.md`](../../../skills/agent-kit/templates/skills/feature/reference/fix-cycles.md) — line-patch-only resume, fix-cycle model rotation, bypass and criteria-defect routing
+- [`skills/agent-kit/templates/skills/feature/reference/fix-cycles.md`](../../../skills/agent-kit/templates/skills/feature/reference/fix-cycles.md) — line-patch-only resume, fix-cycle model rotation, bypass and criteria-defect routing, provenance (re-evaluations and re-audits)
 - [`skills/agent-kit/templates/skills/feature/reference/degraded-mode.md`](../../../skills/agent-kit/templates/skills/feature/reference/degraded-mode.md) — Case 1/2 fix-cycle rotation skip, Case 2 QA index by orchestrator
 - [`skills/agent-kit/templates/ORCHESTRATION.md`](../../../skills/agent-kit/templates/ORCHESTRATION.md) — QA Evaluation section (orchestrator never captures QA evidence itself; collector context package and `qa/**` fence)
 - [`skills/agent-kit/templates/skills/feature/reference/memory-protocol.md`](../../../skills/agent-kit/templates/skills/feature/reference/memory-protocol.md) — prior-knowledge fence recipients (excludes evidence-collector)
-- [`skills/agent-kit/templates/skills/task-criteria/SKILL.template.md`](../../../skills/agent-kit/templates/skills/task-criteria/SKILL.template.md) — required-fix `[line-patch]` / `[structural]` tags
+- [`skills/agent-kit/templates/skills/task-criteria/SKILL.template.md`](../../../skills/agent-kit/templates/skills/task-criteria/SKILL.template.md) — required-fix `[line-patch]` / `[structural]` tags and `[carried]` / `[regression]` / `[new]` provenance tags with the justification clause
 - [`skills/agent-kit/templates/agents/implementer.md`](../../../skills/agent-kit/templates/agents/implementer.md) — implementer rules, write fence, test ladder, terminal spawn
 - [`skills/agent-kit/templates/agents/test-writer.md`](../../../skills/agent-kit/templates/agents/test-writer.md) — test writer coverage rules, mocking, write fence
 - [`skills/agent-kit/templates/agents/terminal.md`](../../../skills/agent-kit/templates/agents/terminal.md) — terminal command runner, output isolation

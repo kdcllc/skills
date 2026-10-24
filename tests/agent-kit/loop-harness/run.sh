@@ -2608,12 +2608,12 @@ zero_stray_branches=1
 # zero_litter: `.loop-worktrees` itself is not removed by `git worktree
 # remove` (only the slot-N entry under it is), so an empty parent is
 # expected, not litter -- verified empirically before writing this check.
-# breaker-state.json is likewise an expected, non-litter byproduct.
+# breaker-state.json and ledger.jsonl are likewise expected, non-litter byproducts.
 zero_litter=1
 if [[ -d "$LIFECYCLE_DIR/.loop-worktrees" ]]; then
   [[ -z "$(ls -A "$LIFECYCLE_DIR/.loop-worktrees" 2>/dev/null)" ]] || zero_litter=0
 fi
-litter_status="$(sandbox_git "$LIFECYCLE_DIR" status --porcelain -- . ':(exclude)_memory/loop/breaker-state.json' ':(exclude)_memory/loop/backlog.md')"
+litter_status="$(sandbox_git "$LIFECYCLE_DIR" status --porcelain -- . ':(exclude)_memory/loop/breaker-state.json' ':(exclude)_memory/loop/ledger.jsonl' ':(exclude)_memory/loop/backlog.md' ':(exclude)_memory/loop/attempts')"
 [[ -n "$litter_status" ]] && zero_litter=0
 
 worktree_list_count="$(sandbox_git "$LIFECYCLE_DIR" worktree list | wc -l)"
@@ -4942,19 +4942,19 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 96: exit-5 site count == 5 in BOTH canonical twins (D3's [AMENDED]
-# five-site pin). Nothing at HEAD previously counted the exit-5 SITES
-# themselves (only their prose, via check G/assertion 33/94) -- this counts
-# the literal, standalone `exit 5` STATEMENT lines only (anchored `^\s*exit
-# 5\s*$`, never matching prose mentions like "exit 5, setup-failure
-# category" inside comments, which do not end the line at the digit).
+# 96: exit-5 site count == 6 in loop.sh / 5 in loop.ps1 (loop-guards task 02
+# adds setup-failure helper `_loop_setup_fail` as the sixth standalone exit 5
+# in loop.sh). Counts the literal, standalone `exit 5` STATEMENT lines only
+# (anchored `^\s*exit 5\s*$`, never matching prose mentions like "exit 5,
+# setup-failure category" inside comments, which do not end the line at the
+# digit).
 # ---------------------------------------------------------------------------
 exit5_sh_count="$(grep -cE '^\s*exit 5\s*$' "$LOOP_SH")"
 exit5_ps1_count="$(grep -cE '^\s*exit 5\s*$' "$LOOP_PS1")"
-if [[ "$exit5_sh_count" -eq 5 && "$exit5_ps1_count" -eq 5 ]]; then
-  report PASS "96: exit-5 site count == 5 in both canonical twins (loop.sh=$exit5_sh_count loop.ps1=$exit5_ps1_count) -- matches D3's [AMENDED] five-site pin (preflight, PROMPT.md substitution, missing/unreadable backlog at fill-time, non-ff integration, missing/unreadable backlog at the funnel's bottom-path re-scan)"
+if [[ "$exit5_sh_count" -eq 6 && "$exit5_ps1_count" -eq 5 ]]; then
+  report PASS "96: exit-5 site count == 6 in loop.sh / 5 in loop.ps1 (loop.sh=$exit5_sh_count loop.ps1=$exit5_ps1_count) -- sixth loop.sh site is setup-failure helper _loop_setup_fail (preflight, PROMPT.md substitution, missing/unreadable backlog at fill-time, non-ff integration, missing/unreadable backlog at the funnel's bottom-path re-scan, plus _loop_setup_fail)"
 else
-  report FAIL "96: exit-5 site count" "loop.sh=$exit5_sh_count(expected 5) loop.ps1=$exit5_ps1_count(expected 5)"
+  report FAIL "96: exit-5 site count" "loop.sh=$exit5_sh_count(expected 6) loop.ps1=$exit5_ps1_count(expected 5)"
 fi
 
 # ---------------------------------------------------------------------------

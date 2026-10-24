@@ -6,6 +6,35 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 
 ## [Unreleased]
 
+## [1.1.3] - 2026-10-23
+
+### Added
+
+- **Loop run ledger and summary** — the bash driver appends one JSON line per reaped or killed slot to `_memory/loop/ledger.jsonl` by default (`LOOP_LEDGER=off` disables); after at least one reap or kill it prints an outcome and token/cost summary on stderr (not in `--lint` mode).
+- **Loop iteration timeout and budgets** — bash-only knobs `LOOP_ITER_TIMEOUT`, `LOOP_RUN_BUDGET_TOKENS`, `LOOP_STORY_BUDGET_TOKENS`, `LOOP_RUN_BUDGET_USD`, `LOOP_STORY_BUDGET_USD`, and `LOOP_ITER_BUDGET_USD` (Claude Code per-dispatch cap); run budgets stop claiming new stories (exit 1 when eligible work remains); story budgets block the story and append `_memory/loop/ESCALATIONS.md`; missing usage/cost fails open.
+- **Loop tamper check** — `LOOP_TAMPER_CHECK` (`warn` default, `fail` worktree-only, `off`) with optional `LOOP_TEST_PATTERNS`; `fail` quarantines with reason `tamper`.
+- **Loop backlog lint** — `_loop/loop.sh --lint [backlog-path]` reports errors and warnings with no side effects (exit 0/1/5).
+- **Fix-cycle provenance tags** — re-evaluation and re-audit required fixes are tagged `[carried]` / `[regression]` / `[new]`; late `[new]` items need a reason and are logged; task reversals route as `criteria-defect` and re-audit reversals escalate to the user; rung 5 arbitration also runs when ≥ 2 `[new]` items appear across cycles 2–3; re-evaluation packages carry every earlier required-fixes list.
+- **Loop attempt dossier** — bash-only `LOOP_DOSSIER` (default on) stores the two newest failed-reap entries (~2048 bytes each) under `_memory/loop/attempts/<story-id>.md`, injects a fenced DATA block on the next dispatch, and deletes the file when a reap sets `passes: true`; slots write `<outbox>/attempt.md` (1500-byte cap).
+- **Loop `claude-stream` usage format** — opt-in `LOOP_USAGE_FORMAT=claude-stream` splices `--output-format stream-json --verbose`, detects rate limits from typed `system`/`api_retry` events with `error` `rate_limit` or `overloaded`, falls back to stderr text plus the final result envelope only, and is never chosen by `auto`; `LOOP_ITER_BUDGET_USD` applies as for `claude`.
+- **README security section** — explains the skills.sh scan flags (command execution, indirect prompt injection, transcript access, external downloads, dynamic execution), why each capability exists, and what limits it (marking prompt-only rules as *Instruction*), plus the loop sandbox requirement; the autonomous-loop guide now states that a worktree alone is not isolation for skipping permission prompts.
+- **Loop upward breaker recovery** — bash-only probe of the preferred model after a rate-limit fallback: first delay 1800 s, doubling with an 1800 s floor and 14400 s cap; success stays on the preferred model, failure restores the pre-probe model (`breaker.ps1` has no upward path).
+
+### Changed
+
+- **Loop PowerShell drivers frozen** — `loop.ps1` and `breaker.ps1` stay at agent-kit 1.1.2 behavior; timeout, budget, tamper, ledger, lint, dossier, `claude-stream`, and breaker-probe knobs are bash-only. Re-emit adds gitignored `_memory/loop/ledger.jsonl` for the run ledger.
+- **Loop tamper classifier** — default test-path rules exclude `fixtures/` segments and `*.golden` / `*.snap` basenames; `LOOP_TEST_PATTERNS` replaces all defaults; the reap scan is one awk pass per file.
+- **Loop maintainer guards** — `tests/agent-kit/checks.sh` check E and `tests/agent-kit/templates/escalation-ladder.sh` check 5 model-ID guards exempt the exact `claude-stream` usage-format token.
+
+### Fixed
+
+- **Documented `LOOP_CLI` recipes** — Codex examples now use `codex exec --sandbox danger-full-access` with an external-sandbox caveat; the autonomous-loop guide adds permission-mode guidance for Claude Code `-p`, plus an opt-in `claude --bare -p` recipe with explicit auth and context-loading limits.
+- **Loop ledger JSON** — the bash driver escapes the ledger `format` field so special characters cannot break JSON lines.
+
+### Upgrade notes
+
+- Re-emit adds gitignored `_memory/loop/ledger.jsonl` and `_memory/loop/attempts/` to `.gitignore`, refreshes the bash loop driver, and updates dispatched slots to write `<outbox>/attempt.md`; the breaker state file gains four bash-only keys — `probeAfter`, `probeBackoff`, `probing`, `preProbeIndex` — which the frozen PowerShell breaker tolerates and drops on rewrite. PowerShell-only loop users (`pwsh _loop/loop.ps1`) do not receive the new timeout, budget, tamper, ledger, dossier, `claude-stream`, breaker-probe, or `--lint` knobs — use Git Bash `_loop/loop.sh` on Windows for them.
+
 ## [1.1.2] - 2026-10-20
 
 ### Added

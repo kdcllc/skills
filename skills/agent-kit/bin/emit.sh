@@ -2204,7 +2204,7 @@ planned_git_lines() {
   GI_LINES=('_kit/' '_memory/.index/' '_memory/raw/' '_memory/work/')
   if flag_is loop; then
     GA_LINES+=('_memory/loop/LEARNINGS.md merge=union' '_memory/loop/ESCALATIONS.md merge=union' '*.sh text eol=lf' '*.ps1 text eol=lf')
-    GI_LINES+=('_memory/loop/breaker-state.json')
+    GI_LINES+=('_memory/loop/breaker-state.json' '_memory/loop/ledger.jsonl' '_memory/loop/attempts/')
   fi
 }
 

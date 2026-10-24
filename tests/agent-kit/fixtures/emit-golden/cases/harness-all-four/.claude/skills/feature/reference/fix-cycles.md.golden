@@ -22,11 +22,48 @@ Implementer MAY be resumed for fix cycle 1; cycles 2–3 fresh spawns
 **`criteria-defect`** (not bypass): route at detection per `reference/continuation-ladder.md`. **Bypass at detection (every verdict, cycles 1–3).** Verdicts tagged `destructive`,
 `security`, or `infra` stop all cycles immediately and escalate — from cycle 1.
 
+## Provenance (re-evaluations and re-audits)
+
+This section applies to Phase 4 task re-evaluations and Phase 5 final-audit re-audits. It
+does not apply to Phase 3 goal re-checks.
+
+Every re-evaluation and re-audit context package must include every earlier required-fixes list verbatim for that task or audit, labeled by cycle and copied from
+the earlier `spawns/NN-report.md`, whether the evaluator is resumed or freshly spawned.
+
+Before routing on a re-evaluation verdict not tagged `destructive`, `security`, or `infra`
+(those escalate at detection first), check provenance tags. If any required-fix item lacks
+a provenance tag, or any `[new]` item has neither `missed earlier:` nor
+`reverses cycle N:`, or any `[new]` or reversal item's justification text is not a
+**justification clause** placed **directly before the kind tag** (misplaced or differently punctuated
+text fails the check), resume the same evaluator once to complete the tags; when the
+harness cannot resume, fresh-spawn the same model with the verdict attached. That round
+trip **consumes no cycle**. If tags are still missing, treat the item as `[new]` and log
+a note saying so. If a justification clause is still misplaced after the round trip, log
+a note saying so.
+
+Phase 5 re-audit packages also list `.claude/skills/task-criteria/SKILL.md` (its
+Provenance tags section) alongside the earlier required-fixes lists so the auditor has
+the tag rules without relying on the evaluator.md pointer alone.
+
+From the first re-evaluation onward, log one note per `[new]` item:
+`_kit/log-spawn.sh note --goal <g> --text "late finding: <phase> <task-or-audit> cycle N — <item>"`.
+Late findings get **no extra cycle**.
+
+A verdict item quoting `reverses cycle N: <verbatim earlier item>` is a reversal. **N**
+is the number of the earlier verdict being reversed, counting that task's evaluations from
+1 (the first verdict); ladder re-evaluations continue the count, and Phase 5 counts audits
+the same way (first audit = 1). In Phase 4, classify the verdict `criteria-defect` and
+follow **## Criteria-defect and bypass** (at-detection route). In Phase 5 there is no
+ladder — escalate to the user at detection, quoting both items verbatim.
+
 ## On cycle-3 exhaustion
 
 **On cycle-3 exhaustion**, read `goal.md`'s `phases.ladder`: `escalate` (default, or
 key absent) → escalate with "Run the continuation ladder" as option 1 (log "ladder:
-escalate per goal.md"); `auto` → Read `reference/continuation-ladder.md` and follow
+escalate per goal.md"); the escalation's **Ladder** line reports the **drift** count (the
+number of `[new]` items across the cycle 2–3 verdicts), and when the count is ≥ 2 the
+**Ladder** line adds that **rung 5 runs first** because the drift trigger fired;
+`auto` → Read `reference/continuation-ladder.md` and follow
 it. Every ladder fix attempt is re-evaluated.
 
 ## Fix-cycle model rotation

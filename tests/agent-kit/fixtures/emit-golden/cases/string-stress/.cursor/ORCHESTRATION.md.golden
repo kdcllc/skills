@@ -73,8 +73,7 @@ Each subagent invocation:
 
 This eliminates fatigue and bias completely.
 
-Exception for re-checks: the evaluator is resumed with a delta prompt listing only
-the applied fixes; Phase 3 deltas quote newly written passages and Phase 3 attempt 3 is a fresh spawn per `reference/goal-revisions.md`. The implementer may be resumed for fix cycle 1 only (cycles 2–3
+Exception for re-checks: the evaluator is resumed with a delta prompt listing the applied fixes (Phase 4/5 deltas list the applied fixes plus every earlier required-fixes list); Phase 3 deltas quote newly written passages and Phase 3 attempt 3 is a fresh spawn per `reference/goal-revisions.md`. The implementer may be resumed for fix cycle 1 only (cycles 2–3
 are fresh spawns) except a line-patch-only NEEDS FIXES verdict (every required fix
 tagged `[line-patch]`) resumes the same executor (`implementer`/`test-writer`) in
 apply-verbatim mode on any cycle without model rotation, still counting toward the
@@ -328,6 +327,7 @@ member reaches task-evaluation PASS or PASS (with notes).
   re-evaluated; the next cycle follows the normal path.
   A verdict tagged with a bypass failure class (destructive/security/infra)
   escalates at detection, on any cycle.
+  On re-evaluation, each required fix is tagged `[carried]` / `[regression]` / `[new]` after its kind tag; context packages carry every earlier required-fixes list; the orchestrator logs a `late finding:` note per `[new]` item; a reversal (`reverses cycle N:`) is a `criteria-defect`; see `reference/fix-cycles.md` § Provenance.
 
 INVARIANT: A task is only marked complete after the evaluator returns PASS or
 PASS (with notes) (`PASS (with notes)` counts as PASS). There is no path where
@@ -344,6 +344,7 @@ evaluator audit. APPROVED → Quality Checks (ladder rung 3: full suites, via a
 `terminal` spawn); ISSUES → fix (ladder rungs 1–2), then re-audit (3 max). When
 `goal.md` has `qa: run`, after Quality Checks spawn `evidence-collector` then
 `qa-evaluator` with its index (`qa: skip` or absent key omits the gate).
+Re-audits carry the same provenance tags and late-finding notes, and a re-audit reversal escalates to the user at detection.
 INVARIANT: The ONLY exit to Quality Checks is an APPROVED verdict from the audit
 subagent. Remediations MUST be re-audited.
 
@@ -641,7 +642,9 @@ terminal human escalation. Apply in this order:
 
 2. **Rung 5 — arbitration (conditional, checked first on exhaustion).** If cycles 1–3 all
    failed on the *same* required-fix item (unanimous-failure heuristic; compare items
-   tag-stripped of trailing `[line-patch]` / `[structural]`), spawn the
+   tag-stripped of trailing `[line-patch]` / `[structural]` and trailing provenance tags,
+   with the justification clause (from its start (` — missed earlier:` or
+   ` — reverses cycle `) through the end of the item) removed when present), or when the **drift trigger** fires (≥ 2 `[new]` items across the cycle 2–3 verdicts recorded in the orchestration log), spawn the
    evaluator in **arbitration mode** on `claude-opus-5-5-high` before any
    further fixing. Outcomes: `criteria-defective` → escalate to the human carrying the
    specific defect; arbiter/primary **disagreement → escalate (never auto-resolve)**;
@@ -673,7 +676,7 @@ terminal human escalation. Apply in this order:
 - Every rung transition is an orchestration-log entry recording agent, model, rung, and
   trigger.
 - Token/cost budgets are not a guard in interactive mode (no harness exposes true usage to the
-  orchestrator); the headless loop records real usage per iteration via `LOOP_USAGE_FORMAT` — gating on it is a future knob, not this ladder's.
+  orchestrator); the headless loop records real usage per iteration via `LOOP_USAGE_FORMAT` — the bash loop driver's opt-in `LOOP_*_BUDGET_*` knobs gate on it at loop level, not in this ladder.
 
 **Attempt accounting:** The diagnosis-driven implementation attempt costs 1 of the 3.
 Each rung-6 subtask implement→evaluate cycle costs 1 of the 3. Before splitting, the
@@ -681,7 +684,7 @@ orchestrator compares the failing-subtask count against the remaining budget —
 count exceeds the remaining budget, escalate instead of splitting. **Signature identity:**
 the evaluator's required-fixes list as recorded in the orchestration log, identical to an
 earlier cycle's list item-for-item after normalizing whitespace and list numbering and
-stripping trailing `[line-patch]` / `[structural]` tags from each item.
+stripping trailing `[line-patch]` / `[structural]` tags from each item and trailing provenance tags (`[carried]` / `[regression]` / `[new]`) from each item and the justification clause (from its start (` — missed earlier:` or ` — reverses cycle `) through the end of the item) from each item when present.
 
 **Deferred future rungs (out of scope):**
 
@@ -748,8 +751,8 @@ single-writer integrator; dispatched slots never re-select stories, never increm
 **manual** runs only. After each slot reap (post-CB0, post-disposal), the integrator
 **step 3b** adds `<outbox>/memory/*.md` proposals via `_kit/memory.*` and may make a
 path-limited `chore(memory): <story-id> records` commit (see **Memory** below). Concurrency: `LOOP_SLOTS` > 1 is honored iff `LOOP_WORKTREE=1`
-(default 2, clamped [1,3]). Usage capture: `LOOP_USAGE_FORMAT` (`auto`|`claude`|`codex`|
-`cursor`|`none`; `auto` = basename of `LOOP_CLI`'s first word) and optional `LOOP_USAGE_LOG`. When a
+(default 2, clamped [1,3]). Usage capture: `LOOP_USAGE_FORMAT` (`auto`|`claude`|`claude-stream`|`codex`|
+`cursor`|`none`; `claude-stream` bash driver only; `auto` = basename of `LOOP_CLI`'s first word) and optional `LOOP_USAGE_LOG`. When a
 format is active the driver prints `usage: input=<n> output=<n> cache_read=<n|n/a>
 cache_write=<n|n/a> cost_usd=<x|n/a> format=<f>` after each slot's `tail -n 25` block
 (silent when unset and `auto` resolves to none).
@@ -784,7 +787,7 @@ flowchart TD
 | Max iterations per run | 10 (argument to the loop driver (`loop.sh`/`loop.ps1`)) |
 | Per-story attempt cap | 3, then blocked + escalation entry |
 | Circuit breaker | per slot: retire after 3 consecutive no-commit reaps or 5 identical failure signatures (run continues); every slot retired stops the run — exit 3 if any signature-retirement, else 2 |
-| Model breaker | CLOSED/OPEN/HALF-OPEN on anchored rate-limit detection; 600s cooldown, 2 successes to close; falls down the loop model chain, omit-pin at chain end; OPEN sleeps instead of hammering; rate-limited passes CB1-exempt |
+| Model breaker | CLOSED/OPEN/HALF-OPEN on anchored rate-limit detection; 600s cooldown, 2 successes to close; falls down the loop model chain, omit-pin at chain end; OPEN sleeps instead of hammering; rate-limited passes CB1-exempt; **bash driver only:** upward probe of chain[0] after a fallback — first delay 1800 s, doubling with 1800 s floor, 14400 s (4 h) cap; success stays on chain[0], failure restores the pre-probe model (shared across slots) |
 | Exit condition | driver-dispatched runs: the driver's own backlog re-scan, gated on zero quarantined branches (exit 0); manual runs: explicit `<promise>COMPLETE</promise>` sentinel — never inferred from prose |
 | Merge gate | evaluator PASS + green ladder rungs 1–2 before any commit; rung 3 per story after that story's Phase 5 audit, before that story's commit |
 | Docs | align-docs (Phase 6) runs per story — doc updates land in the story's commit |
@@ -792,13 +795,23 @@ flowchart TD
 | Memory gates | `_memory/loop/LEARNINGS.md` ≥ 15 KB → compact; `_memory/loop/ESCALATIONS.md` ≥ 20 KB → archive resolved entries |
 | Shipping | the loop never pushes; at run end, `ship-pr` (Phase 7) drafts and creates the PR/MR on the project's forge, or hand over, with the user approving the draft |
 | Sandbox | run in a worktree/container with minimal credentials; never skip permission prompts outside a sandbox |
+| Iteration timeout / budgets | opt-in (`LOOP_ITER_TIMEOUT`, `LOOP_RUN_BUDGET_TOKENS`, `LOOP_STORY_BUDGET_TOKENS`, `LOOP_RUN_BUDGET_USD`, `LOOP_STORY_BUDGET_USD`, `LOOP_ITER_BUDGET_USD`); **bash driver only** (`loop.sh`); run-budget stop exits 1 when eligible work remains; missing usage/cost data fails open |
+| Tamper check | `LOOP_TAMPER_CHECK` = `warn` (default) \| `fail` (worktree only — requires `LOOP_WORKTREE=1`) \| `off`; optional `LOOP_TEST_PATTERNS`; **bash driver only**; `fail` quarantines with reason `tamper` |
+
+**bash-only knobs** (`loop.sh` only; `loop.ps1` frozen at 1.1.2): `LOOP_LEDGER` (default on → `$PWD/_memory/loop/ledger.jsonl`, set `off` to disable); `LOOP_DOSSIER` (default on → `$PWD/_memory/loop/attempts/<story-id>.md`, `off` disables); `LOOP_USAGE_FORMAT=claude-stream` (opt-in stream-json with typed `api_retry` rate-limit detection; text fallback limited to stderr plus the final result envelope); `--lint [backlog-path]` (readiness check, exit 0/1/5, no side effects); plus the timeout, budget, and tamper knobs above.
 
 **Exit funnel** (driver-aggregated across slots; precedence **4>3>2>1>0** — exit 4 and
 exit 5 short-circuit): **exit 1** = max-iterations reached with eligible stories
-remaining, or drained backlog with quarantined branches retained; **exit 5** = setup or
+remaining, or (**bash driver only**) a run budget (`LOOP_RUN_BUDGET_TOKENS` /
+`LOOP_RUN_BUDGET_USD`) stopped claiming new stories while eligible work remains, or
+drained backlog with quarantined branches retained; **exit 5** = setup or
 integration failure (tracked-instance preflight, missing/unreadable backlog, PROMPT.md
-substitution point, non-fast-forward integration). Quarantine markers
-`.loop-worktrees/QUARANTINE-<branch>.md` (reasons: `mismatch|abnormal|subset|killed`)
+substitution point, non-fast-forward integration; **bash driver only**: invalid
+`LOOP_ITER_TIMEOUT`, budget (`LOOP_*_BUDGET_*`) or `LOOP_TAMPER_CHECK` value, missing
+`timeout`/`gtimeout` when `LOOP_ITER_TIMEOUT` is set, a `timeout` without `-s`/`-k` support,
+`LOOP_TAMPER_CHECK=fail` without `LOOP_WORKTREE=1`, **`--lint`** on a missing, unreadable,
+or directory backlog). Quarantine markers
+`.loop-worktrees/QUARANTINE-<branch>.md` (reasons: `mismatch|abnormal|subset|tamper|killed`)
 block exit 0 until inspected.
 
 Known failure mode: loops can burn large budgets without converging — prefer more,
@@ -907,12 +920,14 @@ _memory/work/goals/<goal>/orchestration-log.md  # Append-only spawn ledger per g
 _memory/work/goals/<goal>/spawns/NN-context.md  # Context package sent to spawn #NN (verbatim)
 _memory/work/goals/<goal>/spawns/NN-report.md   # Report returned by spawn #NN (verbatim)
 _memory/loop/breaker-state.json       # Model circuit breaker state (runtime, gitignored)
+_memory/loop/ledger.jsonl             # Run ledger — one JSON line per reaped/killed slot (runtime, gitignored; bash driver)
+_memory/loop/attempts/                # Attempt dossiers per story (runtime, gitignored; bash driver)
 _kit/{log-spawn.sh,log-spawn.cmd}  # Single-copy tools: orchestration-log writer + Windows launcher
 _kit/{memory.sh,memory.ps1}  # Single-copy tools: memory store (add / index / search / show / redact / check / rm / capture / backfill)
 _memory/records/ · _memory/quarantine/  # Tracked memory records (immutable, one per file) — see _memory/README.md
 _memory/research/               # Tracked research briefs (<topic>.md) + README.md status index (orchestrator-owned)
 _memory/work/                   # Gitignored in-flight goal and research scratch (research: work/research/<topic>/) — see _memory/README.md
-_memory/loop/                   # Tracked loop ledgers and archive (breaker-state.json gitignored)
+_memory/loop/                   # Tracked loop ledgers and archive (breaker-state.json, ledger.jsonl, attempts/ gitignored)
 _memory/.index/ · _memory/raw/  # Derived index; capture output, ledgers and drafts (gitignored)
 _loop/{loop.sh,loop.ps1,breaker.sh,breaker.ps1,PROMPT.md}  # Headless loop driver (if enabled)
 ```

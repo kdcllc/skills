@@ -120,7 +120,7 @@ flowchart TD
     subgraph memIgnored ["_memory/ gitignored"]
         Work["work/goals/ · work/research/"]
         Derive[".index/ · raw/"]
-        Brk["loop/breaker-state.json"]
+        Brk["loop/breaker-state.json · loop/ledger.jsonl · loop/attempts/"]
     end
 
     harnessTrees --> Kit
@@ -128,7 +128,7 @@ flowchart TD
     Kit --> Rec
 ```
 
-**Tracked:** `_memory/README.md`, `records/`, `quarantine/`, `research/` (curated briefs such as [`../../../_memory/research/agent-memory-store.md`](../../../_memory/research/agent-memory-store.md)), and `loop/` except `breaker-state.json`. **Gitignored:** all of `work/`, `.index/`, `raw/`, and `loop/breaker-state.json`. Goal and research scratch paths are **plain text** in docs — never hyperlinks — so CI link checks pass on a fresh clone.
+**Tracked:** `_memory/README.md`, `records/`, `quarantine/`, `research/` (curated briefs such as [`../../../_memory/research/agent-memory-store.md`](../../../_memory/research/agent-memory-store.md)), and `loop/` except `breaker-state.json`, `ledger.jsonl`, and `attempts/`. **Gitignored:** all of `work/`, `.index/`, `raw/`, `loop/breaker-state.json`, `loop/ledger.jsonl`, and `loop/attempts/`. Goal and research scratch paths are **plain text** in docs — never hyperlinks — so CI link checks pass on a fresh clone.
 
 Layout norm: [`templates/memory/README.md`](../../../skills/agent-kit/templates/memory/README.md) § Layout.
 
@@ -205,7 +205,7 @@ Spawn ledger format: [`templates/tools/log-spawn.sh`](../../../skills/agent-kit/
 
 ## Task verdict states
 
-Phase 4 tasks move through dispatch and evaluation until a terminal verdict. **NEEDS FIXES** triggers up to **three** implement→evaluate **fix cycles** with **model rotation**: cycle **1** re-runs on the normal **light** tier, cycle **2** pins a **different model family** at comparable tier (or a different same-family model labelled `same-family rotation (reduced diversity)` when none is reachable), cycle **3** pins **frontier** ([`models.map.md`](../../../skills/agent-kit/templates/models.map.md) · [`fix-cycles.md`](../../../skills/agent-kit/templates/skills/feature/reference/fix-cycles.md)). A **line-patch-only** verdict (every required fix tagged `[line-patch]`) resumes the same executor (`implementer` / `test-writer`) in apply-verbatim mode on any cycle **without** rotation, still counts toward the cap, and is always re-evaluated; any `[structural]` fix uses the normal cycle with line patches applied verbatim. In **degraded mode**, fix-cycle rotation is **skipped** (logged once per skipped rotation) in both Case 1 (model argument rejected) and Case 2 (no spawn tool). **Bypass** failure classes (`destructive`, `security`, `infra`) escalate immediately on any cycle. **`criteria-defect`** is not a bypass class but stops fix cycles at detection on any cycle — with `ladder: auto`, rung 5 arbitration now; with `ladder: escalate`, escalate with arbitration offered as option 1 (winning over line-patch-only resume). After cycle-3 exhaustion, `goal.md`'s `phases.ladder` chooses **`escalate`** (offer continuation ladder to the human) or **`auto`** (run ladder rungs **5 → 4 → 6**, then human escalation if still stuck).
+Phase 4 tasks move through dispatch and evaluation until a terminal verdict. **NEEDS FIXES** triggers up to **three** implement→evaluate **fix cycles** with **model rotation**: cycle **1** re-runs on the normal **light** tier, cycle **2** pins a **different model family** at comparable tier (or a different same-family model labelled `same-family rotation (reduced diversity)` when none is reachable), cycle **3** pins **frontier** ([`models.map.md`](../../../skills/agent-kit/templates/models.map.md) · [`fix-cycles.md`](../../../skills/agent-kit/templates/skills/feature/reference/fix-cycles.md)). **Re-evaluations** tag each required fix with `[carried]`, `[regression]`, or `[new]` after its kind tag; a **reversal** classifies **`criteria-defect`**; **rung 5** arbitration also runs when the **drift trigger** fires (the cycle 2–3 verdicts in the orchestration log together carry ≥ 2 `[new]` items). A **line-patch-only** verdict (every required fix tagged `[line-patch]`) resumes the same executor (`implementer` / `test-writer`) in apply-verbatim mode on any cycle **without** rotation, still counts toward the cap, and is always re-evaluated; any `[structural]` fix uses the normal cycle with line patches applied verbatim. In **degraded mode**, fix-cycle rotation is **skipped** (logged once per skipped rotation) in both Case 1 (model argument rejected) and Case 2 (no spawn tool). **Bypass** failure classes (`destructive`, `security`, `infra`) escalate immediately on any cycle. **`criteria-defect`** is not a bypass class but stops fix cycles at detection on any cycle — with `ladder: auto`, rung 5 arbitration now; with `ladder: escalate`, escalate with arbitration offered as option 1 (winning over line-patch-only resume). After cycle-3 exhaustion, `goal.md`'s `phases.ladder` chooses **`escalate`** (offer continuation ladder to the human) or **`auto`** (run ladder rungs **5 → 4 → 6**, then human escalation if still stuck).
 
 ```mermaid
 stateDiagram-v2
@@ -247,7 +247,7 @@ Verdict vocabulary and invariants: [`templates/ORCHESTRATION.md`](../../../skill
 
 ## Loop story states
 
-Backlog stories in `_memory/loop/backlog.md` carry `passes:`, `attempts:`, and `blocked:`. Eligible stories have **`passes: false`** and **`attempts < 3`**. The **`attempts`** counter increments when the story is **claimed** (driver, before dispatch) or at **iteration start** in manual mode — so a crashed iteration still counts. On evaluator-gated success the driver sets **`passes: true`** from the `ITERATION:` line (manual mode sets it in the story commit). At **`attempts` 3**, the story becomes **`blocked: true`** (driver from `ITERATION:` in dispatched mode; manual mode sets it on failure). **Quarantined** branches (ITERATION mismatch, subset violation, abnormal exit) stay out of integration. **Circuit breakers** **retire** a slot (CB1 no-progress, CB2 repeated signatures) while other slots may continue.
+Backlog stories in `_memory/loop/backlog.md` carry `passes:`, `attempts:`, and `blocked:`. Eligible stories have **`passes: false`** and **`attempts < 3`**. The **`attempts`** counter increments when the story is **claimed** (driver, before dispatch) or at **iteration start** in manual mode — so a crashed iteration still counts. On evaluator-gated success the driver sets **`passes: true`** from the `ITERATION:` line (manual mode sets it in the story commit). At **`attempts` 3**, the story becomes **`blocked: true`** (driver from `ITERATION:` in dispatched mode; manual mode sets it on failure). The bash driver also sets **`blocked: true`** when a story budget (`LOOP_STORY_BUDGET_TOKENS` / `LOOP_STORY_BUDGET_USD`) is reached on a non-passing reap. **Quarantined** branches (ITERATION mismatch, subset violation, abnormal exit, tamper fail with `LOOP_TAMPER_CHECK=fail`, or killed when another slot hit a protected path) stay out of integration. **Circuit breakers** **retire** a slot (CB1 no-progress, CB2 repeated signatures) while other slots may continue.
 
 ```mermaid
 stateDiagram-v2
@@ -411,13 +411,13 @@ Stop on first failing rung; after a fix, restart at rung 1 for that fix.
 - [`skills/agent-kit/templates/models.map.md`](../../../skills/agent-kit/templates/models.map.md) — fix-cycle rotation pins
 - [`skills/agent-kit/templates/ORCHESTRATION.md`](../../../skills/agent-kit/templates/ORCHESTRATION.md) — runtime architecture, spawn ledger, repository safety, feature/loop/memory guards
 - [`skills/agent-kit/templates/agents/evidence-collector.md`](../../../skills/agent-kit/templates/agents/evidence-collector.md) — QA evidence write fence and behavioral rules
-- [`skills/agent-kit/templates/agents/evaluator.md`](../../../skills/agent-kit/templates/agents/evaluator.md) — required-fix `[line-patch]` / `[structural]` tags
+- [`skills/agent-kit/templates/agents/evaluator.md`](../../../skills/agent-kit/templates/agents/evaluator.md) — required-fix `[line-patch]` / `[structural]` tags and `[carried]` / `[regression]` / `[new]` provenance tags on re-evaluations
 - [`skills/agent-kit/templates/skills/feature/reference/ready-groups.md`](../../../skills/agent-kit/templates/skills/feature/reference/ready-groups.md) — Phase 4 concurrent ready groups
 - [`skills/agent-kit/templates/skills/feature/reference/degraded-mode.md`](../../../skills/agent-kit/templates/skills/feature/reference/degraded-mode.md) — degraded spawn paths and rotation skip
 - [`skills/agent-kit/templates/memory/README.md`](../../../skills/agent-kit/templates/memory/README.md) — `_memory/` layout, CLI exit codes, capture
 - [`skills/agent-kit/templates/skills/feature/reference/memory-protocol.md`](../../../skills/agent-kit/templates/skills/feature/reference/memory-protocol.md) — recall, fence, archive, brief status updates
 - [`skills/agent-kit/templates/skills/feature/reference/continuation-ladder.md`](../../../skills/agent-kit/templates/skills/feature/reference/continuation-ladder.md) — rungs 5, 4, 6 after fix-cycle exhaustion
-- [`skills/agent-kit/templates/skills/feature/reference/fix-cycles.md`](../../../skills/agent-kit/templates/skills/feature/reference/fix-cycles.md) — Phase 4 fix cycles: line-patch resume, bypass and criteria-defect routing, cycle-3 ladder, model rotation
+- [`skills/agent-kit/templates/skills/feature/reference/fix-cycles.md`](../../../skills/agent-kit/templates/skills/feature/reference/fix-cycles.md) — Phase 4 fix cycles: line-patch resume, bypass and criteria-defect routing, cycle-3 ladder, model rotation, provenance
 - [`skills/agent-kit/templates/tools/log-spawn.sh`](../../../skills/agent-kit/templates/tools/log-spawn.sh) — spawn/outcome/note ledger
 - [`skills/agent-kit/templates/skills/research/SKILL.template.md`](../../../skills/agent-kit/templates/skills/research/SKILL.template.md) — research scratch vs brief promotion
 - [`skills/agent-kit/templates/skills/memory-capture/SKILL.template.md`](../../../skills/agent-kit/templates/skills/memory-capture/SKILL.template.md) — capture/distillation pipeline

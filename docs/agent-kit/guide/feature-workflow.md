@@ -68,7 +68,7 @@ flowchart TD
     P7Skip --> Done
 ```
 
-When Phase 4 fix cycles exhaust without **PASS**, the continuation ladder runs before terminal escalation when `phases.ladder` is `auto` (rung 5 only when all three verdicts flagged the same failing item); bypass-class verdicts escalate immediately from any cycle. A verdict tagged `criteria-defect` is not a bypass class — it stops fix cycles at detection on any cycle: with `ladder: auto` run rung 5 arbitration now; with `ladder: escalate` escalate with arbitration offered as option 1 (routing wins over line-patch-only resume). When `phases.ladder` is `escalate`, cycle 3 goes to the user with the ladder offered as an option.
+When Phase 4 fix cycles exhaust without **PASS**, the continuation ladder runs before terminal escalation when `phases.ladder` is `auto` (rung 5 when all three verdicts flagged the same failing item, or when the drift trigger fires — ≥ 2 `[new]` items across the cycle 2–3 verdicts); bypass-class verdicts escalate immediately from any cycle. A verdict tagged `criteria-defect` is not a bypass class — it stops fix cycles at detection on any cycle: with `ladder: auto` run rung 5 arbitration now; with `ladder: escalate` escalate with arbitration offered as option 1 (routing wins over line-patch-only resume). When `phases.ladder` is `escalate`, cycle 3 goes to the user with the ladder offered as an option.
 
 ```mermaid
 stateDiagram-v2
@@ -93,7 +93,7 @@ stateDiagram-v2
     Eval1 --> Human: criteria-defect · ladder escalate
     Eval2 --> Human: criteria-defect · ladder escalate
     Eval3 --> Human: criteria-defect · ladder escalate
-    LadderEntry --> Rung5: unanimous same failing item
+    LadderEntry --> Rung5: unanimous same failing item or drift trigger
     LadderEntry --> Rung4: else skip to diagnosis
     Rung5 --> Rung4: criteria-sound after cycle 3
     Rung5 --> Human: criteria-defective, disagreement, or early criteria-sound
@@ -223,10 +223,10 @@ For each ready group, in dependency order (each member follows the loop below):
 | Verdict | Action |
 |---------|--------|
 | **PASS** / **PASS (with notes)** | Mark complete, next task (notes copied into the orchestration log) |
-| **NEEDS FIXES** | Fix cycle with evaluator's required-fixes list (each fix tagged `[line-patch]` or `[structural]`), re-evaluate (max 3 cycles, then ladder or escalation per `phases.ladder`) — the feature skill reads [`reference/fix-cycles.md`](../../../skills/agent-kit/templates/skills/feature/reference/fix-cycles.md) before any fix cycle |
+| **NEEDS FIXES** | Fix cycle with evaluator's required-fixes list (each fix tagged `[line-patch]` or `[structural]`; re-evaluations tag each fix with a provenance tag — `[carried]` / `[regression]` / `[new]` — after its kind tag), re-evaluate (max 3 cycles, then ladder or escalation per `phases.ladder`) — the feature skill reads [`reference/fix-cycles.md`](../../../skills/agent-kit/templates/skills/feature/reference/fix-cycles.md) before any fix cycle |
 | **REJECT** | Escalate |
 
-**Resume policy:** Phase 4/5 re-evaluations resume the same evaluator with a delta listing only the applied fixes; Phase 3 deltas quote newly written or changed passages verbatim (attempt 3 fresh on `{{MODEL_FRONTIER_ALT_FAMILY}}` — see [`reference/goal-revisions.md`](../../../skills/agent-kit/templates/skills/feature/reference/goal-revisions.md)). The implementer may be resumed for fix cycle 1 only; cycles 2–3 are fresh spawns (model rotation applies) **except** a **line-patch-only** verdict (every required fix tagged `[line-patch]`): resume the same executor (`implementer` or `test-writer`) in **apply-verbatim** mode on any cycle — no model rotation, still counts toward the 3-cycle cap, always re-evaluated; fresh spawn on the same model when the harness cannot resume (`criteria-defect` routing wins over line-patch-only resume). Any `[structural]` fix uses the normal fix cycle with line patches applied verbatim. A report listing `NOT APPLIED` is still re-evaluated; the next cycle follows the normal path.
+**Resume policy:** Phase 4/5 re-evaluations resume the same evaluator with a delta listing the applied fixes and carrying every earlier required-fixes list (provenance: [`reference/fix-cycles.md`](../../../skills/agent-kit/templates/skills/feature/reference/fix-cycles.md) § Provenance); Phase 3 deltas quote newly written or changed passages verbatim (attempt 3 fresh on `{{MODEL_FRONTIER_ALT_FAMILY}}` — see [`reference/goal-revisions.md`](../../../skills/agent-kit/templates/skills/feature/reference/goal-revisions.md)). The implementer may be resumed for fix cycle 1 only; cycles 2–3 are fresh spawns (model rotation applies) **except** a **line-patch-only** verdict (every required fix tagged `[line-patch]`): resume the same executor (`implementer` or `test-writer`) in **apply-verbatim** mode on any cycle — no model rotation, still counts toward the 3-cycle cap, always re-evaluated; fresh spawn on the same model when the harness cannot resume (`criteria-defect` routing wins over line-patch-only resume). Any `[structural]` fix uses the normal fix cycle with line patches applied verbatim. A report listing `NOT APPLIED` is still re-evaluated; the next cycle follows the normal path.
 
 When an executor **reports and stops** on a defect in files a **completed** task owns, the orchestrator adds a **corrective task** (`NN<letter>-<name>.md`) per [`reference/corrective-tasks.md`](../../../skills/agent-kit/templates/skills/feature/reference/corrective-tasks.md) — minimal `writes`, `depends_on` the fixed task, unstarted readers/writers ordered after it, disjointness re-checked, additive amendment — and the reporter never edits those files itself.
 
@@ -236,9 +236,9 @@ Any verdict tagged `destructive`, `security`, or `infra` stops all cycles immedi
 
 ### Continuation ladder (on cycle-3 exhaustion, when `phases.ladder: auto`)
 
-When three implement→evaluate cycles end without **PASS**, read `goal.md`'s `phases.ladder`. **`escalate`** (default, or key absent): escalate to the user with "Run the continuation ladder" as option 1. **`auto`**: run this ladder before terminal escalation. Every ladder fix attempt is re-evaluated; there is no exception.
+When three implement→evaluate cycles end without **PASS**, read `goal.md`'s `phases.ladder`. **`escalate`** (default, or key absent): escalate to the user with "Run the continuation ladder" as option 1; the escalation's **Ladder** line reports the drift count (the number of `[new]` items across the cycle 2–3 verdicts), and when the count is ≥ 2 the **Ladder** line adds that rung 5 runs first because the drift trigger fired. **`auto`**: run this ladder before terminal escalation. Every ladder fix attempt is re-evaluated; there is no exception.
 
-1. **Rung 5 — arbitration (unanimity check).** Also runs **early at detection** when a verdict is tagged `criteria-defect` (unanimity not required; pass the verdict(s) so far). After cycle-3 exhaustion, if all three evaluator verdicts flagged the same required-fix item, spawn `evaluator` in **arbitration mode** on `{{MODEL_FRONTIER_ALT_FAMILY}}` (may be same-family when flagged with `arbiter_same_family: true`; the verdict header then says `same-family arbiter`) with the task file (including its Acceptance Criteria), the verdict(s) so far, and when present all three fix-cycle verdicts and implementer reports. Outcomes: `criteria-defective` → escalate carrying the named defective criterion **verbatim**; arbiter/primary disagreement → escalate (never auto-resolve); `criteria-sound` → rung 4 only after cycle-3 exhaustion (on early arbitration, disagreement escalates).
+1. **Rung 5 — arbitration (unanimity check).** Also runs **early at detection** when a verdict is tagged `criteria-defect` (unanimity not required; pass the verdict(s) so far). Arbitration also runs when the **drift trigger** fires: the cycle 2–3 verdicts recorded in the orchestration log together carry ≥ 2 `[new]` items (unanimity and drift are alternatives; outcomes unchanged). After cycle-3 exhaustion, if all three evaluator verdicts flagged the same required-fix item, or the drift trigger fired, spawn `evaluator` in **arbitration mode** on `{{MODEL_FRONTIER_ALT_FAMILY}}` (may be same-family when flagged with `arbiter_same_family: true`; the verdict header then says `same-family arbiter`) with the task file (including its Acceptance Criteria), the verdict(s) so far, and when present all three fix-cycle verdicts and implementer reports. Outcomes: `criteria-defective` → escalate carrying the named defective criterion **verbatim**; arbiter/primary disagreement → escalate (never auto-resolve); `criteria-sound` → rung 4 only after cycle-3 exhaustion (on early arbitration, disagreement escalates).
 
 2. **Rung 4 — diagnosis-first.** Spawn `diagnostician` with the task file (including its Acceptance Criteria), all three implementer reports and evaluator verdicts, and the targeted verification command. If its **Signature Declaration** matches a previously tried fix signature → skip to rung 6 if it recommended a split, else escalate. Otherwise **ONE** diagnosis-driven implementation attempt: fresh `implementer` on `{{MODEL_FRONTIER}}` executing the diagnostician's **Rewritten Required-Fixes** list, then mandatory re-evaluation.
 
@@ -249,9 +249,9 @@ When three implement→evaluate cycles end without **PASS**, read `goal.md`'s `p
 **Hard guards:**
 
 - At most **3 additional implementation attempts** after cycle 3, summed across rungs 4 and 6 (the diagnosis-driven attempt costs 1; each rung-6 subtask cycle costs 1; evaluator spawns never consume the budget; if failing-subtask count exceeds the remaining budget, escalate instead of splitting).
-- A **repeated failure signature** (required-fixes list identical item-for-item after normalizing whitespace and numbering) stops the ladder immediately.
+- A **repeated failure signature** (required-fixes list identical item-for-item after normalizing whitespace and numbering and stripping trailing kind tags (`[line-patch]` / `[structural]`), trailing provenance tags (`[carried]` / `[regression]` / `[new]`), and the justification clause from its start (` — missed earlier:` or ` — reverses cycle `) through the end of each item when present) stops the ladder immediately.
 - Every rung transition, spawn, and guard trip is an orchestration-log entry recording the rung name.
-- Token/cost budgets are **not** a guard in this kit.
+- Token/cost budgets are **not** a ladder guard (interactive mode); the bash loop driver's opt-in `LOOP_*_BUDGET_*` knobs are a separate loop-level guard — see [autonomous-loop.md](autonomous-loop.md).
 
 **Deferred future rungs:** high-effort pin and best-of-N are named as future rungs but **not** implemented.
 
@@ -280,7 +280,7 @@ Launch `evaluator` in **audit mode** over the whole goal, with matching rule fil
 | Verdict | Action |
 |---------|--------|
 | **APPROVED** | Run **Quality Checks** (test-ladder rung 3) |
-| **ISSUES** | Fix via executor + re-evaluate (rungs 1–2), then re-audit (max 3 cycles) |
+| **ISSUES** | Fix via executor + re-evaluate (rungs 1–2), then re-audit (max 3 cycles); re-audits tag required fixes with provenance tags and log one `late finding:` note per `[new]` item (no extra cycle), and a re-audit reversal escalates to the user at detection |
 
 **Quality Checks** run via a spawned `terminal` subagent with the project's full-suite command — the orchestrator **never** runs the full suite inline. If `terminal` returns non-zero, the orchestrator reads the failure excerpt or log tail and routes a narrow fix — it does not dump the full suite into the session.
 
@@ -332,7 +332,7 @@ These are user-visible behaviors enforced throughout all phases:
 | **Never edit product code** | The orchestrating session coordinates only — context packages, spawns, verdicts, decisions. Spawning `terminal` for Quality Checks is coordination, not implementation. **Exception (degraded mode Case 2 only):** when the harness has no spawn tool, the orchestrator may implement and test inside each task's write fence, logged as degraded worker steps — see [`reference/degraded-mode.md`](../../../skills/agent-kit/templates/skills/feature/reference/degraded-mode.md). |
 | **Every fix is re-evaluated** | Fixes and revisions are **always** re-verified by an evaluator. No exception — under degraded mode Case 2 the orchestrator performs the evaluator role itself and tells the user the gate was self-evaluated before advancing. |
 | **No phase advances without verdict** | Phase 4 tasks need evaluator **PASS**; Phase 5 needs **APPROVED**; Phase 3 needs **PASS** on the goal. |
-| **Max 3 cycles, then escalate** | Phase 4 task execution continues through the continuation ladder (rungs 5→4→6) before escalation when `phases.ladder` is `auto`; Phase 3 and Phase 5 escalate after 3 cycles. |
+| **Max 3 cycles, then escalate** | Phase 4 task execution continues through the continuation ladder (rungs 5→4→6) before escalation when `phases.ladder` is `auto`; Phase 3 and Phase 5 escalate after 3 cycles (a Phase 5 re-audit reversal escalates at detection). |
 | **Repository safety** | Before goals whose tasks move, rename, or delete user files the orchestrator takes a restorable backup and records where it is in the orchestration log. Before dispatch, record sha256/mtime baselines for untracked, ignored, out-of-tree, or no-commit-repo paths (fenced and unfenced paths the spawn must not touch). After every subagent returns, compare `HEAD` (or `no HEAD`), the current branch, and `git config --local` user entries with pre-spawn values, and compare the changed-file set (`git status --porcelain --untracked-files=all`) with the task's write fence, and re-check the hash baseline; anything unexpected stops the goal — log it, restore from git or the backup, and fix the cause before continuing. Canonical detail: [`skills/agent-kit/templates/ORCHESTRATION.md`](../../../skills/agent-kit/templates/ORCHESTRATION.md) (Repository safety). |
 
 ### Escalation format
@@ -399,7 +399,7 @@ These are what **you** do in a typical `/feature` run — separate from any spec
 | **Decision gates** | Phase 2 (and elsewhere) | Choose between viable approaches when the orchestrator presents tradeoffs |
 | **Phase 6/7/QA opt-in** | Phase 1 (recorded in Phase 2) | Confirm docs alignment, PR intent, and behavioral QA (`qa: run\|skip`, default skip); Phase 6 defaults to no — set `align_docs: true` or `pull_request: false` in `goal.md`'s `phases:` block to enable or skip optional phases |
 | **PR approval** | Phase 7 (when enabled and not skipped) | Review the drafted PR title and body; approve or request edits before push/create |
-| **Escalations** | Phase 4 after cycle 3 when `phases.ladder: escalate` (or after the continuation ladder when `auto`); **`criteria-defect`** may escalate on any cycle when `ladder: escalate` (arbitration offered as option 1); other phases after 3 failed cycles | Respond with a decision from the options the orchestrator presents |
+| **Escalations** | Phase 4 after cycle 3 when `phases.ladder: escalate` (or after the continuation ladder when `auto`); **`criteria-defect`** may escalate on any cycle when `ladder: escalate` (arbitration offered as option 1); other phases after 3 failed cycles (a Phase 5 re-audit reversal escalates at detection) | Respond with a decision from the options the orchestrator presents |
 
 You are not expected to spawn subagents or run Quality Checks — those are orchestrator responsibilities.
 
