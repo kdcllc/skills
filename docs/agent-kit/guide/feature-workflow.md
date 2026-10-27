@@ -154,6 +154,8 @@ Each task's `## Acceptance Criteria` (criterion + verification method each) is c
 
 The orchestrator presents a **"My Understanding"** summary and **waits for explicit user confirmation** before Phase 2. Phase 6/7 answers, `ladder:` (default `escalate` for interactive goals), `qa:`, and `parallel:` (default concurrent ready groups in Phase 4) are recorded in `goal.md`'s `phases:` block during Phase 2. There is no silent advance.
 
+**Memory prune (start of Phase 2):** Once per goal, immediately before recall and before the new goal folder exists, the orchestrator runs `_kit/memory.sh prune --apply` inline to delete finished `_memory/work/` goal and research scratch folders whose archive record ids are durable (committed and, when the repo has a remote default branch, merged there); non-zero exit, a missing tool, or `failed` lines never block. Once `_memory/work/goals/<goal>/` exists, log a `Prune:` summary (and any `failed` lines) with `_kit/log-spawn.sh note`.
+
 **Memory recall (before Phase 2):** Once per goal, the orchestrator searches `_memory/` and records up to five picks (or `none`) in `goal.md`'s `## Recalled memory` section; empty search or tool failure never blocks. After Phase 5 **APPROVED** and green Quality Checks, the orchestrator archives a `goal-summary` plus optional decision/pitfall records (uncommitted for review), runs `_kit/memory.sh check <path>` on each added or quarantined path — exit **3** ⇒ report to the user and do not commit until fixed; once every path passes, it logs an `ARCHIVED: <ids>` note in the orchestration log (the closed signal `memory.sh backfill` reads). Details: [memory.md](memory.md).
 
 ---
@@ -449,7 +451,7 @@ Shipped on `migrate/agent-kit` (local commit, no PR, no push) per archived goal-
 - [`skills/agent-kit/templates/skills/feature/reference/ready-groups.md`](../../../skills/agent-kit/templates/skills/feature/reference/ready-groups.md) — Phase 4 concurrent ready groups
 - [`skills/agent-kit/templates/skills/feature/reference/degraded-mode.md`](../../../skills/agent-kit/templates/skills/feature/reference/degraded-mode.md) — spawn limitations, self-evaluated gates, rotation skips
 - [`skills/agent-kit/templates/agents/evidence-collector.md`](../../../skills/agent-kit/templates/agents/evidence-collector.md) — QA evidence gatherer (no verdicts)
-- [`skills/agent-kit/templates/skills/feature/reference/memory-protocol.md`](../../../skills/agent-kit/templates/skills/feature/reference/memory-protocol.md) — prior-knowledge fence, recall/archive, loop memory proposals
+- [`skills/agent-kit/templates/skills/feature/reference/memory-protocol.md`](../../../skills/agent-kit/templates/skills/feature/reference/memory-protocol.md) — prior-knowledge fence, prune, recall/archive, loop memory proposals
 - [`skills/agent-kit/templates/skills/feature/templates/goal.md`](../../../skills/agent-kit/templates/skills/feature/templates/goal.md) — goal artifact shape (incl. `phases:` block)
 - [`skills/agent-kit/templates/skills/feature/templates/task.md`](../../../skills/agent-kit/templates/skills/feature/templates/task.md) — task + ownership contract + Acceptance Criteria shape
 - [`skills/agent-kit/templates/skills/align-docs/SKILL.template.md`](../../../skills/agent-kit/templates/skills/align-docs/SKILL.template.md) — Phase 6 workflow

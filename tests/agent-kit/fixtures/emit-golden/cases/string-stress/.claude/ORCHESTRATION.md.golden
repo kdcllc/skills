@@ -281,7 +281,9 @@ are created during this phase. Discovery covers: problem, affected layer/lane,
 external surfaces touched, auth/permissions, behavior/error handling, interface
 shape, existing patterns to follow, priority.
 
-**Phase 2 — Goal creation (with decision gates).** Create `_memory/work/goals/[name]/` and write
+**Phase 2 — Goal creation (with decision gates).** Before recall, the orchestrator runs
+`_kit/memory.sh prune --apply` once to delete finished `_memory/work/` folders whose records
+are committed and merged (memory protocol, Prune). Create `_memory/work/goals/[name]/` and write
 `goal.md`. For each task: if multiple viable approaches exist, present them to the
 user and WAIT for the decision; only then create the task file. Each task file carries
 `## Acceptance Criteria` (criterion + verification method each); the Phase 3 evaluator
@@ -854,6 +856,7 @@ flowchart TD
 | **Loop (dispatched)** | At `LOOP_WORKTREE=0`: feature recall once before Phase 2 in the slot; at `LOOP_WORKTREE=1`: empty recall (no `_kit/` in slot worktrees) | Proposals in `<outbox>/memory/*.md`; integrator **step 3b** at reap end |
 | **Capture** | Optional recall when distilling a session | `memory-capture` skill: `_kit/memory.sh capture` → scope confirm → distill → `add` → `check`; gitignored `_memory/raw/` |
 | **Back-fill** | Optional recall before a one-time legacy import | `_kit/memory.sh backfill --plan` (no writes), review output, then `--apply`; sources under `_memory/work/goals/`, `_memory/work/research/`, and `_memory/loop/ESCALATIONS.md` plus `_memory/loop/archive/`; closed signals — the kit writes the `ARCHIVED:` note and `_memory/work/research/<topic>/ingested`; a human adds the escalation `resolved:` line — see `_memory/README.md` (`backfill`, **Closed signals**); one-time transcript import via `memory-capture` (runbook: `.claude/skills/feature/reference/memory-capture.md`; Codex-only installs: run `capture` per `_memory/README.md` and distill from a Claude Code, Cursor or Copilot session) |
+| **Prune** | — | Feature Phase 2 start, before recall: `_kit/memory.sh prune --apply` deletes `_memory/work/goals/<goal>/` and `_memory/work/research/<topic>/` folders whose archived record ids are all committed in `HEAD` and on the remote default branch when one exists; uncommitted, unmerged or unarchived folders are kept with a reason; preview with `--plan` — see `_memory/README.md` (`prune`) |
 
 Before committing memory records, run `_kit/memory.sh check <paths>`, or
 `check --staged` for everything staged. Exit **3** means the gate failed (secret, hash/id mismatch,
@@ -923,7 +926,7 @@ _memory/loop/breaker-state.json       # Model circuit breaker state (runtime, gi
 _memory/loop/ledger.jsonl             # Run ledger — one JSON line per reaped/killed slot (runtime, gitignored)
 _memory/loop/attempts/                # Attempt dossiers per story (runtime, gitignored)
 _kit/{log-spawn.sh,log-spawn.cmd}  # Single-copy tools: orchestration-log writer + Windows launcher
-_kit/{memory.sh,memory.cmd}  # Single-copy tools: memory store (add / index / search / show / redact / check / rm / capture / backfill)
+_kit/{memory.sh,memory.cmd}  # Single-copy tools: memory store (add / index / search / show / redact / check / rm / capture / backfill / prune)
 _memory/records/ · _memory/quarantine/  # Tracked memory records (immutable, one per file) — see _memory/README.md
 _memory/research/               # Tracked research briefs (<topic>.md) + README.md status index (orchestrator-owned)
 _memory/work/                   # Gitignored in-flight goal and research scratch (research: work/research/<topic>/) — see _memory/README.md
@@ -987,6 +990,7 @@ _kit/memory.sh check --staged
 _kit/memory.sh capture --harness all --idle-hours 6
 _kit/memory.sh backfill --plan
 _kit/memory.sh backfill --apply --only my-research-topic --research
+_kit/memory.sh prune --plan
 ```
 
 ### Invoking Skills

@@ -45,6 +45,9 @@ Understanding" + **wait for explicit confirmation** before Phase 2. Record Phase
 
 ## Phase 2 — Goal creation
 
+**Prune** (once): before Recall and before the goal folder exists, run `_kit/memory.sh prune --apply` per `reference/memory-protocol.md` (Prune); it deletes finished `_memory/work/` folders whose records are committed and merged; any exit code or a missing tool never blocks.
+`note` the summary line once `_memory/work/goals/<goal>/` exists.
+
 **Recall** (once): per `reference/memory-protocol.md`, search and record picked ids or
 `none` in `goal.md` `## Recalled memory`; never block on empty store; `note`
 once `_memory/work/goals/<goal>/` exists.

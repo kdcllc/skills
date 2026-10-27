@@ -1,6 +1,6 @@
 # AI Orchestration Kit (`agent-kit`)
 
-> Kit version: **2.0.0** (`metadata.version` in [SKILL.md](SKILL.md)) · Version history: [CHANGELOG.md](CHANGELOG.md)
+> Kit version: **2.1.0** (`metadata.version` in [SKILL.md](SKILL.md)) · Version history: [CHANGELOG.md](CHANGELOG.md)
 
 A portable orchestrator/worker/evaluator multi-agent system for AI coding harnesses —
 **Claude Code, Cursor, GitHub Copilot (VS Code), and OpenAI Codex** — packaged as one
@@ -116,7 +116,7 @@ Maintainer material lives in the [kdcllc/skills](https://github.com/kdcllc/skill
 npx skills add kdcllc/skills --skill agent-kit
 
 # Pin to a release
-npx skills add kdcllc/skills#agent-kit/v2.0.0 --skill agent-kit
+npx skills add kdcllc/skills#agent-kit/v2.1.0 --skill agent-kit
 
 # Option B — agent-skills-cli
 npx agent-skills-cli install https://github.com/kdcllc/skills.git
@@ -184,7 +184,7 @@ exit codes.
 | `skills/auto-loop` + `_loop/` (including `_loop\loop.cmd` on Windows) + `_memory/loop/backlog.md` | Autonomous loop with structural guards (optional) |
 | `skills/agent-kit-models.map.md` | The model map — the only place model IDs live per install |
 | `_kit/log-spawn.sh` + `_kit/log-spawn.cmd` | Single-copy orchestration-log writer + Windows launcher (`spawn` / `outcome` / `note`) |
-| `_kit/memory.sh` + `_kit/memory.cmd` | Single-copy memory store + Windows launcher (`add` / `index` / `search` / `show` / `redact` / `check` / `rm` / `capture` / `backfill`) |
+| `_kit/memory.sh` + `_kit/memory.cmd` | Single-copy memory store + Windows launcher (`add` / `index` / `search` / `show` / `redact` / `check` / `rm` / `capture` / `backfill` / `prune`) |
 | `_memory/` | Tracked records (`records/`, `quarantine/`, `loop/`); gitignored scratch `work/` plus derived `.index/` and `raw/` |
 | `ORCHESTRATION.md` | The architecture doc, filled in for the project |
 | `orchestration-kit.manifest.json` | Kit version + file hashes + embedded `answers`, enabling clean upgrades |
