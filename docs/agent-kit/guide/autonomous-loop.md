@@ -188,10 +188,10 @@ sequenceDiagram
 
 ### Windows known limitations
 
-On Windows, `_loop\loop.cmd` invokes the same Bash driver under Git Bash. Two behaviors remain **unverified** until the Windows CI leg passes (`tests/agent-kit/templates/loop-windows.sh`); full detail is in [`windows-launcher.md`](../../../skills/agent-kit/reference/windows-launcher.md) § Loop on Windows: known limitations.
+On Windows, `_loop\loop.cmd` invokes the same Bash driver under Git Bash. The Windows CI leg confirms two behaviors (`tests/agent-kit/templates/loop-windows.sh` reports them as `INFO` lines); full detail is in [`windows-launcher.md`](../../../skills/agent-kit/reference/windows-launcher.md) § Loop on Windows: known limitations.
 
-1. **Orphaned native processes after kill or timeout** — stopping a slot may leave native Windows child processes running (`claude.exe`, `codex.exe`, and similar). After a killed or timed-out run, check Task Manager or your process list.
-2. **`LOOP_CLI` and `.cmd` shims** — Git Bash may not resolve a bare `LOOP_CLI` command to a `.cmd` shim such as `cursor-agent.cmd`. Workaround: name the shim with its suffix, for example `LOOP_CLI="cursor-agent.cmd -p …"`. Caveat: a `.cmd` shim runs through `cmd.exe`, which cuts an argument at its first newline and re-reads `"`, `&`, and `%` — the loop passes the whole prompt as one argument, so prefer the CLI's native `.exe` (or its `node` entry point) when one exists.
+1. **Orphaned native processes after kill or timeout** — stopping a slot leaves native Windows child processes running (`claude.exe`, `codex.exe`, and similar). After a killed or timed-out run, check Task Manager or your process list.
+2. **`LOOP_CLI` and `.cmd` shims** — Git Bash does not resolve a bare `LOOP_CLI` command to a `.cmd` shim such as `cursor-agent.cmd`. Workaround: name the shim with its suffix, for example `LOOP_CLI="cursor-agent.cmd -p …"`. Caveat: a `.cmd` shim runs through `cmd.exe`, which cuts an argument at its first newline and re-reads `"`, `&`, and `%` — the loop passes the whole prompt as one argument, so prefer the CLI's native `.exe` (or its `node` entry point) when one exists.
 
 ### `LOOP_ITER_TIMEOUT` and budgets
 

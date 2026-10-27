@@ -87,14 +87,14 @@ agent-kit: Git Bash not found - install Git for Windows from https://git-scm.com
 
 ## Loop on Windows: known limitations
 
-These behaviors are **unverified** until the Windows CI leg passes (maintainer check:
-`tests/agent-kit/templates/loop-windows.sh`).
+The Windows CI leg (`windows-latest`, Git Bash) confirms both behaviors; the maintainer check
+`tests/agent-kit/templates/loop-windows.sh` reports them as `INFO` lines.
 
 1. **Orphaned native processes after kill or timeout** — stopping a slot (iteration timeout,
-   manual kill, or breaker-driven termination) under Git Bash may leave native Windows child
+   manual kill, or breaker-driven termination) under Git Bash leaves native Windows child
    processes running (`claude.exe`, `codex.exe`, and similar). After a killed or timed-out run,
    check Task Manager or your process list and end stray harness CLI processes.
-2. **`LOOP_CLI` and `.cmd` shims** — Git Bash may not resolve a bare `LOOP_CLI` command to a
+2. **`LOOP_CLI` and `.cmd` shims** — Git Bash does not resolve a bare `LOOP_CLI` command to a
    `.cmd` shim such as `cursor-agent.cmd`. Workaround: name the shim with its suffix, for example
    `LOOP_CLI="cursor-agent.cmd -p …"`. Caveat: a `.cmd` shim runs through `cmd.exe`, which cuts
    an argument at its first newline and re-reads `"`, `&`, and `%` — the loop passes the whole

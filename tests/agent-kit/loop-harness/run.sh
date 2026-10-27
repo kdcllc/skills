@@ -379,10 +379,11 @@ fi
 
 # ---------------------------------------------------------------------------
 # 82. --symlink: .agents/skills/<name> is a real directory; both harness dests
-#     (.claude and .cursor) are symlinks. If OS cannot create symlinks, SKIP.
+#     (.claude and .cursor) are symlinks. If the host cannot produce a real
+#     symlink (for example Git Bash without native symlinks), SKIP.
 # ---------------------------------------------------------------------------
-if ln -s /dev/null "$TMP/si-symlink-probe" 2>/dev/null; then
-  rm -f "$TMP/si-symlink-probe"
+if mkdir -p "$TMP/si-symlink-probe-tgt" && ln -s "$TMP/si-symlink-probe-tgt" "$TMP/si-symlink-probe" 2>/dev/null && [[ -L "$TMP/si-symlink-probe" ]]; then
+  rm -rf "$TMP/si-symlink-probe" "$TMP/si-symlink-probe-tgt"
   _sl_dir="$TMP/si-sl"
   cp -a "$SI_FIX" "$_sl_dir"
   _sl_exit=0
@@ -406,6 +407,7 @@ if ln -s /dev/null "$TMP/si-symlink-probe" 2>/dev/null; then
       "exit=$_sl_exit agents_real=$_sl_agents_real claude_link=$_sl_claude_link cursor_link=$_sl_cursor_link claude_tgt_ok=$_sl_claude_tgt_ok cursor_tgt_ok=$_sl_cursor_tgt_ok"
   fi
 else
+  rm -rf "$TMP/si-symlink-probe" "$TMP/si-symlink-probe-tgt"
   report SKIP "82: --symlink (OS cannot create symlinks)"
 fi
 
@@ -1902,10 +1904,9 @@ fi
 # after it, INCLUDING chain itself, never made it out. _breaker_valid_fields
 # fails OUTRIGHT (multiple required keys absent, not merely the terminator),
 # so breaker_load takes the IMMEDIATE fail-safe path with NO retry sleep at
-# all (elapsed checked < 100ms -- fix-cycle-1: loosened from <50ms, which had
-# only 1.7x margin under CPU saturation [worst observed 29ms]; 100ms still
-# sits far under the retry path's hard 150ms sleep floor [3x50ms], so
-# discrimination from 29's >=100ms is fully preserved). Because the chain key
+# all. The no-retry proof counts retry sleeps through a `sleep` shadow (as in
+# case 31), because a wall-clock bound fails on slow-fork hosts such as Git Bash
+# (603 ms observed on windows-latest). Because the chain key
 # itself never made it to disk, chain is seeded
 # from the <chain> ARGUMENT (not preserved), and currentModel is DERIVED as
 # chain[0] = modelA.
@@ -1917,21 +1918,21 @@ head -n 2 "$S30_valid" > "$S30"   # only `{` and the state line survive
 
 T30=21000000
 stderr_file30="$TMP/30-stderr.txt"
-start_ns=$(date +%s%N)
+retry_sleep_calls30=0
+sleep() { retry_sleep_calls30=$((retry_sleep_calls30 + 1)); command sleep "$@"; }
 breaker_load "$S30" "$CHAIN" "$T30" 2>"$stderr_file30"
-end_ns=$(date +%s%N)
-elapsed_ms30=$(( (end_ns - start_ns) / 1000000 ))
+unset -f sleep
 
 state="$(_breaker_get "$S30" state)"; chain="$(_breaker_get "$S30" chain)"
 model="$(_breaker_get "$S30" currentModel)"; opened="$(_breaker_get "$S30" openedAt)"
 warn_lines30=$(wc -l < "$stderr_file30")
 if [[ "$state" == "OPEN" && "$opened" == "$T30" && "$chain" == "$CHAIN" && "$model" == "modelA" \
-      && "$elapsed_ms30" -lt 100 && "$warn_lines30" -eq 1 \
+      && "$retry_sleep_calls30" -eq 0 && "$warn_lines30" -eq 1 \
       && "$(grep -c "failing SAFE to OPEN" "$stderr_file30")" -eq 1 ]]; then
-  report PASS "30: key-dropping truncation (chain + trailing keys missing) -> IMMEDIATE fail-safe OPEN, chain seeded from argument, currentModel derived (modelA), NO retry (elapsed=${elapsed_ms30}ms < 100ms)"
+  report PASS "30: key-dropping truncation (chain + trailing keys missing) -> IMMEDIATE fail-safe OPEN, chain seeded from argument, currentModel derived (modelA), NO retry (retry sleeps=${retry_sleep_calls30})"
 else
   report FAIL "30: key-dropping truncation (chain + trailing keys missing) -> IMMEDIATE fail-safe OPEN, chain seeded from argument, NO retry" \
-    "state=$state chain=$chain model=$model opened=$opened elapsed_ms=$elapsed_ms30 warn_lines=$warn_lines30"
+    "state=$state chain=$chain model=$model opened=$opened retry_sleeps=$retry_sleep_calls30 warn_lines=$warn_lines30"
 fi
 
 # ---------------------------------------------------------------------------

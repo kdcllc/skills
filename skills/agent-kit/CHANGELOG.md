@@ -16,7 +16,7 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 ### Added
 
 - **`_loop\loop.cmd` Windows launcher** — loop-enabled installs emit a Git-Bash-backed launcher beside `_loop/loop.sh` for cmd and PowerShell on Windows (Git for Windows required).
-- **Windows CI leg and Windows-only loop test** — a non-blocking `windows-latest` CI job runs the loop harness and a Windows-only loop test under Git Bash (through `_loop/loop.sh`) that checks both known limitations: `.cmd` shim resolution and native child processes after a slot timeout.
+- **Windows CI leg and Windows-only loop test** — a non-blocking `windows-latest` CI job runs the loop harness and a Windows-only loop test under Git Bash (through `_loop/loop.sh`) that reports both known limitations: `.cmd` shim resolution and native child processes after a slot timeout.
 
 ### Changed
 
@@ -30,7 +30,7 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 - Re-emit with `--upgrade` deletes unmodified `_loop/loop.ps1`, `_loop/breaker.ps1`, and `_kit/memory.ps1`; modified copies are kept and reported as warnings — delete them by hand when you are ready.
 - Replace `pwsh _loop/loop.ps1 …` with `_loop\loop.cmd …` from cmd or PowerShell (Git for Windows required) or `_loop/loop.sh …` in Git Bash.
 - Existing `*.ps1 text eol=lf` lines in `.gitattributes` are not removed by upgrade; new installs no longer add that line.
-- Two Windows loop behaviors remain **unverified** until the Windows CI leg passes — see [reference/windows-launcher.md](reference/windows-launcher.md) § Loop on Windows: known limitations (orphaned native processes after kill/timeout; `.cmd` shim resolution and cmd.exe argument truncation when `LOOP_CLI` points at a `.cmd` file).
+- Two Windows loop behaviors are known limitations, confirmed on the Windows CI leg — see [reference/windows-launcher.md](reference/windows-launcher.md) § Loop on Windows: known limitations (orphaned native processes after kill/timeout; `.cmd` shim resolution and cmd.exe argument truncation when `LOOP_CLI` points at a `.cmd` file).
 
 ## [1.1.3] - 2026-10-23
 

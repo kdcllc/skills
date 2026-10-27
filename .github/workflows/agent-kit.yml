@@ -67,7 +67,7 @@ jobs:
       - name: Windows loop integration suite
         run: bash tests/agent-kit/templates/loop-windows.sh
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         if: ${{ !cancelled() }}
         with:
           python-version: '3.x'
