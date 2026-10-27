@@ -6,6 +6,21 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-10-27
+
+### Added
+
+- **`_kit/memory.sh prune`** — deterministic `--plan` / `--apply` deletion of `_memory/work/goals/<goal>/` and `_memory/work/research/<topic>/` folders once every record id on the goal's latest `ARCHIVED:` line (or, without one, every `goal <g> (goal.md)` record) or on line 2 of the research `ingested` marker is committed in `HEAD` and, when the repo has a remote default branch (`origin/HEAD`, else `origin/main`, else `origin/master`), merged there; keeps everything else with a `keep:<reason>` (including `keep:unmerged:<id>` and `keep:tracked`), never follows symlinks, keeps all with `keep:no-git` outside git.
+- **Feature Phase 2 prune step** — the orchestrator runs `prune --apply` once before recall and logs the summary in the new goal's orchestration log.
+
+### Changed
+
+- **Memory and orchestration docs** — memory protocol (`## Prune`), `_memory/README.md` (`prune` section, usage, exit codes), ORCHESTRATION.md (Phase 2 note, memory table row, `_kit` tool lists, command example), and the harness matrix document the command.
+
+### Upgrade notes
+
+- Re-emit with `--upgrade`; the next feature Phase 2 deletes finished `_memory/work/` folders whose records are committed and merged — fetch first so `origin/…` is current, or folders simply stay until the next run; run `_kit/memory.sh prune --plan` first to see what would go; pruned goals stop giving `memory-capture` goal-folder hints.
+
 ## [2.0.0] - 2026-10-26
 
 ### Removed

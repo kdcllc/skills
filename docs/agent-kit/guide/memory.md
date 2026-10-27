@@ -1,4 +1,4 @@
-**Who this is for / What you'll learn:** Kit **users** who want durable, searchable knowledge across sessions and machines, and **contributors** documenting how memory interacts with `/feature`, `/research`, and the autonomous loop. You will learn what belongs in `_memory/` versus goal and loop artifacts, when the orchestrator recalls and archives records, how to search and add records with `_kit/memory.sh` (Windows: `_kit\memory.cmd`), back-fill legacy work, the prior-knowledge DATA fence, pointer rules in always-loaded files, and common failure modes. Workflow phase detail stays in [feature-workflow.md](feature-workflow.md) and [research-workflow.md](research-workflow.md); harness-native stores are contrasted in [agent-memory-store research brief](../../../_memory/research/agent-memory-store.md).
+**Who this is for / What you'll learn:** Kit **users** who want durable, searchable knowledge across sessions and machines, and **contributors** documenting how memory interacts with `/feature`, `/research`, and the autonomous loop. You will learn what belongs in `_memory/` versus goal and loop artifacts, when the orchestrator recalls and archives records, how to search and add records with `_kit/memory.sh` (Windows: `_kit\memory.cmd`), back-fill legacy work, prune finished goal and research scratch, the prior-knowledge DATA fence, pointer rules in always-loaded files, and common failure modes. Workflow phase detail stays in [feature-workflow.md](feature-workflow.md) and [research-workflow.md](research-workflow.md); harness-native stores are contrasted in [agent-memory-store research brief](../../../_memory/research/agent-memory-store.md).
 
 # Memory store (`_memory/`)
 
@@ -68,6 +68,7 @@ sequenceDiagram
 
 ### Feature workflow (`/feature`)
 
+- **Prune:** Once at the start of **Phase 2**, immediately **before Recall** and before `_memory/work/goals/<goal>/` exists. Run `_kit/memory.sh prune --apply` to delete finished goal and research folders under `_memory/work/` when every linked record id is **durable** (present in `HEAD` and, when the repo has a remote default branch ref, in that ref too — see [Prune (`prune`)](#prune-prune)). Non-zero exit, missing tool, or `failed` lines never block Phase 2; after the goal folder exists, log the summary with `_kit/log-spawn.sh note`.
 - **Recall:** Once **before Phase 2** (goal creation). Run `_kit/memory.sh search <term>… --limit 10`, read candidates with `show <id>`, pick **≤ 5** (drop anything contradicted by the codebase). Write ids or `none` into `goal.md` **`## Recalled memory`**. After `_memory/work/goals/<goal>/` exists, log picks or failure with `_kit/log-spawn.sh note`. Any non-zero exit, missing tool, or stderr `memory: 0 results` ⇒ treat as **no prior knowledge** — the phase never blocks.
 - **Archive:** After Phase 5 **APPROVED** and green **Quality Checks**, before optional Phases 6/7: one **`goal-summary`** plus zero to three **`decision`** / **`pitfall`** records via `_kit/memory.sh add` (drafts under `_memory/work/goals/<goal>/memory-drafts/`). After each added or quarantined path, run `_kit/memory.sh check <path>`; exit **3** ⇒ report the failing stdout line to the user and do not commit until fixed. After every path passes `check`, the orchestrator logs one closed marker `_kit/log-spawn.sh note --goal <g> --text "ARCHIVED: <id> [<id>…]"` listing **all** ids `add` wrote (including quarantined). Driver-dispatched slots write no ARCHIVED note; their **`goal-summary`** proposals set `source: goal <g> (goal.md)`. Untracked bad record ⇒ `_kit/memory.sh rm <id>`; committed correction ⇒ new record with **`--supersedes`**. Records stay **uncommitted** with the goal for human review. Exit **5** (quarantined) ⇒ report to the user, run `check` on the quarantined path too; do not retry automatically.
 
@@ -83,6 +84,7 @@ See [research-workflow.md](research-workflow.md).
 
 ### Autonomous loop
 
+- **Prune:** **Manual** loop iterations and driver-dispatched slots at **`LOOP_WORKTREE=0`** run the feature **Prune** once at Phase 2 start (same `--apply` rules as interactive `/feature`). At **`LOOP_WORKTREE=1`**, slot worktrees have no `_kit/` — prune is **skipped** there.
 - **Recall (read):** **Manual** loop iterations and driver-dispatched slots at **`LOOP_WORKTREE=0`** run the feature **Recall** once before Phase 2 (same search/pick rules as interactive `/feature`). At **`LOOP_WORKTREE=1`**, slot worktrees have no `_kit/` — recall is **empty** there.
 - **Manual mode:** Archive uses `_kit/memory.sh add` directly; include new record paths in the story commit like any other tracked `_memory/` file.
 - **Driver-dispatched mode:** The feature archive step writes **proposals** under `<outbox>/memory/<name>.md` (header/body format in memory-protocol.md) instead of calling `add`.
@@ -241,6 +243,33 @@ _kit/memory.sh backfill --plan
 _kit/memory.sh backfill --apply --only <goal> --goals
 ```
 
+## Prune (`prune`)
+
+```
+_kit/memory.sh prune [--plan|--apply] [--goals] [--research] [--only <name>] [--root <dir>]
+```
+
+Deterministic, LLM-free deletion of finished **goal** and **research** scratch folders under gitignored `_memory/work/` once every record that holds their knowledge is committed and merged. Never touches `records/`, `quarantine/`, `.index/`, `loop/`, tracked `_memory/research/` (briefs and index), or `raw/`. Normative rules: [`skills/agent-kit/templates/memory/README.md`](../../../skills/agent-kit/templates/memory/README.md) **`### prune`**.
+
+**Flags:** `--plan` (default) writes nothing; `--apply` deletes the folders the plan would delete; both together ⇒ exit **2**. Kind flags `--goals` and `--research` select kinds; when neither is given, both run. `--only <name>` (repeatable) names goal folders and research topics (exact names); unnamed candidates are omitted when any `--only` is given.
+
+**Durable id:** A record id is durable when its file under `records/` or `quarantine/` exists in **`HEAD`** and, when a **base ref** resolves (`refs/remotes/origin/HEAD`, else `refs/remotes/origin/main`, else `refs/remotes/origin/master` — local remote-tracking only; **`prune` never fetches**), in that ref's commit too. When no base ref resolves, **`HEAD` alone** decides.
+
+**Goal decision:** When the orchestration log has at least one archive heading (a `### <timestamp> — ` log heading containing `ARCHIVED:`; body lines never count), only the **last** such line counts; ids are taken from the text after the **last** `ARCHIVED:` on that line. With no archive line, ids come from every record in the working tree whose `source:` equals exactly `goal <g> (goal.md)`. Each id is checked in order; the first failing id keeps the folder.
+
+**Research decision:** Requires an `ingested` marker; ids are extracted from **line 2** (trailing CR stripped), then the same per-id durability rules apply.
+
+**Keep reasons** (stdout `memory: prune <kind> <name> keep:<reason>`): `keep:no-git` · `keep:symlink` · `keep:tracked` · `keep:no-log` · `keep:no-ids` · `keep:not-archived` · `keep:missing:<id>` · `keep:uncommitted:<id>` · `keep:unmerged:<id>` · for `--only` names (`memory: prune only <name> …`), `keep:excluded-kind` or `keep:not-found`. Full decision order: README **`### prune`**.
+
+**Output:** Per candidate: `would-delete` / `deleted` / `keep:<reason>` / `failed <reason>`; summaries `memory: prune plan <w> would-delete, <k> kept` and `memory: prune <d> deleted, <k> kept, <f> failed`. Exit **0**; **2** usage; **4** when any deletion failed (the run continues).
+
+**Workflow limits:** The feature skill runs `prune --apply` before recall and before the new goal folder exists, so goals awaiting commit, merge, or PR review are kept. **Pruned goals** no longer supply orchestration-log timestamps to **`memory-capture`**, so later captured sessions lose goal-folder tag hints. Without a resolvable origin default-branch ref, **`HEAD` alone** decides — a goal already committed on a branch that carries several goals can be pruned before the PR step reads it. A **research topic folder** can be pruned once its ingest record is durable even if a goal born from that topic is still in flight; the tracked brief `_memory/research/<topic>.md` is never deleted.
+
+```bash
+_kit/memory.sh prune --plan
+_kit/memory.sh prune --apply --only <goal> --goals
+```
+
 ## Prior-knowledge fence and pointers
 
 **Fence (recall picks only):** Heading must be exact:
@@ -283,6 +312,9 @@ Emit also writes the memory pointer block per harness; see [getting-started.md](
 | exit **5** on `backfill --apply` | A candidate was quarantined — review `_memory/quarantine/` |
 | `backfill goal <g> skip:open` | No Phase 5 APPROVED signal in the log — name it with `--only <g>` if it is really done |
 | `backfill escalation <name> skip:bad-date` | The entry's last `- resolved:` date is not a real calendar date — fix the line and re-run |
+| `prune goal <g> keep:unmerged:<id>` | Record is in `HEAD` but not on the remote default branch yet — merge (or advance local remote-tracking refs after fetch) so the id is durable |
+| `prune … keep:uncommitted:<id>` | Record exists only in the working tree or index — commit it, then re-run |
+| exit **4** on `prune --apply` | One or more folder deletions failed — read the `memory: prune <kind> <name> failed …` line; kept folders and records are unchanged |
 
 ## Layout and upgrade
 
@@ -297,11 +329,11 @@ In **kdcllc/skills**, `_memory/records/`, `_memory/quarantine/`, `_memory/resear
 ## Sources
 
 - [`skills/agent-kit/templates/memory/README.md`](../../../skills/agent-kit/templates/memory/README.md) — layout, record schema, search scoring, CLI exit codes
-- [`skills/agent-kit/templates/skills/feature/reference/memory-protocol.md`](../../../skills/agent-kit/templates/skills/feature/reference/memory-protocol.md) — recall, fence, archive, loop proposals, integrator step 3b
-- [`skills/agent-kit/templates/tools/memory.sh`](../../../skills/agent-kit/templates/tools/memory.sh) — reference implementation for search scoring, redaction, `check`, `rm`, `capture`, and `backfill`
+- [`skills/agent-kit/templates/skills/feature/reference/memory-protocol.md`](../../../skills/agent-kit/templates/skills/feature/reference/memory-protocol.md) — prune, recall, fence, archive, loop proposals, integrator step 3b
+- [`skills/agent-kit/templates/tools/memory.sh`](../../../skills/agent-kit/templates/tools/memory.sh) — reference implementation for search scoring, redaction, `check`, `rm`, `capture`, `backfill`, and `prune`
 - [`skills/agent-kit/templates/skills/memory-capture/SKILL.template.md`](../../../skills/agent-kit/templates/skills/memory-capture/SKILL.template.md) — orchestrator capture/distillation workflow
 - [`skills/agent-kit/templates/skills/feature/reference/memory-capture.md`](../../../skills/agent-kit/templates/skills/feature/reference/memory-capture.md) — session-summary distillation contract
-- [`skills/agent-kit/templates/skills/feature/SKILL.template.md`](../../../skills/agent-kit/templates/skills/feature/SKILL.template.md) — feature recall and archive hooks
+- [`skills/agent-kit/templates/skills/feature/SKILL.template.md`](../../../skills/agent-kit/templates/skills/feature/SKILL.template.md) — feature prune, recall and archive hooks
 - [`skills/agent-kit/templates/skills/research/SKILL.template.md`](../../../skills/agent-kit/templates/skills/research/SKILL.template.md) — research recall and archive hooks
 - [`skills/agent-kit/templates/ORCHESTRATION.md`](../../../skills/agent-kit/templates/ORCHESTRATION.md) — memory guard table and loop step 3b summary
 - [`skills/agent-kit/bin/emit.sh`](../../../skills/agent-kit/bin/emit.sh) — `pointer_memory` and harness pointer emission

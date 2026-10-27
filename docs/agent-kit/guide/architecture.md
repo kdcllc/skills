@@ -145,7 +145,7 @@ Write authority is **contract-driven**. Task files declare a YAML `writes:` fenc
 | **terminal** | None (command output only) |
 | **Loop driver / integrator** | Driver: `_memory/loop/backlog.md`, outbox, integration commits; integrator step **3b**: `_memory/records/` or `quarantine/` via `_kit/memory.* add` |
 | **`log-spawn.sh`** | Appends to `_memory/work/goals/<goal>/orchestration-log.md` only |
-| **`memory.sh`** | Creates files under `_memory/records/` or `_memory/quarantine/` via `add`; never edits existing record bodies |
+| **`memory.sh`** | Creates files under `_memory/records/` or `_memory/quarantine/` via `add`; never edits existing record bodies; `prune --apply` deletes direct child folders of `_memory/work/goals/` and `_memory/work/research/` that pass the `prune` decision rules (record ids durable) |
 
 ```mermaid
 flowchart TD
@@ -415,7 +415,7 @@ Stop on first failing rung; after a fix, restart at rung 1 for that fix.
 - [`skills/agent-kit/templates/skills/feature/reference/ready-groups.md`](../../../skills/agent-kit/templates/skills/feature/reference/ready-groups.md) — Phase 4 concurrent ready groups
 - [`skills/agent-kit/templates/skills/feature/reference/degraded-mode.md`](../../../skills/agent-kit/templates/skills/feature/reference/degraded-mode.md) — degraded spawn paths and rotation skip
 - [`skills/agent-kit/templates/memory/README.md`](../../../skills/agent-kit/templates/memory/README.md) — `_memory/` layout, CLI exit codes, capture
-- [`skills/agent-kit/templates/skills/feature/reference/memory-protocol.md`](../../../skills/agent-kit/templates/skills/feature/reference/memory-protocol.md) — recall, fence, archive, brief status updates
+- [`skills/agent-kit/templates/skills/feature/reference/memory-protocol.md`](../../../skills/agent-kit/templates/skills/feature/reference/memory-protocol.md) — prune, recall, fence, archive, brief status updates
 - [`skills/agent-kit/templates/skills/feature/reference/continuation-ladder.md`](../../../skills/agent-kit/templates/skills/feature/reference/continuation-ladder.md) — rungs 5, 4, 6 after fix-cycle exhaustion
 - [`skills/agent-kit/templates/skills/feature/reference/fix-cycles.md`](../../../skills/agent-kit/templates/skills/feature/reference/fix-cycles.md) — Phase 4 fix cycles: line-patch resume, bypass and criteria-defect routing, cycle-3 ladder, model rotation, provenance
 - [`skills/agent-kit/templates/tools/log-spawn.sh`](../../../skills/agent-kit/templates/tools/log-spawn.sh) — spawn/outcome/note ledger
