@@ -1,11 +1,11 @@
 ---
 name: skill-versioning
 description: >-
-  Keeps every skill in a multi-skill repository (skills/<name>/SKILL.md) on its
+  Keeps every skill in a multi-skill repository (skills/{name}/SKILL.md) on its
   own semantic version and changelog. Records each change to a skill folder
   under ## [Unreleased] in that skill's CHANGELOG.md, picks the MAJOR, MINOR,
-  or PATCH bump, and cuts per-skill releases tagged <name>/vX.Y.Z without
-  pushing. Use after editing, adding, or importing files under skills/<name>/,
+  or PATCH bump, and cuts per-skill releases tagged {name}/vX.Y.Z without
+  pushing. Use after editing, adding, or importing files under skills/{name}/,
   and when the user asks to version a skill, update a changelog, bump or release
   a skill, tag a skill release, or check which skills need a release.
 license: MIT

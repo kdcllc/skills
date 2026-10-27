@@ -218,6 +218,8 @@ check_skill() {
     error "${rel}/SKILL.md: description is ${#description} characters (max ${MAX_DESCRIPTION_LENGTH})"
   elif [[ "$description" == TODO* ]]; then
     error "${rel}/SKILL.md: description is still the template placeholder"
+  elif [[ "$description" == *"<"* || "$description" == *">"* ]]; then
+    error "${rel}/SKILL.md: description must not contain '<' or '>' (claude.ai rejects XML-like tags in descriptions)"
   fi
 
   allowed_tools="$(frontmatter_value "$fm" allowed-tools)"

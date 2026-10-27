@@ -1,7 +1,7 @@
 ---
 name: terraform-azure-modules
 description: >-
-  Creates or updates a reusable Azure Terraform module under modules/<name>/
+  Creates or updates a reusable Azure Terraform module under modules/{name}/
   using azurerm, providers.tf, and canonical naming with organization_name.
   Use when asked to create module folders, author or change an Azure Terraform
   module, apply Azure resource naming, or wrap an azurerm resource as a library
