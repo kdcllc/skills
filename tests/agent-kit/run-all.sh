@@ -146,9 +146,8 @@ _validate_case_jobs() {
 }
 _validate_case_jobs
 
-# Memory split ON when normalized label sets match (task 08 AC1): exclude SKIP lines
-# whose detail contains `not in MEMORY_SUITES` from the union of split logs.
-# Comparison (2026-10-12): 92 labels each for memory.log vs filtered union — split ON.
+# Memory suite runs as memory.sh[bash] only (pwsh/parity legs retired).
+# MEMORY_SPLIT kept for log layout compatibility when comparing split logs.
 MEMORY_SPLIT=1
 
 if (( install )); then
@@ -223,8 +222,6 @@ _expand_memory_jobs() {
     if [ "$MEMORY_SPLIT" -eq 1 ] && [ "$s" = "tests/agent-kit/templates/memory.sh" ]; then
       out+=(
         "tests/agent-kit/templates/memory.sh|MEMORY_SUITES=bash|tests/agent-kit/templates/memory.sh[bash]"
-        "tests/agent-kit/templates/memory.sh|MEMORY_SUITES=pwsh|tests/agent-kit/templates/memory.sh[pwsh]"
-        "tests/agent-kit/templates/memory.sh|MEMORY_SUITES=parity|tests/agent-kit/templates/memory.sh[parity]"
       )
     else
       out+=("$s||$s")
@@ -328,8 +325,6 @@ for s in "${SELECTED[@]}"; do
   if [ "$MEMORY_SPLIT" -eq 1 ] && [ "$s" = "tests/agent-kit/templates/memory.sh" ]; then
     DISPLAY_ORDER+=(
       "tests/agent-kit/templates/memory.sh[bash]"
-      "tests/agent-kit/templates/memory.sh[pwsh]"
-      "tests/agent-kit/templates/memory.sh[parity]"
     )
   else
     DISPLAY_ORDER+=("$s")

@@ -28,10 +28,10 @@ AGENTS.md is read once at session start — edits require a new session.
 Re-check https://developers.openai.com/codex/config-reference if any key is
 rejected.
 
-Loop-enabled installs emit `_loop/loop.ps1` and `_loop/breaker.ps1` (and the
-bash twins). `_memory/loop/backlog.md` (create if missing; never overwrite).
+Loop-enabled installs emit `_loop/loop.sh`, `_loop/breaker.sh`, `_loop/PROMPT.md`, and the
+`_loop/loop.cmd` Windows launcher. `_memory/loop/backlog.md` (create if missing; never overwrite).
 Always emits `_kit/log-spawn.sh` and `_kit/log-spawn.cmd` (single-copy; Git for Windows on Windows).
-Always emits `_kit/memory.sh`, `_kit/memory.cmd`, `_kit/memory.ps1` (loop helper), and `_memory/README.md` (single-copy), appends `_memory/work/`, `_memory/.index/`, and `_memory/raw/` to `.gitignore`, and appends `_memory/** text eol=lf` to `.gitattributes`; loop emits also union-merge `_memory/loop/LEARNINGS.md` and `_memory/loop/ESCALATIONS.md` and gitignore `_memory/loop/breaker-state.json`, `_memory/loop/ledger.jsonl`, and `_memory/loop/attempts/`; `_memory/records/` and `_memory/quarantine/` stay tracked.
+Always emits `_kit/memory.sh`, `_kit/memory.cmd`, and `_memory/README.md` (single-copy), appends `_memory/work/`, `_memory/.index/`, and `_memory/raw/` to `.gitignore`, and appends `_memory/** text eol=lf` and `*.cmd -text` to `.gitattributes`; loop emits also add `*.sh text eol=lf`, union-merge `_memory/loop/LEARNINGS.md` and `_memory/loop/ESCALATIONS.md` and gitignore `_memory/loop/breaker-state.json`, `_memory/loop/ledger.jsonl`, and `_memory/loop/attempts/`; `_memory/records/` and `_memory/quarantine/` stay tracked.
 Codex-only installs emit **no kit skills tree** — document `capture` and distillation in
 project docs only. `_kit/memory.sh capture --harness codex` is best-effort against
 `~/.codex/sessions/` rollout JSONL (see `_memory/README.md`).

@@ -51,7 +51,7 @@
 #   warning on outcome MISMATCH). Success: exactly one stdout line (the appended heading
 #   or outcome line).
 #
-#   Portability freeze (both twins): timestamp = local time, minutes precision, colon in
+#   Portability freeze: timestamp = local time, minutes precision, colon in
 #   the offset (`2026-09-03T16:59-04:00`); byte counts are FILE BYTES; io_est_tokens is
 #   floor((c + r) / 4); every append is UTF-8 without BOM with LF line endings; running
 #   totals are the LAST `running io: <n>` / `running work: <n>` matches (io falls back to

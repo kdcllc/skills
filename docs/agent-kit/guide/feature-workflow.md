@@ -255,7 +255,7 @@ When three implement→evaluate cycles end without **PASS**, read `goal.md`'s `p
 
 **Deferred future rungs:** high-effort pin and best-of-N are named as future rungs but **not** implemented.
 
-The headless loop inherits this ladder because each iteration runs this skill; the loop drivers' per-story attempt cap and circuit breakers stay the unchanged outer backstop.
+The headless loop inherits this ladder because each iteration runs this skill; the loop driver's per-story attempt cap and circuit breakers stay the unchanged outer backstop.
 
 ### Fix-cycle model rotation
 

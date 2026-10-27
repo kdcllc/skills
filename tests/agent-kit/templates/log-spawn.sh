@@ -384,7 +384,7 @@ run_suite bash bash "$BIN"
 run_work_suite bash bash "$BIN"
 
 # ---------------------------------------------------------------------------
-# model_check — match / MISMATCH / unverified / openai family (bash + pwsh twin)
+# model_check — match / MISMATCH / unverified / openai family (log-spawn emitter)
 # ---------------------------------------------------------------------------
 run_model_check_case() { # <label> <runner...>
   local label="$1"; shift

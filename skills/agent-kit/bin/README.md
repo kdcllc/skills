@@ -57,4 +57,6 @@ top-level key order is pinned (see Manifest); nested objects are ordinal-sorted.
 
 Windows launcher copied from `templates/tools/bash-launcher.cmd`. Invokes this
 script through Git for Windows Bash: `bin\emit.cmd --answers F --root DIR` (use
-forward slashes in path arguments).
+forward slashes in path arguments). The emitter also writes the same launcher
+bytes to `_kit/memory.cmd`, `_kit/log-spawn.cmd`, and — for loop-enabled installs
+— `_loop/loop.cmd`.

@@ -30,30 +30,23 @@
 #      reason as B: they are not emitted instance).
 #   E. No hardcoded model IDs (claude-*/gpt-*/gemini-*) in canonical templates
 #      outside models.map.md; the usage-format token claude-stream is exempt.
-#   F. Skip-aware pwsh parse check: if pwsh is on PATH, parse the canonical and
-#      instance loop.ps1 drivers via the .NET parser API. Parse errors FAIL;
-#      an invocation error (pwsh present but something else went wrong) WARNs
-#      without failing the suite; pwsh absent SKIPs without failing the suite.
-#   G. Parity heuristic (drift tripwire, not a proof): both canonical loop
-#      drivers (loop.sh/loop.ps1) contain the sentinel string, all six exit
-#      codes (0-5), and a matching default iteration count of 10. Also covers
-#      the canonical breaker twins (breaker.sh/breaker.ps1): all three state
-#      names present in both, the 600s cooldown literal present in both, and
-#      the successes threshold keyed on the ACTUAL transition line in each
-#      twin's own identifier spelling -- bash's `_BRK_HALF == 2` and ps1's
-#      `HalfOpenSuccesses -eq 2` -- via one regex accepting either spelling
-#      (halfOpenSuccesses|_BRK_HALF) compared (-eq|==) to 2, so a real 2->N
-#      threshold mutation in the code (not just its comment) fails the check.
-#   H. Reference coverage: loop.ps1 is mentioned in all four
+#   F. Canonical kit has no PowerShell scripts: `find skills/agent-kit -name
+#      '*.ps1'` must be empty — any hit FAILs listing paths.
+#   G. Loop driver heuristic (drift tripwire, not a proof): the canonical
+#      loop.sh contains the sentinel string, all six exit codes (0-5), and a
+#      default iteration count of 10. The canonical breaker.sh contains all
+#      three state names, the 600s cooldown literal, and the successes
+#      threshold keyed on `_BRK_HALF == 2`.
+#   H. Reference coverage: loop.cmd is mentioned in all four
 #      skills/agent-kit/emitters/*.md, in templates/loop/SKILL.template.md, and in
-#      templates/ORCHESTRATION.md.
-#   I. H-analog for the breaker helper: breaker.ps1 is mentioned in all four
+#      templates/ORCHESTRATION.md; loop.ps1 is mentioned in none of them.
+#   I. Breaker helper docs: breaker.ps1 is mentioned in none of the four
 #      skills/agent-kit/emitters/*.md.
 #   J. Manifest hash join (self-excluding, seed-aware): reads
 #      CHECKS_MANIFEST (default: orchestration-kit.manifest.json, same override
 #      form as the manifest path). Verifier is python3 (json + hashlib): SKIPs
-#      "python3 not available" when python3 is not on PATH (mirrors check F's
-#      interpreter-missing idiom); if python3 runs but exits non-zero (bad
+#      "python3 not available" when python3 is not on PATH; if python3 runs
+#      but exits non-zero (bad
 #      JSON, uncaught exception, etc.) the whole sub-check FAILs "verifier
 #      failed (exit N)" with the captured output as detail -- a dead verifier
 #      is never silently green. Otherwise: for every entry in the manifest's
@@ -66,11 +59,11 @@
 #      failure) — a consumer capturing evidence must capture stdout, not just
 #      stderr. A `files` map that parses to ZERO entries FAILs outright ("empty
 #      join is not proof of integrity") rather than vacuously passing. The
-#      whole hash-join sub-check SKIPs (mirroring check F) only when the
+#      whole hash-join sub-check SKIPs only when the
 #      manifest FILE itself is absent. Manifest-independent A4 regression grep
 #      (its own SKIP if _loop/ is absent): `skills/agent-kit/templates` must not
-#      appear in the header region (first 20 lines) of any of the four `_loop`
-#      driver/breaker twins; the Twin: line must use the sibling form.
+#      appear in the header region (first 20 lines) of `_loop/loop.sh` or
+#      `_loop/breaker.sh`.
 #      kitVersion==VERSION tripwire (its own report line, plain-text join --
 #      no python3 required): reads CHECKS_VERSION_FILE (default:
 #      skills/agent-kit/SKILL.md metadata.version) and greps/seds the `"kitVersion":` line out of
@@ -85,16 +78,6 @@
 #      template contains the "### Ownership contract" heading, the "Missing
 #      ownership block" remedy line, and the "bracket-literal placeholder
 #      values" pristine-block literal (presence-only).
-#   L. ps1 unbraced-colon interpolation: a line-based tripwire, not proof
-#      (here-strings and multi-line constructs are out of scope; check F owns
-#      parser-level truth where pwsh exists). Flags "$Var:"-style unbraced
-#      colon interpolation inside double-quoted strings (colon not followed by
-#      a variable-name character, no backslash exemption) across a target set
-#      derived at run time: every *.ps1 under skills/agent-kit/templates/,
-#      _loop/, and scripts/. A missing
-#      root is skipped and noted without failing by itself; the empty-set FAIL
-#      fires only when the TOTAL derived set across all present roots is
-#      empty.
 #   M. No `.claude/` path reference exists anywhere under `.cursor/` (excluding
 #      the self-install compiler copy at `.cursor/skills/agent-kit/`) — plain
 #      ignore-blind `grep -r` (never `rg`, which honors .gitignore and passes
@@ -114,8 +97,9 @@
 #      `.cursor/skills/` is absent.
 #   O. Emitter parse: `bash -n skills/agent-kit/bin/emit.sh` (PASS/FAIL).
 #   P. Instance Windows launchers: `_kit/memory.cmd` and `_kit/log-spawn.cmd`
-#      present; `_kit/log-spawn.ps1` absent; `_kit/memory.ps1` still present;
-#      root `.gitattributes` contains `*.cmd -text`.
+#      present; `_kit/log-spawn.ps1` and `_kit/memory.ps1` absent; when `_loop/`
+#      exists, `_loop/loop.cmd` present and `_loop/loop.ps1` / `_loop/breaker.ps1`
+#      absent; root `.gitattributes` contains `*.cmd -text`.
 set -u
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
@@ -299,136 +283,67 @@ check_e() {
 
 
 # ---------------------------------------------------------------------------
-# Check F: skip-aware pwsh parse of loop.ps1 (canonical + instance)
+# Check F: no .ps1 files under skills/agent-kit (Bash-only canonical kit)
 # ---------------------------------------------------------------------------
 check_f() {
-  if ! command -v pwsh >/dev/null 2>&1; then
-    report SKIP "F: pwsh not available"
-    return
-  fi
-
-  local targets=(
-    "skills/agent-kit/templates/loop/loop.ps1"
-    "_loop/loop.ps1"
-    "skills/agent-kit/templates/loop/breaker.ps1"
-    "_loop/breaker.ps1"
-  )
-  local f out rc parse_errors=0 invocation_errors=0 detail=""
-
-  for f in "${targets[@]}"; do
-    if [[ ! -f "$f" ]]; then
-      invocation_errors=1
-      detail+=$'\n'"$f: file not found"
-      continue
-    fi
-    out="$(PWSH_TARGET_FILE="$f" pwsh -NoProfile -Command '
-      $ErrorActionPreference = "Stop"
-      $path = $env:PWSH_TARGET_FILE
-      try {
-        $tokens = $null
-        $errs = $null
-        [System.Management.Automation.Language.Parser]::ParseFile($path, [ref]$tokens, [ref]$errs) | Out-Null
-        if ($errs.Count -gt 0) {
-          $errs | ForEach-Object { Write-Output $_.ToString() }
-          exit 2
-        }
-        exit 0
-      } catch {
-        Write-Output $_.Exception.Message
-        exit 3
-      }
-    ' 2>&1)"
-    rc=$?
-    if ((rc == 2)); then
-      parse_errors=1
-      detail+=$'\n'"$f: parse errors:"$'\n'"$out"
-    elif ((rc != 0)); then
-      invocation_errors=1
-      detail+=$'\n'"$f: pwsh invocation error (exit $rc): $out"
-    fi
-  done
-
-  if ((parse_errors)); then
-    report FAIL "F: pwsh parse (skip-aware)" "parse errors found"
-    printf '%s\n' "$detail" >&2
-  elif ((invocation_errors)); then
-    report WARN "F: pwsh parse (skip-aware)" "invocation error, not a parse failure"
-    printf '%s\n' "$detail" >&2
+  local found=() f
+  [[ -d skills/agent-kit ]] || { report FAIL "F: no .ps1 under skills/agent-kit" "skills/agent-kit not found"; return; }
+  while IFS= read -r -d '' f; do
+    found+=("$f")
+  done < <(find skills/agent-kit -type f -name '*.ps1' -print0 2>/dev/null)
+  if ((${#found[@]})); then
+    report FAIL "F: no .ps1 under skills/agent-kit" "${#found[@]} file(s)"
+    printf '%s\n' "${found[@]}" >&2
   else
-    report PASS "F: pwsh parse (skip-aware)"
+    report PASS "F: no .ps1 under skills/agent-kit"
   fi
 }
 
 # ---------------------------------------------------------------------------
-# Check G: parity heuristic — sentinel, all six exit codes, matching default
-# iteration count between the two canonical drivers (drift tripwire, not proof)
+# Check G: loop.sh + breaker.sh heuristic (drift tripwire, not proof)
 # ---------------------------------------------------------------------------
 check_g() {
   local sh="skills/agent-kit/templates/loop/loop.sh"
-  local ps1="skills/agent-kit/templates/loop/loop.ps1"
-  local sentinel='<promise>COMPLETE</promise>'
-  local bad=() f n sh_default ps1_default
-
-  for f in "$sh" "$ps1"; do
-    if [[ ! -f "$f" ]]; then
-      bad+=("$f: file not found")
-      continue
-    fi
-    grep -qF "$sentinel" "$f" || bad+=("$f: missing sentinel string")
-    for n in 0 1 2 3 4 5; do
-      grep -qE "exit $n([^0-9]|\$)" "$f" || bad+=("$f: missing exit $n")
-    done
-  done
-
-  # Note: extracting the default digits requires anchoring on the closing brace —
-  # a naive [0-9]+ over the whole ${1:-10} match would also pick up the "1" in
-  # the positional-parameter index and corrupt the comparison below.
-  sh_default="$(grep -oE '\{1:-[0-9]+\}' "$sh" 2>/dev/null | grep -oE '[0-9]+\}' | tr -d '}')"
-  ps1_default="$(grep -oE '\$MaxIterations = [0-9]+' "$ps1" 2>/dev/null | grep -oE '[0-9]+$')"
-  if [[ -z "$sh_default" ]]; then
-    bad+=("$sh: no default iteration count found")
-  elif [[ "$sh_default" != "10" ]]; then
-    bad+=("$sh: default iteration count is $sh_default, expected 10")
-  fi
-  if [[ -z "$ps1_default" ]]; then
-    bad+=("$ps1: no default iteration count found")
-  elif [[ "$ps1_default" != "10" ]]; then
-    bad+=("$ps1: default iteration count is $ps1_default, expected 10")
-  fi
-  if [[ -n "$sh_default" && -n "$ps1_default" && "$sh_default" != "$ps1_default" ]]; then
-    bad+=("default iteration counts differ: loop.sh=$sh_default loop.ps1=$ps1_default")
-  fi
-
-  # Breaker twins: state names, cooldown literal, successes threshold keyed on
-  # the ACTUAL transition line (not a bare digit, and not merely a comment
-  # that could drift from the code) -- one regex accepting either twin's own
-  # identifier spelling (bash: _BRK_HALF, ps1: HalfOpenSuccesses) compared via
-  # -eq/== to the literal 2, so a real threshold mutation in the code fails.
   local brk_sh="skills/agent-kit/templates/loop/breaker.sh"
-  local brk_ps1="skills/agent-kit/templates/loop/breaker.ps1"
-  for f in "$brk_sh" "$brk_ps1"; do
-    if [[ ! -f "$f" ]]; then
-      bad+=("$f: file not found")
-      continue
+  local sentinel='<promise>COMPLETE</promise>'
+  local bad=() f n sh_default
+
+  if [[ ! -f "$sh" ]]; then
+    bad+=("$sh: file not found")
+  else
+    grep -qF "$sentinel" "$sh" || bad+=("$sh: missing sentinel string")
+    for n in 0 1 2 3 4 5; do
+      grep -qE "exit $n([^0-9]|\$)" "$sh" || bad+=("$sh: missing exit $n")
+    done
+    sh_default="$(grep -oE '\{1:-[0-9]+\}' "$sh" 2>/dev/null | grep -oE '[0-9]+\}' | tr -d '}')"
+    if [[ -z "$sh_default" ]]; then
+      bad+=("$sh: no default iteration count found")
+    elif [[ "$sh_default" != "10" ]]; then
+      bad+=("$sh: default iteration count is $sh_default, expected 10")
     fi
-    grep -qF "CLOSED" "$f" || bad+=("$f: missing state name CLOSED")
-    grep -qF "OPEN" "$f" || bad+=("$f: missing state name OPEN")
-    grep -qF "HALF-OPEN" "$f" || bad+=("$f: missing state name HALF-OPEN")
-    grep -qF "600" "$f" || bad+=("$f: missing cooldown literal 600")
-    grep -qiE '(halfOpenSuccesses|_BRK_HALF)[^0-9]*(-eq|==)[^0-9]*2' "$f" || \
-      bad+=("$f: successes threshold ACTUAL transition line (halfOpenSuccesses/_BRK_HALF compared -eq/== 2) not found")
-  done
+  fi
+
+  if [[ ! -f "$brk_sh" ]]; then
+    bad+=("$brk_sh: file not found")
+  else
+    grep -qF "CLOSED" "$brk_sh" || bad+=("$brk_sh: missing state name CLOSED")
+    grep -qF "OPEN" "$brk_sh" || bad+=("$brk_sh: missing state name OPEN")
+    grep -qF "HALF-OPEN" "$brk_sh" || bad+=("$brk_sh: missing state name HALF-OPEN")
+    grep -qF "600" "$brk_sh" || bad+=("$brk_sh: missing cooldown literal 600")
+    grep -qE '_BRK_HALF[^0-9]*==[^0-9]*2' "$brk_sh" || \
+      bad+=("$brk_sh: successes threshold _BRK_HALF == 2 transition not found")
+  fi
 
   if ((${#bad[@]})); then
-    report FAIL "G: loop driver parity heuristic" "${#bad[@]} issue(s)"
+    report FAIL "G: loop driver heuristic (bash)" "${#bad[@]} issue(s)"
     printf '%s\n' "${bad[@]}" >&2
   else
-    report PASS "G: loop driver parity heuristic"
+    report PASS "G: loop driver heuristic (bash)"
   fi
 }
 
 # ---------------------------------------------------------------------------
-# Check H: loop.ps1 reference coverage across setup docs
+# Check H: loop.cmd reference coverage; loop.ps1 must not appear
 # ---------------------------------------------------------------------------
 check_h() {
   local files=(
@@ -443,21 +358,22 @@ check_h() {
   for f in "${files[@]}"; do
     if [[ ! -f "$f" ]]; then
       missing+=("$f: file not found")
-    elif ! grep -qF 'loop.ps1' "$f"; then
-      missing+=("$f: no mention of loop.ps1")
+    elif ! grep -qF 'loop.cmd' "$f"; then
+      missing+=("$f: no mention of loop.cmd")
+    elif grep -qF 'loop.ps1' "$f"; then
+      missing+=("$f: must not mention loop.ps1")
     fi
   done
   if ((${#missing[@]})); then
-    report FAIL "H: loop.ps1 reference coverage" "${#missing[@]} file(s) missing mention"
+    report FAIL "H: loop.cmd reference coverage" "${#missing[@]} file(s) wrong"
     printf '%s\n' "${missing[@]}" >&2
   else
-    report PASS "H: loop.ps1 reference coverage"
+    report PASS "H: loop.cmd reference coverage"
   fi
 }
 
 # ---------------------------------------------------------------------------
-# Check I: H-analog for the breaker helper -- breaker.ps1 mentioned in all
-# four skills/agent-kit/emitters/*.md
+# Check I: breaker.ps1 must not appear in emitter docs
 # ---------------------------------------------------------------------------
 check_i() {
   local files=(
@@ -470,22 +386,22 @@ check_i() {
   for f in "${files[@]}"; do
     if [[ ! -f "$f" ]]; then
       missing+=("$f: file not found")
-    elif ! grep -qF 'breaker.ps1' "$f"; then
-      missing+=("$f: no mention of breaker.ps1")
+    elif grep -qF 'breaker.ps1' "$f"; then
+      missing+=("$f: must not mention breaker.ps1")
     fi
   done
   if ((${#missing[@]})); then
-    report FAIL "I: breaker.ps1 reference coverage" "${#missing[@]} file(s) missing mention"
+    report FAIL "I: no breaker.ps1 in emitters" "${#missing[@]} file(s) mention breaker.ps1"
     printf '%s\n' "${missing[@]}" >&2
   else
-    report PASS "I: breaker.ps1 reference coverage"
+    report PASS "I: no breaker.ps1 in emitters"
   fi
 }
 
 # ---------------------------------------------------------------------------
 # Check J: manifest + seed-class hash integrity (self-excluding), the
-# manifest-independent A4 regression grep over the four _loop driver/breaker
-# twins, and the kitVersion==VERSION tripwire. Three independently gated
+# manifest-independent A4 regression grep over _loop/loop.sh and
+# _loop/breaker.sh, and the kitVersion==VERSION tripwire. Three independently gated
 # sub-checks, each with its own report() line.
 # ---------------------------------------------------------------------------
 check_j() {
@@ -567,16 +483,14 @@ PY
   else
     local a4_targets=(
       "_loop/loop.sh"
-      "_loop/loop.ps1"
       "_loop/breaker.sh"
-      "_loop/breaker.ps1"
     )
     local f a4_bad=()
     for f in "${a4_targets[@]}"; do
       if [[ ! -f "$f" ]]; then
         a4_bad+=("$f: file not found")
       elif head -n 20 "$f" | grep -qF 'skills/agent-kit/templates'; then
-        a4_bad+=("$f: header (first 20 lines) contains 'skills/agent-kit/templates' — Twin: line must use sibling form (A4 regression)")
+        a4_bad+=("$f: header (first 20 lines) contains 'skills/agent-kit/templates' (A4 regression)")
       fi
     done
     if ((${#a4_bad[@]})); then
@@ -674,51 +588,6 @@ check_k() {
 }
 
 # ---------------------------------------------------------------------------
-# Check L: ps1 unbraced-colon interpolation (accepted-limitation line-based
-# scan, not a parser -- here-strings/multi-line constructs are out of scope;
-# check F owns parser-level truth where pwsh exists). Derived target set
-# computed at run time: every *.ps1 under skills/agent-kit/templates/, _loop/,
-# and scripts/. A missing root is
-# skipped and noted without failing by itself; the empty-set FAIL fires only
-# when the TOTAL derived set across all present roots is empty.
-# ---------------------------------------------------------------------------
-check_l() {
-  local roots=("skills/agent-kit/templates" "_loop" "scripts")
-  local root f targets=() hits=()
-
-  for root in "${roots[@]}"; do
-    if [[ ! -d "$root" ]]; then
-      echo "L: root not found, skipped -- $root"
-      continue
-    fi
-    while IFS= read -r -d '' f; do
-      targets+=("$f")
-    done < <(find "$root" -type f -name '*.ps1' -print0)
-  done
-
-  if ((${#targets[@]} == 0)); then
-    report FAIL "L: ps1 unbraced-colon interpolation" "empty target set is not proof"
-    return
-  fi
-
-  for f in "${targets[@]}"; do
-    while IFS= read -r line; do
-      [[ -z "$line" ]] && continue
-      hits+=("$f:$line")
-    done < <(grep -nE '"' "$f" 2>/dev/null | \
-              grep -E '\$[A-Za-z_][A-Za-z0-9_]*:([^A-Za-z0-9_]|$)' | \
-              grep -vE '^[0-9]+:[[:space:]]*#')
-  done
-
-  if ((${#hits[@]})); then
-    report FAIL "L: ps1 unbraced-colon interpolation" "unbraced colon interpolation found"
-    printf '%s\n' "${hits[@]}" >&2
-  else
-    report PASS "L: ps1 unbraced-colon interpolation"
-  fi
-}
-
-# ---------------------------------------------------------------------------
 # Check M: no .claude/ path reference exists under .cursor/ (excluding the
 # self-install compiler copy at .cursor/skills/agent-kit/) -- plain ignore-blind
 # grep -r, matching check B's existing idiom (never rg, which would honor
@@ -727,8 +596,7 @@ check_l() {
 # pointing at `.claude/skills/...`, `.claude/agents/...`,
 # `.claude/ORCHESTRATION.md`, etc.) is real cross-contamination and FAILs.
 # Exclusion is anchored to the .cursor/skills/agent-kit/ subtree specifically
-# (not "any directory named setup" anywhere), mirroring the ps1 twin's
-# `-notmatch '/\.cursor/skills/agent-kit(/|$)'`.
+# (not "any directory named setup" anywhere).
 # ---------------------------------------------------------------------------
 check_m() {
   local hits
@@ -791,23 +659,28 @@ check_o() {
 }
 
 # ---------------------------------------------------------------------------
-# Check P: instance Windows launchers and retired log-spawn.ps1 twin.
+# Check P: instance Windows launchers present; retired .ps1 twins absent.
 # ---------------------------------------------------------------------------
 check_p() {
   local bad=()
   [[ -f _kit/memory.cmd ]] || bad+=("_kit/memory.cmd missing")
   [[ -f _kit/log-spawn.cmd ]] || bad+=("_kit/log-spawn.cmd missing")
-  [[ -f _kit/memory.ps1 ]] || bad+=("_kit/memory.ps1 missing")
+  [[ ! -f _kit/memory.ps1 ]] || bad+=("_kit/memory.ps1 must be absent")
   [[ ! -f _kit/log-spawn.ps1 ]] || bad+=("_kit/log-spawn.ps1 must be absent (pruned on upgrade)")
+  if [[ -d _loop ]]; then
+    [[ -f _loop/loop.cmd ]] || bad+=("_loop/loop.cmd missing")
+    [[ ! -f _loop/loop.ps1 ]] || bad+=("_loop/loop.ps1 must be absent")
+    [[ ! -f _loop/breaker.ps1 ]] || bad+=("_loop/breaker.ps1 must be absent")
+  fi
   if [[ -f .gitattributes ]]; then
     grep -qxF '*.cmd -text' .gitattributes || bad+=(".gitattributes missing '*.cmd -text'")
   else
     bad+=(".gitattributes missing")
   fi
   if ((${#bad[@]})); then
-    report FAIL "P: instance Windows launchers (.cmd) + no log-spawn.ps1" "${bad[*]}"
+    report FAIL "P: instance Windows launchers (.cmd), no ps1 twins" "${bad[*]}"
   else
-    report PASS "P: instance Windows launchers (.cmd) + no log-spawn.ps1"
+    report PASS "P: instance Windows launchers (.cmd), no ps1 twins"
   fi
 }
 
@@ -822,7 +695,6 @@ check_h
 check_i
 check_j
 check_k
-check_l
 check_m
 check_n
 check_o

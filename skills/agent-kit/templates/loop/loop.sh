@@ -2,9 +2,6 @@
 # Autonomous feature loop for {{PROJECT_NAME}} — drives one `auto-loop` iteration per
 # fresh-context CLI run. State lives in _memory/loop/backlog.md + git, never in memory.
 #
-# Twin: loop.ps1 (PowerShell 7+) — loop.ps1 is frozen at agent-kit 1.1.2
-# behavior; knobs added after it (ledger, budgets, timeout, tamper, lint, dossier, claude-stream, breaker probe) are bash-only.
-#
 # Usage:   _loop/loop.sh [max-iterations]        (default 10)
 #          _loop/loop.sh --lint [backlog-path]  (readiness check; exit 0/1/5)
 # CLI:     override with LOOP_CLI, e.g. LOOP_CLI="codex exec --sandbox danger-full-access" or LOOP_CLI="claude -p"
@@ -62,6 +59,9 @@
 #          1 runs each iteration in its own git worktree under .loop-worktrees/.
 #
 # SAFETY: run inside a sandbox (worktree/container) with minimal credentials.
+# A worktree only separates the git tree — it gives no filesystem, network, or
+# credential isolation — so any CLI flag that skips permission prompts or disables
+# the CLI's own sandbox needs a container or VM.
 # This script never pushes and never bypasses permission prompts by itself.
 #
 # Breaker: sources breaker.sh (functions: breaker_load, breaker_should_skip,
@@ -86,10 +86,7 @@
 # immediately and every other running slot is killed).
 # 126/127 (shell-propagated edge cases, not loop-owned codes): command-not-found
 # propagates as exit 127 and found-but-not-executable as exit 126 (bash) --
-# standard shell convention, distinct from the aggregated codes above. The
-# PowerShell twin's Get-Command guard does not attempt to distinguish the two
-# and exits 127 for both -- a stated, knowingly-accepted platform difference
-# (the 126 case is Unix-host-only).
+# standard shell convention, distinct from the aggregated codes above.
 # Exit 5 = setup or integration failure: the LOOP_WORKTREE=1 tracked-instance
 # preflight failing after `git worktree add`, PROMPT.md missing a %%...%%
 # substitution point, a missing/unreadable _memory/loop/backlog.md, or the
@@ -2472,7 +2469,7 @@ _loop_fill_slot() {
     # DIRECTORY test on {{IDE_DIR}}, deliberately NOT a skill-FILE path: each
     # harness tree may carry its own skills (the Cursor
     # emitter is self-contained), so a single skill-file path can't cover
-    # every install shape. {{IDE_DIR}} in these single-copy loop drivers
+    # every install shape. {{IDE_DIR}} in this single-copy loop driver
     # resolves to the PRIMARY harness's dir, and a directory probe stays
     # layout-agnostic across all four harnesses regardless of which one is
     # primary. A directory probe on {{IDE_DIR}} is true on all four harnesses
@@ -2518,7 +2515,7 @@ _loop_fill_slot() {
 
   local p
   p="$(cat "$PROMPT_FILE")"
-  # CRLF parity (twin: loop.ps1's TrimEnd): strip BOTH trailing CR and LF, not CR alone
+  # CRLF handling: strip BOTH trailing CR and LF, not CR alone
   # — command substitution above already strips trailing newlines, so a \n before a \r
   # (e.g. a CRLF file ending "text\r\n\r\n") would otherwise re-expose a trailing \r
   # that a CR-only strip misses.

@@ -1,5 +1,5 @@
 # Sourced from tests/agent-kit/templates/memory.sh (bash leg only).
-# Uses caller report, mktemp_dir, mktemp_root, MEMORY_SH, MEMORY_PS1, REPO_ROOT, CANON_MEMORY_SH.
+# Uses caller report, mktemp_dir, mktemp_root, MEMORY_SH, REPO_ROOT, CANON_MEMORY_SH.
 
 _mrc_assert() { assert_fixture_root "$1" || exit 1; }
 _mrc_git_at() { _mrc_assert "$1"; git -C "$1" "${@:2}"; }
@@ -226,28 +226,6 @@ run_release_c_bash_only() {
   [[ "$rc" -eq 4 && "$err" == 'memory: rm: git ls-files failed' && -f "$R/$p" ]] \
     && report PASS "[bash-only] (rc-rm-lsfiles-fatal) corrupt index exit 4 keeps record" \
     || report FAIL "[bash-only] (rc-rm-lsfiles-fatal)" "rc=$rc err=[$err] exists=$([[ -f "$R/$p" ]] && echo yes || echo no)"
-
-  if command -v pwsh >/dev/null 2>&1; then
-    local stub_chk stub_rm stub_cap
-    stub_chk='memory: '\''check'\'' is bash-only; run bash _kit/memory.sh check (Windows: _kit\memory.cmd check)'
-    stub_rm='memory: '\''rm'\'' is bash-only; run bash _kit/memory.sh rm (Windows: _kit\memory.cmd rm)'
-    stub_cap='memory: '\''capture'\'' is bash-only; run bash _kit/memory.sh capture (Windows: _kit\memory.cmd capture)'
-    stub_bf='memory: '\''backfill'\'' is bash-only; run bash _kit/memory.sh backfill (Windows: _kit\memory.cmd backfill)'
-    out="$(pwsh -NoProfile -NonInteractive -File "$MEMORY_PS1" check 2>&1)"; rc=$?
-    [[ "$rc" -eq 2 && "$out" == "$stub_chk" ]] && report PASS "[bash-only] (rc-pwsh-stub-check)" \
-      || report FAIL "[bash-only] (rc-pwsh-stub-check)" "rc=$rc out=[$out]"
-    out="$(pwsh -NoProfile -NonInteractive -File "$MEMORY_PS1" rm x 2>&1)"; rc=$?
-    [[ "$rc" -eq 2 && "$out" == "$stub_rm" ]] && report PASS "[bash-only] (rc-pwsh-stub-rm)" \
-      || report FAIL "[bash-only] (rc-pwsh-stub-rm)" "rc=$rc out=[$out]"
-    out="$(pwsh -NoProfile -NonInteractive -File "$MEMORY_PS1" capture 2>&1)"; rc=$?
-    [[ "$rc" -eq 2 && "$out" == "$stub_cap" ]] && report PASS "[bash-only] (rc-pwsh-stub-capture)" \
-      || report FAIL "[bash-only] (rc-pwsh-stub-capture)" "rc=$rc out=[$out]"
-    out="$(pwsh -NoProfile -NonInteractive -File "$MEMORY_PS1" backfill 2>&1)"; rc=$?
-    [[ "$rc" -eq 2 && "$out" == "$stub_bf" ]] && report PASS "[bash-only] (rc-pwsh-stub-backfill)" \
-      || report FAIL "[bash-only] (rc-pwsh-stub-backfill)" "rc=$rc out=[$out]"
-  else
-    report SKIP "[bash-only] (rc-pwsh-stub) pwsh absent"
-  fi
 
   if ( assert_fixture_root "$REPO_ROOT" 2>/dev/null ); then
     report FAIL "[bash-only] fixture-root guard rejects repository root"

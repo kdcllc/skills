@@ -62,6 +62,10 @@ _suite_cleanup() {
 trap _suite_cleanup EXIT
 
 RUN_TMP="$(mktemp -d 2>/dev/null || mktemp -d -t wl-run)"
+FIXTURE_TMPDIR="$RUN_TMP"
+export TMPDIR="$FIXTURE_TMPDIR"
+# shellcheck source=../lib/fixture-root.sh
+. "$HERE/../lib/fixture-root.sh"
 
 file_every_line_cr() { # path — every line CRLF (portable roundtrip; no GNU-only sed)
   local f="$1" u norm line
@@ -155,6 +159,42 @@ static_emitted_cmd_identity() {
   emit_cache_root emit_root "$FIXTURE" || return 1
   cmp -s "$LAUNCHER_CMD" "$emit_root/_kit/memory.cmd" \
     && cmp -s "$LAUNCHER_CMD" "$emit_root/_kit/log-spawn.cmd"
+}
+
+static_loop_cmd_emit() {
+  local emit_root=""
+  emit_cache_root emit_root "$FIXTURE" || return 1
+  [[ -f "$emit_root/_loop/loop.cmd" ]] \
+    && cmp -s "$LAUNCHER_CMD" "$emit_root/_loop/loop.cmd"
+}
+
+static_loop_cmd_absent_when_disabled() {
+  local root ans
+  ans="$(mktemp "$RUN_TMP/ans-noloop.XXXXXX")" || return 1
+  jq '.flags.loop = false' "$FIXTURE" > "$ans" || return 1
+  root="$(mktemp -d "$RUN_TMP/noloop.XXXXXX")" || return 1
+  assert_fixture_root "$root" || return 1
+  git -C "$root" init -q 2>/dev/null || true
+  "$BASH" "$EMIT_SH" --root "$root" --kit "$KIT" --answers "$ans" >/dev/null 2>&1 || return 1
+  [[ ! -f "$root/_loop/loop.cmd" ]]
+}
+
+static_gitattributes_ps1_line() {
+  local emit_root=""
+  emit_cache_root emit_root "$FIXTURE" || return 1
+  grep -qxF '*.sh text eol=lf' "$emit_root/.gitattributes" \
+    && ! grep -qxF '*.ps1 text eol=lf' "$emit_root/.gitattributes"
+}
+
+static_gitattributes_ps1_line_upgrade_retained() {
+  local root
+  root="$(mktemp -d "$RUN_TMP/gattr.XXXXXX")" || return 1
+  assert_fixture_root "$root" || return 1
+  git -C "$root" init -q 2>/dev/null || true
+  emit_cache_copy "$root" "$FIXTURE" || return 1
+  grep -qxF '*.ps1 text eol=lf' "$root/.gitattributes" || echo '*.ps1 text eol=lf' >> "$root/.gitattributes"
+  "$BASH" "$EMIT_SH" --root "$root" --kit "$KIT" --force --upgrade >/dev/null 2>&1 || return 1
+  grep -qxF '*.ps1 text eol=lf' "$root/.gitattributes"
 }
 
 static_candidate_order() {
@@ -362,6 +402,30 @@ if static_emitted_cmd_identity; then
   report PASS "emitted _kit/memory.cmd and log-spawn.cmd match template (cached emit)"
 else
   report FAIL "emitted _kit/memory.cmd and log-spawn.cmd match template (cached emit)"
+fi
+
+if static_loop_cmd_emit; then
+  report PASS "loop-enabled emit: _loop/loop.cmd byte-identical to launcher template"
+else
+  report FAIL "loop-enabled emit: _loop/loop.cmd byte-identical to launcher template"
+fi
+
+if static_loop_cmd_absent_when_disabled; then
+  report PASS "loop-disabled emit: no _loop/loop.cmd"
+else
+  report FAIL "loop-disabled emit: no _loop/loop.cmd"
+fi
+
+if static_gitattributes_ps1_line; then
+  report PASS "fresh emit .gitattributes: *.sh eol=lf, no *.ps1 line"
+else
+  report FAIL "fresh emit .gitattributes: *.sh eol=lf, no *.ps1 line"
+fi
+
+if static_gitattributes_ps1_line_upgrade_retained; then
+  report PASS "upgrade retains existing *.ps1 text eol=lf in .gitattributes"
+else
+  report FAIL "upgrade retains existing *.ps1 text eol=lf in .gitattributes"
 fi
 
 if static_candidate_order; then

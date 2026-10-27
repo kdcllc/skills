@@ -360,7 +360,7 @@ case_n_memory_emit_paths() {
   root="$(mktemp_root)"
   emit_cache_copy "$root" "$FIXTURE" || return 1
   run_emit_sh "$root" --kit "$KIT" --answers "$FIXTURE" >/dev/null 2>&1 || return 1
-  [[ -f "$root/_kit/memory.ps1" && -f "$root/_memory/README.md" ]] || return 1
+  [[ ! -f "$root/_kit/memory.ps1" && -f "$root/_memory/README.md" ]] || return 1
   gi="$(grep -cxF '_memory/.index/' "$root/.gitignore" || true)"
   gr="$(grep -cxF '_memory/raw/' "$root/.gitignore" || true)"
   [[ "$gi" -eq 1 && "$gr" -eq 1 ]] || return 1
@@ -704,9 +704,9 @@ blk_j() {
 }
 blk_n() {
   if case_n_memory_emit_paths; then
-    report PASS "(n) memory.ps1 + _memory/README.md; gitignore/gitattributes lines"
+    report PASS "(n) _memory/README.md present, _kit/memory.ps1 absent; gitignore/gitattributes lines"
   else
-    report FAIL "(n) memory.ps1 + _memory/README.md; gitignore/gitattributes lines"
+    report FAIL "(n) _memory/README.md present, _kit/memory.ps1 absent; gitignore/gitattributes lines"
   fi
 }
 blk_o() {

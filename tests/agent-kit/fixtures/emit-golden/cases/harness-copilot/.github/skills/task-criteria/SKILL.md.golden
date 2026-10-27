@@ -99,7 +99,7 @@ Apply the auto-fail list in `.github/agents/evaluator.md`.
   or sends that fence to `evaluator`, `qa-evaluator`, or `terminal`.
 - **(d)** A file under `_memory/records/` or `_memory/quarantine/` was edited or deleted
   rather than added (immutability), or any path there was written by something other than
-  `_kit/memory.sh` / `_kit/memory.ps1`. **Carve-outs (not violations):** deleting an
+  `_kit/memory.sh` (or its `_kit/memory.cmd` launcher). **Carve-outs (not violations):** deleting an
   **untracked** record with `_kit/memory.sh rm <full-id>`; deleting a quarantined file
   when a human or an explicitly tasked cleanup removes bad admission-screen hits before
   re-`add`.

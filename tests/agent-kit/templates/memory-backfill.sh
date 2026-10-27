@@ -13,11 +13,8 @@ git_fixture() {
   git -C "$1" "${@:2}"
 }
 CANON_MEMORY_SH="$REPO_ROOT/skills/agent-kit/templates/tools/memory.sh"
-CANON_MEMORY_PS1="$REPO_ROOT/skills/agent-kit/templates/tools/memory.ps1"
 MEMORY_SH="${MEMORY_SH:-$CANON_MEMORY_SH}"
-MEMORY_PS1="${MEMORY_PS1:-$CANON_MEMORY_PS1}"
 case "$MEMORY_SH" in /*) ;; *) MEMORY_SH="$REPO_ROOT/$MEMORY_SH" ;; esac
-case "$MEMORY_PS1" in /*) ;; *) MEMORY_PS1="$REPO_ROOT/$MEMORY_PS1" ;; esac
 
 pass=0; fail=0; skip=0
 CLEANUP=()
@@ -869,24 +866,6 @@ grep -q 'memory: backfill goal goal-x quarantined' <<<"$BF_OUT" \
   && [[ "$BF_RC" -eq 5 ]] \
   && report PASS "quarantine admission → exit 5, run continues" \
   || report FAIL "quarantine path" "rc=$BF_RC"
-
-# usage parity twins
-if ! command -v pwsh >/dev/null 2>&1; then
-  report SKIP "twins --help byte-identical" "pwsh absent"
-elif cmp -s <(bash "$CANON_MEMORY_SH" --help) <(pwsh -NoProfile -File "$CANON_MEMORY_PS1" --help 2>/dev/null); then
-  report PASS "twins --help byte-identical"
-else
-  report FAIL "twins --help differ"
-fi
-stub_bf='memory: '\''backfill'\'' is bash-only; run bash _kit/memory.sh backfill (Windows: _kit\memory.cmd backfill)'
-if command -v pwsh >/dev/null 2>&1; then
-  out="$(pwsh -NoProfile -File "$CANON_MEMORY_PS1" backfill 2>&1)"; rc=$?
-  [[ "$rc" -eq 2 && "$out" == "$stub_bf" ]] \
-    && report PASS "pwsh backfill stub exit 2 exact line" \
-    || report FAIL "pwsh backfill stub" "rc=$rc out=[$out]"
-else
-  report SKIP "pwsh backfill stub" "pwsh absent"
-fi
 
 # --- logic mutations (temp copies of memory.sh) ---
 mut_archived() {

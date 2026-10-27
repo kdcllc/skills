@@ -2,7 +2,7 @@
 
 # Architecture
 
-This guide describes **agent-kit 1.0.0** as shipped from `skills/agent-kit/templates/` through `/agent-kit` and `bin/emit.sh`. It is the structural companion to the emitted [`ORCHESTRATION.md`](../../../skills/agent-kit/templates/ORCHESTRATION.md) in each install.
+This guide describes the current agent-kit release (`metadata.version` in [`SKILL.md`](../../../skills/agent-kit/SKILL.md)) as shipped from `skills/agent-kit/templates/` through `/agent-kit` and `bin/emit.sh`. It is the structural companion to the emitted [`ORCHESTRATION.md`](../../../skills/agent-kit/templates/ORCHESTRATION.md) in each install.
 
 ## System context
 
@@ -35,7 +35,7 @@ The orchestrator never substitutes implementation work: it prepares context pack
 
 ## Package components
 
-Canonical source lives under `skills/agent-kit/`. **`SKILL.md`** is the `/agent-kit` workflow (detect harnesses, greenfield gate, inspect, interview, answers file, emit, report). **`templates/`** holds agents, skills, loop drivers, tools, memory layout, `ORCHESTRATION.md`, and `models.map.md`. **`emitters/`** are **caveats only** — translation rules live in **`bin/emit.sh`** and **`bin/emit.cmd`**. **`reference/`** holds the harness capability matrix, bootstrap ids, and Windows launcher notes.
+Canonical source lives under `skills/agent-kit/`. **`SKILL.md`** is the `/agent-kit` workflow (detect harnesses, greenfield gate, inspect, interview, answers file, emit, report). **`templates/`** holds agents, skills, loop drivers, tools, memory layout, `ORCHESTRATION.md`, and `models.map.md`. **`emitters/`** are **caveats only** — translation rules live in **`bin/emit.sh`** (**`bin/emit.cmd`** is its Windows launcher). **`reference/`** holds the harness capability matrix, bootstrap ids, and Windows launcher notes.
 
 ```mermaid
 flowchart TD
@@ -108,7 +108,7 @@ flowchart TD
 
     subgraph singleCopy ["Single-copy (_kit gitignored · _loop on loop installs)"]
         Kit["_kit/\nlog-spawn · memory · launchers"]
-        Loop["_loop/\nloop.sh · loop.ps1"]
+        Loop["_loop/\nloop.sh · loop.cmd"]
     end
 
     subgraph memTracked ["_memory/ tracked"]
@@ -247,7 +247,7 @@ Verdict vocabulary and invariants: [`templates/ORCHESTRATION.md`](../../../skill
 
 ## Loop story states
 
-Backlog stories in `_memory/loop/backlog.md` carry `passes:`, `attempts:`, and `blocked:`. Eligible stories have **`passes: false`** and **`attempts < 3`**. The **`attempts`** counter increments when the story is **claimed** (driver, before dispatch) or at **iteration start** in manual mode — so a crashed iteration still counts. On evaluator-gated success the driver sets **`passes: true`** from the `ITERATION:` line (manual mode sets it in the story commit). At **`attempts` 3**, the story becomes **`blocked: true`** (driver from `ITERATION:` in dispatched mode; manual mode sets it on failure). The bash driver also sets **`blocked: true`** when a story budget (`LOOP_STORY_BUDGET_TOKENS` / `LOOP_STORY_BUDGET_USD`) is reached on a non-passing reap. **Quarantined** branches (ITERATION mismatch, subset violation, abnormal exit, tamper fail with `LOOP_TAMPER_CHECK=fail`, or killed when another slot hit a protected path) stay out of integration. **Circuit breakers** **retire** a slot (CB1 no-progress, CB2 repeated signatures) while other slots may continue.
+Backlog stories in `_memory/loop/backlog.md` carry `passes:`, `attempts:`, and `blocked:`. Eligible stories have **`passes: false`** and **`attempts < 3`**. The **`attempts`** counter increments when the story is **claimed** (driver, before dispatch) or at **iteration start** in manual mode — so a crashed iteration still counts. On evaluator-gated success the driver sets **`passes: true`** from the `ITERATION:` line (manual mode sets it in the story commit). At **`attempts` 3**, the story becomes **`blocked: true`** (driver from `ITERATION:` in dispatched mode; manual mode sets it on failure). The driver also sets **`blocked: true`** when a story budget (`LOOP_STORY_BUDGET_TOKENS` / `LOOP_STORY_BUDGET_USD`) is reached on a non-passing reap. **Quarantined** branches (ITERATION mismatch, subset violation, abnormal exit, tamper fail with `LOOP_TAMPER_CHECK=fail`, or killed when another slot hit a protected path) stay out of integration. **Circuit breakers** **retire** a slot (CB1 no-progress, CB2 repeated signatures) while other slots may continue.
 
 ```mermaid
 stateDiagram-v2

@@ -12,7 +12,7 @@
 #   - a CB1 carve-out end-to-end stub run of the RE-EMITTED instance
 #     _loop/loop.sh + _loop/breaker.sh inside a throwaway git repo (assertion
 #     15) — requires the repo's own self-install (_loop/) to exist;
-#   - T1a/T1b PowerShell structural guards, A1-A3 emitter/SKILL text coverage,
+#   - A1-A3 emitter/SKILL text coverage,
 #     the story-006 T2a herestring SIGPIPE regression + its pre-fix control
 #     (assertions 16-19-ish);
 #   - story-007 additions: checks J (manifest hash join, self-excluding,
@@ -24,8 +24,7 @@
 #     scripts/agent-kit/self-install.sh against a temp fixture —
 #     copy-mode, overwrite, --force, dry-run, --dry-run --symlink, unknown-flag,
 #     empty-skills, sibling-preservation, rollback, --symlink, mode-transition,
-#     .gitignore dest-lines, bash -n, ps1 structural-parity, ps1 parse (pwsh-
-#     conditional), ps1 live run (pwsh-conditional), README citation, and
+#     .gitignore dest-lines, bash -n, README citation, and
 #     checks B/D excluding the compiler copy at .claude/skills/agent-kit/.
 #   - greenfield-setup Step 2b contract (no _loop/ required): assertions 125-135
 #     lock Step 2b skill-suggestions contract, docs/version claims, and $TMP
@@ -33,8 +32,8 @@
 #     docs/agent-kit/guide/getting-started.md.
 #   - memory integrator step 3b (assertions 136-141): proposal integration,
 #     ITERATION-mismatch gating, LOOP_WORKTREE=0 sweep safety, missing _kit/
-#     memory.sh behavior, pwsh driver parity — sandboxes copy canonical
-#     skills/agent-kit/templates/tools/memory.{sh,ps1} into _kit/.
+#     memory.sh behavior, memory integrator — sandboxes copy canonical
+#     skills/agent-kit/templates/tools/memory.sh into _kit/.
 #
 # Every assertion is outcome-verifying: it inspects the resulting state file /
 # stdout / stderr / exit code and FAILs loudly (non-zero exit, explicit FAIL
@@ -62,11 +61,8 @@ sandbox_git() {
 }
 
 BREAKER_SH="$REPO_ROOT/skills/agent-kit/templates/loop/breaker.sh"
-BREAKER_PS1="$REPO_ROOT/skills/agent-kit/templates/loop/breaker.ps1"
 LOOP_SH="${LOOP_DRIVER_SH:-$REPO_ROOT/skills/agent-kit/templates/loop/loop.sh}"
-LOOP_PS1="$REPO_ROOT/skills/agent-kit/templates/loop/loop.ps1"
 INSTANCE_LOOP_SH="$REPO_ROOT/_loop/loop.sh"
-INSTANCE_LOOP_PS1="$REPO_ROOT/_loop/loop.ps1"
 INSTANCE_BREAKER_SH="$REPO_ROOT/_loop/breaker.sh"
 INSTANCE_PROMPT_MD="$REPO_ROOT/_loop/PROMPT.md"
 SETUP_SKILL_MD="$REPO_ROOT/skills/agent-kit/SKILL.md"
@@ -1627,72 +1623,6 @@ SCRIPTEOF
 fi
 
 # ---------------------------------------------------------------------------
-# 18 (T1a, structural -- pwsh absent on this box; PRECISION FIX story-006
-# task-03 judge): the RE-EMITTED instance _loop/loop.ps1 carries the
-# Get-Command guard AND the exit 127 it triggers COUPLED within the same
-# guard block -- a line-window match anchored at the Get-Command line, not
-# two independent file-wide greps (which a decoy `exit 127` elsewhere in the
-# file, with no guard of its own, could satisfy). Structural by construction
-# -- never runtime-verified here.
-# ---------------------------------------------------------------------------
-t1a_check() { # t1a_check <file> -> 0 if Get-Command git + exit 127 are coupled within a 6-line window
-  local f="$1" ln window
-  [[ -f "$f" ]] || return 1
-  ln="$(grep -n 'Get-Command git' "$f" | head -1 | cut -d: -f1)"
-  [[ -z "$ln" ]] && return 1
-  window="$(sed -n "${ln},$((ln + 5))p" "$f")"
-  grep -qE 'exit 127' <<< "$window"
-}
-if t1a_check "$INSTANCE_LOOP_PS1"; then
-  report PASS "18 (structural, coupled): T1a -- instance loop.ps1 carries Get-Command git + exit 127 within the SAME guard block (6-line window), not two independent file-wide greps; not runtime-verified, pwsh absent"
-else
-  report FAIL "18 (structural, coupled): T1a" "Get-Command guard and exit 127 not found coupled within a 6-line window in $INSTANCE_LOOP_PS1"
-fi
-
-# 18-mutation-proof: a copy carrying a decoy `exit 127` elsewhere in the file
-# (not inside any Get-Command guard) must FAIL the coupled check even though
-# the old two-independent-greps form would have PASSED it.
-# FIX-CYCLE-2 (routed from task 04's escalation, seam inherited via the
-# instance re-emit, not a defect introduced here): task 02's 126/127
-# documentation clause puts a plain-text `exit 127` inside a COMMENT ahead of
-# the real Get-Command guard, so the old FIRST-textual-hit neutralization
-# below (`sed -i '0,/exit 127/{...}'`) silently neutralized the COMMENT's
-# occurrence instead of the real guard's, leaving the real guard's own
-# `exit 127` intact -- the decoy then satisfied the coupled check via the
-# untouched real guard, and the mutation-proof FAILed. Fixed by anchoring the
-# neutralization at the guard itself (content-anchored on 'Get-Command git',
-# a small window forward), the same anchoring style already used by
-# t1a_check/the assertion-23 row-scoped precedent -- this survives future
-# line drift (e.g. more comment text landing above the guard) because it
-# locates the guard by content, never by an absolute line number or a
-# first-textual-hit assumption.
-t18_decoy="$TMP/loop_decoy.ps1"
-cp "$INSTANCE_LOOP_PS1" "$t18_decoy"
-# neutralize the real guard's own exit 127 (content-anchored at the guard, not
-# a first-textual-hit assumption) so only the decoy remains
-guard_ln="$(grep -n 'Get-Command git' "$t18_decoy" | head -1 | cut -d: -f1)"
-sed -i "${guard_ln},$((guard_ln + 5)){s/exit 127/exit 99/}" "$t18_decoy"
-printf '\nexit 127  # decoy, unrelated to any git guard\n' >> "$t18_decoy"
-if t1a_check "$t18_decoy"; then
-  report FAIL "18-mutation-proof: decoy exit 127 (uncoupled) must FAIL the coupled check" "decoy copy incorrectly PASSED"
-else
-  report PASS "18-mutation-proof: decoy exit 127 (uncoupled, no guard) correctly FAILS the coupled check -- precision fix confirmed"
-fi
-
-# ---------------------------------------------------------------------------
-# 19 (T1b, structural -- pwsh absent on this box): the RE-EMITTED instance
-# _loop/loop.ps1 carries the NULL-ONLY coalescing guard (`$null -eq`) around
-# the PROMPT.md -Raw read, guarding exactly the literal-null case (0-byte
-# file) without coalescing whitespace-only content. Structural by
-# construction -- never runtime-verified here.
-# ---------------------------------------------------------------------------
-if [[ -f "$INSTANCE_LOOP_PS1" ]] && grep -qE '\$null -eq \$raw' "$INSTANCE_LOOP_PS1"; then
-  report PASS "19 (structural): T1b -- instance loop.ps1 carries the null-only guard (\$null -eq \$raw) around the PROMPT.md read; not runtime-verified, pwsh absent"
-else
-  report FAIL "19 (structural): T1b" "null-only guard (\$null -eq \$raw) not found in $INSTANCE_LOOP_PS1"
-fi
-
-# ---------------------------------------------------------------------------
 # 20 (A1, task-02 coverage): cursor.md's loop row carries the literal per-OS
 # invocation forms inline, matching the copilot/codex emitter cells, while
 # keeping the "as in the Claude Code emitter" pointer.
@@ -1700,8 +1630,8 @@ fi
 if [[ -f "$ORCH_TPL" ]]; then
   _orch_loop_flat="$(tr -s '[:space:]' ' ' < "$ORCH_TPL")"
   if grep -qF '_loop/loop.sh [max-iterations]' <<< "$_orch_loop_flat" \
-     && grep -qF 'pwsh _loop/loop.ps1 [MaxIterations]' <<< "$_orch_loop_flat"; then
-    report PASS "20: A1 -- ORCHESTRATION.md carries literal bash + pwsh loop invocation forms"
+     && grep -qF '_loop\loop.cmd [max-iterations]' <<< "$_orch_loop_flat"; then
+    report PASS "20: A1 -- ORCHESTRATION.md carries bash entry point (_loop/loop.sh) and Windows _loop\\loop.cmd"
   else
     report FAIL "20: A1" "literal invocation forms not found in $ORCH_TPL (whitespace-flattened grep)"
   fi
@@ -2099,84 +2029,70 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 33 (NEW, story-009 task-03, routed addendum item a): 126/127 contract-clause
-# parity. Extracts the appended 126/127 clause from BOTH canonical loop
-# twins' exit-code contract blocks (marker-normalized: leading `# ` comment
-# markers stripped before compare, since the twins otherwise differ in
-# comment-marker convention on other lines) and requires the clause text be
-# byte-identical, plus that both extracted blocks literally mention "126"
-# and "127".
+# 33 (NEW, story-009 task-03): 126/127 contract-clause in canonical loop.sh.
+# Extracts the appended 126/127 clause from the exit-code contract block and
+# requires the extracted block literally mention "126" and "127".
 # ---------------------------------------------------------------------------
 extract_126127_clause() { # extract_126127_clause <file>
   awk '/^# 126\/127 \(shell-propagated edge cases/{flag=1} flag{print} /\(the 126 case is Unix-host-only\)\.$/{if (flag) exit}' "$1"
 }
 clause_sh33="$(extract_126127_clause "$LOOP_SH")"
-clause_ps133="$(extract_126127_clause "$LOOP_PS1")"
 norm_sh33="$(sed 's/^# \{0,1\}//' <<< "$clause_sh33")"
-norm_ps133="$(sed 's/^# \{0,1\}//' <<< "$clause_ps133")"
 
-if [[ -z "$clause_sh33" || -z "$clause_ps133" ]]; then
-  report FAIL "33 setup: extract 126/127 clause from canonical loop twins" \
-    "clause_sh empty=$([[ -z "$clause_sh33" ]] && echo yes || echo no) clause_ps1 empty=$([[ -z "$clause_ps133" ]] && echo yes || echo no)"
-elif [[ "$norm_sh33" == "$norm_ps133" && "$norm_sh33" == *"126"* && "$norm_sh33" == *"127"* \
-        && "$norm_ps133" == *"126"* && "$norm_ps133" == *"127"* ]]; then
-  report PASS "33: 126/127 contract-clause parity -- canonical loop.sh + loop.ps1 exit-code contract blocks carry a byte-identical (marker-normalized) appended clause, both mentioning 126 and 127"
+if [[ -z "$clause_sh33" ]]; then
+  report FAIL "33 setup: extract 126/127 clause from canonical loop.sh" "clause empty"
+elif [[ "$norm_sh33" == *"126"* && "$norm_sh33" == *"127"* ]]; then
+  report PASS "33: 126/127 contract-clause -- canonical loop.sh exit-code block mentions 126 and 127 in the appended shell-propagated clause"
 else
-  report FAIL "33: 126/127 contract-clause parity" "clause_sh='$clause_sh33' clause_ps1='$clause_ps133'"
+  report FAIL "33: 126/127 contract-clause" "clause_sh='$clause_sh33'"
 fi
 
 # ---------------------------------------------------------------------------
 # 34 (NEW, story-009 task-03, cycle-1 MAJOR-3 / Check-G-parity-guard
-# deviation landing site; FIX-CYCLE-1: t34_move_check re-scoped): ps1
-# mechanics structural guard. The canonical breaker.ps1 is grepped for three
+# deviation landing site; FIX-CYCLE-1: t34_move_check re-scoped): breaker
+# mechanics structural guard. The canonical breaker.sh is grepped for three
 # mechanics, block-scoped per the assertion-18 coupling precedent (a
 # line-window anchored at the relevant function/message, not independent
 # file-wide greps a decoy could satisfy):
-#   - ::Move( with the overwrite argument ($true), inside the
-#     Write-BreakerState function body (fix-cycle-1: a file-wide grep was
-#     mutation-proven decoy-satisfiable -- breaker.ps1:138 is a COMMENT
-#     containing this exact literal; deleting the real :171 call left the
-#     old check green, so it is now anchored at `function Write-BreakerState`
-#     the same way the other two sub-checks below are already anchored);
-#   - the terminator condition (-eq '}') inside Test-BreakerTerminatorOk;
-#   - the fail-safe OPEN branch: the "failing SAFE to OPEN" warning coupled
-#     (within a few lines) to the New-BreakerFailsafeOpen call, and that
-#     function's own body in turn coupled to -State 'OPEN'.
+#   - mv -f atomic write inside _breaker_write;
+#   - the terminator guard inside _breaker_terminator_ok;
+#   - breaker_load's fail-safe path (failing SAFE to OPEN -> _breaker_failsafe_open)
+#     and _breaker_failsafe_open's OPEN state write.
 # ---------------------------------------------------------------------------
 t34_move_check() {
   local f="$1" ln window
-  ln="$(grep -n 'function Write-BreakerState' "$f" | head -1 | cut -d: -f1)"
+  ln="$(grep -n '_breaker_write() {' "$f" | head -1 | cut -d: -f1)"
   [[ -z "$ln" ]] && return 1
-  window="$(sed -n "${ln},$((ln + 35))p" "$f")"
-  grep -qF '::Move($tmp, $Path, $true)' <<< "$window"
+  window="$(sed -n "${ln},$((ln + 40))p" "$f")"
+  grep -qF 'mv -f "$tmp" "$file"' <<< "$window"
 }
 t34_term_check() {
   local f="$1" ln window
-  ln="$(grep -n 'function Test-BreakerTerminatorOk' "$f" | head -1 | cut -d: -f1)"
+  ln="$(grep -n '_breaker_terminator_ok() {' "$f" | head -1 | cut -d: -f1)"
   [[ -z "$ln" ]] && return 1
-  window="$(sed -n "${ln},$((ln + 15))p" "$f")"
-  grep -qE -- "-eq '\}'" <<< "$window"
+  window="$(sed -n "${ln},$((ln + 20))p" "$f")"
+  grep -qF '"}"' <<< "$window"
 }
 t34_failsafe_msg_check() {
   local f="$1" ln window
-  ln="$(grep -n 'failing SAFE to OPEN' "$f" | head -1 | cut -d: -f1)"
+  ln="$(grep -n 'breaker_load() {' "$f" | head -1 | cut -d: -f1)"
   [[ -z "$ln" ]] && return 1
-  window="$(sed -n "${ln},$((ln + 5))p" "$f")"
-  grep -qF 'New-BreakerFailsafeOpen' <<< "$window"
+  window="$(sed -n "${ln},$((ln + 25))p" "$f")"
+  grep -qF 'failing SAFE to OPEN' <<< "$window" && grep -qF '_breaker_failsafe_open' <<< "$window"
 }
 t34_failsafe_state_check() {
   local f="$1" ln window
-  ln="$(grep -n 'function New-BreakerFailsafeOpen' "$f" | head -1 | cut -d: -f1)"
+  ln="$(grep -n '_breaker_failsafe_open() {' "$f" | head -1 | cut -d: -f1)"
   [[ -z "$ln" ]] && return 1
-  window="$(sed -n "${ln},$((ln + 30))p" "$f")"
-  grep -qE -- "-State 'OPEN'" <<< "$window"
+  window="$(sed -n "${ln},$((ln + 50))p" "$f")"
+  grep -qE '_breaker_write "\$file" OPEN' <<< "$window"
 }
-if t34_move_check "$BREAKER_PS1" && t34_term_check "$BREAKER_PS1" \
-   && t34_failsafe_msg_check "$BREAKER_PS1" && t34_failsafe_state_check "$BREAKER_PS1"; then
-  report PASS "34: ps1 mechanics structural guard -- canonical breaker.ps1 carries ::Move( with the overwrite arg (\$true), the terminator condition (-eq '}') inside Test-BreakerTerminatorOk, and the fail-safe OPEN branch (New-BreakerFailsafeOpen coupled to the 'failing SAFE to OPEN' warning, itself writing -State 'OPEN') -- not runtime-verified, pwsh absent"
+if t34_move_check "$BREAKER_SH" && t34_term_check "$BREAKER_SH" \
+   && t34_failsafe_msg_check "$BREAKER_SH" && t34_failsafe_state_check "$BREAKER_SH"; then
+  report PASS "34: breaker mechanics structural guard -- canonical breaker.sh carries mv -f atomic write, terminator guard, and fail-safe OPEN branch (_breaker_failsafe_open) -- structural guard"
 else
-  report FAIL "34: ps1 mechanics structural guard" \
-    "move=$(t34_move_check "$BREAKER_PS1" && echo ok || echo FAIL) term=$(t34_term_check "$BREAKER_PS1" && echo ok || echo FAIL) failsafe_msg=$(t34_failsafe_msg_check "$BREAKER_PS1" && echo ok || echo FAIL) failsafe_state=$(t34_failsafe_state_check "$BREAKER_PS1" && echo ok || echo FAIL)"
+  report FAIL "34: breaker mechanics structural guard" \
+    "move=$(t34_move_check "$BREAKER_SH" && echo ok || echo FAIL) term=$(t34_term_check "$BREAKER_SH" && echo ok || echo FAIL) failsafe_msg=$(t34_failsafe_msg_check "$BREAKER_SH" && echo ok || echo FAIL) failsafe_state=$(t34_failsafe_state_check "$BREAKER_SH" && echo ok || echo FAIL)"
 fi
 
 # ---------------------------------------------------------------------------
@@ -2228,37 +2144,6 @@ else
   else
     report FAIL "35: CRLF prompt parity (bash)" "${fail_details35[*]}"
   fi
-fi
-
-# ---------------------------------------------------------------------------
-# 36 (NEW, story-009 task-03, routed addendum item b; FIX-CYCLE-1: TrimEnd
-# check re-scoped): CRLF prompt parity -- ps1 structural. The canonical
-# loop.ps1 is grepped for the corrected comment (the original CR-only-strip
-# pin was empirically disproven at cycle 1; the comment now accurately
-# states both twins strip trailing CR/LF) and the TrimEnd("`r", "`n") line
-# itself, which strips BOTH characters -- exact parity with the bash twin's
-# iterative both-char strip loop verified behaviorally in 35. Fix-cycle-1: a
-# file-wide grep for the TrimEnd(...) literal was mutation-proven
-# decoy-satisfiable -- loop.ps1:168 applies the SAME TrimEnd("`r", "`n") call
-# to the CLI OUTPUT (not the PROMPT.md read); deleting the prompt-side :153
-# line left the old check green. Now block-scoped: anchored at the line that
-# reads PROMPT.md into $raw (Get-Content -Raw -LiteralPath $PromptFile), a
-# small window forward to the TrimEnd call that consumes that same $raw.
-# ---------------------------------------------------------------------------
-comment_ok36=0
-grep -qF 'both twins strip trailing CR/LF from the prompt tail' "$LOOP_PS1" && comment_ok36=1
-
-trimend_ok36=0
-prompt_read_ln36="$(grep -nF 'Get-Content -Raw -LiteralPath $PromptFile' "$LOOP_PS1" | head -1 | cut -d: -f1)"
-if [[ -n "$prompt_read_ln36" ]]; then
-  prompt_window36="$(sed -n "${prompt_read_ln36},$((prompt_read_ln36 + 5))p" "$LOOP_PS1")"
-  grep -qF 'TrimEnd("`r", "`n")' <<< "$prompt_window36" && trimend_ok36=1
-fi
-
-if [[ "$comment_ok36" -eq 1 && "$trimend_ok36" -eq 1 ]]; then
-  report PASS "36: CRLF prompt parity (ps1 structural) -- canonical loop.ps1 carries the corrected comment ('both twins strip trailing CR/LF from the prompt tail') and the TrimEnd(\`r,\`n) line matching bash's iterative both-char strip -- not runtime-verified, pwsh absent"
-else
-  report FAIL "36: CRLF prompt parity (ps1 structural)" "comment_ok=$comment_ok36 trimend_ok=$trimend_ok36"
 fi
 
 # ===========================================================================
@@ -2340,21 +2225,10 @@ sandbox_install_memory_kit() { # sandbox_install_memory_kit <dest_dir>
   local dest="$1"
   mkdir -p "$dest/_kit"
   cp "$REPO_ROOT/skills/agent-kit/templates/tools/memory.sh" \
-     "$REPO_ROOT/skills/agent-kit/templates/tools/memory.ps1" \
      "$dest/_kit/"
   chmod +x "$dest/_kit/memory.sh"
 }
 
-sandbox_write_loop_ps1() { # sandbox_write_loop_ps1 <dest_dir> <ide_dir_name>
-  local dest="$1" ide="$2"
-  sed -e 's/{{PROJECT_NAME}}/sandbox-project/g' \
-      -e 's/{{LOOP_MODEL_CHAIN}}/sonnet/g' \
-      -e 's/{{LOOP_WORKTREE_DEFAULT}}/0/g' \
-      -e "s/{{IDE_DIR}}/$ide/g" \
-      "$LOOP_PS1" > "$dest/_loop/loop.ps1"
-  sed -e 's/{{PROJECT_NAME}}/sandbox-project/g' \
-      "$BREAKER_PS1" > "$dest/_loop/breaker.ps1"
-}
 
 # ---------------------------------------------------------------------------
 # 37-40: LOOP_SLOTS clamp/guard/banner surface. The banner ("slots: N — ...")
@@ -3022,145 +2896,6 @@ else
   sed 's/^/    /' "$cb2_ctrl_log" >&2
 fi
 
-# ---------------------------------------------------------------------------
-# 53: ps1 structural parity, block-scoped (assertion-18/34 coupling
-# precedent) against the CANONICAL loop.ps1 -- not runtime-verified, pwsh
-# absent, same disposition as this file's other ps1 structural guards.
-# ---------------------------------------------------------------------------
-t53_slots_check() { # $env:LOOP_SLOTS read + clamp, block-scoped
-  local f="$1" ln window
-  ln="$(grep -n '\$SlotsRaw = \$env:LOOP_SLOTS' "$f" | head -1 | cut -d: -f1)"
-  [[ -z "$ln" ]] && return 1
-  window="$(sed -n "${ln},$((ln + 10))p" "$f")"
-  grep -qF '$Slots -lt 1' <<< "$window" && grep -qF '$Slots -gt 3' <<< "$window"
-}
-t53_worktree_check() { grep -qF '$env:LOOP_WORKTREE' "$1"; }
-t53_guard_msg_check() { grep -qF 'LOOP_SLOTS>1 requires LOOP_WORKTREE=1' "$1"; }
-t53_preflight_check() { # two-path preflight, block-scoped
-  local f="$1" ln window
-  ln="$(grep -n 'backlogOk = Test-Path' "$f" | head -1 | cut -d: -f1)"
-  [[ -z "$ln" ]] && return 1
-  window="$(sed -n "${ln},$((ln + 6))p" "$f")"
-  grep -qF 'ideDirOk = Test-Path' <<< "$window" && grep -qF 'PathType Container' <<< "$window"
-}
-t53_startjob_wait_check() { # Start-Job dispatch + Wait-Job reap -- RE-ANCHORED
-  # (task 05, STORY-011 restructure note): task 03's fill/reap split moved
-  # Wait-Job out of Start-Job's own neighborhood (dispatch and reap are now
-  # separate functions, mirroring the bash twin's _loop_fill_slot/
-  # _loop_reap_slot split), so a small fixed-line window from Start-Job no
-  # longer reaches it. Re-scoped to each mechanic's OWN function: Start-Job
-  # anywhere (dispatch exists) + Wait-Job inside Invoke-LoopReapSlot's own
-  # body (reap actually waits for the job).
-  local f="$1" ln window
-  grep -qF 'Start-Job -ScriptBlock' "$f" || return 1
-  ln="$(grep -n 'function Invoke-LoopReapSlot' "$f" | head -1 | cut -d: -f1)"
-  [[ -z "$ln" ]] && return 1
-  window="$(sed -n "${ln},$((ln + 40))p" "$f")"
-  grep -qF 'Wait-Job' <<< "$window"
-}
-t53_removal_ordering_check() { # wait-then-remove comment + --force/prune fallback
-  local f="$1" ln window
-  ln="$(grep -n 'Windows removal ordering' "$f" | head -1 | cut -d: -f1)"
-  [[ -z "$ln" ]] && return 1
-  window="$(sed -n "${ln},$((ln + 12))p" "$f")"
-  grep -qF 'Wait-Job' <<< "$window" || return 1
-  grep -qF -- '--force' "$f" && grep -qF 'prune' "$f"
-}
-t53_abnormal_check() { # abnormal-exit branch, block-scoped -- anchor updated
-  # (task 05): the message interpolates $Slot BETWEEN "slot" and "exited"
-  # ("slot $Slot exited abnormally"), so the old literal 'slot exited
-  # abnormally' (no variable) never matches; anchored on the
-  # variable-agnostic remainder 'exited abnormally' instead, window widened
-  # to reach the retainedBranches append a few lines later.
-  # WINDOW RE-WIDENED (STORY-012 task 06, red-window repair -- harness-lag,
-  # not a regression): task 02's D4 quarantine-marker call
-  # (Write-LoopQuarantineMarker) landed BETWEEN the abnormal-exit message and
-  # the pre-existing `$script:retainedBranches +=` append, pushing the append
-  # from anchor+10 to anchor+11 (measured against the shipped file) -- one
-  # line past the old anchor+10 window ceiling. Widened to anchor+12 (>= the
-  # goal's required anchor+12 floor) for margin against any further
-  # single-line insertion in that block.
-  local f="$1" ln window
-  ln="$(grep -n 'exited abnormally' "$f" | head -1 | cut -d: -f1)"
-  [[ -z "$ln" ]] && return 1
-  window="$(sed -n "${ln},$((ln + 12))p" "$f")"
-  grep -qF 'retainedBranches +=' <<< "$window"
-}
-t53_capacity_check() { grep -qF 'Capacity-contention rationale' "$1"; }
-t53_exit5_check() { grep -qF 'Exit 5 = setup or integration failure' "$1"; }
-# New mechanics (STORY-011): block-scoped checks anchored on each construct's
-# own function/call site (not whole-file single-token greps).
-t53_parser_check() { # ConvertTo-LoopBacklogEntry: function defined with param block
-  local f="$1" ln window
-  ln="$(grep -n 'function ConvertTo-LoopBacklogEntry' "$f" | head -1 | cut -d: -f1)"
-  [[ -z "$ln" ]] && return 1
-  window="$(sed -n "${ln},$((ln + 5))p" "$f")"
-  grep -qF 'param(' <<< "$window"
-}
-t53_admission_fn_check() { # Select-LoopStory: function + conflict calls inside body
-  local f="$1" ln window
-  ln="$(grep -n 'function Select-LoopStory' "$f" | head -1 | cut -d: -f1)"
-  [[ -z "$ln" ]] && return 1
-  window="$(sed -n "${ln},$((ln + 40))p" "$f")"
-  grep -qF 'Test-LoopWritesConflict' <<< "$window" && grep -qF 'Test-LoopHotspotConflict' <<< "$window"
-}
-t53_claim_hashtable_check() { # $slots[Slot].Story and .Writes assigned on consecutive rows
-  local f="$1" ln window
-  ln="$(grep -n '\$slots\[.*\]\.Story = ' "$f" | head -1 | cut -d: -f1)"
-  [[ -z "$ln" ]] && return 1
-  window="$(sed -n "${ln},$((ln + 3))p" "$f")"
-  grep -qF '.Story =' <<< "$window" && grep -qF '.Writes =' <<< "$window"
-}
-t53_substitution_check() { # Replace('%%STORY_ID%%'...) and Replace('%%OUTBOX_DIR%%'...) at substitution site
-  local f="$1" ln window
-  ln="$(grep -n "Replace.*'%%STORY_ID%%'" "$f" | head -1 | cut -d: -f1)"
-  [[ -z "$ln" ]] && return 1
-  window="$(sed -n "${ln},$((ln + 2))p" "$f")"
-  grep -qF '%%STORY_ID%%' <<< "$window" && grep -qF '%%OUTBOX_DIR%%' <<< "$window"
-}
-t53_integrator_mismatch_check() { # $mismatch = $true scoped to ITERATION-validation block (anchored on $mismatch = $false)
-  local f="$1" ln window
-  ln="$(grep -n '\$mismatch = \$false' "$f" | head -1 | cut -d: -f1)"
-  [[ -z "$ln" ]] && return 1
-  window="$(sed -n "${ln},$((ln + 20))p" "$f")"
-  grep -qF '$mismatch = $true' <<< "$window"
-}
-t53_subset_check() { # Get-LoopSubsetViolation at its pre-merge call site, gated on $mismatch
-  local f="$1" ln window
-  ln="$(grep -n 'Get-LoopSubsetViolation.*-Tree' "$f" | head -1 | cut -d: -f1)"
-  [[ -z "$ln" ]] && return 1
-  window="$(sed -n "$((ln - 2)),$((ln + 2))p" "$f")"
-  grep -qF 'Get-LoopSubsetViolation' <<< "$window" && grep -qF '$mismatch' <<< "$window"
-}
-t53_prune_gate_check() { # $pruneRc = $LASTEXITCODE after git worktree prune
-  local f="$1" ln window
-  ln="$(grep -n '\$pruneRc = \$LASTEXITCODE' "$f" | head -1 | cut -d: -f1)"
-  [[ -z "$ln" ]] && return 1
-  window="$(sed -n "$((ln - 1)),$((ln + 3))p" "$f")"
-  grep -qF 'worktree prune' <<< "$window" && grep -qF '$pruneRc' <<< "$window"
-}
-t53_guard_replacement_check() { # $LoopSlotsExplicit = $env:LOOP_SLOTS, coupled to guard message in same block
-  local f="$1" ln window
-  ln="$(grep -n '\$LoopSlotsExplicit = \$env:LOOP_SLOTS' "$f" | head -1 | cut -d: -f1)"
-  [[ -z "$ln" ]] && return 1
-  window="$(sed -n "${ln},$((ln + 50))p" "$f")"
-  grep -qF '$LoopSlotsExplicit' <<< "$window" && grep -qF 'LOOP_SLOTS>1' <<< "$window"
-}
-
-if t53_slots_check "$LOOP_PS1" && t53_worktree_check "$LOOP_PS1" && t53_guard_msg_check "$LOOP_PS1" \
-   && t53_preflight_check "$LOOP_PS1" && t53_startjob_wait_check "$LOOP_PS1" \
-   && t53_removal_ordering_check "$LOOP_PS1" && t53_abnormal_check "$LOOP_PS1" \
-   && t53_capacity_check "$LOOP_PS1" && t53_exit5_check "$LOOP_PS1" \
-   && t53_parser_check "$LOOP_PS1" && t53_admission_fn_check "$LOOP_PS1" \
-   && t53_claim_hashtable_check "$LOOP_PS1" && t53_substitution_check "$LOOP_PS1" \
-   && t53_integrator_mismatch_check "$LOOP_PS1" && t53_subset_check "$LOOP_PS1" \
-   && t53_prune_gate_check "$LOOP_PS1" && t53_guard_replacement_check "$LOOP_PS1"; then
-  report PASS "53: ps1 structural parity -- \$env:LOOP_SLOTS+clamp, \$env:LOOP_WORKTREE, the STORY-011 guard message, the two-path preflight (backlogOk/ideDirOk, Container test), Start-Job/Wait-Job, removal ordering (wait-then-remove + --force/prune fallback), the abnormal-exit branch (retainedBranches +=), the capacity-contention comment, the appended exit-5 sentence, AND new mechanics (parser ConvertTo-LoopBacklogEntry, admission Select-LoopStory, claim-hashtable \$slots[...].Story, %%STORY_ID%%/%%OUTBOX_DIR%% substitution, integrator \$mismatch, subset-check Get-LoopSubsetViolation, prune-gate \$pruneRc, guard-replacement \$LoopSlotsExplicit) all present in canonical loop.ps1 -- not runtime-verified, pwsh absent"
-else
-  report FAIL "53: ps1 structural parity" \
-    "slots=$(t53_slots_check "$LOOP_PS1" && echo ok || echo FAIL) worktree=$(t53_worktree_check "$LOOP_PS1" && echo ok || echo FAIL) guard_msg=$(t53_guard_msg_check "$LOOP_PS1" && echo ok || echo FAIL) preflight=$(t53_preflight_check "$LOOP_PS1" && echo ok || echo FAIL) startjob_wait=$(t53_startjob_wait_check "$LOOP_PS1" && echo ok || echo FAIL) removal_ordering=$(t53_removal_ordering_check "$LOOP_PS1" && echo ok || echo FAIL) abnormal=$(t53_abnormal_check "$LOOP_PS1" && echo ok || echo FAIL) capacity=$(t53_capacity_check "$LOOP_PS1" && echo ok || echo FAIL) exit5=$(t53_exit5_check "$LOOP_PS1" && echo ok || echo FAIL) parser=$(t53_parser_check "$LOOP_PS1" && echo ok || echo FAIL) admission=$(t53_admission_fn_check "$LOOP_PS1" && echo ok || echo FAIL) claim=$(t53_claim_hashtable_check "$LOOP_PS1" && echo ok || echo FAIL) subst=$(t53_substitution_check "$LOOP_PS1" && echo ok || echo FAIL) mismatch=$(t53_integrator_mismatch_check "$LOOP_PS1" && echo ok || echo FAIL) subset=$(t53_subset_check "$LOOP_PS1" && echo ok || echo FAIL) prune=$(t53_prune_gate_check "$LOOP_PS1" && echo ok || echo FAIL) guard_rep=$(t53_guard_replacement_check "$LOOP_PS1" && echo ok || echo FAIL)"
-fi
-
 # ===========================================================================
 # 54-70+: STORY-011 new driver mechanics -- selection/prompt pinning/guard
 # replacement/structural/chain[fallbackIndex]/mid-path glob/refused-ids/
@@ -3341,8 +3076,8 @@ fi
 # 57: §3.2-part-4 structural -- no breaker_* call inside the child subshell
 # block (driver/child boundary pin: the child only cd's + runs the CLI, the
 # breaker calls live OUTSIDE at driver level). Block-scoped on the child
-# subshell's CLI invocation line in canonical loop.sh and canonical loop.ps1
-# (the Start-Job scriptblock is also breaker-free by construction).
+# subshell's CLI invocation line in canonical loop.sh
+# (child subshell must not call breaker_*).
 # ---------------------------------------------------------------------------
 t57_no_breaker_in_bash_child() {
   local f="$1" ln window
@@ -3351,19 +3086,12 @@ t57_no_breaker_in_bash_child() {
   window="$(sed -n "$((ln - 3)),$((ln + 3))p" "$f")"
   ! grep -qF 'breaker_' <<< "$window"
 }
-t57_no_breaker_in_ps1_job() {
-  # The Start-Job scriptblock in loop.ps1 should not contain breaker calls
-  local f="$1" ln window
-  ln="$(grep -n 'Start-Job -ScriptBlock' "$f" | head -1 | cut -d: -f1)"
-  [[ -z "$ln" ]] && return 1
-  window="$(sed -n "${ln},$((ln + 10))p" "$f")"
-  ! grep -qF 'breaker' <<< "$window"
-}
-if t57_no_breaker_in_bash_child "$LOOP_SH" && t57_no_breaker_in_ps1_job "$LOOP_PS1"; then
-  report PASS "57: §3.2-part-4 structural -- no breaker_* call inside the bash child subshell (CLI-invocation window) and no breaker call inside the ps1 Start-Job scriptblock; boundary discipline intact after dispatch restructure"
+
+if t57_no_breaker_in_bash_child "$LOOP_SH"; then
+  report PASS "57: §3.2-part-4 structural -- no breaker_* call inside the bash child subshell (CLI-invocation window); boundary discipline intact after dispatch restructure"
 else
   report FAIL "57: §3.2-part-4 structural" \
-    "bash_child=$(t57_no_breaker_in_bash_child "$LOOP_SH" && echo ok || echo FAIL) ps1_job=$(t57_no_breaker_in_ps1_job "$LOOP_PS1" && echo ok || echo FAIL)"
+    "bash_child=$(t57_no_breaker_in_bash_child "$LOOP_SH" && echo ok || echo FAIL)"
 fi
 
 # ---------------------------------------------------------------------------
@@ -4378,7 +4106,7 @@ fi
 # ===========================================================================
 # 87+: STORY-012 exit-aggregation coverage (D2 retirement, D3 aggregation
 # funnel + precedence, D1 exit-0 quarantine gating, D4 quarantine markers,
-# D5 dispatch-prompt capture, D6 ps1 $status normalization, D7 contract-
+# D5 dispatch-prompt capture, D6 status normalization, D7 contract-
 # block byte-parity, D8 check-G/tripwire). Numbered from 87 -- the
 # self-install block (69-86) is a parallel workstream's committed surface,
 # never touched here; 68-mutation-proof above is the prior tail.
@@ -4813,13 +4541,8 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 93: Dispatch-prompt capture, structural (D5) -- both canonical drivers
-# write the substituted prompt to dispatch-prompt.md AFTER both %%...%%
-# substitutions and BEFORE the child spawns (assertion 92 above is the
-# behavioral half, via the marker's embedded prompt on the quarantine path).
-# Block-scoped: anchored on each twin's OWN final substitution line, window
-# forward to the child-spawn site, requiring the write to fall strictly
-# between them.
+# 93: Dispatch-prompt capture, structural (D5) -- canonical loop.sh writes
+# dispatch-prompt.md AFTER %%OUTBOX_DIR%% substitution and BEFORE child spawn.
 # ---------------------------------------------------------------------------
 t93_sh_check() {
   local f="$1" ln window
@@ -4833,57 +4556,26 @@ t93_sh_check() {
   spawn_ln="$(grep -n '\$LOOP_CLI \$model_arg "\$p"' "$f" | head -1 | cut -d: -f1)"
   [[ -n "$write_ln" && -n "$spawn_ln" ]] && (( write_ln < spawn_ln ))
 }
-t93_ps1_check() {
-  local f="$1" subst_ln window
-  # Anchor on the FINAL substitution call itself (.Replace('%%OUTBOX_DIR%%'
-  # ...), matches exactly once) rather than the earlier missing-token GUARD
-  # line, which also contains the literal 'OUTBOX_DIR%%' substring and would
-  # otherwise bind first under head -1.
-  subst_ln="$(grep -n "\.Replace('%%OUTBOX_DIR%%'" "$f" | head -1 | cut -d: -f1)"
-  [[ -z "$subst_ln" ]] && return 1
-  window="$(sed -n "${subst_ln},$((subst_ln + 15))p" "$f")"
-  # Anchor the write on the Set-Content call itself, not the bare Join-Path
-  # fragment (which also matches the unrelated read-back at reap time) --
-  # disambiguates the write site deterministically.
-  grep -qF "Set-Content -LiteralPath (Join-Path \$outboxDir 'dispatch-prompt.md')" <<< "$window" || return 1
-  local write_ln spawn_ln
-  write_ln="$(grep -n "Set-Content -LiteralPath (Join-Path \$outboxDir 'dispatch-prompt.md')" "$f" | head -1 | cut -d: -f1)"
-  spawn_ln="$(grep -n 'Start-Job -ScriptBlock' "$f" | head -1 | cut -d: -f1)"
-  [[ -n "$write_ln" && -n "$spawn_ln" ]] || return 1
-  (( subst_ln < write_ln )) && (( write_ln < spawn_ln ))
-}
-if t93_sh_check "$LOOP_SH" && t93_ps1_check "$LOOP_PS1"; then
-  report PASS "93: dispatch-prompt capture, structural (D5) -- both canonical drivers write the fully-substituted prompt to <outbox>/dispatch-prompt.md strictly AFTER the final %%OUTBOX_DIR%% substitution and strictly BEFORE the child/job spawn site, in loop.sh AND loop.ps1"
+if t93_sh_check "$LOOP_SH"; then
+  report PASS "93: dispatch-prompt capture, structural (D5) -- canonical loop.sh writes the fully-substituted prompt to <outbox>/dispatch-prompt.md strictly AFTER the final %%OUTBOX_DIR%% substitution and strictly BEFORE the child spawn site"
 else
-  report FAIL "93: dispatch-prompt capture, structural" \
-    "sh=$(t93_sh_check "$LOOP_SH" && echo ok || echo FAIL) ps1=$(t93_ps1_check "$LOOP_PS1" && echo ok || echo FAIL)"
+  report FAIL "93: dispatch-prompt capture, structural (D5)" \
+    "sh=$(t93_sh_check "$LOOP_SH" && echo ok || echo FAIL)"
 fi
 
 # ---------------------------------------------------------------------------
-# 94: Contract-block byte-parity, FULL (D7) -- SUPERSEDES assertion 33
-# (strictly stronger: 33 checked only the appended 126/127 clause; this
-# extracts the ENTIRE P1 block, from the `# Exit codes` header line through
-# the `# branch for inspection).` closer line, inclusive) from both
-# canonical twins and requires the extracted text be byte-identical
-# (marker-normalized, same technique as 33), covering every one of the six
-# aggregated exit codes (0-5) AND the 126/127 clause 33 already proved --
-# 33 itself is left untouched (byte-identical, in the permitted-update set
-# but not modified) since it still holds and this assertion is additive.
-# No-weakening mapping: 33 (126/127 clause only) -> 94 (full six-code block,
-# superset).
+# 94: Contract-block FULL (D7, supersedes 33's partial clause check) --
+# extracts the entire P1 exit-code block from canonical loop.sh and requires
+# all six aggregated codes (0-5) plus the 126/127 clause markers.
 # ---------------------------------------------------------------------------
 extract_p1_block() { # extract_p1_block <file>
   awk '/^# Exit codes \(driver-aggregated/{flag=1} flag{print} /branch for inspection\)\.$/{if (flag) exit}' "$1"
 }
 p1_sh94="$(extract_p1_block "$LOOP_SH")"
-p1_ps194="$(extract_p1_block "$LOOP_PS1")"
 p1_norm_sh94="$(sed 's/^# \{0,1\}//' <<< "$p1_sh94")"
-p1_norm_ps194="$(sed 's/^# \{0,1\}//' <<< "$p1_ps194")"
 
 p1_nonempty=0
-[[ -n "$p1_sh94" && -n "$p1_ps194" ]] && p1_nonempty=1
-p1_identical=0
-[[ "$p1_norm_sh94" == "$p1_norm_ps194" ]] && p1_identical=1
+[[ -n "$p1_sh94" ]] && p1_nonempty=1
 p1_all_codes=1
 for _code_marker in '0 = backlog complete' '1 = stopped without completing' \
                     '2 = circuit breaker' '3 = circuit breaker' \
@@ -4892,57 +4584,52 @@ for _code_marker in '0 = backlog complete' '1 = stopped without completing' \
   grep -qF "$_code_marker" <<< "$p1_norm_sh94" || p1_all_codes=0
 done
 
-if [[ "$p1_nonempty" -eq 1 && "$p1_identical" -eq 1 && "$p1_all_codes" -eq 1 ]]; then
-  report PASS "94: contract-block byte-parity, FULL (D7, supersedes 33) -- the entire pinned exit-code contract block (six aggregated codes 0-5 plus the 126/127 shell-propagated clause) is byte-identical (marker-normalized) between canonical loop.sh and loop.ps1"
+if [[ "$p1_nonempty" -eq 1 && "$p1_all_codes" -eq 1 ]]; then
+  report PASS "94: contract-block FULL (D7, supersedes 33) -- canonical loop.sh carries the pinned exit-code contract block (six aggregated codes 0-5 plus the 126/127 shell-propagated clause)"
 else
-  report FAIL "94: contract-block byte-parity, FULL" \
-    "nonempty=$p1_nonempty identical=$p1_identical all_codes=$p1_all_codes"
+  report FAIL "94: contract-block FULL" \
+    "nonempty=$p1_nonempty all_codes=$p1_all_codes"
 fi
 
 # ---------------------------------------------------------------------------
-# 95: ps1 structural parity for the STORY-012 mechanics not covered by
-# assertion 53 (which pins the pre-story/STORY-011 surface). Block-scoped,
-# same discipline as 53/34/18: Retired/RetireReason slot fields; the
-# Invoke-LoopAggregateExit funnel's rows-3/2 (all-retired) branch; the P4
-# and P5 stdout literals (byte-exact); the $status normalization to -1 plus
-# the P6 stderr literal. Not runtime-verified -- pwsh absent, same
-# disposition as every other ps1 structural guard in this file.
+# 95: loop.sh structural STORY-012 mechanics not covered by assertion 53.
+# Block-scoped: slot_retired fields; _loop_aggregate_exit rows-3/2 branch;
+# P4/P5 stdout literals; abnormal exit handling after wait.
 # ---------------------------------------------------------------------------
 t95_retired_fields_check() {
   local f="$1" ln window
-  ln="$(grep -n '^\$slots = @()$' "$f" | head -1 | cut -d: -f1)"
+  ln="$(grep -n 'for ((SLOT = 0; SLOT < EFFECTIVE_SLOTS; SLOT++))' "$f" | head -1 | cut -d: -f1)"
   [[ -z "$ln" ]] && return 1
-  window="$(sed -n "${ln},$((ln + 20))p" "$f")"
-  grep -qF 'Retired' <<< "$window" && grep -qF 'RetireReason' <<< "$window"
+  window="$(sed -n "${ln},$((ln + 25))p" "$f")"
+  grep -qF 'slot_retired[SLOT]=0' <<< "$window" && grep -qF 'slot_retire_reason[SLOT]=""' <<< "$window"
 }
 t95_funnel_check() {
   local f="$1" ln window
-  ln="$(grep -n 'function Invoke-LoopAggregateExit' "$f" | head -1 | cut -d: -f1)"
+  ln="$(grep -n '_loop_aggregate_exit() {' "$f" | head -1 | cut -d: -f1)"
   [[ -z "$ln" ]] && return 1
-  window="$(sed -n "${ln},$((ln + 40))p" "$f")"
-  grep -qF '$allRetired' <<< "$window" && grep -qF '$anyCb2' <<< "$window" \
+  window="$(sed -n "${ln},$((ln + 35))p" "$f")"
+  grep -qF 'all_retired' <<< "$window" && grep -qF 'any_cb2' <<< "$window" \
     && grep -qE '^\s*exit 3\s*$' <<< "$window" && grep -qE '^\s*exit 2\s*$' <<< "$window"
 }
 t95_p4_check() { grep -qF 'no eligible stories remain, but quarantined branches were retained this run — exiting 1' "$1"; }
 t95_p5_check() { grep -qF 'max iterations reached and no eligible stories remain — backlog complete' "$1"; }
 t95_status_norm_check() {
   local f="$1" ln window
-  ln="$(grep -n 'Receive-Job -Job \$job' "$f" | head -1 | cut -d: -f1)"
+  ln="$(grep -n '_loop_reap_slot() {' "$f" | head -1 | cut -d: -f1)"
   [[ -z "$ln" ]] && return 1
-  window="$(sed -n "${ln},$((ln + 25))p" "$f")"
-  grep -qF '$status = -1' <<< "$window" \
-    && grep -qF 'job produced no usable exit status — normalizing to -1 (abnormal)' <<< "$window"
+  window="$(sed -n "${ln},$((ln + 420))p" "$f")"
+  grep -qF 'wait "$pid"' <<< "$window" && grep -qF 'exited abnormally' <<< "$window"
 }
-if t95_retired_fields_check "$LOOP_PS1" && t95_funnel_check "$LOOP_PS1" \
-   && t95_p4_check "$LOOP_PS1" && t95_p5_check "$LOOP_PS1" && t95_status_norm_check "$LOOP_PS1"; then
-  report PASS "95: ps1 structural parity, STORY-012 mechanics -- Retired/RetireReason slot fields, Invoke-LoopAggregateExit's rows-3/2 all-retired branch (\$allRetired/\$anyCb2/exit 3/exit 2), the P4 and P5 literals, and the \$status normalization to -1 with its P6 stderr note all present in canonical loop.ps1, block-scoped -- not runtime-verified, pwsh absent"
+if t95_retired_fields_check "$LOOP_SH" && t95_funnel_check "$LOOP_SH" \
+   && t95_p4_check "$LOOP_SH" && t95_p5_check "$LOOP_SH" && t95_status_norm_check "$LOOP_SH"; then
+  report PASS "95: loop.sh structural, STORY-012 mechanics -- slot_retired fields, _loop_aggregate_exit rows-3/2 branch, P4/P5 literals, and abnormal-exit handling present in canonical loop.sh"
 else
-  report FAIL "95: ps1 structural parity, STORY-012 mechanics" \
-    "retired_fields=$(t95_retired_fields_check "$LOOP_PS1" && echo ok || echo FAIL) funnel=$(t95_funnel_check "$LOOP_PS1" && echo ok || echo FAIL) p4=$(t95_p4_check "$LOOP_PS1" && echo ok || echo FAIL) p5=$(t95_p5_check "$LOOP_PS1" && echo ok || echo FAIL) status_norm=$(t95_status_norm_check "$LOOP_PS1" && echo ok || echo FAIL)"
+  report FAIL "95: loop.sh structural, STORY-012 mechanics" \
+    "retired_fields=$(t95_retired_fields_check "$LOOP_SH" && echo ok || echo FAIL) funnel=$(t95_funnel_check "$LOOP_SH" && echo ok || echo FAIL) p4=$(t95_p4_check "$LOOP_SH" && echo ok || echo FAIL) p5=$(t95_p5_check "$LOOP_SH" && echo ok || echo FAIL) status_norm=$(t95_status_norm_check "$LOOP_SH" && echo ok || echo FAIL)"
 fi
 
 # ---------------------------------------------------------------------------
-# 96: exit-5 site count == 6 in loop.sh / 5 in loop.ps1 (loop-guards task 02
+# 96: exit-5 site count == 6 in loop.sh (loop-guards task 02
 # adds setup-failure helper `_loop_setup_fail` as the sixth standalone exit 5
 # in loop.sh). Counts the literal, standalone `exit 5` STATEMENT lines only
 # (anchored `^\s*exit 5\s*$`, never matching prose mentions like "exit 5,
@@ -4950,11 +4637,10 @@ fi
 # digit).
 # ---------------------------------------------------------------------------
 exit5_sh_count="$(grep -cE '^\s*exit 5\s*$' "$LOOP_SH")"
-exit5_ps1_count="$(grep -cE '^\s*exit 5\s*$' "$LOOP_PS1")"
-if [[ "$exit5_sh_count" -eq 6 && "$exit5_ps1_count" -eq 5 ]]; then
-  report PASS "96: exit-5 site count == 6 in loop.sh / 5 in loop.ps1 (loop.sh=$exit5_sh_count loop.ps1=$exit5_ps1_count) -- sixth loop.sh site is setup-failure helper _loop_setup_fail (preflight, PROMPT.md substitution, missing/unreadable backlog at fill-time, non-ff integration, missing/unreadable backlog at the funnel's bottom-path re-scan, plus _loop_setup_fail)"
+if [[ "$exit5_sh_count" -eq 6 ]]; then
+  report PASS "96: exit-5 site count == 6 in loop.sh (loop.sh=$exit5_sh_count) -- sixth site is setup-failure helper _loop_setup_fail"
 else
-  report FAIL "96: exit-5 site count" "loop.sh=$exit5_sh_count(expected 6) loop.ps1=$exit5_ps1_count(expected 5)"
+  report FAIL "96: exit-5 site count" "loop.sh=$exit5_sh_count(expected 6)"
 fi
 
 # ---------------------------------------------------------------------------
@@ -5012,9 +4698,8 @@ fi
 
 # ---------------------------------------------------------------------------
 # 99: check G mutation -- exit-5-stripped loop.sh COPY -> FAIL (D8). Check
-# G's `local sh=`/`local ps1=`/`local brk_sh=`/`local brk_ps1=` paths are
-# RELATIVE to cwd, not truly hardcoded-absolute, so a cwd-mirrored sandbox
-# (skills/agent-kit/templates/loop/{loop.sh,loop.ps1,breaker.sh,breaker.ps1}
+# G's relative template paths under cwd are not hardcoded-absolute, so a
+# cwd-mirrored sandbox (skills/agent-kit/templates/loop/{loop.sh,breaker.sh}
 # under a throwaway root) achieves a clean copy-mutation without needing the
 # assertion-26-class `$sh`-sed-repoint-the-checks.sh-copy fallback the task
 # anticipated for a truly hardcoded-absolute case -- noted here since that
@@ -5047,9 +4732,7 @@ if [[ -f "$CHECKS_SH" ]]; then
     for _d in "$CHECKG_POS_DIR" "$CHECKG_MUT_DIR"; do
       mkdir -p "$_d/skills/agent-kit/templates/loop"
       cp "$LOOP_SH" "$_d/skills/agent-kit/templates/loop/loop.sh"
-      cp "$LOOP_PS1" "$_d/skills/agent-kit/templates/loop/loop.ps1"
       cp "$BREAKER_SH" "$_d/skills/agent-kit/templates/loop/breaker.sh"
-      cp "$BREAKER_PS1" "$_d/skills/agent-kit/templates/loop/breaker.ps1"
     done
     sed -i 's/exit 5/exit 55/g' "$CHECKG_MUT_DIR/skills/agent-kit/templates/loop/loop.sh"
 
@@ -5070,11 +4753,11 @@ if [[ -f "$CHECKS_SH" ]]; then
     )"
 
     checkg_mut_fails=0
-    grep -qE '^FAIL\|G: loop driver parity heuristic' <<< "$checkg_mut_result" && checkg_mut_fails=1
+    grep -qE '^FAIL\|G: loop driver heuristic \(bash\)' <<< "$checkg_mut_result" && checkg_mut_fails=1
     checkg_mut_names_exit5=0
     grep -qF 'missing exit 5' <<< "$checkg_mut_result" && checkg_mut_names_exit5=1
     checkg_pos_passes=0
-    grep -qE '^PASS\|G: loop driver parity heuristic' <<< "$checkg_pos_result" && checkg_pos_passes=1
+    grep -qE '^PASS\|G: loop driver heuristic \(bash\)' <<< "$checkg_pos_result" && checkg_pos_passes=1
 
     if [[ "$checkg_mut_bash_n_ok" -eq 1 && "$checkg_mut_fails" -eq 1 && "$checkg_mut_names_exit5" -eq 1 \
           && "$checkg_pos_passes" -eq 1 ]]; then
@@ -5752,7 +5435,7 @@ fi
 # ---------------------------------------------------------------------------
 MEM_L4A_DIR="$TMP/mem-l4a-sandbox"
 make_sandbox "$MEM_L4A_DIR" ".claude" 1 1
-rm -f "$MEM_L4A_DIR/_kit/memory.sh" "$MEM_L4A_DIR/_kit/memory.ps1"
+rm -f "$MEM_L4A_DIR/_kit/memory.sh"
 cat > "$MEM_L4A_DIR/_loop/stub-noprops.sh" <<'STUBEOF'
 #!/usr/bin/env bash
 echo "progress" > progress.txt
@@ -5812,81 +5495,6 @@ if [[ "${mem_l4m_tracked:-0}" -ge 1 ]]; then
   report PASS "140-mutation-proof: _kit/memory.sh present integrates orphan proposal (contrast to 140b skip)"
 else
   report FAIL "140-mutation-proof: kit present did not integrate" "tracked=$mem_l4m_tracked"
-fi
-
-# ---------------------------------------------------------------------------
-# 141: L5 — pwsh driver variant of L1 (SKIP when pwsh absent).
-# ---------------------------------------------------------------------------
-if command -v pwsh >/dev/null 2>&1; then
-  MEM_PW_BASE_DIR="$TMP/mem-pw-baseline-sandbox"
-  make_sandbox "$MEM_PW_BASE_DIR" ".claude" 1 1
-  sandbox_install_memory_kit "$MEM_PW_BASE_DIR"
-  sandbox_write_loop_ps1 "$MEM_PW_BASE_DIR" ".claude"
-  cat > "$MEM_PW_BASE_DIR/_loop/stub-nomem.sh" <<'STUBEOF'
-#!/usr/bin/env bash
-echo "progress" > progress.txt
-git add progress.txt
-git commit -qm "progress"
-echo "ITERATION: STORY-101 passed"
-exit 0
-STUBEOF
-  chmod +x "$MEM_PW_BASE_DIR/_loop/stub-nomem.sh"
-  ( cd "$MEM_PW_BASE_DIR" && env -u LOOP_SLOTS -u LOOP_WORKTREE \
-      LOOP_CLI="$MEM_PW_BASE_DIR/_loop/stub-nomem.sh" pwsh -NoProfile -File ./_loop/loop.ps1 1 ) \
-    >"$TMP/mem-pw-base-out.txt" 2>"$TMP/mem-pw-base-err.txt"
-  mem_pw_baseline_rc=$?
-
-  MEM_L5_DIR="$TMP/mem-l5-sandbox"
-  make_sandbox "$MEM_L5_DIR" ".claude" 1 1
-  sandbox_install_memory_kit "$MEM_L5_DIR"
-  sandbox_write_loop_ps1 "$MEM_L5_DIR" ".claude"
-  mem_l5_log="$TMP/mem-l5.log"
-  ( cd "$MEM_L5_DIR" && env -u LOOP_SLOTS -u LOOP_WORKTREE \
-      LOOP_CLI="$MEM_STUB" pwsh -NoProfile -File ./_loop/loop.ps1 1 ) \
-    >"$TMP/mem-l5-out.txt" 2>"$TMP/mem-l5-err.txt"
-  mem_l5_rc=$?   # pwsh driver status — captured BEFORE any cat/log assembly
-  cat "$TMP/mem-l5-out.txt" "$TMP/mem-l5-err.txt" >"$mem_l5_log"
-  mem_l5_rec=0; mem_l5_quar=0; mem_l5_chore=0; mem_l5_mal=0; mem_l5_qline=0; mem_l5_passes=0
-  [[ "$(sandbox_git "$MEM_L5_DIR" ls-files _memory/records 2>/dev/null | grep -c '\.md$' || true)" -eq 1 ]] && mem_l5_rec=1
-  [[ "$(sandbox_git "$MEM_L5_DIR" ls-files _memory/quarantine 2>/dev/null | grep -c '\.md$' || true)" -eq 1 ]] && mem_l5_quar=1
-  sandbox_git "$MEM_L5_DIR" log --format='%s' | grep -qxF 'chore(memory): STORY-101 records' && mem_l5_chore=1
-  grep -qF '!!! memory proposal 02-malformed skipped:' "$mem_l5_log" && mem_l5_mal=1
-  grep -qF '!!! memory proposal 03-quarantine quarantined:' "$mem_l5_log" && mem_l5_qline=1
-  grep -A5 '## STORY-101' "$MEM_L5_DIR/_memory/loop/backlog.md" | grep -q 'passes: true' && mem_l5_passes=1
-  if [[ "$mem_l5_rec" -eq 1 && "$mem_l5_quar" -eq 1 && "$mem_l5_chore" -eq 1 \
-        && "$mem_l5_mal" -eq 1 && "$mem_l5_qline" -eq 1 && "$mem_l5_passes" -eq 1 \
-        && "$mem_l5_rc" -eq "$mem_pw_baseline_rc" ]]; then
-    report PASS "141: L5 pwsh driver — full L1 parity (tracked record/quarantine, chore, !!! lines, passes, rc=$mem_l5_rc == pwsh no-proposal baseline rc=$mem_pw_baseline_rc)"
-  else
-    report FAIL "141: L5 pwsh driver" \
-      "rec=$mem_l5_rec quar=$mem_l5_quar chore=$mem_l5_chore mal=$mem_l5_mal qline=$mem_l5_qline passes=$mem_l5_passes rc=$mem_l5_rc baseline=$mem_pw_baseline_rc"
-    sed 's/^/    /' "$mem_l5_log" >&2
-  fi
-
-  MEM_L5M_DIR="$TMP/mem-l5-mut-sandbox"
-  make_sandbox "$MEM_L5M_DIR" ".claude" 1 1
-  sandbox_install_memory_kit "$MEM_L5M_DIR"
-  sandbox_write_loop_ps1 "$MEM_L5M_DIR" ".claude"
-  sed -i 's/Invoke-LoopIntegrateMemoryProposals -Slot \$Slot -Story \$story -AsideDir \$slots\[\$Slot\]\.MemoryAside/# disabled 3b/' \
-    "$MEM_L5M_DIR/_loop/loop.ps1"
-  mem_l5m_applied=0
-  grep -qF '# disabled 3b' "$MEM_L5M_DIR/_loop/loop.ps1" && mem_l5m_applied=1
-  ( cd "$MEM_L5M_DIR" && env -u LOOP_SLOTS -u LOOP_WORKTREE \
-      LOOP_CLI="$MEM_STUB" pwsh -NoProfile -File ./_loop/loop.ps1 1 ) >/dev/null 2>&1
-  mem_l5m_rc=$?
-  mem_l5m_tracked="$(sandbox_git "$MEM_L5M_DIR" ls-files _memory/records 2>/dev/null | grep -c '\.md$' || true)"
-  mem_l5m_passes=0
-  grep -A5 '## STORY-101' "$MEM_L5M_DIR/_memory/loop/backlog.md" | grep -q 'passes: true' && mem_l5m_passes=1
-  if [[ "$mem_l5m_applied" -eq 1 && "$mem_l5m_passes" -eq 1 && "$mem_l5m_rc" -eq "$mem_pw_baseline_rc" \
-        && "${mem_l5m_tracked:-0}" -eq 0 ]] \
-     && ! sandbox_git "$MEM_L5M_DIR" log --format='%s' | grep -q 'chore(memory):'; then
-    report PASS "141-mutation-proof: pwsh step 3b no-op -> mutant ran (passes:true, rc=$mem_l5m_rc), no tracked records/chore(memory)"
-  else
-    report FAIL "141-mutation-proof: pwsh 3b no-op left integration artifacts or mutant did not run" \
-      "applied=$mem_l5m_applied passes=$mem_l5m_passes rc=$mem_l5m_rc baseline=$mem_pw_baseline_rc tracked=$mem_l5m_tracked"
-  fi
-else
-  report SKIP "141: L5 pwsh driver variant of L1" "pwsh not on PATH"
 fi
 
 echo

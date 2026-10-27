@@ -2,7 +2,6 @@
 # Guard: skills/agent-kit/bin/emit.sh emitter speed (fork hot-path patterns removed).
 #
 # Default: cheap structural checks + in-suite mutation proofs (no timing, no strace).
-# Case (c): one pwsh launch site in verify_all (pattern: pwsh[[:space:]]+-), never inside loops.
 # Opt-in: EMIT_PERF=1 runs three timed self-answers emits (median wall clock) and,
 # when strace works, a fork-budget check.
 #
@@ -139,68 +138,6 @@ struct_b_no_awk_end_nr() {
   return 0
 }
 
-struct_c_pwsh_verify_all() {
-  awk '
-    BEGIN { in_fn = 0; fn_depth = 0; loop_depth = 0; pending_do = 0; seen_fn = 0; launch_n = 0; err = 0 }
-    # launch_nr[i] = emit.sh line number of pwsh launch site i
-    /^verify_all\(\) \{/ { in_fn = 1; seen_fn = 1 }
-    in_fn {
-      line = $0
-      nr = NR
-      if (pending_do && line ~ /^[[:space:]]*do([[:space:];<>|&)]|$)/) {
-        loop_depth++
-        pending_do = 0
-      }
-      if (line ~ /(^|[;&|[:space:]])(for|while|until)[[:space:]]/) {
-        if (line ~ /[[:space:]]do([[:space:];<>|&)]|$)/) {
-          loop_depth++
-        } else {
-          pending_do = 1
-        }
-      }
-      if (line ~ /(^|[^[:alnum:]_-])pwsh[[:space:]]+-/) {
-        launch_n++
-        launch_nr[launch_n] = nr
-        if (loop_depth > 0) {
-          printf "%d: pwsh launch inside loop in verify_all\n", nr > "/dev/stderr"
-          err = 1
-        }
-      }
-      if (line ~ /(^|[;[:space:]])done([[:space:];<>|&)]|$)/) {
-        if (loop_depth > 0) {
-          loop_depth--
-        }
-        pending_do = 0
-      }
-      for (i = 1; i <= length(line); i++) {
-        c = substr(line, i, 1)
-        if (c == "{") {
-          fn_depth++
-        } else if (c == "}") {
-          fn_depth--
-        }
-      }
-      if (fn_depth <= 0) {
-        in_fn = 0
-      }
-    }
-    END {
-      if (!seen_fn) {
-        print "verify_all() not found" > "/dev/stderr"
-        exit 1
-      }
-      if (launch_n > 1) {
-        for (i = 1; i <= launch_n; i++) {
-          printf "%d: pwsh launch site in verify_all\n", launch_nr[i] > "/dev/stderr"
-        }
-        print "expected at most one pwsh launch in verify_all, got " launch_n > "/dev/stderr"
-        err = 1
-      }
-      exit (err ? 1 : 0)
-    }
-  ' "$EMIT_SH"
-}
-
 struct_d1_no_basename_cmdsub() {
   local hit
   hit="$(grep_offenders '\$\(basename ' "$EMIT_SH")"
@@ -247,7 +184,6 @@ run_struct() {
 
 mut_a() { struct_a_no_index_of_cmdsub; }
 mut_b() { struct_b_no_awk_end_nr; }
-mut_c() { struct_c_pwsh_verify_all; }
 mut_d1() { struct_d1_no_basename_cmdsub; }
 mut_d2() { struct_d2_no_awk_sha256_field; }
 mut_d3() { struct_d3_no_template_stage_cmdsub; }
@@ -295,25 +231,6 @@ emit_mut_test 's/index_of_into idx "\$hay" "\$needle"/idx="$(index_of "$hay" "$n
 run_struct '(b) no awk END{print NR} pipeline' struct_b_no_awk_end_nr
 emit_mut_test 's/nr=\$((nl + 1))/nr="$(printf '"'"'%s'"'"' "$s" | awk '"'"'END{print NR}'"'"')"/' \
   'b-awk-end-nr' mut_b 1
-
-run_struct '(c) pwsh verify_all single launch not inside loops' struct_c_pwsh_verify_all
-emit_mut_test \
-  '/^verify_all() {$/,/^}$/{
-s/ps1_out="\$(pwsh -NoProfile -Command /ps1_out="$(: -NoProfile -Command /
-s/            \[ -z "\$abs" \] && continue/            pwsh -NoProfile -Command "exit 0" >\/dev\/null 2>\&1 || true; [ -z "$abs" ] \&\& continue/
-}' \
-  'c-loop-while' mut_c 2 'inside loop'
-emit_mut_test \
-  '/^        export PS1_VERIFY_LIST$/a\
-        pwsh -NoProfile -Command "exit 0" >/dev/null 2>&1 || true' \
-  'c-count-second' mut_c '' 'at most one' 1
-emit_mut_test \
-  '/^verify_all() {$/a\
-  for _ep_mut in x\
-  do\
-    pwsh -NoProfile -Command "exit 0" >\/dev\/null 2>\&1 || true\
-  done' \
-  'c-for-nextline-do' mut_c '' 'inside loop' 4
 
 run_struct '(d1) no basename command substitution' struct_d1_no_basename_cmdsub
 emit_mut_test 's@expected="\${p##\*/}"@expected="$(basename "$p")"@' \

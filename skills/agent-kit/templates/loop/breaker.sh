@@ -3,15 +3,6 @@
 # HALF-OPEN state machine that degrades to cheaper models on rate limits and
 # self-heals. Sourced by the loop driver (`loop.sh`); never executed directly.
 #
-# Twin: breaker.ps1 (PowerShell 7+) — frozen at agent-kit 1.1.2; tolerates the
-# four bash-only probe keys below and drops them on rewrite; upward recovery is
-# bash-only. Function-name mapping (bash -> PowerShell):
-#   breaker_load          -> Breaker-Load
-#   breaker_should_skip    -> Breaker-ShouldSkip
-#   breaker_record         -> Breaker-Record
-#   breaker_current_model  -> Breaker-CurrentModel
-#   breaker_probe          -> (bash-only)
-#
 # Cooldown threshold: 600s (OPEN -> HALF-OPEN eligible after 600s elapsed).
 # Recovery threshold: HALF-OPEN closes at exactly 2 consecutive successes.
 # Upward probe: after a rate-limit fallback (CLOSED), schedule a probe of
@@ -20,8 +11,7 @@
 # restores the pre-probe model (preProbeIndex).
 #
 # State schema (flat JSON, one key per line — never nested, never minified/reflowed;
-# the bash twin hand-writes this layout; the frozen PowerShell twin writes the
-# first nine keys only, tolerates the four bash-only keys on read and drops them on rewrite):
+# this script writes the following thirteen keys):
 #   {
 #   "state": "CLOSED"|"OPEN"|"HALF-OPEN",
 #   "chain": "<comma-separated model chain, first = preferred>",
@@ -81,7 +71,7 @@ _breaker_get() {
   [[ -z "$line" ]] && { printf '%s' ""; return 0; }
   value="${line#*:}"
   # trim leading/trailing whitespace (guaranteed progress each iteration — handles
-  # space/tab/CR/LF/VT/FF on either end; ordering matches the PS twin's .Trim())
+  # space/tab/CR/LF/VT/FF on either end; strips leading then trailing whitespace)
   while [[ -n "$value" && "$value" == [[:space:]]* ]]; do value="${value:1}"; done
   while [[ -n "$value" && "$value" == *[[:space:]] ]]; do value="${value%?}"; done
   value="${value%,}"

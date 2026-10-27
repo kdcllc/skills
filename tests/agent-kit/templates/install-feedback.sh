@@ -248,7 +248,6 @@ check_g() {
   jq -e '.options.loop_worktree == true' "$mf" >/dev/null || return 1
   grep -qF "LOOP_WORKTREE_DEFAULT='1'" "$root/_loop/loop.sh" || return 1
   grep -qF 'WORKTREE="${LOOP_WORKTREE:-$LOOP_WORKTREE_DEFAULT}"' "$root/_loop/loop.sh" || return 1
-  grep -qF "\$WorktreeRaw = '1'" "$root/_loop/loop.ps1" || return 1
 
   jq 'del(.flags.loop_worktree)' "$ans" > "${ans}.tmp" && mv "${ans}.tmp" "$ans"
   alloc_root; root="$ALLOC_PATH"
@@ -256,7 +255,6 @@ check_g() {
   mf="$root/orchestration-kit.manifest.json"
   jq -e '(.options | has("loop_worktree")) | not' "$mf" >/dev/null || return 1
   grep -qF "LOOP_WORKTREE_DEFAULT='0'" "$root/_loop/loop.sh" || return 1
-  grep -qF "\$WorktreeRaw = '0'" "$root/_loop/loop.ps1" || return 1
 
   jq '.flags.loop_worktree = "yes"' "$ans" > "${ans}.tmp" && mv "${ans}.tmp" "$ans"
   alloc_root; root="$ALLOC_PATH"

@@ -1,6 +1,6 @@
 {
   "kit": "agent-kit",
-  "kitVersion": "1.1.3",
+  "kitVersion": "2.0.0",
   "installedAt": "2026-09-03",
   "harnesses": [
     "copilot"
@@ -28,7 +28,7 @@
     ".github/agents/terminal.agent.md": "94820110b19fbe50e19a9e552f3a6a6e9d6e6444e06c1cc7f6d0e889cbf9aff2",
     ".github/agents/test-writer.agent.md": "ea4b8697c53624b3bd7af1fcb40ad2eb4a6408f1eecca2d6d20d1370e0a60d1a",
     ".github/skills/align-docs/SKILL.md": "b6faaa8be9207b9f0ce9ceb4c76aa6a4eba2dc78c3b7924ad4233e5e469b4651",
-    ".github/skills/auto-loop/SKILL.md": "abbc68fb354a14dee654d38a8cceb06647a6a1f053e2af5abd37ea33ba76f926",
+    ".github/skills/auto-loop/SKILL.md": "7666f1d2eb823cf205f75c64d449dcd2b221dda510223141d8f9199c88a6df8f",
     ".github/skills/feature/SKILL.md": "be290e0af77bc104f4836fe6be2b3156770b4d81687f599ccd5a4d0090ac5d66",
     ".github/skills/feature/reference/continuation-ladder.md": "5334a5f02d6054a89450380bbdd34f9b0a04dca3afc2dd9d5e305d2d2f9c6069",
     ".github/skills/feature/reference/corrective-tasks.md": "c91dd483b9f09f5ab04c8abc7cfdee05c961393b8c426b39418c0251a319b673",
@@ -36,7 +36,7 @@
     ".github/skills/feature/reference/fix-cycles.md": "0922dae31b65166a16bfbe62a2de032f1159dc5468ce86d108fe2aff5164586f",
     ".github/skills/feature/reference/goal-revisions.md": "a8ca81fc8e79295d6676ac46d4bea576d44a00ddbc840bb9be6681f9ba4c73be",
     ".github/skills/feature/reference/memory-capture.md": "9cef97d7a882f3510d97a8fb2e4b870a8db7708df2c7196fba068269ff24db0b",
-    ".github/skills/feature/reference/memory-protocol.md": "52481270294317178907cc2fd6f965d7850f2413f7eeb7d6914c416d008bcb1e",
+    ".github/skills/feature/reference/memory-protocol.md": "6371cb1ae1afacca944e3b57588fa6a23021b65e1ec98b6fd6080787a5704229",
     ".github/skills/feature/reference/preflight.md": "5236660b9448ba35985cd6f56f22a19a2cfc7beb14295443666f004ee2d723f6",
     ".github/skills/feature/reference/ready-groups.md": "8f27a4981df7098a60529f6478fee6c98db033dccfea6a48b329df7c918fa46e",
     ".github/skills/feature/templates/goal.md": "29105d6768851663b8aae48eef007c03437eb0295aacf5d98da08ebaaaf07a1b",
@@ -50,20 +50,18 @@
     ".github/skills/research/templates/research-prompt.md": "7e2c286f3bd6802b650d5d661bacde0eb98829f0e5831382a288af3ed62f3a15",
     ".github/skills/research/templates/research-report.md": "0b1ef92c69e6955e4c11e05f43b52479cd25848d5629ad13c341a3ff2c1f128b",
     ".github/skills/ship-pr/SKILL.md": "33c00b09412944e77c38ddb73d7c27e81831aebcb9b08c48961b860f69b7af81",
-    ".github/skills/task-criteria/SKILL.md": "45a0931c3b79320683684e18eb23d085ed40fcd10960c48ed44a5d6c5846e90d",
+    ".github/skills/task-criteria/SKILL.md": "5224226b92175c99f617a63c769052e0ea120ad3ddd3aa060d8714107bacb072",
     ".github/skills/test-ladder/SKILL.md": "d2d6bb61b4126d22e8e8127f609c658fe8218bea2d3c16c06d18730fe6b1e98f",
-    "ORCHESTRATION.md": "5a453f695504423208987902f7646f8ad64f2202cea2487dc51d58b2439c96dc",
+    "ORCHESTRATION.md": "ec7785a377037d07a5ffeb8d47f96a8084d66d73dd03814c1b6c698b197e024b",
     "_kit/log-spawn.cmd": "ae9541294a03f741311ff8bc0d5c6f9985d6947fb42f7aaeaf6613088e34bf7e",
-    "_kit/log-spawn.sh": "5b288ff4db2274eb807e748b3abb2fce2f442148c378458f07198c4c5b262dd5",
+    "_kit/log-spawn.sh": "ed17f998c31496d8fa83b51136527797f01d1db4fa922f66332dceb05514d254",
     "_kit/memory.cmd": "ae9541294a03f741311ff8bc0d5c6f9985d6947fb42f7aaeaf6613088e34bf7e",
-    "_kit/memory.ps1": "ab1972554d139c838c0908f78ac5619257faff4d24d6e2dbcb228ba8ceea63c6",
-    "_kit/memory.sh": "9ee91e10d7207eb9f25b58e16c5b13ec54e09ef04f63155d3f682ff54d95023c",
+    "_kit/memory.sh": "d1e4fea943fbd859412e9f84a0ceca89441a7488eb05376a2f1b5de35f69d0e7",
     "_loop/PROMPT.md": "b1d5e2dde377179fa67edddd5a2d42981965bcc31f99762d9db298e39724a00c",
-    "_loop/breaker.ps1": "c96aca813cc5dcfec30c14864fc0da1eb2afbd0d5ed221d8532ac6e4be2cabe8",
-    "_loop/breaker.sh": "be5c7a57a6cd1f2391acfd71efd1feca893ce40625fbad619a8d0aaae9df23f6",
-    "_loop/loop.ps1": "115c69e3b51807113c97fa2bdbd07631519c9a9445c908d94c0fc64090d1dc4b",
-    "_loop/loop.sh": "f0ec696b552a7d185f1fb25cf5fd1305822db05da61ad3609094e5117857aab8",
-    "_memory/README.md": "13beb4168bb47655e72a4b74e73138a560bc75ca73901a7c376cdd8aa8bf9611"
+    "_loop/breaker.sh": "c759672682f3c3e2dd62781560ff11a00aecb5b31a88ac2d4af03dbfd39c26e5",
+    "_loop/loop.cmd": "ae9541294a03f741311ff8bc0d5c6f9985d6947fb42f7aaeaf6613088e34bf7e",
+    "_loop/loop.sh": "88ab89f5a6cd3823b43bf373bd1311fcd8311754efe42d1a19be8c5b1003e55f",
+    "_memory/README.md": "b844ccdd5c6a958a6781fb41adab30abb75e29ffa9d30b1231dceadd589891d2"
   },
   "answers": {
     "bootstrap": {
