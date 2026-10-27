@@ -4,6 +4,8 @@ All notable changes to the `skill-versioning` skill. Format: [Keep a Changelog](
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-27
+
 ### Fixed
 
 - The `description` no longer contains angle brackets (`<name>` is now `{name}`), so claude.ai syncs it without stripping text.
