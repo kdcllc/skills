@@ -6,6 +6,8 @@ Before re-adding with a new tag, read the target version's entry, especially its
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-10-27
+
 ### Fixed
 
 - The `description` no longer contains angle brackets (`<name>` is now `{name}`), so claude.ai syncs it without stripping text.
