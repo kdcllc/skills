@@ -1,8 +1,8 @@
-**Who this is for / What you'll learn:** Kit **users** who want durable, searchable knowledge across sessions and machines, and **contributors** documenting how memory interacts with `/feature`, `/research`, and the autonomous loop. You will learn what belongs in `_memory/` versus goal and loop artifacts, when the orchestrator recalls and archives records, how to search and add records with `_kit/memory.sh` / `_kit/memory.ps1`, back-fill legacy work, the prior-knowledge DATA fence, pointer rules in always-loaded files, and common failure modes. Workflow phase detail stays in [feature-workflow.md](feature-workflow.md) and [research-workflow.md](research-workflow.md); harness-native stores are contrasted in [agent-memory-store research brief](../../../_memory/research/agent-memory-store.md).
+**Who this is for / What you'll learn:** Kit **users** who want durable, searchable knowledge across sessions and machines, and **contributors** documenting how memory interacts with `/feature`, `/research`, and the autonomous loop. You will learn what belongs in `_memory/` versus goal and loop artifacts, when the orchestrator recalls and archives records, how to search and add records with `_kit/memory.sh` (Windows: `_kit\memory.cmd`), back-fill legacy work, the prior-knowledge DATA fence, pointer rules in always-loaded files, and common failure modes. Workflow phase detail stays in [feature-workflow.md](feature-workflow.md) and [research-workflow.md](research-workflow.md); harness-native stores are contrasted in [agent-memory-store research brief](../../../_memory/research/agent-memory-store.md).
 
 # Memory store (`_memory/`)
 
-Every emitted install gets a git-tracked `_memory/` tree (immutable markdown records), single-copy `_kit/memory.sh` and `_kit/memory.ps1`, and orchestration rules in [`skills/agent-kit/templates/skills/feature/reference/memory-protocol.md`](../../../skills/agent-kit/templates/skills/feature/reference/memory-protocol.md). Normative CLI and schema detail also live in [`skills/agent-kit/templates/memory/README.md`](../../../skills/agent-kit/templates/memory/README.md).
+Every emitted install gets a git-tracked `_memory/` tree (immutable markdown records), single-copy `_kit/memory.sh` (Windows: `_kit\memory.cmd`), and orchestration rules in [`skills/agent-kit/templates/skills/feature/reference/memory-protocol.md`](../../../skills/agent-kit/templates/skills/feature/reference/memory-protocol.md). Normative CLI and schema detail also live in [`skills/agent-kit/templates/memory/README.md`](../../../skills/agent-kit/templates/memory/README.md).
 
 ## Three kinds of “memory” in a kit project
 
@@ -11,7 +11,7 @@ The kit uses several persistence layers; each has a different lifecycle:
 | Layer | Location | Holds | When to use it |
 |-------|----------|-------|----------------|
 | **Goal artifacts** | `_memory/work/goals/<goal>/` — `goal.md`, task files, append-only `orchestration-log.md`, `spawns/`, `evidence/`, `qa/` (behavioral QA index and artifacts when the optional QA gate runs), `memory-drafts/` (gitignored scratch) | In-flight and recently closed feature work: plans, verdicts, spawn audit trail | Trace how a goal was executed; not a cross-goal search index |
-| **Loop ledgers** | `_memory/loop/` — `backlog.md`, `LEARNINGS.md`, `ESCALATIONS.md`, `archive/ESCALATIONS-<YYYY-MM>.md` (tracked); `breaker-state.json` (gitignored runtime), `ledger.jsonl` (gitignored runtime; bash driver run ledger), and `attempts/` (gitignored runtime; bash driver attempt dossiers) | Loop backlog, learnings, escalations; size gates defer compaction/archival to manual iterations | Autonomous loop operation; ledgers are **not** auto-imported into `records/` |
+| **Loop ledgers** | `_memory/loop/` — `backlog.md`, `LEARNINGS.md`, `ESCALATIONS.md`, `archive/ESCALATIONS-<YYYY-MM>.md` (tracked); `breaker-state.json` (gitignored runtime), `ledger.jsonl` (gitignored runtime; loop driver run ledger), and `attempts/` (gitignored runtime; loop driver attempt dossiers) | Loop backlog, learnings, escalations; size gates defer compaction/archival to manual iterations | Autonomous loop operation; ledgers are **not** auto-imported into `records/` |
 | **Memory store** | `_memory/records/`, `_memory/quarantine/` (immutable, tracked); plus gitignored `work/` and derived `.index/` / `raw/` | Distilled records (decisions, goal summaries, research ingests, pitfalls, etc.) | Cross-session recall before planning; team-shareable via git |
 
 Scratch research lives under `_memory/work/research/<topic>/` (`prompt.md`, `report.md`, `recalled-memory.md`, `review.md`, `ingested` marker) until promoted or ingested; it is working space, not the immutable record store. **Curated research briefs** live in tracked **`_memory/research/<topic>.md`** with index **`_memory/research/README.md`** — orchestrator-owned, mutable status fields, not memory records. A **`research-ingest`** record in `_memory/records/` distills a closed research topic; the brief summarizes findings for humans and links to the ingest record id in frontmatter.
@@ -94,11 +94,11 @@ See [autonomous-loop.md](autonomous-loop.md).
 
 ## How to search
 
-Run from the repo root or pass **`--root <dir>`** (store path is `<root>/_memory/`). Primary: `_kit/memory.sh`; Windows outside Git Bash: `_kit\memory.cmd` (Git for Windows). `_kit/memory.ps1` (PowerShell 7.2+) implements `add` (with redaction), `index`, `search`, `show`, and `redact`; **`check`**, **`rm`**, **`capture`**, and **`backfill`** are bash-only — the PowerShell twin prints `memory: '<sub>' is bash-only; run bash _kit/memory.sh <sub> (Windows: _kit\memory.cmd <sub>)` and exits **2**.
+Run from the repo root or pass **`--root <dir>`** (store path is `<root>/_memory/`). Primary: `_kit/memory.sh`; Windows outside Git Bash: `_kit\memory.cmd` (Git for Windows). Behavior, messages, and exit codes match across the Bash script and its `.cmd` launcher.
 
 **Terms:** At least one required. Each term is an ASCII **case-folded substring** match; every term contributes to the score.
 
-**Ranking (default `--engine grep`):** For each term: **+3** when the folded term appears in the **title** or any **tag**; **+1** for each **body line** that contains the folded term (per term, counted separately). Implementation: `score_file` / `meta_hit` in `memory.sh`, `Grep-Score` in `memory.ps1`. **Ties:** equal scores sort by **id descending** (newest id first). With **`--engine fts`**, the same grep candidates are re-ranked by **bm25**; rows without an FTS match sort last; equal bm25 breaks by id descending. FTS requires `sqlite3` with FTS5 and an index built by `index`; otherwise `--engine fts` exits **4**.
+**Ranking (default `--engine grep`):** For each term: **+3** when the folded term appears in the **title** or any **tag**; **+1** for each **body line** that contains the folded term (per term, counted separately). Implementation: `score_file` / `meta_hit` in `memory.sh`. **Ties:** equal scores sort by **id descending** (newest id first). With **`--engine fts`**, the same grep candidates are re-ranked by **bm25**; rows without an FTS match sort last; equal bm25 breaks by id descending. FTS requires `sqlite3` with FTS5 and an index built by `index`; otherwise `--engine fts` exits **4**.
 
 **Filters:** `--kind <comma-list>` · **`--limit`** default **10**, range **1–100** · **`--include-superseded`** (default search hides superseded ids).
 
@@ -141,10 +141,10 @@ export ROOT
 "$ROOT/_kit/memory.sh" show 20261008T110000Z-b1df2be6 --root "$ROOT"
 ```
 
-PowerShell (run the bash block first — it runs `export ROOT` mid-block so the path is visible to pwsh; or set `$env:ROOT = '<same path>'` manually):
+Windows outside Git Bash (after the bash block above sets `ROOT`, or pass the same path with `--root`):
 
-```powershell
-pwsh _kit/memory.ps1 search alpha --root $env:ROOT
+```bat
+_kit\memory.cmd search alpha --root <path>
 ```
 
 Optional when SQLite FTS5 is available:
@@ -156,7 +156,7 @@ Optional when SQLite FTS5 is available:
 
 ## Adding, superseding, and quarantine
 
-**By hand:** Only `_kit/memory.sh add` / `_kit/memory.ps1 add` creates files under `records/` or `quarantine/`. Never edit an existing tracked record; committed correction ⇒ `add` with **`--supersedes <id>`**. Untracked mistake ⇒ `_kit/memory.sh rm <full-id>` (bash-only; tracked records exit **2** `memory: record is tracked; add a superseding record instead`).
+**By hand:** Only `_kit/memory.sh add` creates files under `records/` or `quarantine/`. Never edit an existing tracked record; committed correction ⇒ `add` with **`--supersedes <id>`**. Untracked mistake ⇒ `_kit/memory.sh rm <full-id>` (tracked records exit **2** `memory: record is tracked; add a superseding record instead`).
 
 **Quarantine:** Admission patterns in the title or any single body line send the record to `_memory/quarantine/` with exit **5**. A human may delete the quarantined file directly, or an explicitly tasked agent runs `_kit/memory.sh rm <id>`, then re-`add` cleaned content (unchanged body reports **duplicate**).
 
@@ -164,7 +164,7 @@ Optional when SQLite FTS5 is available:
 
 ## Redaction
 
-`add` redacts the title and normalized body **before** size check, hashing, dedupe, and the admission screen. `redact` applies the same function to stdin (both bash and PowerShell twins). Redaction is idempotent. When replacements occur, stderr prints `memory: redacted <n> secret(s): <classes>` (`<classes>` in frozen class order, comma-separated).
+`add` redacts the title and normalized body **before** size check, hashing, dedupe, and the admission screen. `redact` applies the same function to stdin. Redaction is idempotent. When replacements occur, stderr prints `memory: redacted <n> secret(s): <classes>` (`<classes>` in frozen class order, comma-separated).
 
 Classes (ERE, applied in this order): **`private-key`** (multi-line PEM block, body only) · **`secret`** (assignment keys such as `password`, `token`, `api_key`) · **`aws-key`** · **`github-token`** · **`api-key`** (`sk-…`) · **`slack-token`** · **`jwt`** · **`azure-key`**. Full patterns: [`skills/agent-kit/templates/memory/README.md`](../../../skills/agent-kit/templates/memory/README.md) **Redaction**.
 
@@ -174,7 +174,7 @@ Classes (ERE, applied in this order): **`private-key`** (multi-line PEM block, b
 _kit/memory.sh check [--staged] [--root <dir>] [<path>…]
 ```
 
-Bash-only. **Scope:** no paths and no `--staged` ⇒ every `*.md` under `records/` and `quarantine/`; explicit paths ⇒ those files only; `--staged` ⇒ staged paths under those trees (requires a git work tree). **`--staged` with paths** ⇒ exit **2**.
+**Scope:** no paths and no `--staged` ⇒ every `*.md` under `records/` and `quarantine/`; explicit paths ⇒ those files only; `--staged` ⇒ staged paths under those trees (requires a git work tree). **`--staged` with paths** ⇒ exit **2**.
 
 **Per-file failures** (stdout `memory: check failed <reason> <repo-relative path>`, then exit **3**): `malformed` · `id-mismatch` · `sha256-mismatch` · `secret` (redaction would change content) · `admission` (`records/` only) · **`--staged` only:** `immutable` for modifications/deletions under tracked memory paths (deletions under `quarantine/` are allowed for human cleanup). All pass ⇒ stdout `memory: check ok <n> file(s)`, exit **0**.
 
@@ -190,11 +190,11 @@ printf '#!/bin/sh\nexec bash _kit/memory.sh check --staged\n' > .git/hooks/pre-c
 _kit/memory.sh rm <id> [--root <dir>]
 ```
 
-Bash-only. Removes an **untracked** file under `records/` or `quarantine/` only. Invalid id ⇒ exit **2** `memory: invalid id`; not a git work tree ⇒ exit **4** `memory: rm needs a git work tree`; missing ⇒ exit **4** `memory: record not found: <id>`; tracked ⇒ exit **2** `memory: record is tracked; add a superseding record instead`. Success ⇒ stdout `memory: removed <id> <path>`, exit **0**.
+Removes an **untracked** file under `records/` or `quarantine/` only. Invalid id ⇒ exit **2** `memory: invalid id`; not a git work tree ⇒ exit **4** `memory: rm needs a git work tree`; missing ⇒ exit **4** `memory: record not found: <id>`; tracked ⇒ exit **2** `memory: record is tracked; add a superseding record instead`. Success ⇒ stdout `memory: removed <id> <path>`, exit **0**.
 
 ## Transcript capture and distillation
 
-**Capture (bash-only):**
+**Capture:**
 
 ```
 _kit/memory.sh capture [--harness cursor|claude|codex|all] [--from <dir>] [--idle-hours <n>] [--since <YYYY-MM-DD>] [--root <dir>]
@@ -212,7 +212,7 @@ Capture hooks are not shipped.
 _kit/memory.sh backfill [--plan|--apply] [--goals] [--research] [--escalations] [--only <name>] [--root <dir>]
 ```
 
-Bash-only, deterministic, LLM-free. Candidates go through the existing `add` path (redaction, admission, dedupe). Identical inputs at the same git HEAD yield byte-identical records; record ids are derived from source timestamps.
+Deterministic, LLM-free. Candidates go through the existing `add` path (redaction, admission, dedupe). Identical inputs at the same git HEAD yield byte-identical records; record ids are derived from source timestamps.
 
 **Flags:** `--plan` (default) writes nothing; `--apply` adds records; both together ⇒ exit **2**. Kind flags `--goals`, `--research`, and `--escalations` select sources; when none are given, all three run. `--only <name>` (repeatable) names goal folders and research topics (exact names). When any `--only` is given, escalations run only if `--escalations` is also given.
 

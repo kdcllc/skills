@@ -51,8 +51,7 @@
 #   (canonical layout: 2-space indent, raw UTF-8, lowercase \u00xx escapes).
 #
 # Runtime floor: Bash 3.2 (macOS /bin/bash), POSIX awk (gawk, mawk, BusyBox, BWK),
-# sha256sum or shasum. No external JSON tool, no GNU-only coreutils flags. pwsh is optional and only
-# used by the verify step to parse-check emitted .ps1 files.
+# sha256sum or shasum. No external JSON tool, no GNU-only coreutils flags.
 set -euo pipefail
 export LC_ALL=C
 # Bash 5.2 makes '&' special in ${var//pat/repl} replacements; keep it literal.
@@ -1943,7 +1942,7 @@ emit_single_copy() {
   set_harness_tokens "$PRIMARY"
   local f dest content
   if flag_is loop; then
-    for f in loop.sh loop.ps1 breaker.sh breaker.ps1 PROMPT.md; do
+    for f in loop.sh breaker.sh PROMPT.md; do
       if [ -f "$TPL/loop/$f" ]; then
         resolve_template "$TPL/loop/$f" "loop/$f"
         content="$RESOLVED"
@@ -1951,19 +1950,23 @@ emit_single_copy() {
       fi
     done
   fi
-  for f in log-spawn.sh memory.sh memory.ps1; do
+  for f in log-spawn.sh memory.sh; do
     if [ -f "$TPL/tools/$f" ]; then
       resolve_template "$TPL/tools/$f" "tools/$f"
       content="$RESOLVED"
       put_emit "_kit/$f" "$content"
     fi
   done
-  # Windows launchers: byte copies of the one template (CRLF must survive, so
-  # never through read_file_raw_into / resolve_template).
+  # Windows launchers (_kit/memory.cmd, _kit/log-spawn.cmd, _loop/loop.cmd when
+  # loop is on): byte copies of the one template (CRLF must survive, so never
+  # through read_file_raw_into / resolve_template).
   if [ -f "$TPL/tools/bash-launcher.cmd" ]; then
     tpl_bytes_into content "$TPL/tools/bash-launcher.cmd"
     map_set EMIT "_kit/memory.cmd" "$content"
     map_set EMIT "_kit/log-spawn.cmd" "$content"
+    if flag_is loop; then
+      map_set EMIT "_loop/loop.cmd" "$content"
+    fi
   fi
   if [ -f "$TPL/memory/README.md" ]; then
     resolve_template "$TPL/memory/README.md" "memory/README.md"
@@ -2203,7 +2206,7 @@ planned_git_lines() {
   GA_LINES=('_memory/** text eol=lf' '*.cmd -text')
   GI_LINES=('_kit/' '_memory/.index/' '_memory/raw/' '_memory/work/')
   if flag_is loop; then
-    GA_LINES+=('_memory/loop/LEARNINGS.md merge=union' '_memory/loop/ESCALATIONS.md merge=union' '*.sh text eol=lf' '*.ps1 text eol=lf')
+    GA_LINES+=('_memory/loop/LEARNINGS.md merge=union' '_memory/loop/ESCALATIONS.md merge=union' '*.sh text eol=lf')
     GI_LINES+=('_memory/loop/breaker-state.json' '_memory/loop/ledger.jsonl' '_memory/loop/attempts/')
   fi
 }
@@ -3020,66 +3023,6 @@ verify_all() {
     if [ -n "$hit" ]; then
       record_verify 'verify: .cursor/: contains .claude/ reference'
       rc=1
-    fi
-  fi
-  local ps1_files=() q
-  for p in ${EMIT_N[@]+"${EMIT_N[@]}"}; do
-    [[ "$p" == *.ps1 ]] && ps1_files+=("$p")
-  done
-  if [ ${#ps1_files[@]} -gt 0 ]; then
-    if command -v pwsh >/dev/null 2>&1; then
-      local ps1_abs=() ps1_fail=() fp abs rel
-      for p in "${ps1_files[@]}"; do
-        if [ -f "$ROOT/$p" ]; then
-          ps1_abs+=("$ROOT/$p")
-        fi
-      done
-      if [ ${#ps1_abs[@]} -gt 0 ]; then
-        local pwsh_rc=0 ps1_out
-        PS1_VERIFY_LIST="$(printf '%s\n' "${ps1_abs[@]}")"
-        export PS1_VERIFY_LIST
-        ps1_out="$(pwsh -NoProfile -Command '
-          foreach ($fp in ($env:PS1_VERIFY_LIST -split "`n")) {
-            if (-not $fp) { continue }
-            $e = $null
-            [void][System.Management.Automation.Language.Parser]::ParseFile($fp, [ref]$null, [ref]$e)
-            if ($e) { Write-Output $fp }
-          }
-        ' 2>/dev/null)" || pwsh_rc=$?
-        unset PS1_VERIFY_LIST
-        if [ "$pwsh_rc" -ne 0 ]; then
-          for p in "${ps1_files[@]}"; do
-            if [ -f "$ROOT/$p" ]; then
-              record_verify "verify: $p: pwsh parse failed"
-              rc=1
-            fi
-          done
-        else
-          while IFS= read -r abs || [ -n "$abs" ]; do
-            [ -z "$abs" ] && continue
-            abs="${abs%$'\r'}"
-            ps1_fail+=("$abs")
-          done <<EOF
-$ps1_out
-EOF
-          for p in "${ps1_files[@]}"; do
-            abs="$ROOT/$p"
-            if [ ! -f "$abs" ]; then
-              continue
-            fi
-            for fp in ${ps1_fail[@]+"${ps1_fail[@]}"}; do
-              if [ "$fp" = "$abs" ]; then
-                record_verify "verify: $p: pwsh parse failed"
-                rc=1
-                break
-              fi
-            done
-          done
-        fi
-      fi
-    else
-      bump_warn
-      printf 'emit: pwsh not on PATH — skipped .ps1 parse\n' >&2
     fi
   fi
   if [ ${#VERIFY_ERRS[@]} -gt 0 ]; then

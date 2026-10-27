@@ -125,13 +125,14 @@ else
   report FAIL "cursor.md: {{IDE_DIR}} -> .cursor resolution statement present"
 fi
 
-# 2g. The literals loop.ps1 and breaker.ps1 are each still present.
+# 2g. loop.cmd is documented; loop.ps1 and breaker.ps1 are not.
 if [[ -f "$CURSOR_MD" ]] \
-  && [[ "$(grep -c 'loop\.ps1' "$CURSOR_MD")" -ge 1 ]] \
-  && [[ "$(grep -c 'breaker\.ps1' "$CURSOR_MD")" -ge 1 ]]; then
-  report PASS "cursor.md: literals loop.ps1 and breaker.ps1 both still present"
+  && grep -qF 'loop.cmd' "$CURSOR_MD" \
+  && [[ "$(grep -c 'loop\.ps1' "$CURSOR_MD")" -eq 0 ]] \
+  && [[ "$(grep -c 'breaker\.ps1' "$CURSOR_MD")" -eq 0 ]]; then
+  report PASS "cursor.md: loop.cmd present; loop.ps1 and breaker.ps1 absent"
 else
-  report FAIL "cursor.md: literals loop.ps1 and breaker.ps1 both still present"
+  report FAIL "cursor.md: loop.cmd present; loop.ps1 and breaker.ps1 absent"
 fi
 
 # ===========================================================================

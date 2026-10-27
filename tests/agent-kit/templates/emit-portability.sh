@@ -220,6 +220,67 @@ case_upgrade_log_spawn_ps1_prune() {
   [ -n "$prune_n" ] && [ "$prune_n" -ge 1 ]
 }
 
+case_upgrade_loop_ps1_triple_prune() {
+  local root out rc prune_n
+  root="$(mktemp_root)"
+  emit_cache_copy "$root" "$FIXTURE" || return 1
+  mkdir -p "$root/_loop" "$root/_kit"
+  echo '@rem stale loop twin' > "$root/_loop/loop.ps1"
+  echo '@rem stale breaker twin' > "$root/_loop/breaker.ps1"
+  echo '@rem stale memory twin' > "$root/_kit/memory.ps1"
+  manifest_add_file_entry "$root/orchestration-kit.manifest.json" "_loop/loop.ps1" "$root/_loop/loop.ps1" || return 1
+  manifest_add_file_entry "$root/orchestration-kit.manifest.json" "_loop/breaker.ps1" "$root/_loop/breaker.ps1" || return 1
+  manifest_add_file_entry "$root/orchestration-kit.manifest.json" "_kit/memory.ps1" "$root/_kit/memory.ps1" || return 1
+  rc=0
+  out="$(run_emit "$root" --force --upgrade 2>&1)" || rc=$?
+  [ "$rc" -eq 0 ] || return 1
+  [ ! -f "$root/_loop/loop.ps1" ] || return 1
+  [ ! -f "$root/_loop/breaker.ps1" ] || return 1
+  [ ! -f "$root/_kit/memory.ps1" ] || return 1
+  prune_n="$(printf '%s' "$out" | sed -n 's/.*pruned \([0-9][0-9]*\).*/\1/p' | head -1)"
+  [ -n "$prune_n" ] && [ "$prune_n" -ge 3 ]
+}
+
+_upgrade_loop_ps1_triple_setup() { # root
+  local root="$1"
+  mkdir -p "$root/_loop" "$root/_kit"
+  echo '@rem stale loop twin' > "$root/_loop/loop.ps1"
+  echo '@rem stale breaker twin' > "$root/_loop/breaker.ps1"
+  echo '@rem stale memory twin' > "$root/_kit/memory.ps1"
+  manifest_add_file_entry "$root/orchestration-kit.manifest.json" "_loop/loop.ps1" "$root/_loop/loop.ps1" || return 1
+  manifest_add_file_entry "$root/orchestration-kit.manifest.json" "_loop/breaker.ps1" "$root/_loop/breaker.ps1" || return 1
+  manifest_add_file_entry "$root/orchestration-kit.manifest.json" "_kit/memory.ps1" "$root/_kit/memory.ps1" || return 1
+}
+
+_emit_stdout_warnings() { # stdout
+  printf '%s' "$1" | sed -n 's/.*warnings \([0-9][0-9]*\).*/\1/p' | head -1
+}
+
+case_upgrade_loop_ps1_modified_retain() {
+  local root out rc baseline_warn warn_n
+  root="$(mktemp_root)"
+  emit_cache_copy "$root" "$FIXTURE" || return 1
+  _upgrade_loop_ps1_triple_setup "$root" || return 1
+  rc=0
+  out="$(run_emit "$root" --force --upgrade 2>&1)" || rc=$?
+  [ "$rc" -eq 0 ] || return 1
+  baseline_warn="$(_emit_stdout_warnings "$out")"
+  [ -n "$baseline_warn" ] || baseline_warn=0
+
+  root="$(mktemp_root)"
+  emit_cache_copy "$root" "$FIXTURE" || return 1
+  _upgrade_loop_ps1_triple_setup "$root" || return 1
+  echo 'user modified' >> "$root/_loop/loop.ps1"
+  rc=0
+  out="$(run_emit "$root" --force --upgrade 2>&1)" || rc=$?
+  [ "$rc" -eq 0 ] || return 1
+  [ -f "$root/_loop/loop.ps1" ] || return 1
+  [ ! -f "$root/_loop/breaker.ps1" ] || return 1
+  [ ! -f "$root/_kit/memory.ps1" ] || return 1
+  warn_n="$(_emit_stdout_warnings "$out")"
+  [ -n "$warn_n" ] && [ "$warn_n" -gt "$baseline_warn" ]
+}
+
 emit_cache_init
 
 # jq hidden from PATH — direct emit (no cache; PATH is part of the emit environment)
@@ -266,6 +327,18 @@ if case_upgrade_log_spawn_ps1_prune; then
   report PASS "upgrade: _kit/log-spawn.ps1 from prior manifest is pruned (stdout count)"
 else
   report FAIL "upgrade: _kit/log-spawn.ps1 from prior manifest is pruned (stdout count)"
+fi
+
+if case_upgrade_loop_ps1_triple_prune; then
+  report PASS "upgrade: unmodified loop.ps1/breaker.ps1/memory.ps1 pruned (stdout count)"
+else
+  report FAIL "upgrade: unmodified loop.ps1/breaker.ps1/memory.ps1 pruned (stdout count)"
+fi
+
+if case_upgrade_loop_ps1_modified_retain; then
+  report PASS "upgrade: modified loop.ps1 retained; warnings count"
+else
+  report FAIL "upgrade: modified loop.ps1 retained; warnings count"
 fi
 
 # bash:3.2 docker run of emit-golden.sh

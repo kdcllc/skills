@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 # memory.sh — add|index|search|show|redact|check|rm|capture|backfill
-# Twin: memory.ps1 (PowerShell 7.2+) — behaviorally identical — any divergence is a bug;
-# memory.ps1 is retained as a helper for loop.ps1 until loop twins retire.
 # Emitted single-copy to `_kit/memory.sh` (Windows outside Git Bash: `_kit\memory.cmd`).
 #
 #   memory.sh add --kind <k> --title <t> --body <path>

@@ -9,7 +9,6 @@ REPO_ROOT="$(cd "$HERE/../../.." && pwd)"
 
 GUIDE="$REPO_ROOT/docs/agent-kit/guide/autonomous-loop.md"
 LOOP_SH="$REPO_ROOT/skills/agent-kit/templates/loop/loop.sh"
-LOOP_PS1="$REPO_ROOT/skills/agent-kit/templates/loop/loop.ps1"
 HEADER_RECIPE='codex exec --sandbox danger-full-access'
 
 CLI_RECIPES_TERMS=(
@@ -120,21 +119,12 @@ check_no_bare_codex_recipe() {
 check_driver_header_recipe() {
   local root="${1:-$REPO_ROOT}"
   local sh="${2:-$root/skills/agent-kit/templates/loop/loop.sh}"
-  local ps1="${3:-$root/skills/agent-kit/templates/loop/loop.ps1}"
   if [[ ! -f "$sh" ]]; then
     echo "missing file: $sh" >&2
     return 1
   fi
-  if [[ ! -f "$ps1" ]]; then
-    echo "missing file: $ps1" >&2
-    return 1
-  fi
   if ! head -n 20 "$sh" | grep -qF -- "$HEADER_RECIPE"; then
     echo "first 20 lines of loop.sh lack explicit Codex recipe: $sh" >&2
-    return 1
-  fi
-  if ! head -n 20 "$ps1" | grep -qF -- "$HEADER_RECIPE"; then
-    echo "first 20 lines of loop.ps1 lack explicit Codex recipe: $ps1" >&2
     return 1
   fi
   return 0
@@ -216,10 +206,8 @@ mut_root="$FIXTURE_TMPDIR/header-mut"
 mkdir -p "$mut_root/skills/agent-kit/templates/loop"
 require_fixture_root "$mut_root"
 cp "$LOOP_SH" "$mut_root/skills/agent-kit/templates/loop/loop.sh"
-cp "$LOOP_PS1" "$mut_root/skills/agent-kit/templates/loop/loop.ps1"
 sed -i 's/codex exec --sandbox danger-full-access/claude -p/' \
-  "$mut_root/skills/agent-kit/templates/loop/loop.sh" \
-  "$mut_root/skills/agent-kit/templates/loop/loop.ps1"
+  "$mut_root/skills/agent-kit/templates/loop/loop.sh"
 mutation_expect_fail "case 2 detects violation" check_driver_header_recipe "$mut_root"
 
 mut_dir="$FIXTURE_TMPDIR/guide-heading-mut"

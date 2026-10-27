@@ -692,7 +692,7 @@ stripping trailing `[line-patch]` / `[structural]` tags from each item and trail
 - **best-of-N** — conflicts with disjoint write-set admission; no procedure defined here.
 
 The headless loop inherits this ladder because each iteration runs the phased flow; the
-loop drivers' per-story attempt cap and circuit breakers stay the unchanged outer
+loop driver's per-story attempt cap and circuit breakers stay the unchanged outer
 backstop.
 
 ### Retry Limits by Phase
@@ -752,7 +752,7 @@ single-writer integrator; dispatched slots never re-select stories, never increm
 **step 3b** adds `<outbox>/memory/*.md` proposals via `_kit/memory.*` and may make a
 path-limited `chore(memory): <story-id> records` commit (see **Memory** below). Concurrency: `LOOP_SLOTS` > 1 is honored iff `LOOP_WORKTREE=1`
 (default 2, clamped [1,3]). Usage capture: `LOOP_USAGE_FORMAT` (`auto`|`claude`|`claude-stream`|`codex`|
-`cursor`|`none`; `claude-stream` bash driver only; `auto` = basename of `LOOP_CLI`'s first word) and optional `LOOP_USAGE_LOG`. When a
+`cursor`|`none`; `auto` = basename of `LOOP_CLI`'s first word) and optional `LOOP_USAGE_LOG`. When a
 format is active the driver prints `usage: input=<n> output=<n> cache_read=<n|n/a>
 cache_write=<n|n/a> cost_usd=<x|n/a> format=<f>` after each slot's `tail -n 25` block
 (silent when unset and `auto` resolves to none).
@@ -784,29 +784,29 @@ flowchart TD
 
 | Guard | Default |
 |-------|---------|
-| Max iterations per run | 10 (argument to the loop driver (`loop.sh`/`loop.ps1`)) |
+| Max iterations per run | 10 (argument to the loop driver (`loop.sh`)) |
 | Per-story attempt cap | 3, then blocked + escalation entry |
 | Circuit breaker | per slot: retire after 3 consecutive no-commit reaps or 5 identical failure signatures (run continues); every slot retired stops the run — exit 3 if any signature-retirement, else 2 |
-| Model breaker | CLOSED/OPEN/HALF-OPEN on anchored rate-limit detection; 600s cooldown, 2 successes to close; falls down the loop model chain, omit-pin at chain end; OPEN sleeps instead of hammering; rate-limited passes CB1-exempt; **bash driver only:** upward probe of chain[0] after a fallback — first delay 1800 s, doubling with 1800 s floor, 14400 s (4 h) cap; success stays on chain[0], failure restores the pre-probe model (shared across slots) |
+| Model breaker | CLOSED/OPEN/HALF-OPEN on anchored rate-limit detection; 600s cooldown, 2 successes to close; falls down the loop model chain, omit-pin at chain end; OPEN sleeps instead of hammering; rate-limited passes CB1-exempt; upward probe of chain[0] after a fallback — first delay 1800 s, doubling with 1800 s floor, 14400 s (4 h) cap; success stays on chain[0], failure restores the pre-probe model (shared across slots) |
 | Exit condition | driver-dispatched runs: the driver's own backlog re-scan, gated on zero quarantined branches (exit 0); manual runs: explicit `<promise>COMPLETE</promise>` sentinel — never inferred from prose |
 | Merge gate | evaluator PASS + green ladder rungs 1–2 before any commit; rung 3 per story after that story's Phase 5 audit, before that story's commit |
 | Docs | align-docs (Phase 6) runs per story — doc updates land in the story's commit |
-| Protected paths | the loop may not modify `_loop/`, kit agents/skills, the manifest, or `.gitattributes` — the loop driver (`loop.sh`/`loop.ps1`) reverts the iteration and stops (exit 4). `_memory/records/` and `_memory/quarantine/`: never staged by dispatched slots (created only via `_kit/memory.*` — integrator step 3b, or the manual iteration with its story commit) |
+| Protected paths | the loop may not modify `_loop/`, kit agents/skills, the manifest, or `.gitattributes` — the loop driver (`loop.sh`) reverts the iteration and stops (exit 4). `_memory/records/` and `_memory/quarantine/`: never staged by dispatched slots (created only via `_kit/memory.*` — integrator step 3b, or the manual iteration with its story commit) |
 | Memory gates | `_memory/loop/LEARNINGS.md` ≥ 15 KB → compact; `_memory/loop/ESCALATIONS.md` ≥ 20 KB → archive resolved entries |
 | Shipping | the loop never pushes; at run end, `ship-pr` (Phase 7) drafts and creates the PR/MR on the project's forge, or hand over, with the user approving the draft |
-| Sandbox | run in a worktree/container with minimal credentials; never skip permission prompts outside a sandbox |
-| Iteration timeout / budgets | opt-in (`LOOP_ITER_TIMEOUT`, `LOOP_RUN_BUDGET_TOKENS`, `LOOP_STORY_BUDGET_TOKENS`, `LOOP_RUN_BUDGET_USD`, `LOOP_STORY_BUDGET_USD`, `LOOP_ITER_BUDGET_USD`); **bash driver only** (`loop.sh`); run-budget stop exits 1 when eligible work remains; missing usage/cost data fails open |
-| Tamper check | `LOOP_TAMPER_CHECK` = `warn` (default) \| `fail` (worktree only — requires `LOOP_WORKTREE=1`) \| `off`; optional `LOOP_TEST_PATTERNS`; **bash driver only**; `fail` quarantines with reason `tamper` |
+| Sandbox | run in a worktree/container with minimal credentials; never skip permission prompts (or disable the CLI's own sandbox) outside a container or VM — a worktree only separates the git tree and is not isolation |
+| Iteration timeout / budgets | opt-in (`LOOP_ITER_TIMEOUT`, `LOOP_RUN_BUDGET_TOKENS`, `LOOP_STORY_BUDGET_TOKENS`, `LOOP_RUN_BUDGET_USD`, `LOOP_STORY_BUDGET_USD`, `LOOP_ITER_BUDGET_USD`); run-budget stop exits 1 when eligible work remains; missing usage/cost data fails open |
+| Tamper check | `LOOP_TAMPER_CHECK` = `warn` (default) \| `fail` (worktree only — requires `LOOP_WORKTREE=1`) \| `off`; optional `LOOP_TEST_PATTERNS`; `fail` quarantines with reason `tamper` |
 
-**bash-only knobs** (`loop.sh` only; `loop.ps1` frozen at 1.1.2): `LOOP_LEDGER` (default on → `$PWD/_memory/loop/ledger.jsonl`, set `off` to disable); `LOOP_DOSSIER` (default on → `$PWD/_memory/loop/attempts/<story-id>.md`, `off` disables); `LOOP_USAGE_FORMAT=claude-stream` (opt-in stream-json with typed `api_retry` rate-limit detection; text fallback limited to stderr plus the final result envelope); `--lint [backlog-path]` (readiness check, exit 0/1/5, no side effects); plus the timeout, budget, and tamper knobs above.
+**Additional knobs:** `LOOP_LEDGER` (default on → `$PWD/_memory/loop/ledger.jsonl`, set `off` to disable); `LOOP_DOSSIER` (default on → `$PWD/_memory/loop/attempts/<story-id>.md`, `off` disables); `LOOP_USAGE_FORMAT=claude-stream` (opt-in stream-json with typed `api_retry` rate-limit detection; text fallback limited to stderr plus the final result envelope); `--lint [backlog-path]` (readiness check, exit 0/1/5, no side effects); plus the timeout, budget, and tamper knobs above.
 
 **Exit funnel** (driver-aggregated across slots; precedence **4>3>2>1>0** — exit 4 and
 exit 5 short-circuit): **exit 1** = max-iterations reached with eligible stories
-remaining, or (**bash driver only**) a run budget (`LOOP_RUN_BUDGET_TOKENS` /
+remaining, or a run budget (`LOOP_RUN_BUDGET_TOKENS` /
 `LOOP_RUN_BUDGET_USD`) stopped claiming new stories while eligible work remains, or
 drained backlog with quarantined branches retained; **exit 5** = setup or
 integration failure (tracked-instance preflight, missing/unreadable backlog, PROMPT.md
-substitution point, non-fast-forward integration; **bash driver only**: invalid
+substitution point, non-fast-forward integration; invalid
 `LOOP_ITER_TIMEOUT`, budget (`LOOP_*_BUDGET_*`) or `LOOP_TAMPER_CHECK` value, missing
 `timeout`/`gtimeout` when `LOOP_ITER_TIMEOUT` is set, a `timeout` without `-s`/`-k` support,
 `LOOP_TAMPER_CHECK=fail` without `LOOP_WORKTREE=1`, **`--lint`** on a missing, unreadable,
@@ -817,7 +817,7 @@ block exit 0 until inspected.
 Known failure mode: loops can burn large budgets without converging — prefer more,
 smaller stories (each sized to one context window) and let the circuit breaker stop a
 drifting run early. Headless entry point: `_loop/loop.sh [max-iterations]` (bash) or
-`pwsh _loop/loop.ps1 [MaxIterations]` (PowerShell 7+).
+`_loop\loop.cmd [max-iterations]` on Windows from cmd or PowerShell (Git for Windows required).
 
 ---
 
@@ -920,16 +920,16 @@ _memory/work/goals/<goal>/orchestration-log.md  # Append-only spawn ledger per g
 _memory/work/goals/<goal>/spawns/NN-context.md  # Context package sent to spawn #NN (verbatim)
 _memory/work/goals/<goal>/spawns/NN-report.md   # Report returned by spawn #NN (verbatim)
 _memory/loop/breaker-state.json       # Model circuit breaker state (runtime, gitignored)
-_memory/loop/ledger.jsonl             # Run ledger — one JSON line per reaped/killed slot (runtime, gitignored; bash driver)
-_memory/loop/attempts/                # Attempt dossiers per story (runtime, gitignored; bash driver)
+_memory/loop/ledger.jsonl             # Run ledger — one JSON line per reaped/killed slot (runtime, gitignored)
+_memory/loop/attempts/                # Attempt dossiers per story (runtime, gitignored)
 _kit/{log-spawn.sh,log-spawn.cmd}  # Single-copy tools: orchestration-log writer + Windows launcher
-_kit/{memory.sh,memory.ps1}  # Single-copy tools: memory store (add / index / search / show / redact / check / rm / capture / backfill)
+_kit/{memory.sh,memory.cmd}  # Single-copy tools: memory store (add / index / search / show / redact / check / rm / capture / backfill)
 _memory/records/ · _memory/quarantine/  # Tracked memory records (immutable, one per file) — see _memory/README.md
 _memory/research/               # Tracked research briefs (<topic>.md) + README.md status index (orchestrator-owned)
 _memory/work/                   # Gitignored in-flight goal and research scratch (research: work/research/<topic>/) — see _memory/README.md
 _memory/loop/                   # Tracked loop ledgers and archive (breaker-state.json, ledger.jsonl, attempts/ gitignored)
 _memory/.index/ · _memory/raw/  # Derived index; capture output, ledgers and drafts (gitignored)
-_loop/{loop.sh,loop.ps1,breaker.sh,breaker.ps1,PROMPT.md}  # Headless loop driver (if enabled)
+_loop/{loop.sh,loop.cmd,breaker.sh,PROMPT.md}  # Headless loop driver (if enabled)
 ```
 
 ### Critical Reference Files
@@ -978,7 +978,7 @@ _kit/log-spawn.sh outcome --goal my-goal --spawn 03 --report _memory/work/goals/
 _kit/log-spawn.sh note --goal my-goal --text "Phase 4 complete"
 ```
 
-**Memory store** (Windows outside Git Bash: `_kit\memory.cmd …` — Git for Windows required; same flags; `memory.ps1` remains for `loop.ps1`):
+**Memory store** (Windows outside Git Bash: `_kit\memory.cmd …` — Git for Windows required; same flags):
 ```bash
 _kit/memory.sh add --kind decision --title "Example" --body /tmp/body.md --harness claude
 _kit/memory.sh search orchestration --kind decision,pitfall --limit 5

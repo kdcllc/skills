@@ -1,10 +1,8 @@
 #!/usr/bin/env bash
-# Guard: memory-store CLI twins (skills/agent-kit/templates/tools/memory.{sh,ps1}).
+# Guard: memory-store CLI (skills/agent-kit/templates/tools/memory.sh).
 #
-# Behavioral cases (a)–(v): mktemp --root work, MEMORY_NOW per step, both twins when pwsh present.
-# (m) cross-twin parity: raw stdout/stderr/rc of every step compared byte for byte (only the paired
-#     temp-root path prefixes are collapsed) plus a `diff -r` of the paired roots.
-# (q)–(t) structural · (w) real-repo guard · SKIP: pwsh/sqlite absent for (m)/(n), instance absent (t).
+# Behavioral cases (a)–(v): mktemp --root work, MEMORY_NOW per step.
+# (q)–(t) structural · (w) real-repo guard · SKIP: sqlite absent for (n), instance absent (t).
 #
 # Real-repo guard, two layers:
 #   1. the behavioral suites run from a neutral non-git mktemp cwd; run/direct_twin/show_to_file abort
@@ -24,26 +22,18 @@ export TMPDIR="$FIXTURE_TMPDIR"
 . "$HERE/../lib/fixture-root.sh"
 
 CANON_MEMORY_SH="$REPO_ROOT/skills/agent-kit/templates/tools/memory.sh"
-CANON_MEMORY_PS1="$REPO_ROOT/skills/agent-kit/templates/tools/memory.ps1"
 MEMORY_SH="${MEMORY_SH:-$CANON_MEMORY_SH}"
-MEMORY_PS1="${MEMORY_PS1:-$CANON_MEMORY_PS1}"
 # The suites cd into a neutral dir, so the scripts under test are addressed absolutely
 # (a relative override resolves against the repo root).
 case "$MEMORY_SH" in /*) ;; *) MEMORY_SH="$REPO_ROOT/$MEMORY_SH" ;; esac
-case "$MEMORY_PS1" in /*) ;; *) MEMORY_PS1="$REPO_ROOT/$MEMORY_PS1" ;; esac
 CANON_README="$REPO_ROOT/skills/agent-kit/templates/memory/README.md"
 
 TAB="$(printf '\t')"
 
-# Set by case_m_twin_parity: dual-run every step (bash vs pwsh), log transcripts, compare raw.
-M_PARITY=0
-M_PARITY_BAD=0
-M_PARITY_STEP=0
+# 
 M_TA=""
 M_TB=""
-ROOTTwin_bash=()
-ROOTTwin_pwsh=()
-ROOT_REG=()       # every registered temp root (bash side and pwsh twin side)
+ROOT_REG=()       # every registered temp root (bash side and scratch side)
 NEUTRAL=""        # neutral non-git cwd for the behavioral suites
 REPO_MEM_BEFORE=""
 
@@ -134,23 +124,18 @@ mktemp_dir() { # <out-var> — hard-fails the whole run on an empty/relative/non
   printf -v "$_mv" '%s' "$_md"
 }
 
-mktemp_root() { # <out-var> — registered temp root (parity mode: a bash/pwsh twin pair)
-  local _rv="${1:-}" _rd _rt
+mktemp_root() { # <out-var> — registered temp root
+  local _rv="${1:-}" _rd
   [[ -n "$_rv" ]] || fatal "mktemp_root: missing out-var"
   mktemp_dir _rd
-  if [[ "${M_PARITY:-0}" -eq 1 ]]; then
-    _rd="$(canonical_dir "$_rd")"
-    mktemp_dir _rt
-    _rt="$(canonical_dir "$_rt")"
-    [[ -n "$_rd" && -n "$_rt" ]] || fatal "mktemp_root: canonical path resolution failed"
-    ROOTTwin_bash+=("$_rd")
-    ROOTTwin_pwsh+=("$_rt")
-    ROOT_REG+=("$_rd" "$_rt")
-  else
-    ROOT_REG+=("$_rd")
-  fi
+  ROOT_REG+=("$_rd")
   printf -v "$_rv" '%s' "$_rd"
 }
+
+twin_root() { printf '%s' "$1"; }
+mirror_file() { :; }
+drop_root_pair() { rm -rf "$1"; }
+rm_both() { rm -f "$1"; }
 
 root_registered() { # <path> — true when the path is, or lies under, a registered temp root (builtins only: runs under a shim PATH)
   local v="${1:-}" r
@@ -183,10 +168,10 @@ count_memory_files() { # <root>
   find "$root/_memory/records" "$root/_memory/quarantine" -type f 2>/dev/null | wc -l | tr -d ' '
 }
 
-collapse_roots() { # <file> — stdout: the file's bytes with every paired temp-root path replaced by @ROOT@ (the only normalization)
+collapse_roots() { # <file> — stdout: registered temp-root paths replaced by @ROOT@
   local i expr=""
-  for i in "${!ROOTTwin_bash[@]}"; do
-    expr="${expr}s#${ROOTTwin_bash[$i]}#@ROOT@#g;s#${ROOTTwin_pwsh[$i]}#@ROOT@#g;"
+  for i in "${!ROOT_REG[@]}"; do
+    expr="${expr}s#${ROOT_REG[$i]}#@ROOT@#g;"
   done
   if [[ -n "$expr" ]]; then LC_ALL=C sed "$expr" "$1"; else cat "$1"; fi
 }
@@ -199,98 +184,6 @@ log_step() { # <transcript> <rc> <out-file> <err-file>
     cat "$4"
     printf '\n---\n'
   } >>"$1"
-}
-
-parity_step() { # <rc-bash> <rc-pwsh> <desc> — raw compare of $B/{out,err}_{a,b}: rc, stdout, stderr; logs transcripts
-  local rca="$1" rcb="$2" desc="$3" f
-  M_PARITY_STEP=$((M_PARITY_STEP + 1))
-  for f in out_a out_b err_a err_b; do collapse_roots "$B/$f" > "$B/$f.n"; done
-  log_step "$M_TA" "$rca" "$B/out_a.n" "$B/err_a.n"
-  log_step "$M_TB" "$rcb" "$B/out_b.n" "$B/err_b.n"
-  if [[ "$rca" != "$rcb" ]] || ! cmp -s "$B/out_a.n" "$B/out_b.n" || ! cmp -s "$B/err_a.n" "$B/err_b.n"; then
-    M_PARITY_BAD=$((M_PARITY_BAD + 1))
-    {
-      printf 'PARITY DIVERGENCE step %s: memory %s\n' "$M_PARITY_STEP" "$desc"
-      printf '  rc     bash=%s  pwsh=%s\n' "$rca" "$rcb"
-      printf '  stdout bash(%s bytes)=[%s]\n' "$(wc -c < "$B/out_a.n" | tr -d ' ')" "$(sed -n l "$B/out_a.n" | head -c 700)"
-      printf '  stdout pwsh(%s bytes)=[%s]\n' "$(wc -c < "$B/out_b.n" | tr -d ' ')" "$(sed -n l "$B/out_b.n" | head -c 700)"
-      printf '  stderr bash(%s bytes)=[%s]\n' "$(wc -c < "$B/err_a.n" | tr -d ' ')" "$(sed -n l "$B/err_a.n" | head -c 700)"
-      printf '  stderr pwsh(%s bytes)=[%s]\n' "$(wc -c < "$B/err_b.n" | tr -d ' ')" "$(sed -n l "$B/err_b.n" | head -c 700)"
-    } >&2
-  fi
-}
-
-twin_root() { # <bash-side path> → the pwsh-side equivalent (prefix-mapped under a paired root; otherwise unchanged)
-  local key="$1" i d
-  if [[ -n "$key" && -d "$key" ]]; then key="$(canonical_dir "$key")"; fi
-  for i in "${!ROOTTwin_bash[@]}"; do
-    d="${ROOTTwin_bash[$i]}"
-    if [[ "$key" == "$d" ]]; then
-      printf '%s' "${ROOTTwin_pwsh[$i]}"
-      return
-    fi
-    if [[ "$key" == "$d"/* ]]; then
-      printf '%s' "${ROOTTwin_pwsh[$i]}/${key#"$d"/}"
-      return
-    fi
-  done
-  printf '%s' "$key"
-}
-
-mirror_file() { # <hand-made fixture file under a paired bash root> — copy exactly that file to the twin root
-  local f="$1" i d dest
-  [[ "${M_PARITY:-0}" -eq 1 ]] || return 0
-  for i in "${!ROOTTwin_bash[@]}"; do
-    d="${ROOTTwin_bash[$i]}"
-    if [[ "$f" == "$d"/* ]]; then
-      dest="${ROOTTwin_pwsh[$i]}/${f#"$d"/}"
-      mkdir -p "$(dirname "$dest")" && cp -p "$f" "$dest" || fatal "mirror_file: could not copy $f"
-      return 0
-    fi
-  done
-  fatal "mirror_file: $f is not under a paired temp root"
-}
-
-rm_both() {
-  local f="$1" d tb i
-  rm -f "$f"
-  [[ "${M_PARITY:-0}" -eq 1 ]] || return 0
-  for i in "${!ROOTTwin_bash[@]}"; do
-    d="${ROOTTwin_bash[$i]}"
-    tb="${ROOTTwin_pwsh[$i]}"
-    if [[ "$f" == "$d"/* ]]; then
-      rm -f "${f/#$d/$tb}"
-      return
-    fi
-  done
-}
-
-drop_root_pair() {
-  local d="$1" i
-  [[ -d "$d" ]] && d="$(canonical_dir "$d")"
-  for i in "${!ROOTTwin_bash[@]}"; do
-    if [[ "${ROOTTwin_bash[$i]}" == "$d" ]]; then
-      unset "ROOTTwin_bash[$i]" "ROOTTwin_pwsh[$i]"
-      return 0
-    fi
-  done
-}
-
-PARITY_PARGS=()
-parity_pwsh_args() { # twin args → PARITY_PARGS with every --root value mapped to the pwsh-side root
-  PARITY_PARGS=()
-  local x map_root=0
-  for x in "$@"; do
-    if [[ "$map_root" -eq 1 ]]; then
-      PARITY_PARGS+=("$(twin_root "$x")")
-      map_root=0
-    elif [[ "$x" == "--root" ]]; then
-      PARITY_PARGS+=("$x")
-      map_root=1
-    else
-      PARITY_PARGS+=("$x")
-    fi
-  done
 }
 
 fts_expected_order() { # <fts.db> <match-expr> <candidate-ids-file> <tmpdir> — independent frozen ordering, one id per line
@@ -311,7 +204,7 @@ sqlite_fts5_available() {
   sqlite3 :memory: "CREATE VIRTUAL TABLE t USING fts5(x);" >/dev/null 2>&1
 }
 
-MEMORY_SUITES="${MEMORY_SUITES:-bash,pwsh,parity}"
+MEMORY_SUITES="${MEMORY_SUITES:-bash}"
 suite_token_in_suites() { # <token> <suites-csv>
   local want="$1" rest="$2" part
   while [[ -n "$rest" ]]; do
@@ -323,13 +216,9 @@ suite_token_in_suites() { # <token> <suites-csv>
   done
   return 1
 }
-suite_selected() { # <bash|pwsh|parity>
+suite_selected() { # <bash>
   suite_token_in_suites "$1" "$MEMORY_SUITES"
 }
-followup_pwsh_runnable() {
-  suite_selected pwsh && command -v pwsh >/dev/null 2>&1
-}
-
 validate_memory_suites() {
   local part rest="$MEMORY_SUITES"
   [[ -n "$rest" ]] || { report FAIL "MEMORY_SUITES empty"; finish; }
@@ -338,7 +227,7 @@ validate_memory_suites() {
     if [[ "$part" = "$rest" ]]; then rest=""; else rest="${rest#*,}"; fi
     part="${part#"${part%%[![:space:]]*}"}"
     part="${part%"${part##*[![:space:]]}"}"
-    case "$part" in bash|pwsh|parity) ;; *)
+    case "$part" in bash) ;; *)
       report FAIL "MEMORY_SUITES unknown value: $part"
       finish
       ;;
@@ -370,10 +259,6 @@ run_memory_followup_cases() {
       report SKIP "[followup] ($cid) $title" "not in MEMORY_SUITES"
       return 0
     fi
-    if [[ "$twin" = pwsh ]] && ! command -v pwsh >/dev/null 2>&1; then
-      report SKIP "[followup] ($cid) $title" "pwsh not on PATH"
-      return 0
-    fi
     return 1
   }
   followup_mkstore() { # <root>
@@ -403,28 +288,10 @@ run_memory_followup_cases() {
       root_p="$Rp/back\\slash"
       root_b="$Rb/back\\slash"
     fi
-    local rcp=0 rcb=0
-    if followup_pwsh_runnable; then
-      guard_args "$@" --root "$root_p"
-      pwsh -NoProfile -NonInteractive -File "$MEMORY_PS1" "$@" --root "$root_p" >"$B/out_p" 2>"$B/err_p"
-      rcp=$?
-    else
-      : > "$B/out_p"; : > "$B/err_p"
-      report SKIP "[followup] ($cid) pwsh parity half" "not in MEMORY_SUITES or pwsh not on PATH"
-    fi
+    local rcb=0
     guard_args "$@" --root "$root_b"
     MEMORY_NOW=20261011T120001Z bash "$MEMORY_SH" "$@" --root "$root_b" >"$B/out_b" 2>"$B/err_b"
     rcb=$?
-    followup_norm "$B/out_p" "$B/out_pn"
-    followup_norm "$B/out_b" "$B/out_bn"
-    followup_norm "$B/err_p" "$B/err_pn"
-    followup_norm "$B/err_b" "$B/err_bn"
-    if followup_pwsh_runnable; then
-      if [[ "$rcp" != "$rcb" ]] || ! cmp -s "$B/out_pn" "$B/out_bn" || ! cmp -s "$B/err_pn" "$B/err_bn"; then
-        ko "$builder $* rc pwsh=$rcp bash=$rcb"
-        diff -u "$B/out_pn" "$B/out_bn" | head -8 >&2 || true
-      fi
-    fi
     followup_absolute "$cid" "$root_b" "$rcb" "$(cat "$B/out_b")" "$(cat "$B/err_b")" "$@"
     followup_report "$cid" "$title"
   }
@@ -517,15 +384,6 @@ run_memory_followup_cases() {
     "$builder" "$Rp"
     "$builder" "$Rb"
     local rc_p=0 rc_b=0
-    if followup_pwsh_runnable; then
-      guard_args add --kind fact --title adddedupe --body "$body" --root "$Rp"
-      pwsh -NoProfile -NonInteractive -File "$MEMORY_PS1" add --kind fact --title adddedupe --body "$body" --root "$Rp" >"$B/out_p" 2>"$B/err_p"
-      rc_p=$?
-      { [ "$rc_p" = 0 ] && [ -z "$(cat "$B/err_p")" ] && grep -q 'memory: added' "$B/out_p"; } \
-        && ok "$cid pwsh add" || ko "$cid pwsh add" "rc=$rc_p err=[$(cat "$B/err_p")] out=[$(cat "$B/out_p")]"
-    else
-      report SKIP "[followup] ($cid) pwsh add half" "not in MEMORY_SUITES or pwsh not on PATH"
-    fi
     guard_args add --kind fact --title adddedupe --body "$body" --root "$Rb"
     followup_run_bash "$Rb" add --kind fact --title adddedupe --body "$body" >"$B/out_b" 2>"$B/err_b"
     rc_b=$?
@@ -718,7 +576,7 @@ run_memory_followup_cases() {
     MEMORY_NOW=20261011T160000Z bash "$MEMORY_SH" add --kind fact --title nl --body "$F/nl.md" --root "$R" >/dev/null 2>&1
   }
 
-  echo "== followup symlinks (pwsh-first fresh fixtures)"
+  echo "== followup symlinks (fresh fixtures)"
   for sym in leaf symlink-mm symlink-yyyy symlink-mem; do
     case "$sym" in
       leaf) b=b_leaf ;;
@@ -761,15 +619,6 @@ run_memory_followup_cases() {
   bash "$MEMORY_SH" search alpha --engine grep --root "$Rb" >"$B/out_b" 2>"$B/err_b"
   first_b="$(sed -n 1p "$B/out_b" | cut -f6)"
   [[ "$first_b" == *2025/10/* ]] && ok "tie grep 2025 path first bash" || ko "tie grep order bash" "[$first_b]"
-  if followup_pwsh_runnable; then
-    guard_args search alpha --engine grep --root "$Rp"
-    pwsh -NoProfile -NonInteractive -File "$MEMORY_PS1" search alpha --engine grep --root "$Rp" >"$B/out_p" 2>"$B/err_p"
-    first_p="$(sed -n 1p "$B/out_p" | cut -f6)"
-    [[ "$first_p" == *2025/10/* ]] && ok "tie grep 2025 path first pwsh" || ko "tie grep order pwsh" "[$first_p]"
-    cmp -s "$B/out_p" "$B/out_b" && ok "tie grep pwsh/bash parity" || ko "tie grep parity"
-  else
-    report SKIP "[followup] (tie-dup-id-order-grep) pwsh half" "not in MEMORY_SUITES or pwsh not on PATH"
-  fi
   followup_report "tie-dup-id-order-grep" "duplicate id tie grep 2025 path first"
   if sqlite_fts5_available; then
     mktemp_dir Rp
@@ -781,15 +630,6 @@ run_memory_followup_cases() {
     bash "$MEMORY_SH" search alpha --engine fts --root "$Rb" >"$B/out_b" 2>"$B/err_b"
     first_b="$(sed -n 1p "$B/out_b" | cut -f6)"
     [[ "$first_b" == *2025/10/* ]] && ok "tie fts 2025 path first bash" || ko "tie fts order bash" "[$first_b]"
-    if followup_pwsh_runnable; then
-      guard_args search alpha --engine fts --root "$Rp"
-      pwsh -NoProfile -NonInteractive -File "$MEMORY_PS1" search alpha --engine fts --root "$Rp" >"$B/out_p" 2>"$B/err_p"
-      first_p="$(sed -n 1p "$B/out_p" | cut -f6)"
-      [[ "$first_p" == *2025/10/* ]] && ok "tie fts 2025 path first pwsh" || ko "tie fts order pwsh" "[$first_p]"
-      cmp -s "$B/out_p" "$B/out_b" && ok "tie fts pwsh/bash parity" || ko "tie fts parity"
-    else
-      report SKIP "[followup] (tie-dup-id-order-fts) pwsh half" "not in MEMORY_SUITES or pwsh not on PATH"
-    fi
     followup_report "tie-dup-id-order-fts" "duplicate id tie fts 2025 path first"
   fi
 
@@ -808,18 +648,6 @@ run_memory_followup_cases() {
     && [ "$(wc -l < "$B/err_b" | tr -d ' ')" = 1 ] \
     && [ -z "$(cat "$B/out_b")" ]; } \
     && ok "limit overflow bash exact stderr" || ko "limit overflow bash" "rc=$rcb err=[$err_b]"
-  if followup_pwsh_runnable; then
-    guard_args search x --limit 99999999999999999999 --root "$Rp"
-    pwsh -NoProfile -NonInteractive -File "$MEMORY_PS1" search x --limit 99999999999999999999 --root "$Rp" >"$B/out_p" 2>"$B/err_p"; rcp=$?
-    err_p="$(cat "$B/err_p")"
-    { [ "$rcp" = 2 ] \
-      && [ "$(printf '%s' "$err_p" | tr -d '\n')" = "memory: invalid --limit" ] \
-      && [ "$(wc -l < "$B/err_p" | tr -d ' ')" = 1 ] \
-      && [ -z "$(cat "$B/out_p")" ]; } \
-      && ok "limit overflow pwsh exact stderr" || ko "limit overflow pwsh" "rc=$rcp err=[$err_p]"
-  else
-    report SKIP "[followup] (limit-overflow) pwsh half" "not in MEMORY_SUITES or pwsh not on PATH"
-  fi
   followup_report "limit-overflow" "--limit 20 digits single stderr line exit 2"
 
   echo "== followup hardening numeric id (index)"
@@ -835,21 +663,9 @@ run_memory_followup_cases() {
     b_fts_id_join "$Rp"
     b_fts_id_join "$Rb"
     followup_run_bash "$Rb" index >/dev/null 2>&1
-    if followup_pwsh_runnable; then
-      guard_args index --root "$Rp"
-      pwsh -NoProfile -NonInteractive -File "$MEMORY_PS1" index --root "$Rp" >/dev/null 2>"$B/err_p"
-    fi
     guard_args search joinftstok --engine fts --root "$Rb"
     bash "$MEMORY_SH" search joinftstok --engine fts --root "$Rb" >"$B/out_b" 2>"$B/err_b"
     rcb=$?
-    if followup_pwsh_runnable; then
-      guard_args search joinftstok --engine fts --root "$Rp"
-      pwsh -NoProfile -NonInteractive -File "$MEMORY_PS1" search joinftstok --engine fts --root "$Rp" >"$B/out_p" 2>"$B/err_p"
-      cmp -s "$B/out_p" "$B/out_b" && cmp -s "$B/err_p" "$B/err_b" && ok "fts id join parity" \
-        || ko "fts id join parity" "pwsh/bash differ"
-    else
-      report SKIP "[followup] (harden-fts-ids) pwsh parity half" "not in MEMORY_SUITES or pwsh not on PATH"
-    fi
     followup_absolute "harden-fts-ids" "$Rb" "$rcb" "$(cat "$B/out_b")" "$(cat "$B/err_b")" search joinftstok --engine fts
     followup_report "harden-fts-ids" "bm25 join treats 1e3 and 1000 as distinct ids"
   else
@@ -857,7 +673,7 @@ run_memory_followup_cases() {
     report SKIP "[followup] (harden-fts-ids) bm25 id join 1e3 vs 1000" "sqlite3 FTS5 unavailable"
   fi
 
-  echo "== followup add dedupe (both twins)"
+  echo "== followup add dedupe (bash)"
   printf 'dedupe broken leaf\n' > "$F/add-broken.md"
   printf 'dedupe leaf dir\n' > "$F/add-leafdir.md"
   printf 'dedupe records loop\n' > "$F/add-loop.md"
@@ -890,7 +706,7 @@ run_memory_followup_cases() {
   err_b="$(cat "$B/err_b")"
   bash_n="$(followup_index_n "$(cat "$B/out_b")")"
   cp "$B/out_b" "$B/bs_idx_b.out"
-  # bash halves are their own reported cases (a failure here must never ride on the pwsh parity branch below)
+  # bash-only reported cases (failures must not be masked by optional followup branches)
   followup_absolute "byte-backslash-bash-idx" "$bs_b" "$rcb" "$(cat "$B/out_b")" "$err_b" index
   followup_report "byte-backslash-bash-idx" "bash index of a --root containing a backslash"
   guard_args search omega --root "$bs_b"
@@ -898,23 +714,6 @@ run_memory_followup_cases() {
   rcb=$?
   followup_absolute "byte-backslash-bash-search" "$bs_b" "$rcb" "$(cat "$B/out_b")" "$(cat "$B/err_b")" search omega
   followup_report "byte-backslash-bash-search" "bash search row (id/title/path) of a --root containing a backslash"
-  if followup_pwsh_runnable; then
-    guard_args index --root "$bs_p"
-    pwsh -NoProfile -NonInteractive -File "$MEMORY_PS1" index --root "$bs_p" >"$B/out_p" 2>"$B/err_p"
-    pwsh_n="$(followup_index_n "$(cat "$B/out_p")")"
-    if [[ "$pwsh_n" = 0 && "$bash_n" = 1 ]]; then
-      report SKIP "[followup] (byte-backslash-idx) pwsh twin index parity" "pre-existing pwsh limitation: --root paths containing backslash index 0 records while bash indexes 1"
-      report SKIP "[followup] (byte-backslash-search) pwsh twin search parity" "pre-existing pwsh limitation: --root paths containing backslash index 0 records while bash indexes 1"
-    elif [[ "$pwsh_n" != "$bash_n" ]] || ! cmp -s "$B/out_p" "$B/bs_idx_b.out"; then
-      report FAIL "[followup] (byte-backslash-idx) pwsh/bash index mismatch" "bash_n=$bash_n pwsh_n=$pwsh_n"
-    else
-      followup_compare "byte-backslash-idx" "backslash --root index parity" b_backslash_root index
-      followup_compare "byte-backslash-search" "backslash --root search parity" b_backslash_root search omega
-    fi
-  else
-    report SKIP "[followup] (byte-backslash-idx) pwsh twin parity" "not in MEMORY_SUITES or pwsh not on PATH"
-    report SKIP "[followup] (byte-backslash-search) pwsh twin search parity" "not in MEMORY_SUITES or pwsh not on PATH"
-  fi
 
   echo "== followup search frontmatter parity"
   b_tab_title_search() {
@@ -983,30 +782,16 @@ run_behavioral_suite() {
     sf=1
     printf '  rc [%s] %s: expected %s got %s out=[%s] err=[%s]\n' "$label" "${2:-}" "$1" "$RC" "$OUT" "$ERR" >&2
   }
-  twin_exec() { # <MEMORY_NOW or ""> <twin args...> — sets RC OUT ERR; parity: run both twins and compare raw
-    local now="$1" rc_b
+  twin_exec() { # <MEMORY_NOW or ""> <args...> — sets RC OUT ERR
+    local now="$1"
     shift
     guard_args "$@"
-    if [[ "${M_PARITY:-0}" -eq 1 ]]; then
-      parity_pwsh_args "$@"
-      guard_args "${PARITY_PARGS[@]}"
-      if [[ -n "$now" ]]; then
-        MEMORY_NOW="$now" bash "$MEMORY_SH" "$@" >"$B/out_a" 2>"$B/err_a"; RC=$?
-        MEMORY_NOW="$now" pwsh -NoProfile -NonInteractive -File "$MEMORY_PS1" "${PARITY_PARGS[@]}" >"$B/out_b" 2>"$B/err_b"; rc_b=$?
-      else
-        bash "$MEMORY_SH" "$@" >"$B/out_a" 2>"$B/err_a"; RC=$?
-        pwsh -NoProfile -NonInteractive -File "$MEMORY_PS1" "${PARITY_PARGS[@]}" >"$B/out_b" 2>"$B/err_b"; rc_b=$?
-      fi
-      OUT="$(cat "$B/out_a")"; ERR="$(cat "$B/err_a")"
-      parity_step "$RC" "$rc_b" "$*"
+    if [[ -n "$now" ]]; then
+      OUT="$(MEMORY_NOW="$now" "${RUN[@]}" "$@" 2>"$B/err")"; RC=$?
     else
-      if [[ -n "$now" ]]; then
-        OUT="$(MEMORY_NOW="$now" "${RUN[@]}" "$@" 2>"$B/err")"; RC=$?
-      else
-        OUT="$("${RUN[@]}" "$@" 2>"$B/err")"; RC=$?
-      fi
-      ERR="$(cat "$B/err")"
+      OUT="$("${RUN[@]}" "$@" 2>"$B/err")"; RC=$?
     fi
+    ERR="$(cat "$B/err")"
   }
   run(){ # <MEMORY_NOW> <twin args...>
     local now="$1"; shift
@@ -1015,24 +800,13 @@ run_behavioral_suite() {
   direct_twin() { # <twin args...> (no MEMORY_NOW)
     twin_exec "" "$@"
   }
-  show_to_file() { # <outfile> <id> <root> — sets RC, ERR; outfile gets the exact stdout bytes (bash side in parity)
-    local outfile="$1" id="$2" root="$3" tb rc_b
+  show_to_file() { # <outfile> <id> <root> — sets RC, ERR
+    local outfile="$1" id="$2" root="$3"
     guard_args show "$id" --root "$root"
-    if [[ "${M_PARITY:-0}" -eq 1 ]]; then
-      tb="$(twin_root "$root")"
-      guard_args --root "$tb"
-      bash "$MEMORY_SH" show "$id" --root "$root" >"$B/out_a" 2>"$B/err_a"; RC=$?
-      pwsh -NoProfile -NonInteractive -File "$MEMORY_PS1" show "$id" --root "$tb" >"$B/out_b" 2>"$B/err_b"; rc_b=$?
-      ERR="$(cat "$B/err_a")"
-      parity_step "$RC" "$rc_b" "show $id"
-      cp "$B/out_a" "$outfile"
-    else
-      "${RUN[@]}" show "$id" --root "$root" >"$outfile" 2>"$B/err"; RC=$?
-      ERR="$(cat "$B/err")"
-    fi
+    "${RUN[@]}" show "$id" --root "$root" >"$outfile" 2>"$B/err"; RC=$?
+    ERR="$(cat "$B/err")"
   }
   report_section() {
-    [[ "$label" == "__parity__" ]] && return 0
     local case_id="$1" title="$2"
     if [[ $sf -eq 0 ]]; then report PASS "[$label] ($case_id) $title"
     else report FAIL "[$label] ($case_id) $title"; fi
@@ -1104,7 +878,7 @@ run_behavioral_suite() {
   sf=0
   echo "== exit 2 / exit 4"
   mktemp_dir SHIM
-  for t in bash env cat sed awk grep sort head tail tr cut od find mkdir rm mv cp ls wc date mktemp sha256sum cmp printf basename dirname touch git pwsh; do
+  for t in bash env cat sed awk grep sort head tail tr cut od find mkdir rm mv cp ls wc date mktemp sha256sum cmp printf basename dirname touch git; do
     p="$(command -v "$t" 2>/dev/null || true)"; [ -n "$p" ] && ln -sf "$p" "$SHIM/$t"
   done
   run 20261008T130000Z add --kind bogus --title T --body "$B/b.md" --root "$R"; expect_rc 2 "bad kind"
@@ -1174,9 +948,6 @@ run_behavioral_suite() {
 
   report_section "h" "120/4096 boundaries + field rendering"
   echo "== git root commit"
-  if [[ "${M_PARITY:-0}" -eq 1 ]]; then
-    sf=0
-  else
   mktemp_root G; (cd "$G" && git init -q && git -c user.email=a@b -c user.name=n commit -q --allow-empty -m i)
   run 20261008T150000Z add --kind fact --title G --body "$B/b.md" --root "$G"
   gf="$G/$(echo "$OUT" | awk '{print $4}')"; local gcommit; gcommit="$(grep '^commit:' "$gf" | awk '{print $2}')"
@@ -1194,7 +965,6 @@ run_behavioral_suite() {
   if [[ $save_a -eq 0 && $sf -eq 0 ]]; then report PASS "[$label] (a) add happy path + git/cwd default root"
   else report FAIL "[$label] (a) add happy path + git/cwd default root"; fi
   sf=0
-  fi
   echo "== index"
   mktemp_root S
   printf 'one\n' > "$B/1.md"; run 20261008T100000Z add --kind decision --title First --body "$B/1.md" --tags a --root "$S"; id1="$(echo "$OUT"|awk '{print $3}')"
@@ -1315,7 +1085,6 @@ run_behavioral_suite() {
   run 20261008T170000Z search 'al"pha' alpha --engine fts --root "$T"; expect_rc 0 "fts term with quote"
   run 20261008T170000Z search alpha --engine bogus --root "$T"; expect_rc 2 "bad engine"
   rm_both "$T/_memory/.index/fts.db"; touch -d '2000-01-01' "$T"/_memory/records/*/*/*.md 2>/dev/null
-  [[ "${M_PARITY:-0}" -eq 1 ]] && touch -d '2000-01-01' "$(twin_root "$T")"/_memory/records/*/*/*.md 2>/dev/null
   run 20261008T170000Z search alpha --engine fts --root "$T"; expect_rc 4 "fts without fts.db"
   
     report_section "n" "fts vs grep quote missing db"
@@ -1386,7 +1155,6 @@ run_behavioral_suite() {
   grep -q "$crid2" "$X/_memory/.index/manifest.tsv" && ok "sibling CRLF record is indexed" || ko "manifest lacks the sibling record" "$(cat "$X/_memory/.index/manifest.tsv")"
   grep -q cccccccc "$X/_memory/.index/manifest.tsv" && ko "non-recursive glob" "sub/ counted" || ok "deeper subdir ignored"
   rm -rf "$X/_memory/records/2026/10/sub"
-  if [[ "${M_PARITY:-0}" -eq 1 ]]; then rm -rf "$(twin_root "$X")/_memory/records/2026/10/sub"; fi
   printf 'end\r' > "$B/lcr.md"; run 20261008T200017Z add --kind fact --title lcr --body "$B/lcr.md" --root "$X"; expect_rc 0 "trailing-CR add rc"; lf="$X/$(echo "$OUT"|awk '{print $4}')"
   [ "$(grep '^sha256:' "$lf" | awk '{print $2}')" = "$(printf 'end\r\n' | sha256sum | cut -c1-64)" ] && ok "trailing lone CR kept (sha of 'end\\r\\n')" || ko "lone CR at EOF" "$(grep '^sha256' "$lf")"
   # FTS reorder + OR proof. Every expected order below is computed independently of the tool: goal.md's
@@ -1450,44 +1218,11 @@ run_behavioral_suite() {
     rm -rf "$X" "$F" "$P" "$TD"
   fi
     report_section "n" "FTS reorder SIGPIPE extras + cycle paths"
-  if [[ "$label" != "__parity__" ]]; then
-    rm -rf "$R" "$B" 2>/dev/null || true
-  fi
+  rm -rf "$R" "$B" 2>/dev/null || true
 }
 
 # Release C bash-only subcommands (check, rm, capture) — not run under twin parity.
 . "$REPO_ROOT/tests/agent-kit/lib/memory-release-c.sh"
-
-case_m_twin_parity() {
-  command -v pwsh >/dev/null 2>&1 || return 2
-  local trd i final_bad=0
-  mktemp_dir trd
-  M_TA="$trd/bash.transcript"; M_TB="$trd/pwsh.transcript"
-  : > "$M_TA"; : > "$M_TB"
-  M_PARITY=1
-  M_PARITY_BAD=0
-  M_PARITY_STEP=0
-  ROOTTwin_bash=()
-  ROOTTwin_pwsh=()
-  run_behavioral_suite "__parity__" bash "$MEMORY_SH"
-  M_PARITY=0
-  if [[ "$M_PARITY_BAD" -ne 0 ]]; then
-    final_bad=1
-    echo "memory: $M_PARITY_BAD of $M_PARITY_STEP parity steps diverged (details above)" >&2
-  fi
-  if ! cmp -s "$M_TA" "$M_TB"; then
-    final_bad=1
-    diff -u "$M_TA" "$M_TB" | head -20 >&2
-  fi
-  for i in "${!ROOTTwin_bash[@]}"; do
-    [[ -d "${ROOTTwin_bash[$i]}" && -d "${ROOTTwin_pwsh[$i]}" ]] || continue
-    if ! diff -r -x fts.db "${ROOTTwin_bash[$i]}" "${ROOTTwin_pwsh[$i]}" >/dev/null 2>&1; then
-      final_bad=1
-      diff -r -x fts.db "${ROOTTwin_bash[$i]}" "${ROOTTwin_pwsh[$i]}" | head -15 >&2
-    fi
-  done
-  [[ $final_bad -eq 0 ]]
-}
 
 structural_cases() {
   local f em mem_cnt ls_cnt k
@@ -1542,24 +1277,24 @@ EOF
   [[ "$got" == "$exp" ]] || { report FAIL "(q) README frontmatter key order"; return; }
   report PASS "(q) README template contents"
 
-  if grep -qE '(claude|gpt|gemini)-[0-9a-z]' "$MEMORY_SH" "$MEMORY_PS1" "$CANON_README" 2>/dev/null; then
+  if grep -qE '(claude|gpt|gemini)-[0-9a-z]' "$MEMORY_SH" "$CANON_README" 2>/dev/null; then
     report FAIL "(r) check-E pattern in twins/README"
   elif grep -nE 'declare -[An]|mapfile|readarray|\$\{[A-Za-z_]+(,,?|\^\^?)\}|local -n|\|&' "$MEMORY_SH" >/dev/null; then
     report FAIL "(r) bash-4-only constructs in memory.sh"
   else
-    report PASS "(r) no check-E / bash-4-only in twins+README"
+    report PASS "(r) no check-E / bash-4-only in memory.sh+README"
   fi
 
   for em in claude-code cursor copilot codex; do
     f="$REPO_ROOT/skills/agent-kit/emitters/$em.md"
-    grep -qF '_kit/memory.ps1' "$f" || { report FAIL "(s) emitter $em.md"; return; }
+    grep -qF '_kit/memory.sh' "$f" || { report FAIL "(s) emitter $em.md"; return; }
   done
   f="$REPO_ROOT/skills/agent-kit/templates/ORCHESTRATION.md"
-  mem_cnt="$(grep -cF '_kit/{memory.sh,memory.ps1}' "$f" || true)"
+  mem_cnt="$(grep -cF '_kit/{memory.sh,memory.cmd}' "$f" || true)"
   ls_cnt="$(grep -cF '_kit/{log-spawn.sh,log-spawn.cmd}' "$f" || true)"
-  ls_ps1=0
-  grep -qF 'log-spawn.ps1' "$f" && ls_ps1=1
-  if [[ "$mem_cnt" -eq "$ls_cnt" && "$mem_cnt" -ge 1 && "$ls_ps1" -eq 0 ]]; then
+  stale_logspawn=0
+  grep -qF 'log-spawn.ps1' "$f" && stale_logspawn=1
+  if [[ "$mem_cnt" -eq "$ls_cnt" && "$mem_cnt" -ge 1 && "$stale_logspawn" -eq 0 ]]; then
     report PASS "(s) emitters + ORCHESTRATION memory/log-spawn parity"
   else
     report FAIL "(s) ORCHESTRATION counts memory=$mem_cnt log-spawn=$ls_cnt"
@@ -1567,15 +1302,15 @@ EOF
 
   # absolute paths throughout: the suites run from a neutral cwd outside the repo
   local inst="$REPO_ROOT"
-  if [[ ! -f "$inst/_kit/memory.sh" || ! -f "$inst/_kit/memory.ps1" || ! -f "$inst/_memory/README.md" ]]; then
+  if [[ ! -f "$inst/_kit/memory.sh" || ! -f "$inst/_memory/README.md" ]]; then
     report SKIP "(t) instance mirror" "instance files absent"
     return
   fi
-  cmp -s "$inst/_kit/memory.sh" "$MEMORY_SH" && cmp -s "$inst/_kit/memory.ps1" "$MEMORY_PS1" && cmp -s "$inst/_memory/README.md" "$CANON_README" || {
+  cmp -s "$inst/_kit/memory.sh" "$MEMORY_SH" && cmp -s "$inst/_memory/README.md" "$CANON_README" || {
     report FAIL "(t) instance byte-identity"; return
   }
   if [[ -f "$inst/orchestration-kit.manifest.json" ]]; then
-    for k in _kit/memory.sh _kit/memory.ps1 _memory/README.md; do
+    for k in _kit/memory.sh _memory/README.md; do
       grep -qF "\"$k\"" "$inst/orchestration-kit.manifest.json" || { report FAIL "(t) manifest key $k"; return; }
     done
   else
@@ -1605,31 +1340,6 @@ else
   done
 fi
 
-if suite_selected pwsh; then
-  if command -v pwsh >/dev/null 2>&1; then
-    run_behavioral_suite pwsh pwsh -NoProfile -NonInteractive -File "$MEMORY_PS1"
-  else
-    for _skip_case in a b c d e f g h i j k l n o p u v; do
-      report SKIP "[pwsh] ($_skip_case) behavioral twin" "pwsh not on PATH"
-    done
-  fi
-else
-  for _skip_case in a b c d e f g h i j k l n o p u v; do
-    report SKIP "[pwsh] ($_skip_case) behavioral twin" "not in MEMORY_SUITES"
-  done
-fi
-
-if suite_selected parity; then
-  if command -v pwsh >/dev/null 2>&1 && command -v sqlite3 >/dev/null 2>&1; then
-    if case_m_twin_parity; then report PASS "(m) twin parity raw stdout/stderr/rc per step + _memory tree diff"
-    else report FAIL "(m) twin parity"; fi
-  else
-    report SKIP "(m) twin parity" "pwsh or sqlite3 absent"
-  fi
-else
-  report SKIP "(m) twin parity" "not in MEMORY_SUITES"
-fi
-
 run_memory_followup_cases
 
 if suite_selected bash && [[ "$MEMORY_SH" == "$CANON_MEMORY_SH" ]]; then
@@ -1640,8 +1350,6 @@ fi
 
 if [[ "$MEMORY_SH" != "$CANON_MEMORY_SH" ]]; then
   report SKIP "(q)-(t) structural" "MEMORY_SH overridden"
-elif [[ "$MEMORY_PS1" != "$CANON_MEMORY_PS1" ]]; then
-  report SKIP "(q)-(t) structural" "MEMORY_PS1 overridden"
 else
   structural_cases
 fi

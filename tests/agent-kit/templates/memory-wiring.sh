@@ -26,7 +26,6 @@ ORCH_TPL="$TEMPLATES/ORCHESTRATION.md"
 LOOP_SKILL="$TEMPLATES/loop/SKILL.template.md"
 LOOP_PROMPT="$TEMPLATES/loop/PROMPT.md"
 LOOP_SH="$TEMPLATES/loop/loop.sh"
-LOOP_PS1="$TEMPLATES/loop/loop.ps1"
 MEM_README="$TEMPLATES/memory/README.md"
 MEM_CAPTURE_TPL="$TEMPLATES/skills/memory-capture/SKILL.template.md"
 EVALUATOR_TPL="$TEMPLATES/agents/evaluator.md"
@@ -135,10 +134,6 @@ four_harness_answers() { # outfile
 run_emit_sh() {
   assert_fixture_root "${1-}" || exit 1
   bash "$EMIT_SH" --root "$1" --kit "$KIT" "${@:2}"
-}
-run_emit_ps1() {
-  assert_fixture_root "${1-}" || exit 1
-  pwsh -NoProfile -File "$EMIT_PS1" --root "$1" --kit "$KIT" "${@:2}"
 }
 
 agent_has_memory_frontmatter() {
@@ -312,7 +307,7 @@ blk_s2() {
 }
 
 blk_s3() {
-  if check_s3_protected_paths "$LOOP_SH" && check_s3_protected_paths "$LOOP_PS1"; then
+  if check_s3_protected_paths "$LOOP_SH"; then
     report PASS "S3: PROTECTED_PATHS include _memory/records/ and quarantine/"
   else
     report FAIL "S3: PROTECTED_PATHS include _memory/records/ and quarantine/"

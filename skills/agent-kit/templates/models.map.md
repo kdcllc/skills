@@ -108,7 +108,7 @@ Rules (adapted from bradygaster/squad's model selector):
 
 <!-- BOOTSTRAP[loop-fallback]: fill with CURRENT model IDs for the harness(es) targeted. Resolves {{LOOP_MODEL_CHAIN}}
      (one comma-separated string, first entry = preferred, no spaces around the
-     commas — neither driver twin trims chain entries) wherever that token appears
+     commas — the loop driver does not trim chain entries) wherever that token appears
      in the emitted loop templates.
 | Chain (first available wins) | Resolves |
 |-------------------------------|----------|

@@ -1,6 +1,6 @@
 # AI Orchestration Kit (`agent-kit`)
 
-> Kit version: **1.1.3** (`metadata.version` in [SKILL.md](SKILL.md)) · Version history: [CHANGELOG.md](CHANGELOG.md)
+> Kit version: **2.0.0** (`metadata.version` in [SKILL.md](SKILL.md)) · Version history: [CHANGELOG.md](CHANGELOG.md)
 
 A portable orchestrator/worker/evaluator multi-agent system for AI coding harnesses —
 **Claude Code, Cursor, GitHub Copilot (VS Code), and OpenAI Codex** — packaged as one
@@ -20,8 +20,8 @@ npx skills add kdcllc/skills --skill agent-kit
 /feature
 ```
 
-Optional: start an unattended run (sandboxed!) with `_loop/loop.sh 10` or
-`pwsh _loop/loop.ps1 10` (PowerShell 7+).
+Optional: start an unattended run (sandboxed!) with `_loop/loop.sh 10` (bash, Git Bash on
+Windows) or `_loop\loop.cmd 10` from cmd or PowerShell on Windows (Git for Windows required).
 
 ## What you get
 
@@ -59,24 +59,25 @@ Optional: start an unattended run (sandboxed!) with `_loop/loop.sh 10` or
 - A **staged test ladder** (`test-ladder`): new tests → impacted tests mid-cycle; full
   suites at cycle end — in a goal's designated closer task when it has one, and in the
   orchestrator's Phase 5 Quality Checks.
-- An optional **autonomous loop** (`auto-loop` + `_loop/loop.sh` / `_loop/loop.ps1`):
+- An optional **autonomous loop** (`auto-loop` + `_loop/loop.sh`; `_loop\loop.cmd` on Windows):
   one backlog story per fresh-context iteration, evaluation-gated commits, circuit
-  breakers enforced in the loop drivers (not prose), optional parallel slots in
+  breakers enforced in the loop driver (not prose), optional parallel slots in
   driver-managed worktrees, a six-code exit contract, real per-iteration token usage
   capture when the headless CLI exposes it (`LOOP_USAGE_FORMAT`), and a single
-  human-approved PR at run end. The bash driver adds **bash-only** guards: attempt dossier
+  human-approved PR at run end. The driver adds guards: attempt dossier
   (`LOOP_DOSSIER`), opt-in **`LOOP_USAGE_FORMAT=claude-stream`**, upward model-breaker **probe**
   recovery after rate-limit fallback, iteration timeout and token/USD budgets
   (`LOOP_ITER_TIMEOUT`, `LOOP_*_BUDGET_*`), test tamper check (`LOOP_TAMPER_CHECK`),
   append-only run ledger + stderr summary (`LOOP_LEDGER`), and backlog readiness lint
-  (`loop.sh --lint`); `loop.ps1` stays frozen at 1.1.2. Knobs, exit
+  (`loop.sh --lint`). Knobs, exit
   codes, and the safety model are documented in
   [autonomous-loop.md](https://github.com/kdcllc/skills/blob/master/docs/agent-kit/guide/autonomous-loop.md).
 - A **deterministic emitter** (`bin/emit.sh`; Windows outside Git Bash: `bin\emit.cmd`; Git for Windows required) in the installed `agent-kit` skill: after the LLM
   interview, one answers file and one script command compile canonical templates into
-  every targeted harness — same inputs yield byte-identical output; upgrades re-emit
-  from manifest-embedded `answers`.
-- A **git-tracked memory store** (`_memory/` + `_kit/memory.sh` and `_kit\memory.cmd` on Windows; `_kit/memory.ps1` remains a helper for `loop.ps1` until loop twins retire): orchestrator recall before planning, archive at goal close, searchable immutable records, DATA fence for workers, loop integrator proposals. See [memory.md](https://github.com/kdcllc/skills/blob/master/docs/agent-kit/guide/memory.md).
+  every targeted harness — same answers produce byte-identical agent files and scripts;
+  only the manifest's `installedAt` timestamp changes unless `EMIT_DATE` is set;
+  upgrades re-emit from manifest-embedded `answers`.
+- A **git-tracked memory store** (`_memory/` + `_kit/memory.sh` and `_kit\memory.cmd` on Windows): orchestrator recall before planning, archive at goal close, searchable immutable records, DATA fence for workers, loop integrator proposals. See [memory.md](https://github.com/kdcllc/skills/blob/master/docs/agent-kit/guide/memory.md).
 
 ## Documentation
 
@@ -101,7 +102,7 @@ Developer guide: [docs/agent-kit/guide/README.md](https://github.com/kdcllc/skil
 |------|------------|
 | `SKILL.md` | The `/agent-kit` workflow (detect → greenfield gate → inspect → skill suggestions → interview → emit) and the placeholder table; `metadata.version` is the kit version |
 | `bin/` | `emit.sh` + `emit.cmd` (Windows launcher) — deterministic emitter (flags and exit codes in [bin/README.md](bin/README.md)) |
-| `templates/` | The canonical source: architecture doc, `models.map.md`, seven agents, the skills (each a `SKILL.template.md`, renamed to `SKILL.md` at emit), the loop drivers, and the `_kit/` tools |
+| `templates/` | The canonical source: architecture doc, `models.map.md`, seven agents, the skills (each a `SKILL.template.md`, renamed to `SKILL.md` at emit), the loop scripts, and the `_kit/` tools |
 | `emitters/` | Per-harness caveats (live model-check URLs, silent-fallback warnings) |
 | `reference/` | `harness-matrix.md` (verified harness facts) and `bootstrap-ids.md` (answers-file id table) |
 | `CHANGELOG.md` | Version history; 1.0.0 rolls up the 0.x releases from before the move to kdcllc/skills |
@@ -115,7 +116,7 @@ Maintainer material lives in the [kdcllc/skills](https://github.com/kdcllc/skill
 npx skills add kdcllc/skills --skill agent-kit
 
 # Pin to a release
-npx skills add kdcllc/skills#agent-kit/v1.1.3 --skill agent-kit
+npx skills add kdcllc/skills#agent-kit/v2.0.0 --skill agent-kit
 
 # Option B — agent-skills-cli
 npx agent-skills-cli install https://github.com/kdcllc/skills.git
@@ -180,10 +181,10 @@ exit codes.
 | `skills/test-ladder` | New → impacted tests mid-cycle; full suites only at cycle end |
 | `skills/align-docs` | Phase 6: evaluator-gated sync of all docs to shipped code |
 | `skills/ship-pr` | Phase 7: approval-gated forge delivery (GitHub / Azure DevOps / GitLab / hand-over) |
-| `skills/auto-loop` + `_loop/` + `_memory/loop/backlog.md` | Autonomous loop with structural guards (optional) |
+| `skills/auto-loop` + `_loop/` (including `_loop\loop.cmd` on Windows) + `_memory/loop/backlog.md` | Autonomous loop with structural guards (optional) |
 | `skills/agent-kit-models.map.md` | The model map — the only place model IDs live per install |
 | `_kit/log-spawn.sh` + `_kit/log-spawn.cmd` | Single-copy orchestration-log writer + Windows launcher (`spawn` / `outcome` / `note`) |
-| `_kit/memory.sh` + `_kit/memory.cmd` (+ `_kit/memory.ps1` for `loop.ps1`) | Single-copy memory store + Windows launcher (`add` / `index` / `search` / `show` / `redact` / `check` / `rm` / `capture` / `backfill`) |
+| `_kit/memory.sh` + `_kit/memory.cmd` | Single-copy memory store + Windows launcher (`add` / `index` / `search` / `show` / `redact` / `check` / `rm` / `capture` / `backfill`) |
 | `_memory/` | Tracked records (`records/`, `quarantine/`, `loop/`); gitignored scratch `work/` plus derived `.index/` and `raw/` |
 | `ORCHESTRATION.md` | The architecture doc, filled in for the project |
 | `orchestration-kit.manifest.json` | Kit version + file hashes + embedded `answers`, enabling clean upgrades |
@@ -196,7 +197,8 @@ Targeting Cursor emits a self-contained `.cursor/` tree containing agents, skill
 
 Start your first feature with `/feature`.
 
-Start an unattended run (sandboxed!) with `_loop/loop.sh 10` or `pwsh _loop/loop.ps1 10` (PowerShell 7+).
+Start an unattended run (sandboxed!) with `_loop/loop.sh 10` (bash, Git Bash on Windows) or
+`_loop\loop.cmd 10` from cmd or PowerShell on Windows (Git for Windows required).
 
 Loop driver behavior (dispatch, slots, worktrees, circuit breakers, exit codes) is
 documented in [autonomous-loop.md](https://github.com/kdcllc/skills/blob/master/docs/agent-kit/guide/autonomous-loop.md).
@@ -219,8 +221,9 @@ skills.sh shows security scans for every listing. Snyk passes `agent-kit` with n
 issues, and Socket finds no malicious payload, but two scanners flag the kit for what it
 is allowed to do. Gen Agent Trust Hub rates it **Medium** (command execution, indirect
 prompt injection, data exfiltration, external downloads, dynamic execution). Socket
-raises two **anomaly** alerts, on `SKILL.md` and `templates/agents/terminal.md`, and
-labels `SKILL.md` **Suspicious** (not confirmed malware). Those capabilities are
+raises two **anomaly** alerts, on `SKILL.md` and `templates/agents/terminal.md`; the
+`SKILL.md` alert is rated **Low**, and its analysis text calls the skill suspicious (not
+confirmed malware). Those capabilities are
 deliberate. This section lists each one, why the kit needs it, and what limits it.
 
 Limits marked *Instruction* are rules the agents follow from their prompts, not checks
@@ -229,14 +232,14 @@ in code. Your harness's permission and command-approval settings are the hard bo
 | Flagged capability | Why the kit has it | What limits it |
 |--------------------|--------------------|----------------|
 | **Command execution** — the `terminal` subagent runs any Bash or PowerShell command it is given | Test, build, and git output stays out of the frontier session; the caller gets back only the result it asked for | *Instruction:* `terminal` runs only the exact commands in its spawn prompt and adds none of its own. Claude Code and Copilot installs also withhold Edit/Write tools from it; Cursor and Codex installs have no per-agent tool list, so there that rule is prompt-only. Its shell commands can still write files, and it runs with the permissions your harness grants |
-| **Indirect prompt injection** — agents read repo code, backlog stories, research reports, and transcripts, and some of those agents have shell access | Workers need the code and the plan to do the work | Recalled memory, and loop attempt notes in the bash driver, reach workers inside fenced DATA blocks that are marked as data, not instructions. `memory.sh add` quarantines records that match a short fixed list of injection phrases (for example `new instructions:`). *Instruction:* evaluators verify claims against the code instead of trusting reports. These reduce the risk; they do not remove it |
+| **Indirect prompt injection** — agents read repo code, backlog stories, research reports, and transcripts, and some of those agents have shell access | Workers need the code and the plan to do the work | Recalled memory, and loop attempt notes in `_loop/loop.sh`, reach workers inside fenced DATA blocks that are marked as data, not instructions. `memory.sh add` quarantines records that match a short fixed list of injection phrases (for example `new instructions:`). *Instruction:* evaluators verify claims against the code instead of trusting reports. These reduce the risk; they do not remove it |
 | **Transcript access** (Trust Hub: data exfiltration) — `_kit/memory.sh capture` reads chat transcripts under your home folder | The `memory-capture` skill turns finished sessions into searchable session summaries | It runs only when you or the `memory-capture` skill invoke it. By default it reads only the transcript folder for the current project's path (Codex: it checks each session's recorded working directory and keeps only this project's); `--from <dir>` points it elsewhere. Redaction is pattern-based (private-key blocks, `password=`/`token=`-style assignments, AWS, GitHub, Slack, and `sk-` keys, JWTs, Azure account keys), so secrets in other shapes are not caught. Output goes to gitignored `_memory/raw/` and nothing is uploaded, but the session summaries distilled from it are tracked records you commit |
 | **External downloads** — Step 2b suggests other skills from skills.sh | Stack-specific skills (testing, UI, infra) make the workers better at your project | *Instruction:* nothing installs without your pick, only skills with 1000+ installs are offered, and each installs alone with `--skill` (never the whole source repo), always project-local (never `-g`) |
-| **Dynamic execution** — `bin/emit.sh` writes agent files and shell scripts into your project | This is how the kit compiles one template source for each harness | Output is deterministic (same answers, byte-identical files), every kit-managed file's hash is in `orchestration-kit.manifest.json` (seed files are written only when missing), and emits stop with exit 4 before overwriting files you changed unless you pass `--force` |
+| **Dynamic execution** — `bin/emit.sh` writes agent files and shell scripts into your project | This is how the kit compiles one template source for each harness | Same answers produce byte-identical agent files and scripts; only the manifest's `installedAt` timestamp changes unless `EMIT_DATE` is set. Every kit-managed file's hash is in `orchestration-kit.manifest.json` (seed files are written only when missing), and emits stop with exit 4 before overwriting files you changed unless you pass `--force` |
 
 **The autonomous loop needs a sandbox.** `_loop/loop.sh` runs a headless agent CLI
-unattended. The drivers never push and never bypass permission prompts themselves, but
-the CLI flags that let a run proceed unattended do. Run the loop with minimal
+unattended. The driver never pushes and never bypasses permission prompts itself, but
+the CLI flags or permission settings that let a run proceed unattended do. Run the loop with minimal
 credentials, and never skip permission prompts outside a container or VM: a
 `LOOP_WORKTREE=1` worktree separates the git tree but gives no filesystem, network, or
 credential isolation. The loop's safety model and per-CLI permission flags are in
@@ -287,7 +290,7 @@ Coming from the private `setup` skill (the kit's name before 1.0.0)? Read the 1.
 Templates use `{{TOKEN}}` placeholders, `<!-- BOOTSTRAP[id]: … -->` comments (replaced
 from `answers.bootstrap[id]`), and `<!-- IF flag -->` … `<!-- ENDIF flag -->` spans.
 The placeholder reference lives in `SKILL.md`. All canonical content lives under
-`templates/`; per-harness translation is implemented in `bin/emit.*`; harness caveats
+`templates/`; per-harness translation is implemented in `bin/emit.sh` (`bin/emit.cmd` is its Windows launcher); harness caveats
 live in `emitters/` and verified facts in `reference/harness-matrix.md`. Kit changes are
 made in the [kdcllc/skills](https://github.com/kdcllc/skills) repository — see its
 CONTRIBUTING.md for the dogfood loop and release steps.

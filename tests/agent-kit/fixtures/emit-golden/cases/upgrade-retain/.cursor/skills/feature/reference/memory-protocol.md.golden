@@ -5,7 +5,6 @@ This reference defines how kit workflows **recall** prior records into worker co
 On Windows outside Git Bash, use `_kit\memory.cmd` wherever this doc says
 `_kit/memory.sh` (Git for Windows required; see the kit's
 [windows-launcher.md](https://github.com/kdcllc/skills/blob/master/skills/agent-kit/reference/windows-launcher.md)).
-`_kit/memory.ps1` remains for `loop.ps1` only.
 
 ## Recall
 
@@ -185,8 +184,7 @@ only when there is no ITERATION-mismatch, no subset violation, and at `LOOP_WORK
 the branch was integrated (not quarantined); **any verdict qualifies, including
 `failed`**. Copy `<outbox>/memory/*.md` (direct children
 only) before the outbox is removed; process names in `LC_ALL=C` byte order. Each proposal
-runs `"$PWD/_kit/memory.sh" add --root "$PWD" …` (PowerShell driver: `pwsh -NoProfile
--File (Join-Path $PWD '_kit/memory.ps1') add --root $PWD …`). Exit 0 → echo the tool's
+runs `"$PWD/_kit/memory.sh" add --root "$PWD" …`. Exit 0 → echo the tool's
 stdout line; exit 5 → `!!! memory proposal <name> quarantined: <tool line>`; other →
 `!!! memory proposal <name> rejected (exit N): <tool stderr first line>`; malformed →
 `!!! memory proposal <name> skipped: <reason>`. Missing tool → one `!!! memory proposals

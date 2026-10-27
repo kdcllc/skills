@@ -1,27 +1,13 @@
-# Sourced inside run_behavioral_suite (bash/pwsh/parity). Uses caller ok/ko/run/expect_rc and twin vars.
+# Sourced inside run_behavioral_suite (bash). Uses caller ok/ko/run/expect_rc.
 
 run_release_c_redaction_behavioral() {
   local RR="" GH="" PAT="" SK="" JWT="" f="" id="" sha="" leaks=0 exp_redact=
   mktemp_root RR
 
-  twins_redact_diverge_p() { # <infile> <ps1-path> → exit 0 when bash vs pwsh redact stdout differ
-    local in="$1" ps1="$2"
-    bash "$MEMORY_SH" redact < "$in" >"$B/twin.a" 2>/dev/null
-    pwsh -NoProfile -NonInteractive -File "$ps1" redact < "$in" >"$B/twin.b" 2>/dev/null
-    ! cmp -s "$B/twin.a" "$B/twin.b"
-  }
-
-  release_c_redact() { # <infile> [optional MEMORY_PS1 override for pwsh leg]
-    local in="$1" ps1="${2:-$MEMORY_PS1}" rc_b=0
-    if [[ "${M_PARITY:-0}" -eq 1 ]]; then
-      bash "$MEMORY_SH" redact < "$in" >"$B/out_a" 2>"$B/err_a"; RC=$?
-      pwsh -NoProfile -NonInteractive -File "$ps1" redact < "$in" >"$B/out_b" 2>"$B/err_b"; rc_b=$?
-      parity_step "$RC" "$rc_b" "redact $(basename "$in")"
-      OUT="$(cat "$B/out_a")"; ERR="$(cat "$B/err_a")"
-    else
-      OUT="$("${RUN[@]}" redact < "$in" 2>"$B/err_a")"; RC=$?
-      ERR="$(cat "$B/err_a")"
-    fi
+  release_c_redact() { # <infile>
+    local in="$1"
+    OUT="$("${RUN[@]}" redact < "$in" 2>"$B/err_a")"; RC=$?
+    ERR="$(cat "$B/err_a")"
   }
 
   rc_near_miss() { # <label> <input-bytes>
@@ -143,27 +129,5 @@ EOF
   printf '%s\n' '-----BEGIN RSA PRIVATE KEY-----' 'x' '-----END RSA PRIVATE KEY-----' > "$B/rc.pk"
   release_c_redact "$B/rc.pk"; grep -q '\[REDACTED:private-key\]' <<<"$OUT" && ok "class private-key" || ko "class pk"
 
-  if [[ "$label" == "__parity__" ]] && command -v pwsh >/dev/null 2>&1; then
-    local mut_ps1=""
-    printf 'password=abcdefgh9\n' > "$B/parity.proof.in"
-    if twins_redact_diverge_p "$B/parity.proof.in" "$MEMORY_PS1"; then
-      ko "parity redact negative control" "canonical twins must not diverge"
-    else
-      echo "PASS: parity redact negative control: canonical twins match (no divergence)"
-      ok "parity redact negative control: canonical twins match (no divergence)"
-    fi
-    mut_ps1="$(mktemp "${TMPDIR:-/tmp}/memps1mut.XXXXXX")"
-    sed 's/\[REDACTED:secret\]/[REDACTED:SECRET]/' "$MEMORY_PS1" > "$mut_ps1"
-    if twins_redact_diverge_p "$B/parity.proof.in" "$mut_ps1"; then
-      echo "PASS: parity redact compares stdout bytes (mutant ps1 diverges)"
-      ok "parity redact compares stdout bytes (mutant ps1 diverges)"
-    else
-      ko "parity redact proof" "mutant did not diverge"
-    fi
-    rm -f "$mut_ps1"
-  fi
-
-  if [[ "$label" != "__parity__" ]]; then
-    rm -rf "$RR"
-  fi
+  rm -rf "$RR"
 }

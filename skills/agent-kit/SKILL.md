@@ -3,7 +3,7 @@ name: agent-kit
 description: "Install the orchestrator/worker/evaluator multi-agent system into the current project, compiled for its AI coding harness(es) — Claude Code, Cursor, GitHub Copilot (VS Code), and/or OpenAI Codex. Generates the seven subagents (evaluator, qa-evaluator, implementer, test-writer, evidence-collector, terminal, diagnostician) with tiered model pins — evidence-collector gathers optional-gate QA evidence — terminal is fast-tier (light when an install omits `fast`): it runs any Bash or PowerShell command and returns only the result the caller asked for — plus the orchestrator skills (feature, research, memory-capture), the criteria skills, an optional autonomous feature loop, and a project-specific ORCHESTRATION.md. On empty or near-empty (greenfield) directories it first asks whether to scaffold a project tree and creates nothing until the user confirms. After inspect, suggests skills.sh skills from inspection signals. Run once per project; re-run to upgrade or re-target."
 license: MIT
 metadata:
-  version: "1.1.3"
+  version: "2.0.0"
 ---
 
 # Setup (Orchestration Kit Compiler)
@@ -259,8 +259,10 @@ Ask (multiple-choice where possible) only what you could not infer:
 5. **Research workflow** — wanted? Record `flags.research`.
 6. **Autonomous loop** — wanted? If yes: confirm sandbox strategy (worktree/container),
    max iterations, and that commits stay local (no auto-push) unless they say otherwise.
-   Record `flags.loop`. Persist the sandbox answer: worktree ⇒
-   `flags.loop_worktree: true` (emitted `_loop/*` drivers then default
+   When confirming the sandbox strategy, tell the user that a worktree separates the git
+   tree but is not isolation — unattended runs that skip permission prompts or disable the
+   CLI's own sandbox need a container or VM. Record `flags.loop`. Persist the sandbox answer: worktree ⇒
+   `flags.loop_worktree: true` (the emitted `_loop/loop.sh` driver then defaults to
    `LOOP_WORKTREE=1`; an explicit `LOOP_WORKTREE` env value, including `0`, still
    wins); container or none ⇒ `false`. Warn that worktree mode needs a **tracked**
    instance (`_memory/loop/backlog.md` and the harness directory committed) or the

@@ -24,8 +24,8 @@ _memory/
     ESCALATIONS.md
     archive/ESCALATIONS-<YYYY-MM>.md
     breaker-state.json   # GITIGNORED (runtime)
-    ledger.jsonl         # GITIGNORED (runtime; bash driver — one JSON line per reaped/killed slot)
-    attempts/            # GITIGNORED (runtime; bash driver — per-story attempt dossiers)
+    ledger.jsonl         # GITIGNORED (runtime; one JSON line per reaped/killed slot)
+    attempts/            # GITIGNORED (runtime; per-story attempt dossiers)
   .index/                # GITIGNORED (derived)
   raw/                   # GITIGNORED
     <harness>/<session>.md   # redacted compact transcripts
@@ -35,7 +35,7 @@ _memory/
 **Tracked:** `README.md`, `records/`, `quarantine/`, `research/`, `loop/` except `breaker-state.json`, `ledger.jsonl`, and `attempts/`.
 Research briefs under `research/` are mutable (their status changes), orchestrator-owned,
 not records, and not scanned by `check`, `index`, or `search`.
-**Gitignored:** all of `work/`; `loop/breaker-state.json`; `loop/ledger.jsonl` (bash driver run ledger); `loop/attempts/` (bash driver attempt dossiers); derived `.index/` and `raw/`.
+**Gitignored:** all of `work/`; `loop/breaker-state.json`; `loop/ledger.jsonl` (loop run ledger); `loop/attempts/` (loop attempt dossiers); derived `.index/` and `raw/`.
 Every emit adds `.gitignore` `_memory/work/`, `_memory/.index/`, and `_memory/raw/`; loop
 emits also add `_memory/loop/breaker-state.json`, `_memory/loop/ledger.jsonl`, `_memory/loop/attempts/`, and `.gitattributes`
 `_memory/loop/LEARNINGS.md merge=union` and `_memory/loop/ESCALATIONS.md merge=union`.
@@ -128,8 +128,8 @@ After upgrading, run `_kit/memory.sh backfill --plan` to review import candidate
   still delete a quarantined file directly. Agents delete files under `records/` or
   `quarantine/` only with `_kit/memory.sh rm`, and only when explicitly tasked — never
   on their own initiative.
-- **Single writer tool.** Only `_kit/memory.sh` and `_kit/memory.ps1` create records
-  (including quarantine paths).
+- **Single writer tool.** Only `_kit/memory.sh` (through `_kit/memory.cmd` on Windows)
+  creates records (including quarantine paths).
 - **Loop mode policy.** In loop mode, only the integrator writes under `_memory/records/`
   and `_memory/quarantine/` for driver-dispatched work (protected paths + integrator step
   3b). Manual loop mode may add records in the story commit.
@@ -246,7 +246,7 @@ Run from the repo root (or pass `--root`). Output is tab-separated columns, in o
 **Score (grep engine, default).** For each search term: +3 when the folded term appears
 in the title or any tag; +1 for each body line that contains the folded term (per term,
 counted separately). Implementation: `score_file` / `meta_hit` in the search awk in
-`memory.sh`, `Grep-Score` in `memory.ps1`.
+`memory.sh`.
 
 **Ties (grep engine).** Equal scores sort by **id descending** (newest id first):
 `sort -k4,4nr -k1,1r`. With `--engine fts`, the same grep candidates are re-ranked by
@@ -290,9 +290,8 @@ Default `search` hides superseded rows (`legacy alpha` is absent until
 ## CLI
 
 Primary: `_kit/memory.sh …`. Windows outside Git Bash: `_kit\memory.cmd …` (Git for
-Windows required). `_kit/memory.ps1` (PowerShell 7.2+) remains as a helper for
-`loop.ps1` until loop twins retire. Behavior, messages, and exit codes match across
-the Bash and `.cmd` paths.
+Windows required). Behavior, messages, and exit codes match across the Bash script and
+its `.cmd` launcher.
 
 **Exit codes:** `0` ok · `2` usage/format · `3` gate failed (`check` only) · `4` missing
 root, file, id, or optional dependency · `5` quarantined. For `backfill`, only `0`, `2`,
@@ -305,8 +304,7 @@ stderr and exits 2. Usage errors reuse these existing messages (exit 2 unless no
 `memory: unknown flag '<flag>'`, `memory: unexpected argument '<arg>'`,
 `memory: flag '<flag>' needs a value`, `memory: repeated flag '<flag>'`.
 
-**Usage** (`memory.sh` and `memory.ps1` print this byte-identically, program name
-`memory.sh` included):
+**Usage** (`memory.sh` prints this; program name `memory.sh` included):
 
 ```
 usage: memory.sh <add|index|search|show|redact|check|rm|capture|backfill> [--root <dir>] ...
@@ -321,10 +319,6 @@ usage: memory.sh <add|index|search|show|redact|check|rm|capture|backfill> [--roo
   backfill [--plan|--apply] [--goals] [--research] [--escalations] [--only <name>] [--root <dir>]
 exit: 0 ok · 2 usage/format · 3 gate failed · 4 missing root/file/id/dependency · 5 quarantined
 ```
-
-**PowerShell twin:** `memory.ps1` implements `add` (with redaction and tag rules),
-`index`, `search`, `show`, and `redact`; `check`, `rm`, `capture`, and `backfill` exit 2 with
-`memory: '<sub>' is bash-only; run bash _kit/memory.sh <sub> (Windows: _kit\memory.cmd <sub>)`.
 
 ### add
 
@@ -383,8 +377,7 @@ redact [--root <dir>]
 
 Reads stdin, writes redacted bytes to stdout (no body normalization). Stderr summary line
 when n > 0 (`memory: redacted <n> secret(s): <classes>`), exit 0. Any argument other than
-`--root` (and its value) → the generic usage messages above, exit 2. Implemented in both
-twins.
+`--root` (and its value) → the generic usage messages above, exit 2.
 
 ### check
 
@@ -487,8 +480,7 @@ Stdout per session: `memory: skipped <harness> <session> <reason>` or
 backfill [--plan|--apply] [--goals] [--research] [--escalations] [--only <name>] [--root <dir>]
 ```
 
-Bash-only (`memory.ps1 backfill` prints the bash-only pointer, exit 2). Deterministic,
-LLM-free back-fill of closed goals, opted-in research topics, and resolved escalations into
+Deterministic, LLM-free back-fill of closed goals, opted-in research topics, and resolved escalations into
 records via the existing `add` path (redaction, admission, dedupe). Identical inputs at the
 same git HEAD (or outside git, `commit: none`) yield byte-identical records.
 

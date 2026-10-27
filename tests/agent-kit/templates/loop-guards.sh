@@ -13,8 +13,6 @@ source "$HERE/../lib/fixture-root.sh"
 DRIVER_SRC="${LOOP_GUARDS_DRIVER:-$REPO_ROOT/_loop/loop.sh}"
 BREAKER_SRC="$REPO_ROOT/_loop/breaker.sh"
 PROMPT_SRC="$REPO_ROOT/_loop/PROMPT.md"
-TEMPLATE_LOOP_PS1="$REPO_ROOT/skills/agent-kit/templates/loop/loop.ps1"
-TEMPLATE_BREAKER_PS1="$REPO_ROOT/skills/agent-kit/templates/loop/breaker.ps1"
 EMIT_SH="$REPO_ROOT/skills/agent-kit/bin/emit.sh"
 SELF_ANSWERS="$REPO_ROOT/tests/agent-kit/fixtures/self-answers.json"
 KIT="$REPO_ROOT/skills/agent-kit"
@@ -300,13 +298,6 @@ _lg_lint_expect() {
   local kind=error
   (( want_rc == 0 )) && kind=warn
   [[ -z "$pat" ]] || grep -E "^lint: $kind [^ ]+ : " "$lg_out" | grep -qF "$pat" || return 1
-  return 0
-}
-
-_lg_ps1_knobs_only_in_comments() {
-  local f="$1"
-  awk '/^[[:space:]]*#/ {next} /^\s*#/ {next} {print}' "$f" \
-    | grep -qE 'LOOP_LEDGER|LOOP_ITER_TIMEOUT|LOOP_TAMPER_CHECK' && return 1
   return 0
 }
 
@@ -1113,14 +1104,13 @@ case_16_emit() {
   report PASS "case 16: emit"
 }
 
-case_17_frozen_twins() {
+case_17_retired_ps1_templates() {
   local f
-  for f in "$TEMPLATE_LOOP_PS1" "$TEMPLATE_BREAKER_PS1"; do
-    head -n 20 "$f" | grep -qi frozen || { report FAIL "case 17: frozen twins" "$f"; return; }
-    grep -qF 'any divergence is a bug' "$f" && { report FAIL "case 17: frozen twins" "parity $f"; return; }
-    _lg_ps1_knobs_only_in_comments "$f" || { report FAIL "case 17: frozen twins" "knobs $f"; return; }
+  for f in "$REPO_ROOT/skills/agent-kit/templates/loop/loop.ps1" \
+           "$REPO_ROOT/skills/agent-kit/templates/loop/breaker.ps1"; do
+    [[ ! -e "$f" ]] || { report FAIL "case 17: retired loop .ps1 templates absent" "still present: $f"; return; }
   done
-  report PASS "case 17: frozen twins"
+  report PASS "case 17: retired loop .ps1 templates absent"
 }
 
 case_18_nonff() {
@@ -1189,7 +1179,7 @@ case_13_tamper
 case_14_tamper_modes
 case_15_lint
 case_16_emit
-case_17_frozen_twins
+case_17_retired_ps1_templates
 case_18_nonff
 case_19_setup_fail_count
 finish_suite

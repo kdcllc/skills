@@ -94,7 +94,7 @@ Each scenario states a concrete piece of work, the chosen mode, and why that mod
 
 **Work:** Ten independent stories in `_memory/loop/backlog.md` — each adds input validation, a mocked unit test, and a doc note — with explicit acceptance criteria and disjoint `writes:` sets.
 
-**Route:** Autonomous loop (`auto-loop` skill, invoked repeatedly by `_loop/loop.sh` or `_loop/loop.ps1`).
+**Route:** Autonomous loop (`auto-loop` skill, invoked repeatedly by `_loop/loop.sh` or `_loop\loop.cmd` on Windows).
 
 **Rationale:** The loop consumes **one story per iteration** from the backlog. Stories are already well-specified with acceptance criteria that replace Phase 1 alignment. Each story commits independently after evaluator PASS and doc alignment. This is the intended shape: many small, independently verifiable units — not one large feature session.
 
