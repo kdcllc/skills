@@ -107,8 +107,8 @@ check_no_bare_codex_recipe() {
     return 1
   fi
   local hits
-  hits="$(rg -n --hidden 'LOOP_CLI="codex exec"|LOOP_CLI = "codex exec"' "$skills" "$docs")"; local rc=$?
-  if ((rc > 1)); then echo "rg failed (rc=$rc) scanning: $skills $docs" >&2; return 1; fi
+  hits="$(grep -rnE 'LOOP_CLI="codex exec"|LOOP_CLI = "codex exec"' "$skills" "$docs")"; local rc=$?
+  if ((rc > 1)); then echo "grep failed (rc=$rc) scanning: $skills $docs" >&2; return 1; fi
   if [[ -n "$hits" ]]; then
     echo "bare Codex LOOP_CLI recipe found: $hits" >&2
     return 1
@@ -146,7 +146,7 @@ check_cli_recipes_heading() {
     return 1
   fi
   local count
-  count="$(rg -c '^### CLI recipes$' "$f" 2>/dev/null || true)"
+  count="$(grep -c '^### CLI recipes$' "$f" 2>/dev/null || true)"
   if [[ "$count" != "1" ]]; then
     echo "expected exactly one ### CLI recipes heading in $f (got: ${count:-0})" >&2
     return 1
