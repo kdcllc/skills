@@ -267,11 +267,23 @@ Ask (multiple-choice where possible) only what you could not infer:
    wins); container or none ⇒ `false`. Warn that worktree mode needs a **tracked**
    instance (`_memory/loop/backlog.md` and the harness directory committed) or the
    driver stops with exit 5 at preflight.
-7. **Delivery forge (Phase 7)** — present the detected forge and the chosen remote.
+7. **Opt-in only, or let the agent invoke `/feature` itself?** Default: auto-invocable.
+   Opt-in ⇒ `flags.opt_in: true`: `feature`, `research`, `memory-capture` get
+   `disable-model-invocation: true` (run only via `/feature`, `/research`,
+   `/memory-capture`); the seven kit agents' descriptions are scoped to kit workflows;
+   the ORCHESTRATION.md skills note and the Cursor rule switch to opt-in wording. Partial
+   on Codex (no skills tree; existing `.codex/config.toml` agent tables not rewritten). Record `flags.opt_in`.
+8. **Guard kit-owned files?** (recommended yes for new installs.) `flags.kit_guard: true`
+   emits `_kit/kit-guard.sh` (`check` for CI and the post-spawn orchestration gate),
+   Claude Code / Cursor edit-blocking hooks when `.claude/settings.json` / `.cursor/hooks.json`
+   are absent (else emit prints a merge snippet), and read-only rule text in ORCHESTRATION.md
+   and the agents; Orchestration Progress moves to `_memory/work/goals/[goal]/progress.md`.
+   Copilot and Codex get the check and rule text only. Record `flags.kit_guard`.
+9. **Delivery forge (Phase 7)** — present the detected forge and the chosen remote.
    Confirm or override with any of `github` / `azuredevops` / `gitlab` / `none`
    (plus `forgeHost` for self-hosted). The `ship-pr` skill is always emitted;
    `none` means the draft + hand-over branch.
-8. **Ground-truth doc** — the committed reference file for domain decisions.
+10. **Ground-truth doc** — the committed reference file for domain decisions.
 
 The live model check happens here — the script never fetches anything. See `emitters/`
 for each harness's live-check URL and silent-fallback / cost-tier warnings.
@@ -289,7 +301,7 @@ Write `orchestration-kit.answers.json` at the repo root (`schema: 1`). Id table:
   "primary": "claude-code",
   "flags": { "research": true, "loop": true, "loop_worktree": false,
              "greenfield": false, "lint": true, "typecheck": false,
-             "models_pinned": true },
+             "models_pinned": true, "opt_in": false, "kit_guard": true },
   "forge": { "kind": "github", "host": "" },
   "tokens": { "PROJECT_NAME": "…", "STACK_SUMMARY": "…", "EXECUTION_LAYERS": "…" },
   "models": { "claude-code": { "frontier": "opus", "light": "sonnet", "fast": "haiku",
@@ -315,6 +327,8 @@ Each detected path-scoped rule file (Step 2) gets one
 existing-agents finding to `bootstrap.existing-agents` (which project agent covers
 which role and which agent the orchestrator uses for kit work), or `""` when no project
 agents exist. In `flags`, `loop_worktree` is optional (absent ⇒ false).
+`opt_in` is optional (absent ⇒ false; non-boolean ⇒ exit 3). `kit_guard` is
+optional (absent ⇒ false; non-boolean ⇒ exit 3).
 In any table cell the kit writes, bootstrap rows included, escape a literal `|` as `\|`; never emit a bare `|` inside a cell.
 
 Do **not** put derived keys in `tokens` (marked "derived — do not set" below).
@@ -414,6 +428,15 @@ set `arbiter_same_family: true` or pick a different arbiter), when
 `models.<h>.alt_family` equals `models.<h>.light` (fix: pick a different
 `alt_family` so fix cycle 2 rotates models), and exits 3 for
 `best`/`fable` in a loop chain (fix: replace the entry).
+
+To adopt opt-in on an existing install, add `"opt_in": true` under `flags` in an
+answers file (e.g. copied from the manifest's embedded `answers`) and run
+`emit.sh --answers <file> --upgrade`; files hand-edited to exactly the emitted
+opt-in text count as unchanged; any other difference is blocked (exit 4) — review,
+then `--force` once. To add the guard, set `"kit_guard": true` the same way;
+existing `.claude/settings.json` / `.cursor/hooks.json` are never edited — copy
+the snippet from the emit warning; `bash $SETUP/bin/emit.sh --check` (or
+`_kit/kit-guard.sh check`) reports edited kit files at any time.
 
 On every re-run, re-detect the forge from the current remotes. If detection agrees
 with the manifest, refresh silently. If it disagrees (remote migrated, e.g.

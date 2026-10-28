@@ -46,6 +46,8 @@ An `""` answer deletes the comment silently; a missing key deletes it with a war
 | lint | a lint command is configured | templates/ORCHESTRATION.md (Quality Checks Lint row) |
 | typecheck | a typecheck command is configured | templates/ORCHESTRATION.md (Quality Checks Type check row) |
 | models_pinned | model IDs are pinned (not inherit/unpinned) | templates/ORCHESTRATION.md (Subagents Model Tier column; Model tiers paragraph) |
+| opt_in | `flags.opt_in` — kit is opt-in (orchestrator skills run only via /feature, /research, /memory-capture) | templates/agents/*.md (description prefix token), templates/skills/{feature,research,memory-capture}/SKILL.template.md (disable-model-invocation line, description tokens), templates/ORCHESTRATION.md (skills note variants), templates/loop/SKILL.template.md (feature path Read) |
+| kit_guard | `flags.kit_guard` — kit-owned files are guarded | templates/ORCHESTRATION.md (Repository safety item 4, Workflow State Tracking note), templates/skills/feature/SKILL.template.md (progress location, Phase 5 kit-file gate), templates/agents/{implementer,test-writer,evidence-collector}.md (read-only rule), templates/agents/evaluator.md (auto-fail bullet) |
 | is_claude | emitting the Claude Code copy (exactly one `is_*` true per harness; primary's `is_*` for single-copy artifacts) | (none in templates — reserved for per-target emit) |
 | is_cursor | emitting the Cursor copy | (none in templates — reserved for per-target emit) |
 | is_copilot | emitting the Copilot copy | (none in templates — reserved for per-target emit) |

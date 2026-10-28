@@ -57,3 +57,16 @@ Always emits `_kit/log-spawn.sh` and `_kit/log-spawn.cmd` (single-copy; Git for 
 Always emits `_kit/memory.sh`, `_kit/memory.cmd`, and `_memory/README.md` (single-copy), appends `_memory/work/`, `_memory/.index/`, and `_memory/raw/` to `.gitignore`, and appends `_memory/** text eol=lf` and `*.cmd -text` to `.gitattributes`; loop emits also add `*.sh text eol=lf`, `_memory/loop/LEARNINGS.md merge=union`, and `_memory/loop/ESCALATIONS.md merge=union` to `.gitattributes`, and `_memory/loop/breaker-state.json`, `_memory/loop/ledger.jsonl`, and `_memory/loop/attempts/` to `.gitignore`; `_memory/records/` and `_memory/quarantine/` stay tracked.
 Post-hoc transcript capture scans `~/.cursor/projects/<slug>/agent-transcripts/` JSONL
 (see `_memory/README.md`); distillation uses the emitted `memory-capture` skill.
+
+**Opt-in (`flags.opt_in`):** same as Claude Code — orchestrator skills keep
+`disable-model-invocation: true` (Cursor reads the same key through skill
+translation), and agent descriptions carry the scope prefix. Kit-owned
+`.cursor/rules/orchestration.mdc` switches to opt-in wording on upgrade.
+
+**Kit-file guard (`flags.kit_guard`):** when `.cursor/hooks.json` is absent, emit
+writes `preToolUse` with `matcher` `Write|Delete` and command
+`bash _kit/kit-guard.sh hook cursor` (JSON `permission: deny` on block). When the
+file exists without the hook, emit prints the merge snippet on stderr. Cursor also
+loads Claude Code hooks from `.claude/settings.json` when both harnesses are
+installed — dual-harness installs may run the guard twice. Same ORCHESTRATION.md /
+feature progress behavior as Claude Code.

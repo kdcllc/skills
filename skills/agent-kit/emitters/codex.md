@@ -35,3 +35,14 @@ Always emits `_kit/memory.sh`, `_kit/memory.cmd`, and `_memory/README.md` (singl
 Codex-only installs emit **no kit skills tree** — document `capture` and distillation in
 project docs only. `_kit/memory.sh capture --harness codex` is best-effort against
 `~/.codex/sessions/` rollout JSONL (see `_memory/README.md`).
+
+**Opt-in (`flags.opt_in`) — partial:** no kit skills tree to gate. `[agents.*]`
+descriptions are prefixed only when emit writes the agent tables (new installs); an
+existing `.codex/config.toml` with the kit marker is never rewritten. The `AGENTS.md`
+pointer is unchanged. Emit warns:
+`warning: flags.opt_in is partial on codex: no kit skills tree to gate, and an existing .codex/config.toml agent table is never rewritten`.
+
+**Kit-file guard (`flags.kit_guard`):** no edit-blocking hook — emit warns
+`warning: flags.kit_guard is partial on codex: no edit-blocking hook; run emit.sh --check in CI (_kit/ is gitignored)`.
+`emit.sh --check` / `_kit/kit-guard.sh check` and ORCHESTRATION.md read-only rules
+still apply.

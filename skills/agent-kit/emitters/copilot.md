@@ -36,3 +36,15 @@ Always emits `_kit/log-spawn.sh` and `_kit/log-spawn.cmd` (single-copy; Git for 
 Always emits `_kit/memory.sh`, `_kit/memory.cmd`, and `_memory/README.md` (single-copy), appends `_memory/work/`, `_memory/.index/`, and `_memory/raw/` to `.gitignore`, and appends `_memory/** text eol=lf` and `*.cmd -text` to `.gitattributes`; loop emits also add `*.sh text eol=lf`, union-merge `_memory/loop/LEARNINGS.md` and `_memory/loop/ESCALATIONS.md` and gitignore `_memory/loop/breaker-state.json`, `_memory/loop/ledger.jsonl`, and `_memory/loop/attempts/`; `_memory/records/` and `_memory/quarantine/` stay tracked.
 No supported Copilot transcript export — session summaries use the `memory-capture`
 skill's **orchestrator-written fallback** (see `feature/reference/memory-capture.md`).
+
+**Opt-in (`flags.opt_in`):** the three orchestrator skills (`feature`, `research`,
+`memory-capture`) under `.github/skills/` also carry `disable-model-invocation: true`, and
+the seven kit agents' `.github/agents/*.agent.md` descriptions carry the orchestration-kit
+scope prefix (full support). `.github/agents/feature.agent.md` is built from the same
+template, so it also carries `disable-model-invocation: true` and the opt-in sentence.
+The `.github/copilot-instructions.md` pointer is a user file and is not rewritten.
+
+**Kit-file guard (`flags.kit_guard`):** no edit-blocking hook is emitted — emit warns
+`warning: flags.kit_guard is partial on copilot: no edit-blocking hook; run emit.sh --check in CI (_kit/ is gitignored)`.
+`emit.sh --check` / `_kit/kit-guard.sh check` and ORCHESTRATION.md read-only rules
+still apply.

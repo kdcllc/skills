@@ -41,3 +41,17 @@ Always emits `_kit/log-spawn.sh` and `_kit/log-spawn.cmd` (single-copy; Git for 
 Always emits `_kit/memory.sh`, `_kit/memory.cmd`, and `_memory/README.md` (single-copy), appends `_memory/work/`, `_memory/.index/`, and `_memory/raw/` to `.gitignore`, and appends `_memory/** text eol=lf` and `*.cmd -text` to `.gitattributes`; loop emits also add `*.sh text eol=lf`, union-merge `_memory/loop/LEARNINGS.md` and `_memory/loop/ESCALATIONS.md` and gitignore `_memory/loop/breaker-state.json`, `_memory/loop/ledger.jsonl`, and `_memory/loop/attempts/`; `_memory/records/` and `_memory/quarantine/` stay tracked.
 Post-hoc transcript capture scans `~/.claude/projects/<slug>/*.jsonl` under `$HOME` (see
 `_memory/README.md`); distillation uses the emitted `memory-capture` skill.
+
+**Opt-in (`flags.opt_in`):** the three orchestrator skills (`feature`, `research`,
+`memory-capture`) also carry `disable-model-invocation: true`, and the seven kit
+agents' descriptions carry the orchestration-kit scope prefix (full support on Claude
+Code).
+
+**Kit-file guard (`flags.kit_guard`):** when `.claude/settings.json` is absent, emit
+writes a `PreToolUse` hook:
+`matcher` `Edit|Write|MultiEdit|NotebookEdit`, command
+`bash "$CLAUDE_PROJECT_DIR/_kit/kit-guard.sh" hook claude` (exit **2** blocks).
+When the file already exists without that hook, emit leaves it untouched and prints
+the merge snippet on stderr (see `bin/README.md`). ORCHESTRATION.md Repository safety
+item 4 and agent read-only rules apply; the feature skill tracks Orchestration
+Progress under `_memory/work/goals/[goal]/progress.md`.

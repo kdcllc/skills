@@ -60,6 +60,30 @@ canonical templates are Claude-format:
 | Concurrent subagent spawns (ready groups) | 🔎 documented — code.claude.com/docs/en/sub-agents § Run parallel research (spot-checked 2026-10-16): "For independent investigations, spawn multiple subagents to work simultaneously"; § Concurrent subagent limit: default 20 running, spawning past it fails with `Concurrent subagent limit reached` (`CLAUDE_CODE_MAX_CONCURRENT_SUBAGENTS`, v2.1.217+); subagents share the checkout unless `isolation: worktree` — kit runs ready groups | 🔎 documented — cursor.com/docs/subagents § Parallel execution (spot-checked 2026-10-16): "Agent sends multiple Task tool calls in a single message, so subagents run simultaneously"; same page warns subagents share the parent checkout and concurrent edits can overwrite each other; supporting local observation (not ✅): concurrent worktree-less writers observed in this repo's own runs; nesting per Fresh-context row (spot-checked 2026-10-16); ⚠️ Cloud Agents-specific L1-only cap not documented — concurrency there unverified — kit runs ready groups | ⚠️ unverified (`runSubagent` stateless; concurrency not verified) — kit tries parallel ready groups, falls back to sequential on concurrency error | ⚠️ unverified — reserved `[agents]` names `max_concurrent_threads_per_session`, `max_threads` only (verified 2026-08-21); behavior inferred, not verified — kit tries parallel ready groups, falls back to sequential on concurrency error |
 | Degraded spawn conditions (model pin rejected / no spawn tool) | ⚠️ not documented as a degraded condition; nesting is capped by `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH` (see Fresh-context subagents row) — kit falls back to degraded mode if it happens | 🔎 spot-checked 2026-10-16 — cursor.com/docs/subagents: "You can use subagents in the editor, CLI, and Cloud Agents"; model config honors frontmatter `model` with admin/plan/Max-Mode fallbacks ("In these cases, Cursor falls back to a compatible model"); "Cloud subagents … follow the same model and capability rules as other Cloud Agents"; spawn can fail 🔎 — "a subagent launched by another subagent can't launch further ones" and "Nested launches also need Task tool access in the current mode, and hooks or tool policies can block spawning"; cursor.com/docs/cloud-agent Models: "Cloud Agents use a curated selection of models"; ⚠️ not documented on those pages whether Cloud Agents always ignore custom `model` pins or run as the parent model; ⚠️ no Cloud-Agent-specific L1 nesting limit documented on spot-checked pages — kit: see degraded mode (model pin rejected → inherit; no spawn tool → self-performed roles, disclosed gates) | ⚠️ not documented as a degraded condition; a `model` stronger than the parent refuses to run (see Per-agent model pin row) and subagent nesting is off unless `chat.subagents.allowInvocationsFromSubagents` is set (see Fresh-context subagents row) — kit falls back to degraded mode if it happens | ⚠️ not documented — kit falls back to degraded mode if it happens |
 
+### Opt-in (`flags.opt_in`) — verified 2026-10-27
+
+Description-scoped delegation is guidance the model follows, not an enforced gate (🔎).
+
+| Harness | Support | Notes |
+|---|---|---|
+| Claude Code | ✅ full | Skill `disable-model-invocation: true` on orchestrator skills; agent descriptions scoped via template prefix. `CLAUDE.md` orchestration pointer is a user file — unchanged. |
+| Cursor | ✅ full | Same `disable-model-invocation` key (skill translation); kit-owned `.cursor/rules/orchestration.mdc` rewritten to opt-in wording on upgrade. |
+| Copilot (VS Code) | ✅ full | `.github/skills/*/SKILL.md` and `.github/agents/feature.agent.md` carry the flag; `.agent.md` descriptions scoped. `.github/copilot-instructions.md` pointer unchanged. |
+| OpenAI Codex | 🔎 partial | No kit skills tree; `[agents.*]` descriptions scoped only when emit writes agent tables (new install). Existing `.codex/config.toml` with the kit marker is never rewritten. `AGENTS.md` pointer unchanged; emit warns on stderr. |
+
+### Kit-file guard (`flags.kit_guard`) — verified 2026-10-27
+
+Agent edit hooks are enforced by the harness (✅ per vendor hook docs); path-field parsing for Cursor `Write`/`Delete` is 🔎 (guard checks `file_path`, `notebook_path`, `path`, `target_file`).
+
+| Harness | Edit hook | Check + rule text |
+|---|---|---|
+| Claude Code | ✅ `PreToolUse` in `.claude/settings.json`; exit **2** blocks (code.claude.com/docs/en/hooks) | ✅ ORCHESTRATION.md item 4; feature progress in `_memory/work/goals/[goal]/progress.md` |
+| Cursor | ✅ `preToolUse` in `.cursor/hooks.json`; exit **2** denies (guard prints JSON `permission: deny`); an exit-**0** reply that is not valid JSON blocks, so guard allow paths print `{"permission":"allow"}`; matcher `Write|Delete` ✅ (cursor.com/docs/agent/hooks). Cursor loads Claude Code hooks from `.claude/settings.json` too ✅ — dual-harness may run the guard twice; reply format for third-party hooks 🔎 (`hook claude` detects Cursor caller JSON) | same |
+| Copilot (VS Code) | ⚠️ agent hooks Preview — not used by this kit | ✅ `emit.sh --check`; partial warning on emit |
+| OpenAI Codex | — no edit hook | ✅ `emit.sh --check`; partial warning on emit |
+
+All harnesses: hooks cover agent edit tools, not shell or human edits; `check` detects those. Manifest and hook config files are user-writable exclusions — CI `check` is the backstop.
+
 Windows note: per-harness CLI availability on Windows is unverified — the loop
 drivers assume the harness CLI runs natively where invoked. **Kit tools** (`bin/emit.*`,
 `_kit/memory.*`, `_kit/log-spawn.*`, and `_loop/loop.cmd` on loop installs) require **Git for Windows** when invoked from cmd
