@@ -18,7 +18,7 @@ It needs no `--answers` (any `--answers` is ignored). Mutually exclusive with
 `--upgrade`, `--dry-run`, `--force`, and `--check-answers`. Exit **0** when every
 manifest-listed kit file matches its recorded hash · **2** usage / no manifest (a
 missing `--root` is not created) · **4** when any kit-owned file is missing or its
-bytes differ (stderr ends with the restore hint from `kit-guard.sh check`).
+bytes differ (stdout lists each path and ends with the restore hint from `kit-guard.sh check`).
 
 ## Exit codes
 
