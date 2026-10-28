@@ -2,10 +2,10 @@
 title: "Hardening evaluator gates: consumer trace, cite-or-backlog, repeat signatures, failure classes, hook field notes"
 topic: gate-hardening
 date: 2026-10-27
-status: ingested
+status: adopted
 recheck_by: 2027-01-27
 shipped_in: []
-goals: []
+goals: [evaluator-gate-hardening]
 supersedes: []
 memory: [20261028T002222Z-81ed0485]
 ---
@@ -132,7 +132,12 @@ independent sources agree · **low** = inferred or single community source.
 
 ## Decisions
 
-- **Adopted:** none yet. Ingested for Phase 3 planning with the user.
+- **Adopted (2026-10-27, user planning answers):** goal `evaluator-gate-hardening` (items 2, 3, 4, 5):
+  - severe-class restriction on late findings;
+  - repeat keys logged only;
+  - pre-existing failures reported and backlogged, backlog-only in loop runs.
+
+  A later goal A covers item 1: a planner-written consumer trace, plus a read-only spawn for bypass-class goals. Goal B runs after the concurrent `agent-kit-opt-in` goal merges.
 - **Recommended for planning**, pending user decisions:
   - Item 1: the planner-written trace, checked by `goal-criteria` and the Phase 5 audit;
   - Item 2: cite-or-backlog plus the backlog file and PR-body section;
