@@ -2,9 +2,9 @@
 title: "Hardening evaluator gates: consumer trace, cite-or-backlog, repeat signatures, failure classes, hook field notes"
 topic: gate-hardening
 date: 2026-10-27
-status: adopted
+status: shipped
 recheck_by: 2027-01-27
-shipped_in: []
+shipped_in: ["2.2.0"]
 goals: [evaluator-gate-hardening]
 supersedes: []
 memory: [20261028T002222Z-81ed0485]
