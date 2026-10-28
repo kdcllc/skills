@@ -245,8 +245,64 @@ it as secondhand or unconfirmed.
 | Claude Code subagent `omitClaudeMd: true` (v2.1.271+) skips user/project/local CLAUDE.md; not adopted — target projects' CLAUDE.md carries rules workers need | ✅ | code.claude.com/docs/en/sub-agents |
 | Claude Code subagent `mcpServers` frontmatter (named or inline) | ✅ | code.claude.com/docs/en/sub-agents |
 | Cursor hooks receive `transcript_path` (null when transcripts are disabled) | ✅ | cursor.com/docs/agent/hooks |
-| Cursor cloud agents run project `.cursor/hooks.json` hooks for `stop`, `afterAgentResponse`, `subagentStop`, `preCompact`; not `sessionStart`, `sessionEnd`, MCP-execution hooks, or user-level `~/.cursor/hooks.json` | ✅ | cursor.com/docs/agent/hooks § Cloud agent support |
+| Cursor cloud agents run project `.cursor/hooks.json` hooks for `stop`, `afterAgentResponse`, `subagentStop`, `preCompact`; not `sessionStart`, `sessionEnd`, MCP-execution hooks, or user-level `~/.cursor/hooks.json` | ✅ | cursor.com/docs/agent/hooks § Cloud agent support — superseded by the 2026-10-27 addendum (Cursor hook behavior) |
 | Cursor transcripts: `~/.cursor/projects/<slug>/agent-transcripts/` JSONL (format undocumented) | ✅ observed / 💬 format | local inspection; community parsers |
 | Cursor persistent agent stores: undocumented; mount locally on tmpfs (`/run/user/<uid>/cursor_agent_stores/…`); never a kit target | ✅ observed | _memory/research/agent-memory-store.md § Load-bearing conclusions item 1 |
 | Copilot Memory: preview since 2026-01-15, repo-scoped, 28-day unused expiry, no export API; VS Code memory tool local `/memories/` (preview) | 🔎 | docs.github.com, code.visualstudio.com (per report) |
 | Codex memories: `[features] memories = true`, `~/.codex/memories/`, per-user; hooks include `SessionEnd`, `Stop`, `PreCompact` | ⚠️ | developers.openai.com (secondhand per report) |
+
+## Addendum 2026-10-27 — Cursor hook behavior
+
+Ingested from `_memory/research/gate-hardening.md` item 5 and the forum threads and docs pages it cites (accessed 2026-10-27).
+With `flags.kit_guard` (2.2.0) the kit installs edit-blocking hooks for Claude Code (`.claude/settings.json`) and Cursor (`.cursor/hooks.json`).
+The facts below inform those hooks, optional user hooks and any future hook goal.
+Marks follow **this addendum's** legend, which differs from the top legend:
+
+- **staff-confirmed**: a Cursor staff forum reply.
+- **documented**: cursor.com docs, or the vendor docs the fact names.
+- **community-reported**: forum or issue reports.
+- **unconfirmed**: a single field observation.
+
+1. A `preToolUse` or `beforeShellExecution` deny delivers only `user_message` to the agent, not `agent_message`, although the docs still say `agent_message` is fed back to the agent.
+   **staff-confirmed**: Cursor forum thread 174283 (staff reply 2026-10-12; desktop 3.23.23).
+   Cloud is not verified.
+2. Hooks do not run during a cloud agent's read-only early turns; they start once the agent has a writable environment.
+   **documented**: cursor.com/docs/agent/hooks.
+   Cloud agents only.
+3. Cursor loads Claude Code hooks (third-party configs are on by default), with `loop_limit` `null` for them; Cursor's own default is 5.
+   **documented**: cursor.com/docs/agent/hooks.
+4. For permission hooks (`preToolUse` among them), invalid JSON blocks the action, and crashes, timeouts and non-zero exits other than 2 fail open unless `failClosed: true`.
+   **documented**: cursor.com/docs/agent/hooks.
+   Whether `failClosed` blocks a crashed `stop` or `subagentStop` hook is **unconfirmed**: the docs define `failClosed` as blocking the action, and Cursor staff in thread 161869 call the IDE stop invocation fire-and-forget.
+5. A Task launch without a `model` runs on the parent's model, and an unrecognized frontmatter model silently falls back to the parent's.
+   **community-reported**, staff-acknowledged: Cursor forum threads 160840 and 156736.
+6. `subagentStop` `summary`, `modified_files` and `agent_transcript_path` are often empty or null.
+   **community-reported**: Cursor forum thread 166681.
+7. `loop_count` resetting on each user prompt, hooks firing in a named environment with several workspace roots, and a resumed Task skipping `subagentStart`.
+   **unconfirmed**: no public thread or docs page confirms any of the three.
+8. Copilot reads repository `.claude/settings.json` hooks and runs hooks from every source together, so a hook there can run in Claude Code, Cursor and Copilot.
+   **documented**: code.visualstudio.com/docs/copilot/customization/hooks.
+9. Interaction with `kit_guard` (2.2.0).
+   The entry "Kit-file guard (`flags.kit_guard`) — verified 2026-10-27" above states the per-harness hook design; this fact adds what facts 3, 4 and 8 imply for it and does not restate that entry.
+   - **Cursor, double run.** On an install with both Claude Code and Cursor, Cursor also loads the Claude-format hook from `.claude/settings.json` (fact 3), so the guard can run twice per edit.
+     The double run is a **documented** consequence, not yet observed: Cursor runs all matching hooks from every source (cursor.com/docs/agent/hooks) and loads the Claude Code hooks (fact 3).
+   - **Cursor, reply format.** The guard detects a Cursor caller and answers in Cursor's JSON format (`templates/tools/kit-guard.sh`; the Kit-file guard entry above), so fact 4's invalid-JSON rule does not apply to it.
+     That is the documented design.
+     How reliable the Cursor-caller detection is stays **unconfirmed**.
+   - **Copilot.** On an install with both Claude Code and Copilot, Copilot may also run the guard's Claude hook from `.claude/settings.json` (fact 8) when its agent hooks are enabled, although the Kit-file guard entry says agent-kit doesn't use Copilot hooks.
+     Two things are **unconfirmed**: whether `$CLAUDE_PROJECT_DIR` is set under Copilot, and how the guard's `claude` mode handles Copilot's input.
+     For PascalCase events, Copilot sends snake_case fields and reports Claude tool names (docs.github.com/en/copilot/reference/hooks-configuration, "VS Code compatible format" and "Claude-format matchers"; research brief source 11).
+   - **Copilot fails closed.** Copilot `preToolUse` command hooks deny the tool call on a crash or non-zero exit (**documented**: docs.github.com/en/copilot/reference/hooks-reference).
+     So if `$CLAUDE_PROJECT_DIR` is unset under Copilot, the guard's Claude hook could deny every matched edit.
+     This consequence is **unconfirmed**; it is stated as a risk to check.
+   - Fact 8 holds for Copilot CLI and VS Code.
+     Copilot cloud agent loads only `.github/hooks/*.json` (**documented**).
+10. Cursor cloud agents run `preToolUse`, `beforeShellExecution`, `subagentStop`, `stop` and other project hooks once the environment is writable; `sessionStart` is deferred.
+    **documented**: cursor.com/docs/agent/hooks, § Cloud agent support.
+    This restates the current list that the 2026-10-08 cloud-agent row now points to.
+
+Facts 1, 3, 4 and 8–10 bear on the `kit_guard` hooks directly.
+Fact 2 limits every Cursor cloud-agent hook until the environment is writable.
+Facts 5–7 concern model, subagent and loop hooks the kit does not install.
+
+Re-check these facts by 2027-01-27: Cursor's hook behavior changed several times in 2026, so re-test per Cursor version.
