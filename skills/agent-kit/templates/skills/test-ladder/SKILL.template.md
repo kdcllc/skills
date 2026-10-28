@@ -87,6 +87,8 @@ rung 2 is empty (brand-new module), treat it as a no-op and say so.
 Forbidden until rung 3: any bare full-suite invocation or pattern-less test run.
 A `-k <name>`-style selector is a rung 1/2 tool, not a substitute for rung 3.
 
+A rung-3 failure is classified per ORCHESTRATION.md `### Quality Checks` (flaky, local-edits, pre-existing, introduced) before any fix.
+
 ## Failure handling
 
 ```
