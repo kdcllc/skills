@@ -1548,7 +1548,7 @@ pointer_agents_md() {
 Non-trivial features run through the orchestrator/worker/evaluator flow in
 ORCHESTRATION.md: plan → evaluate the plan → implement per task (spawn \`implementer\` /
 \`test-writer\`) → evaluate every task (spawn \`evaluator\`) → final audit → quality checks.
-Fixes are always re-evaluated. After three fix cycles, spawn \`diagnostician\` for rung 4
+Fixes are always re-evaluated. When fix cycles are exhausted (cycle 3, or earlier on early ladder entry), spawn \`diagnostician\` for rung 4
 diagnosis. Quality checks spawn \`terminal\` for the full-suite run so its raw output stays
 out of the session. When the QA gate runs, spawn \`evidence-collector\` then \`qa-evaluator\`.
 Role instructions: .codex/agents/*.md (seven roles).

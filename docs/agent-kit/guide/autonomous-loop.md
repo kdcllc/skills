@@ -55,7 +55,7 @@ flowchart TD
 **Phase 6/7 and ladder controls** — the loop cannot ask questions, so flags are read from story backlog frontmatter and run configuration only (same naming as `goal.md`'s `phases:` block):
 
 - **`align_docs`** (per story, default `true`): Phase 6 (`align-docs`) runs **per story** when enabled, so doc updates land in the story's commit and documentation never drifts from shipped code. A story may set `align_docs: false` in its backlog frontmatter to skip the per-story Phase 6 run; the skip is logged, never silent — write "Phase 6 skipped per story frontmatter" to the orchestration log.
-- **`ladder`** (per story, fixed `auto`): loop-created goals always set `ladder: auto` in `goal.md`'s `phases:` block so cycle-3 exhaustion runs the continuation ladder unattended; the driver's attempt cap and circuit breakers remain the outer backstop.
+- **`ladder`** (per story, fixed `auto`): loop-created goals always set `ladder: auto` in `goal.md`'s `phases:` block so cycle-3 exhaustion, or an earlier repeated structural fix (early ladder entry), runs the continuation ladder unattended; the driver's attempt cap and circuit breakers remain the outer backstop.
 - **`pull_request`** (loop-level, opt-in): the end-of-run ship step stays explicitly enabled — a human or an opt-in final step runs `ship-pr` once to draft and create the PR/MR on the project's forge, or hand over. Control this with loop-level `pull_request` in run configuration (`pull_request: false` skips the ship step with a logged skip, never silent); default remains opt-in as today.
 
 **Breaker checks.** After each reap, the driver evaluates per-slot circuit breakers (CB1 no-progress, CB2 repeated signatures), the model rate-limit breaker, and protected-path diffs (CB0). Trips **retire** the slot rather than stopping the whole run on first failure — unless CB0 fires (exit 4).
@@ -154,7 +154,7 @@ These proxy fields in the orchestration log (`io_est_tokens`, `work_est_tokens`)
 
 ### `ladder` (goal `phases:` block)
 
-Loop-created goals always set **`ladder: auto`** in `goal.md`'s `phases:` block (alongside `align_docs` and `pull_request`) so cycle-3 exhaustion runs the continuation ladder unattended. Interactive `/feature` goals default to `ladder: escalate` instead.
+Loop-created goals always set **`ladder: auto`** in `goal.md`'s `phases:` block (alongside `align_docs` and `pull_request`) so cycle-3 exhaustion, or an earlier repeated structural fix (early ladder entry), runs the continuation ladder unattended. Interactive `/feature` goals default to `ladder: escalate` instead.
 
 Driver-owned dispatch, slot worktrees, write-set admission, and integrator merge semantics are covered in this guide and [architecture.md](architecture.md).
 
