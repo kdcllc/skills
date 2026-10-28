@@ -132,12 +132,13 @@ independent sources agree · **low** = inferred or single community source.
 
 ## Decisions
 
-- **Adopted (2026-10-27, user planning answers):** goal `evaluator-gate-hardening` (items 2, 3, 4, 5):
-  - severe-class restriction on late findings;
-  - repeat keys logged only;
-  - pre-existing failures reported and backlogged, backlog-only in loop runs.
+- **Adopted (2026-10-27, user planning answers):** goal `evaluator-gate-hardening` (items 2, 3, 4, 5). Its plan passed Phase 3 on 2026-10-27:
+  - **Late findings:** severe-class restriction. A late finding stays blocking in changed files, or when it cites `F1`, `F3`, `F4`, `F7` or an acceptance criterion, or when it is a reversal; every other late finding becomes `[backlog] [late]`.
+  - **Repeat keys:** logged under `ladder: escalate`. Under `ladder: auto`, an initial early-ladder-entry implementation triggers on a repeated `[structural]` key, with the cap and budget unchanged.
+  - **Pre-existing failures:** reported and backlogged, backlog-only in loop runs.
+  - **Release:** ships in the same agent-kit 2.2.0 release as the concurrent `agent-kit-opt-in` goal, as local commits on `feat/agent-kit-opt-in` with no pull request. Its Phase 4 starts after that goal finishes Phases 4–6.
 
-  A later goal A covers item 1: a planner-written consumer trace, plus a read-only spawn for bypass-class goals. Goal B runs after the concurrent `agent-kit-opt-in` goal merges.
+  A later goal A covers item 1: a planner-written consumer trace, plus a read-only spawn for bypass-class goals.
 - **Recommended for planning**, pending user decisions:
   - Item 1: the planner-written trace, checked by `goal-criteria` and the Phase 5 audit;
   - Item 2: cite-or-backlog plus the backlog file and PR-body section;
