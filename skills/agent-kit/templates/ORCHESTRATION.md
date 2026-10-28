@@ -175,6 +175,11 @@ non-independent and disclosed to the user and in the PR draft).
    hooks.
 <!-- ENDIF kit_guard -->
 
+**Pre-existing dirty paths.** Before Phase 4 the orchestrator saves
+`git status --porcelain --untracked-files=all` to
+`_memory/work/goals/<goal>/preexisting-dirty.txt`. Those paths are never staged or edited
+by the goal, and Quality Checks classify failures against them (see **Quality Checks**).
+
 ---
 
 ## Component Overview
@@ -465,6 +470,10 @@ member reaches task-evaluation PASS or PASS (with notes).
   A verdict tagged with a bypass failure class (destructive/security/infra)
   escalates at detection, on any cycle.
   On re-evaluation, each required fix is tagged `[carried]` / `[regression]` / `[new]` after its kind tag; context packages carry every earlier required-fixes list; the orchestrator logs a `late finding:` note per `[new]` item; a reversal (`reverses cycle N:`) is a `criteria-defect`; see `reference/fix-cycles.md` § Provenance.
+  A `[new]` item outside the changed list that cites no `F1`, `F3`, `F4`, `F7` or `AC<n>` and is not a reversal is demoted to a `[backlog] [late]` note and never blocks (late-finding rule: `reference/fix-cycles.md` § Citation checks, backlog and keys).
+  At every evaluator spawn the orchestrator records a working-tree snapshot, logged as `eval-tree [#NN] task <TT|audit>: <sha>`, and each re-evaluation package carries `## Changed since last evaluation` (`reference/fix-cycles.md` § Provenance).
+  The tag-check round trip also checks that each blocking item cites an `AC<n>` within the task's criteria count, an existing `SC` label or `F1`–`F7`, and on re-evaluations the late-finding scope; this citation and scope check covers Phase 4 task evaluations, ladder re-evaluations and Phase 5 audits (`reference/fix-cycles.md` § Citation checks, backlog and keys).
+  The orchestrator appends every `[backlog]` note to `_memory/work/goals/<goal>/follow-ups.md` and runs `_kit/log-spawn.sh keys` once per evaluation; only `ladder: auto` reads the result, and a `[structural]` `REPEAT` there starts the ladder early (`reference/fix-cycles.md` § Citation checks, backlog and keys and § Early ladder entry).
 
 INVARIANT: A task is only marked complete after the evaluator returns PASS or
 PASS (with notes) (`PASS (with notes)` counts as PASS). There is no path where
@@ -482,6 +491,9 @@ evaluator audit. APPROVED → Quality Checks (ladder rung 3: full suites, via a
 `goal.md` has `qa: run`, after Quality Checks spawn `evidence-collector` then
 `qa-evaluator` with its index (`qa: skip` or absent key omits the gate).
 Re-audits carry the same provenance tags and late-finding notes, and a re-audit reversal escalates to the user at detection.
+The audit opens corrective tasks only for cited findings; uncited ones stay `[backlog]` notes in `follow-ups.md`.
+A Quality Checks failure is narrowed first, then classified: flaky (passes on one rerun), local-edits (in or caused by a pre-existing dirty path), pre-existing (also fails on the merge base) or introduced (everything else); the handling per class is under **Quality Checks**.
+When Phase 5 ends, the open `follow-ups.md` rows go into the PR body's `## Backlog (not fixed here)` (`ship-pr` owns the format), or into the Phase 5 final report when Phase 7 is skipped.
 INVARIANT: The ONLY exit to Quality Checks is an APPROVED verdict from the audit
 subagent. Remediations MUST be re-audited.
 
@@ -500,8 +512,10 @@ the orchestrator reads `goal.md`'s `phases:` block — when `pull_request: false
 Phase 7 with an orchestration-log entry ("Phase 7 skipped per goal.md"). When enabled,
 docs aligned → the ship-pr skill: analyze branch commits + diff → draft the PR (exec
 summary + technical breakdown) → show the draft → USER APPROVES → push (if needed) →
-create the PR/MR or hand over → URL. Also skip when the work happened directly on the
-default branch or the user declines a PR.
+create the PR/MR or hand over → URL. The open `follow-ups.md` rows go into the PR body's
+`## Backlog (not fixed here)` (`ship-pr` owns the format), or into the Phase 5 final report
+when Phase 7 is skipped. Also skip when the work happened directly on the default branch or
+the user declines a PR.
 INVARIANT: The PR is never created before the user approves the draft.
 
 ### Forge adapter (Phase 7 delivery)
@@ -734,7 +748,7 @@ Every entry references artifact files rather than inlining them:
 - `_memory/work/goals/<goal>/spawns/NN-report.md` — the subagent's report, verbatim, never polished.
   Agents end with a `### Footprint` block (`files_read: N (~C chars)` / `commands_run: N`).
 
-Three subcommands (`--help` lists every flag):
+Four subcommands (`--help` lists every flag):
 
 - **Before launch** — `spawn --goal G --agent A --phase "P" --model-requested M --context _memory/work/goals/G/spawns/NN-context.md [--writes …] [--why …] [--expect …]`
   appends `### <ts> — SPAWN A (P) [#NN]` plus bullet lines for agent · model requested,
@@ -755,11 +769,18 @@ Three subcommands (`--help` lists every flag):
   line (W = C/4; `n/a` if missing/malformed — flag to the evaluator; `--work-chars C`
   overrides). `running io` / `running work` are the previous totals plus T / W
   (`running io` falls back to the `running total` field of logs written by the private setup kit before 0.26; W=`n/a` adds 0).
+- **Issue keys** — `keys --goal G --spawn NN --task <TT|audit> --report _memory/work/goals/G/spawns/NN-report.md`
+  appends a `KEYS` line (and a `REPEAT` line for each repeated key); both carry each item's kind and provenance tags.
+  Only the `ladder: auto` early entry reads them, and a duplicate spawn number exits 3. The call runs once per
+  evaluation, after the round trip settles, with the evaluation's first spawn number
+  (`reference/fix-cycles.md` § Citation checks, backlog and keys).
 - **Everything else** — `note --goal G --text "…"` appends `### <ts> — …` for phase
-  completions, ladder transitions (with the rung name), guard trips, and skips (e.g.
+  completions, ladder transitions (with the rung name), guard trips, tree snapshots
+  (`eval-tree [#NN] task <TT|audit>: <sha>`, taken at every Phase 4 and Phase 5 evaluator
+  spawn per `reference/fix-cycles.md` § Provenance), and skips (e.g.
   Phase 6/7 declined via `goal.md`'s `phases:` block).
 
-Exit codes: 0 ok · 2 usage error · 3 ledger integrity (duplicate SPAWN/OUTCOME `[#NN]`,
+Exit codes: 0 ok · 2 usage error · 3 ledger integrity (duplicate SPAWN/OUTCOME/KEYS `[#NN]`,
 outcome without its SPAWN) · 4 missing goal directory or artifact file. Rejections and
 respawns are new entries with new NNs, never in-place edits.
 
@@ -772,7 +793,14 @@ respawns are new entries with new NNs, never in-place edits.
 When Task Execution (Phase 4) exhausts its 3 implement→evaluate fix cycles, read
 `goal.md`'s `phases.ladder`. `escalate` (default, or key absent): escalate to the user
 with the continuation ladder offered as option 1. `auto`: run this ladder before
-terminal human escalation. Apply in this order:
+terminal human escalation.
+
+**Early ladder entry** (`reference/fix-cycles.md` § Early ladder entry). Under `ladder: auto`
+only, a `[structural]` `REPEAT` line from `_kit/log-spawn.sh keys` ends a task's fix cycles
+before cycle 3, and the orchestrator proceeds as on cycle-3 exhaustion; the ladder budget and
+guards are unchanged, and Phase 5 never enters the ladder early.
+
+Apply the rungs in this order:
 
 1. **Bypass check (every verdict, every cycle).** A verdict tagged with a bypass failure
    class (`destructive`, `security`, `infra`) stops all retrying immediately — including
@@ -782,18 +810,18 @@ terminal human escalation. Apply in this order:
    ambiguity is not bypass — route through `criteria-defect` or rung 5 arbitration, not
    cycle-3 exhaustion alone).
 
-2. **Rung 5 — arbitration (conditional, checked first on exhaustion).** If cycles 1–3 all
+2. **Rung 5 — arbitration (conditional, checked first on exhaustion).** If every cycle that ran
    failed on the *same* required-fix item (unanimous-failure heuristic; compare items
    tag-stripped of trailing `[line-patch]` / `[structural]` and trailing provenance tags,
    with the justification clause (from its start (` — missed earlier:` or
-   ` — reverses cycle `) through the end of the item) removed when present), or when the **drift trigger** fires (≥ 2 `[new]` items across the cycle 2–3 verdicts recorded in the orchestration log), spawn the
+   ` — reverses cycle `) through the end of the item) removed when present), or when the **drift trigger** fires (≥ 2 `[new]` items across the cycle 2–3 verdicts recorded in the orchestration log. Demoted `[backlog] [late]` notes count toward this total.), spawn the
    evaluator in **arbitration mode** on `{{MODEL_FRONTIER_ALT_FAMILY}}` before any
    further fixing. Outcomes: `criteria-defective` → escalate to the human carrying the
    specific defect; arbiter/primary **disagreement → escalate (never auto-resolve)**;
    `criteria-sound` → continue to rung 4.
 
 3. **Rung 4 — diagnosis-first.** Spawn the `diagnostician` (frontier tier, no code writes)
-   with the task file (including its Acceptance Criteria), and all three fix-cycle histories. If its
+   with the task file (including its Acceptance Criteria), and every fix-cycle history that ran. If its
    hypothesis matches a previously tried fix signature → skip to rung 6 if it recommended
    a split, else escalate. Otherwise run **ONE** diagnosis-driven implementation attempt
    (fresh implementer on `{{MODEL_FRONTIER}}`, using the diagnostician's rewritten
@@ -812,8 +840,8 @@ terminal human escalation. Apply in this order:
 
 **Hard guards:**
 
-- At most **3 additional implementation attempts** after cycle 3, summed across rungs 4
-  and 6.
+- At most **3 additional implementation attempts** after the last fix cycle (cycle 3, or earlier on early entry),
+  summed across rungs 4 and 6.
 - A **repeated failure signature** stops the ladder immediately.
 - Every rung transition is an orchestration-log entry recording agent, model, rung, and
   trigger.
@@ -842,7 +870,7 @@ backstop.
 | Phase | Max Cycles | On Exhaust |
 |-------|------------|------------|
 | Goal Evaluation (Phase 3) | 3 revise→re-evaluate (attempt 3: fresh arbiter evaluator; material amendments reset the cycle) | Escalate to user |
-| Task Execution (Phase 4) | 3 implement→evaluate per task | phases.ladder=auto: continuation ladder (rungs 5→4→6) then escalate; escalate (default): escalate to user, ladder offered |
+| Task Execution (Phase 4) | 3 implement→evaluate per task (`ladder: auto`: fewer on early ladder entry) | phases.ladder=auto: continuation ladder (rungs 5→4→6) then escalate; escalate (default): escalate to user, ladder offered |
 | Final Audit (Phase 5) | 3 fix→re-audit | Escalate to user |
 | Align Docs (Phase 6) | 3 per doc + 3 for plan and final doc audit | Escalate to user |
 | Pull Request (Phase 7) | n/a — gated on explicit user approval | User edits or declines the draft |
@@ -940,6 +968,9 @@ flowchart TD
 | Sandbox | run in a worktree/container with minimal credentials; never skip permission prompts (or disable the CLI's own sandbox) outside a container or VM — a worktree only separates the git tree and is not isolation |
 | Iteration timeout / budgets | opt-in (`LOOP_ITER_TIMEOUT`, `LOOP_RUN_BUDGET_TOKENS`, `LOOP_STORY_BUDGET_TOKENS`, `LOOP_RUN_BUDGET_USD`, `LOOP_STORY_BUDGET_USD`, `LOOP_ITER_BUDGET_USD`); run-budget stop exits 1 when eligible work remains; missing usage/cost data fails open |
 | Tamper check | `LOOP_TAMPER_CHECK` = `warn` (default) \| `fail` (worktree only — requires `LOOP_WORKTREE=1`) \| `off`; optional `LOOP_TEST_PATTERNS`; `fail` quarantines with reason `tamper` |
+
+**Pre-existing failures.** Loop runs never commit fixes for pre-existing failures (the
+**pre-existing** class under **Quality Checks**); those failures become `follow-ups.md` rows.
 
 **Additional knobs:** `LOOP_LEDGER` (default on → `$PWD/_memory/loop/ledger.jsonl`, set `off` to disable); `LOOP_DOSSIER` (default on → `$PWD/_memory/loop/attempts/<story-id>.md`, `off` disables); `LOOP_USAGE_FORMAT=claude-stream` (opt-in stream-json with typed `api_retry` rate-limit detection; text fallback limited to stderr plus the final result envelope); `--lint [backlog-path]` (readiness check, exit 0/1/5, no side effects); plus the timeout, budget, and tamper knobs above.
 
@@ -1042,7 +1073,7 @@ installs have no kit skills tree (no protocol copy on disk).
 │   ├── implementer.md  # Focused implementer
 │   ├── test-writer.md           # Test creator (external services mocked)
 │   ├── terminal.md              # Bash/PowerShell runner — returns only the asked-for result
-│   └── diagnostician.md         # Diagnosis-only (post-cycle-3, no code writes)
+│   └── diagnostician.md         # Diagnosis-only (post-exhaustion, no code writes)
 │
 ├── skills/
 │   ├── feature/       # Feature coordination
@@ -1096,7 +1127,7 @@ _loop/{loop.sh,loop.cmd,breaker.sh,PROMPT.md}  # Headless loop driver (if enable
 │   ├── implementer.md  # Focused implementer
 │   ├── test-writer.md           # Test creator (external services mocked)
 │   ├── terminal.md              # Bash/PowerShell runner — returns only the asked-for result
-│   └── diagnostician.md         # Diagnosis-only (post-cycle-3, no code writes)
+│   └── diagnostician.md         # Diagnosis-only (post-exhaustion, no code writes)
 │
 ├── skills/
 │   ├── feature/       # Feature coordination
@@ -1145,7 +1176,7 @@ _memory/.index/ · _memory/raw/  # Derived index; capture output, ledgers and dr
 │   ├── implementer.md  # Focused implementer
 │   ├── test-writer.md           # Test creator (external services mocked)
 │   ├── terminal.md              # Bash/PowerShell runner — returns only the asked-for result
-│   └── diagnostician.md         # Diagnosis-only (post-cycle-3, no code writes)
+│   └── diagnostician.md         # Diagnosis-only (post-exhaustion, no code writes)
 │
 ├── skills/
 │   ├── feature/       # Feature coordination
@@ -1194,7 +1225,7 @@ _loop/{loop.sh,loop.cmd,breaker.sh,PROMPT.md}  # Headless loop driver (if enable
 │   ├── implementer.md  # Focused implementer
 │   ├── test-writer.md           # Test creator (external services mocked)
 │   ├── terminal.md              # Bash/PowerShell runner — returns only the asked-for result
-│   └── diagnostician.md         # Diagnosis-only (post-cycle-3, no code writes)
+│   └── diagnostician.md         # Diagnosis-only (post-exhaustion, no code writes)
 │
 ├── skills/
 │   ├── feature/       # Feature coordination
@@ -1262,6 +1293,20 @@ in a goal's designated closer task when its task file mandates the full-suite ru
 the closing gate — the `test-ladder` skill governs which rung runs when. Rung 3 is executed by **spawning
 `terminal`** with the command above, never by the orchestrator running it in this
 session.
+
+**Failure classes.** On a failure the orchestrator reads the log path (failure section or
+last ≤80 lines), then narrows the command (re-spawn `terminal` with a narrower one; the
+full suite never lands in this session), then classifies the failure in this order:
+
+- **flaky** — the narrowed command passes on one rerun; add a `follow-ups.md` backlog row
+  (source: the quality-check class).
+- **local-edits** — the failure is in, or caused by, a path in `preexisting-dirty.txt`
+  (see Repository safety); escalate to the user.
+- **pre-existing** — the narrowed command also fails on the merge base, run in a temporary
+  detached worktree under the OS temp dir and removed afterwards. Interactive runs report it,
+  add a backlog row with the base output and offer a separate commit; loop and autonomous
+  runs only add the backlog row.
+- **introduced** — everything else; it goes to the implementer as before.
 
 ### Common Commands
 
