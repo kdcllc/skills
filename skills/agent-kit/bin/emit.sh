@@ -7,7 +7,7 @@
 # CLI CONTRACT (frozen — SKILL.md Steps 4–6 describe the flow):
 #
 #   emit.sh [--answers F] [--upgrade] [--dry-run] [--force] [--check-answers]
-#           [--root DIR] [--kit DIR]
+#           [--check] [--root DIR] [--kit DIR]
 #
 #   --root  repo root (default: cwd). --kit  agent-kit skill dir (default: dirname $0/..).
 #           Templates are read from <kit>/templates.
@@ -36,9 +36,25 @@
 #   options.opt_in when present; drives IF flag opt_in and derived tokens OPT_IN_*; partial
 #   support warning on codex when enabled.
 #
+#   Optional flags.kit_guard (boolean): absent ⇒ false; non-boolean ⇒ exit 3. Persists as
+#   options.kit_guard when present; drives IF flag kit_guard; emits _kit/kit-guard.sh,
+#   _kit/kit-guard.cmd, and .claude/settings.json (PreToolUse hook) / .cursor/hooks.json (preToolUse hook)
+#   only when absent. Warnings (stderr `emit: warning: …`, counted in W, exit unchanged):
+#   enabled + existing settings.json / hooks.json without _kit/kit-guard.sh ⇒ left
+#   untouched, warning prints the exact hook snippet to merge; flag absent/false + an
+#   existing one still referencing _kit/kit-guard.sh ⇒ warning to remove that hook entry;
+#   enabled with copilot or codex ⇒ one partial-support warning per harness (no
+#   edit-blocking hook; run emit.sh --check in CI). The existing spawn-depth warning is
+#   independent.
+#
+#   --check  run kit-guard check against --root (default cwd); needs no --answers.
+#   Delegates to <kit>/templates/tools/kit-guard.sh check --root "<root>" (same exit
+#   codes: 0 clean · 2 usage/no manifest · 4 kit files modified or missing). Mutually
+#   exclusive with --upgrade, --dry-run, --force, and --check-answers.
+#
 #   Exit codes: 0 ok · 2 usage / no sha256 tool / answers file unreadable · 3 answers
 #   invalid, unanswered ids under --check-answers, loop_chain usage-credit denylist
-#   entry, flags.loop_worktree or flags.opt_in wrong type, or models.<h>.fast /
+#   entry, flags.loop_worktree, flags.opt_in, or flags.kit_guard wrong type, or models.<h>.fast /
 #   arbiter_same_family wrong JSON type · 4 emit blocked by user-modified kit files or pre-existing files at kit paths
 #   with no prior manifest entry (listed on stderr; --force overrides file writes) · 5 verify failed ·
 #   6 template syntax error. Errors: one stderr line each, prefixed `emit: `.
@@ -67,7 +83,7 @@ RB='}'
 usage() {
   cat <<'EOF' >&2
 usage: emit.sh [--answers F] [--upgrade] [--dry-run] [--force] [--check-answers]
-               [--root DIR] [--kit DIR]
+               [--check] [--root DIR] [--kit DIR]
   --root DIR   repo root (default: cwd)
   --kit DIR    agent-kit skill dir (default: dirname $0/..)
   --answers F  answers JSON (schema 1). omitted ⇒ read from manifest
@@ -75,6 +91,8 @@ usage: emit.sh [--answers F] [--upgrade] [--dry-run] [--force] [--check-answers]
   --dry-run    print planned actions; touch nothing
   --force      overwrite user-modified kit files and pre-existing kit-path files
   --check-answers  list unanswered class-a bootstrap ids; exit 3 if any
+  --check      run kit-guard check on --root (0 clean · 2 usage/no manifest · 4 modified/missing)
+  answers flags.kit_guard (boolean; absent ⇒ false, non-boolean ⇒ exit 3): emits _kit/kit-guard.sh/.cmd + absent hook configs; hook warnings on stderr (see header)
 exit: 0 ok · 2 usage/sha256/unreadable · 3 answers invalid · 4 blocked · 5 verify · 6 template syntax
 EOF
 }
@@ -91,6 +109,7 @@ DO_UPGRADE=0
 DRY_RUN=0
 FORCE=0
 CHECK_ANSWERS=0
+DO_CHECK=0
 ROOT=""
 ROOT_EXPLICIT=0
 KIT=""
@@ -107,9 +126,17 @@ while [ $# -gt 0 ]; do
     --dry-run)        DRY_RUN=1; shift ;;
     --force)          FORCE=1; shift ;;
     --check-answers)  CHECK_ANSWERS=1; shift ;;
+    --check)          DO_CHECK=1; shift ;;
     *) die 2 "unknown flag '$1'" ;;
   esac
 done
+
+if [ "$DO_CHECK" -eq 1 ]; then
+  if [ "$DO_UPGRADE" -eq 1 ] || [ "$DRY_RUN" -eq 1 ] || [ "$FORCE" -eq 1 ] || [ "$CHECK_ANSWERS" -eq 1 ]; then
+    usage
+    exit 2
+  fi
+fi
 
 if command -v sha256sum >/dev/null 2>&1; then
   SHA256_CMD="sha256sum"
@@ -130,6 +157,23 @@ if [ "$ROOT_EXPLICIT" -eq 1 ] && [ -z "$ROOT" ]; then
   usage >&2
   die 2 "--root requires a non-empty directory path"
 fi
+
+TPL="$KIT/templates"
+[ -d "$TPL" ] || die 2 "templates directory not found: $TPL"
+
+if [ "$DO_CHECK" -eq 1 ]; then
+  [ -f "$TPL/tools/kit-guard.sh" ] || die 2 "kit-guard template missing: $TPL/tools/kit-guard.sh"
+  _check_root=""
+  if [ -z "$ROOT" ]; then
+    _check_root="$(pwd)"
+  elif [ -d "$ROOT" ]; then
+    _check_root="$(cd "$ROOT" && pwd)"
+  else
+    _check_root="$ROOT"
+  fi
+  exec bash "$TPL/tools/kit-guard.sh" check --root "$_check_root"
+fi
+
 if [ -z "$ROOT" ]; then
   ROOT="$PWD"
 else
@@ -142,8 +186,6 @@ else
   ROOT="$(cd "$ROOT" && pwd)"
 fi
 
-TPL="$KIT/templates"
-[ -d "$TPL" ] || die 2 "templates directory not found: $TPL"
 VERSION=""
 if [ -f "$KIT/SKILL.md" ]; then
   VERSION="$(awk '
@@ -869,7 +911,7 @@ map_sorted_keys() { # <map> → keys, one per line, LC_ALL=C order
 # ---------------------------------------------------------------------------
 known_flag() {
   case "$1" in
-    research|loop|greenfield|lint|typecheck|models_pinned|opt_in|\
+    research|loop|greenfield|lint|typecheck|models_pinned|opt_in|kit_guard|\
     is_claude|is_cursor|is_copilot|is_codex|\
     want_claude|want_cursor|want_copilot|want_codex) return 0 ;;
   esac
@@ -879,7 +921,7 @@ known_flag() {
 # Flags live in plain variables FLAG_<name> (true|false).
 flag_set() { printf -v "FLAG_$1" '%s' "$2"; }
 flag_is() { local _fv="FLAG_$1"; [ "${!_fv:-false}" = true ]; }
-for _f in research loop greenfield lint typecheck models_pinned opt_in \
+for _f in research loop greenfield lint typecheck models_pinned opt_in kit_guard \
           is_claude is_cursor is_copilot is_codex \
           want_claude want_cursor want_copilot want_codex; do
   flag_set "$_f" false
@@ -1622,6 +1664,45 @@ settings_json_min() {
 EOF
 }
 
+settings_json_kit_guard() {
+  cat <<'EOF'
+{
+  "env": {
+    "CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH": "3"
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/_kit/kit-guard.sh\" hook claude"
+          }
+        ]
+      }
+    ]
+  }
+}
+EOF
+}
+
+cursor_hooks_json_kit_guard() {
+  cat <<'EOF'
+{
+  "version": 1,
+  "hooks": {
+    "preToolUse": [
+      {
+        "command": "bash _kit/kit-guard.sh hook cursor",
+        "matcher": "Write|Delete"
+      }
+    ]
+  }
+}
+EOF
+}
+
 # ---------------------------------------------------------------------------
 # emit-set
 # ---------------------------------------------------------------------------
@@ -2005,6 +2086,17 @@ emit_single_copy() {
       put_emit "_kit/$f" "$content"
     fi
   done
+  if flag_is kit_guard; then
+    if [ -f "$TPL/tools/kit-guard.sh" ]; then
+      resolve_template "$TPL/tools/kit-guard.sh" "tools/kit-guard.sh"
+      content="$RESOLVED"
+      put_emit "_kit/kit-guard.sh" "$content"
+    fi
+    if [ -f "$TPL/tools/bash-launcher.cmd" ]; then
+      tpl_bytes_into content "$TPL/tools/bash-launcher.cmd"
+      map_set EMIT "_kit/kit-guard.cmd" "$content"
+    fi
+  fi
   # Windows launchers (_kit/memory.cmd, _kit/log-spawn.cmd, _loop/loop.cmd when
   # loop is on): byte copies of the one template (CRLF must survive, so never
   # through read_file_raw_into / resolve_template).
@@ -2133,6 +2225,19 @@ EOF
         flag_set opt_in true
       else
         flag_set opt_in false
+      fi
+    fi
+  fi
+  jt_q_into ty "$ANSWERS" type flags kit_guard
+  if [ "$ty" != missing ]; then
+    if [ "$ty" != boolean ]; then
+      add_problem "flags.kit_guard must be a boolean"
+    else
+      jt_q_into flag_is "$ANSWERS" istrue flags kit_guard
+      if [ "$flag_is" = true ]; then
+        flag_set kit_guard true
+      else
+        flag_set kit_guard false
       fi
     fi
   fi
@@ -2772,7 +2877,7 @@ do_prune() {
 
 
 # Pointers / settings / gitignore — side effects, not emit-set (except
-# settings.json / config.toml when this run creates or appends them).
+# settings.json / hooks.json / config.toml when this run creates or appends them).
 harness_wanted() {
   local h
   for h in ${HARNESSES[@]+"${HARNESSES[@]}"}; do
@@ -2789,14 +2894,55 @@ settings_has_spawn_depth() { # settings.json path → 0 when .env.CLAUDE_CODE_MA
 }
 
 put_optional_kit_files() {
-  local cf light tables existing out
+  local cf light tables existing out sf hf
   if harness_wanted claude-code; then
-    if [ ! -f "$ROOT/.claude/settings.json" ]; then
-      put_emit ".claude/settings.json" "$(settings_json_min)"
-    elif ! settings_has_spawn_depth "$ROOT/.claude/settings.json"; then
-      bump_warn
-      dry_action warn ".claude/settings.json"
-      printf 'emit: .claude/settings.json present without CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH — left untouched\n' >&2
+    sf="$ROOT/.claude/settings.json"
+    if flag_is kit_guard; then
+      if [ ! -f "$sf" ]; then
+        put_emit ".claude/settings.json" "$(settings_json_kit_guard)"
+      elif ! grep -Fq '_kit/kit-guard.sh' "$sf"; then
+        record_warn_line 'warning: .claude/settings.json exists without the kit-guard hook — left untouched; merge into it: {"hooks":{"PreToolUse":[{"matcher":"Edit|Write|MultiEdit|NotebookEdit","hooks":[{"type":"command","command":"bash \"$CLAUDE_PROJECT_DIR/_kit/kit-guard.sh\" hook claude"}]}]}}'
+        if ! settings_has_spawn_depth "$sf"; then
+          bump_warn
+          dry_action warn ".claude/settings.json"
+          printf 'emit: .claude/settings.json present without CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH — left untouched\n' >&2
+        fi
+      elif ! settings_has_spawn_depth "$sf"; then
+        bump_warn
+        dry_action warn ".claude/settings.json"
+        printf 'emit: .claude/settings.json present without CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH — left untouched\n' >&2
+      fi
+    else
+      if [ ! -f "$sf" ]; then
+        put_emit ".claude/settings.json" "$(settings_json_min)"
+      elif ! settings_has_spawn_depth "$sf"; then
+        bump_warn
+        dry_action warn ".claude/settings.json"
+        printf 'emit: .claude/settings.json present without CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH — left untouched\n' >&2
+      fi
+      if [ -f "$sf" ] && grep -Fq '_kit/kit-guard.sh' "$sf"; then
+        record_warn_line "warning: .claude/settings.json still references _kit/kit-guard.sh but flags.kit_guard is off — remove that hook entry"
+      fi
+    fi
+  fi
+  if harness_wanted cursor; then
+    hf="$ROOT/.cursor/hooks.json"
+    if flag_is kit_guard; then
+      if [ ! -f "$hf" ]; then
+        put_emit ".cursor/hooks.json" "$(cursor_hooks_json_kit_guard)"
+      elif ! grep -Fq '_kit/kit-guard.sh' "$hf"; then
+        record_warn_line 'warning: .cursor/hooks.json exists without the kit-guard hook — left untouched; add to its "hooks" object: "preToolUse":[{"command":"bash _kit/kit-guard.sh hook cursor","matcher":"Write|Delete"}]'
+      fi
+    elif [ -f "$hf" ] && grep -Fq '_kit/kit-guard.sh' "$hf"; then
+      record_warn_line "warning: .cursor/hooks.json still references _kit/kit-guard.sh but flags.kit_guard is off — remove that hook entry"
+    fi
+  fi
+  if flag_is kit_guard; then
+    if harness_wanted copilot; then
+      record_warn_line "warning: flags.kit_guard is partial on copilot: no edit-blocking hook; run emit.sh --check in CI (_kit/ is gitignored)"
+    fi
+    if harness_wanted codex; then
+      record_warn_line "warning: flags.kit_guard is partial on codex: no edit-blocking hook; run emit.sh --check in CI (_kit/ is gitignored)"
     fi
   fi
   if harness_wanted codex; then
@@ -2989,6 +3135,10 @@ write_manifest() {
   jt_q_into ty "$ANSWERS" type flags opt_in
   if [ "$ty" != missing ]; then
     MT+="$(jt_sub "$ANSWERS" "${J_US}flags${J_US}opt_in" "${J_US}options${J_US}opt_in")"$'\n'
+  fi
+  jt_q_into ty "$ANSWERS" type flags kit_guard
+  if [ "$ty" != missing ]; then
+    MT+="$(jt_sub "$ANSWERS" "${J_US}flags${J_US}kit_guard" "${J_US}options${J_US}kit_guard")"$'\n'
   fi
   MT+="${J_US}seedFiles"$'\t'array$'\t\n'
   if [ -n "$SEED_CONTENT" ]; then
