@@ -91,11 +91,13 @@ sequenceDiagram
 | **5** | Post-emit verify failed |
 | **6** | Template syntax error |
 
+`emit.sh --check` reuses exits 0/2/4, where 4 means a kit-owned file is missing or differs from the manifest.
+
 Sources: [`bin/README.md`](../../../skills/agent-kit/bin/README.md), [`SKILL.md`](../../../skills/agent-kit/SKILL.md) Steps 4–6. Windows: [`reference/windows-launcher.md`](../../../skills/agent-kit/reference/windows-launcher.md).
 
 ## Installed layout
 
-Each targeted harness gets a **native tree** (for example `.claude/`, `.cursor/`, `.github/`, or `.codex/` plus root `AGENTS.md` for Codex). **Single-copy** artifacts shared across harnesses live under **`_kit/`** (`log-spawn.sh`, `memory.sh`, and `.cmd` launchers), which emit adds to `.gitignore` on every install, and **`_loop/`** (loop drivers), which is emitted only on loop installs and is **not** added to `.gitignore` by emit ([getting-started.md](getting-started.md)). **`_memory/`** splits tracked immutable knowledge from gitignored scratch.
+Each targeted harness gets a **native tree** (for example `.claude/`, `.cursor/`, `.github/`, or `.codex/` plus root `AGENTS.md` for Codex). **Single-copy** artifacts shared across harnesses live under **`_kit/`** (`log-spawn.sh`, `memory.sh`, `kit-guard.sh` when `flags.kit_guard` is set, and `.cmd` launchers), which emit adds to `.gitignore` on every install, and **`_loop/`** (loop drivers), which is emitted only on loop installs and is **not** added to `.gitignore` by emit ([getting-started.md](getting-started.md)). **`_memory/`** splits tracked immutable knowledge from gitignored scratch.
 
 ```mermaid
 flowchart TD
@@ -107,7 +109,7 @@ flowchart TD
     end
 
     subgraph singleCopy ["Single-copy (_kit gitignored · _loop on loop installs)"]
-        Kit["_kit/\nlog-spawn · memory · launchers"]
+        Kit["_kit/\nlog-spawn · memory · kit-guard (kit_guard) · launchers"]
         Loop["_loop/\nloop.sh · loop.cmd"]
     end
 
@@ -233,7 +235,8 @@ stateDiagram-v2
     state "Ladder escalate" as LadderEsc
     LadderChoice --> LadderAuto: phases.ladder auto
     LadderChoice --> LadderEsc: phases.ladder escalate default
-    LadderAuto --> Rung5: arbitration
+    LadderAuto --> Rung5: arbitration when its triggers fire
+    LadderAuto --> Rung4: diagnosis otherwise
     Rung5 --> Rung4: criteria-sound
     Rung5 --> HumanEsc: criteria-defective, disagreement, or early criteria-sound
     Rung4 --> Evaluating: re-evaluate after ladder fix

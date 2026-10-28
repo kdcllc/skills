@@ -47,7 +47,9 @@ Windows) or `_loop\loop.cmd 10` from cmd or PowerShell on Windows (Git for Windo
   ✅/⚠️/❌/🔍 confidence ladder and anti-fabrication rules, a required devil's-advocate
   section in goal evaluation, fix-cycle **model rotation**, execute-before-score,
   `PASS (with notes)` for minors and uncited findings (a blocking finding must cite an
-  acceptance criterion or a floor item; the rest go to a `follow-ups.md` backlog),
+  acceptance criterion `AC<n>`, a goal success criterion `SC<n>`, or a floor item `F<n>`;
+  an uncited finding becomes a `[backlog]` note in `follow-ups.md`, while a cited minor
+  stays a note under `PASS (with notes)`),
   `eval_depth: light` default (with stated `full` triggers), a post-exhaustion
   **continuation ladder** (entered early under `ladder: auto` when a `[structural]`
   finding repeats), and an append-only
@@ -157,7 +159,8 @@ Then, in a session inside that project, run `/agent-kit`. It detects which harne
 target (multiple is normal), inspects the repo (stack, test commands, layers,
 user-facing surfaces, existing project agents), suggests skills.sh skills from what it found (Step 2b),
 interviews you for what it can't infer (project name, model
-tiers, QA surfaces, research workflow, autonomous loop, delivery forge), writes
+tiers, QA surfaces, research workflow, autonomous loop, opt-in-only skills, kit-file
+guard, delivery forge), writes
 `orchestration-kit.answers.json`, and runs the emitter:
 
 ```bash
@@ -188,6 +191,7 @@ exit codes.
 | `skills/agent-kit-models.map.md` | The model map — the only place model IDs live per install |
 | `_kit/log-spawn.sh` + `_kit/log-spawn.cmd` | Single-copy orchestration-log writer + Windows launcher (`spawn` / `outcome` / `note` / `keys`) |
 | `_kit/memory.sh` + `_kit/memory.cmd` | Single-copy memory store + Windows launcher (`add` / `index` / `search` / `show` / `redact` / `check` / `rm` / `capture` / `backfill` / `prune`) |
+| `_kit/kit-guard.sh` + `_kit/kit-guard.cmd` | Kit-file guard + Windows launcher, emitted only with `flags.kit_guard`; Claude Code and Cursor also get hook configs in `.claude/settings.json` / `.cursor/hooks.json` when those files are absent (otherwise emit prints a snippet to merge) |
 | `_memory/` | Tracked records (`records/`, `quarantine/`, `loop/`); gitignored scratch `work/` plus derived `.index/` and `raw/` |
 | `ORCHESTRATION.md` | The architecture doc, filled in for the project |
 | `orchestration-kit.manifest.json` | Kit version + file hashes + embedded `answers`, enabling clean upgrades |

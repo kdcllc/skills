@@ -86,7 +86,7 @@ All harnesses: hooks cover agent edit tools, not shell or human edits; `check` d
 
 Windows note: per-harness CLI availability on Windows is unverified — the loop
 drivers assume the harness CLI runs natively where invoked. **Kit tools** (`bin/emit.*`,
-`_kit/memory.*`, `_kit/log-spawn.*`, and `_loop/loop.cmd` on loop installs) require **Git for Windows** when invoked from cmd
+`_kit/memory.*`, `_kit/log-spawn.*`, `_kit/kit-guard.*` on `flags.kit_guard` installs, and `_loop/loop.cmd` on loop installs) require **Git for Windows** when invoked from cmd
 or PowerShell via the `.cmd` launchers; inside Git Bash, call the `.sh` scripts with
 `bash` directly ([windows-launcher.md](windows-launcher.md)). Loop-specific Windows caveats are in [windows-launcher.md § Loop on Windows: known limitations](windows-launcher.md#loop-on-windows-known-limitations).
 
@@ -253,7 +253,7 @@ it as secondhand or unconfirmed.
 
 ## Addendum 2026-10-27 — Cursor hook behavior
 
-Ingested from `_memory/research/gate-hardening.md` item 5 and the forum threads and docs pages it cites (accessed 2026-10-27).
+Ingested from the gate-hardening research (public forum threads and docs pages are cited per fact), accessed 2026-10-27.
 With `flags.kit_guard` (2.2.0) the kit installs edit-blocking hooks for Claude Code (`.claude/settings.json`) and Cursor (`.cursor/hooks.json`).
 The facts below inform those hooks, optional user hooks and any future hook goal.
 Marks follow **this addendum's** legend, which differs from the top legend:
@@ -295,8 +295,9 @@ Marks follow **this addendum's** legend, which differs from the top legend:
    - **Copilot fails closed.** Copilot `preToolUse` command hooks deny the tool call on a crash or non-zero exit (**documented**: docs.github.com/en/copilot/reference/hooks-reference).
      So if `$CLAUDE_PROJECT_DIR` is unset under Copilot, the guard's Claude hook could deny every matched edit.
      This consequence is **unconfirmed**; it is stated as a risk to check.
+     Command hook timeouts are fail-open: the action proceeds through the normal permission flow, not an outright allow (**documented**: docs.github.com/en/copilot/reference/hooks-reference).
    - Fact 8 holds for Copilot CLI and VS Code.
-     Copilot cloud agent loads only `.github/hooks/*.json` (**documented**).
+     Copilot cloud agent loads only `.github/hooks/*.json` (**documented**: docs.github.com/en/copilot/reference/hooks-reference).
 10. Cursor cloud agents run `preToolUse`, `beforeShellExecution`, `subagentStop`, `stop` and other project hooks once the environment is writable; `sessionStart` is deferred.
     **documented**: cursor.com/docs/agent/hooks, § Cloud agent support.
     This restates the current list that the 2026-10-08 cloud-agent row now points to.

@@ -260,7 +260,7 @@ When three implement→evaluate cycles end without **PASS**, read `goal.md`'s `p
 
 4. **Terminal.** Escalate to the user with the full ladder history.
 
-**Early ladder entry** ([`reference/fix-cycles.md`](../../../skills/agent-kit/templates/skills/feature/reference/fix-cycles.md) § Early ladder entry). Under `ladder: auto` only, a `[structural]` `REPEAT` line from `_kit/log-spawn.sh keys` ends a task's fix cycles before cycle 3, and the orchestrator proceeds as on cycle-3 exhaustion: bypass check, rung 5 when its triggers fire, then rung 4, then rung 6. `[line-patch]` repeats never trigger it, Phase 5 never does (it has no ladder), and the ladder's budget and guards are unchanged. Under `ladder: escalate`, keys are log-only.
+**Early ladder entry** ([`reference/fix-cycles.md`](../../../skills/agent-kit/templates/skills/feature/reference/fix-cycles.md) § Early ladder entry). Under `ladder: auto` only, a `[structural]` `REPEAT` line from `_kit/log-spawn.sh keys` ends a task's fix cycles before cycle 3, and the orchestrator proceeds as on cycle-3 exhaustion: bypass check, rung 5 when its triggers fire, then rung 4, then rung 6. `[line-patch]` repeats never trigger it, Phase 5 never does (it has no ladder), a `REPEAT` during a ladder re-evaluation (rungs 4–6) never does (the ladder is already running), and the ladder's budget and guards are unchanged. Under `ladder: escalate`, keys are log-only.
 
 **Hard guards:**
 
