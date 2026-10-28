@@ -6,6 +6,23 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-10-28
+
+### Added
+
+- **`flags.opt_in`** — optional boolean (`absent` ⇒ false; non-boolean ⇒ exit 3; persisted as manifest `options.opt_in` when present): drives IF flag `opt_in` and derived `OPT_IN_*` tokens. The three orchestrator skills (`feature`, `research`, `memory-capture`) get `disable-model-invocation: true` and end their descriptions with `Opt-in — runs only when the user types /<name>.` (`feature` replaces `Invoke for any non-trivial feature.`); the seven kit agent descriptions start with the scope prefix; ORCHESTRATION.md's skills note switches to opt-in wording for every research × loop variant; `auto-loop` path-Reads the feature skill; Cursor's `orchestration.mdc` switches to opt-in wording; Codex agent tables are prefixed on new installs with a partial-support warning; new Step 3 interview question.
+- **`flags.kit_guard`** — optional boolean (`absent` ⇒ false; non-boolean ⇒ exit 3; persisted as manifest `options.kit_guard` when present): emits `_kit/kit-guard.sh` (`check` / `hook`) and `_kit/kit-guard.cmd`; Claude Code `PreToolUse` and Cursor `preToolUse` hooks blocking agent edits to kit-owned files (written only when `.claude/settings.json` / `.cursor/hooks.json` don't exist — otherwise emit warns with the merge snippet); read-only rule text and a kit-file gate in ORCHESTRATION.md, the feature skill's Phase 5, the writer agents, and the evaluator; `emit.sh --check` (no `--answers`; exits 0 / 2 / 4); Copilot and Codex partial-support warnings; new Step 3 interview question. With the guard on, Orchestration Progress lives in `_memory/work/goals/[goal]/progress.md` (ORCHESTRATION.md is kit-owned).
+
+### Changed
+
+- Default unchanged (auto-invocable orchestrator skills). With both flags absent, emitted output is byte-identical to 2.1.0. Harness matrix and emitter docs record partial-support gaps on Codex and Copilot. `invocation-flags.sh` guard tolerates the IF-guarded flag line.
+
+### Upgrade notes
+
+- No action needed to keep current behavior (both flags absent).
+- **Opt-in:** copy the manifest's embedded `answers` into a file, set `"opt_in": true` under `flags`, run `bash <kit>/bin/emit.sh --answers <file> --upgrade`. An install whose kit files were hand-edited to exactly the emitted opt-in text upgrades with no blocked paths. If the hand edits differ in any byte (wrapping, extra notes), emit exits 4 listing those paths — move any non-kit customizations elsewhere (e.g. bootstrap answers), then re-run once with `--force`. **Codex:** an existing `.codex/config.toml` agent table is not rewritten; pointers already in `CLAUDE.md` / `AGENTS.md` / copilot-instructions are not rewritten.
+- **Kit-file guard:** set `"kit_guard": true` the same way and re-run with `--answers … --upgrade`. If `.claude/settings.json` or `.cursor/hooks.json` already exists, merge the snippet the emit warning prints. Run `bash <kit>/bin/emit.sh --check` in CI to catch edited kit files (`check` needs no answers file). On failure, restore tracked files from git, delete a modified `_kit/` file, and re-run `emit.sh --upgrade` — never `--force` for kit-guard recovery. To remove the guard: set `"kit_guard": false` and re-run `--upgrade`; emit prunes `_kit/kit-guard.*` and warns for each hook config still referencing it — delete that entry. `_kit/` stays gitignored: on a fresh clone or CI checkout the guard script and hooks are inactive until emit runs, and `check` skips `_kit/*` entries there.
+
 ## [2.1.0] - 2026-10-27
 
 ### Added

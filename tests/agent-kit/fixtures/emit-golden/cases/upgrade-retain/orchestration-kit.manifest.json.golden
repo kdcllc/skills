@@ -1,6 +1,6 @@
 {
   "kit": "agent-kit",
-  "kitVersion": "2.1.0",
+  "kitVersion": "2.2.0",
   "installedAt": "2026-01-15",
   "harnesses": [
     "claude-code",
