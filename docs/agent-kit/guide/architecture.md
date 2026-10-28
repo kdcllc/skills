@@ -205,7 +205,7 @@ Spawn ledger format: [`templates/tools/log-spawn.sh`](../../../skills/agent-kit/
 
 ## Task verdict states
 
-Phase 4 tasks move through dispatch and evaluation until a terminal verdict. **NEEDS FIXES** triggers up to **three** implement→evaluate **fix cycles** with **model rotation**: cycle **1** re-runs on the normal **light** tier, cycle **2** pins a **different model family** at comparable tier (or a different same-family model labelled `same-family rotation (reduced diversity)` when none is reachable), cycle **3** pins **frontier** ([`models.map.md`](../../../skills/agent-kit/templates/models.map.md) · [`fix-cycles.md`](../../../skills/agent-kit/templates/skills/feature/reference/fix-cycles.md)). **Re-evaluations** tag each required fix with `[carried]`, `[regression]`, or `[new]` after its kind tag; a **reversal** classifies **`criteria-defect`**; **rung 5** arbitration also runs when the **drift trigger** fires (the cycle 2–3 verdicts in the orchestration log together carry ≥ 2 `[new]` items). A **line-patch-only** verdict (every required fix tagged `[line-patch]`) resumes the same executor (`implementer` / `test-writer`) in apply-verbatim mode on any cycle **without** rotation, still counts toward the cap, and is always re-evaluated; any `[structural]` fix uses the normal cycle with line patches applied verbatim. In **degraded mode**, fix-cycle rotation is **skipped** (logged once per skipped rotation) in both Case 1 (model argument rejected) and Case 2 (no spawn tool). **Bypass** failure classes (`destructive`, `security`, `infra`) escalate immediately on any cycle. **`criteria-defect`** is not a bypass class but stops fix cycles at detection on any cycle — with `ladder: auto`, rung 5 arbitration now; with `ladder: escalate`, escalate with arbitration offered as option 1 (winning over line-patch-only resume). After cycle-3 exhaustion, `goal.md`'s `phases.ladder` chooses **`escalate`** (offer continuation ladder to the human) or **`auto`** (run ladder rungs **5 → 4 → 6**, then human escalation if still stuck).
+Phase 4 tasks move through dispatch and evaluation until a terminal verdict. **NEEDS FIXES** triggers up to **three** implement→evaluate **fix cycles** with **model rotation**: cycle **1** re-runs on the normal **light** tier, cycle **2** pins a **different model family** at comparable tier (or a different same-family model labelled `same-family rotation (reduced diversity)` when none is reachable), cycle **3** pins **frontier** ([`models.map.md`](../../../skills/agent-kit/templates/models.map.md) · [`fix-cycles.md`](../../../skills/agent-kit/templates/skills/feature/reference/fix-cycles.md)). **Re-evaluations** tag each required fix with `[carried]`, `[regression]`, or `[new]` after its kind tag; a **reversal** classifies **`criteria-defect`**; **rung 5** arbitration also runs when the **drift trigger** fires (the cycle 2–3 verdicts in the orchestration log together carry ≥ 2 `[new]` items). Demoted `[backlog] [late]` notes count toward this total. A **line-patch-only** verdict (every required fix tagged `[line-patch]`) resumes the same executor (`implementer` / `test-writer`) in apply-verbatim mode on any cycle **without** rotation, still counts toward the cap, and is always re-evaluated; any `[structural]` fix uses the normal cycle with line patches applied verbatim. In **degraded mode**, fix-cycle rotation is **skipped** (logged once per skipped rotation) in both Case 1 (model argument rejected) and Case 2 (no spawn tool). **Bypass** failure classes (`destructive`, `security`, `infra`) escalate immediately on any cycle. **`criteria-defect`** is not a bypass class but stops fix cycles at detection on any cycle — with `ladder: auto`, rung 5 arbitration now; with `ladder: escalate`, escalate with arbitration offered as option 1 (winning over line-patch-only resume). After cycle-3 exhaustion, `goal.md`'s `phases.ladder` chooses **`escalate`** (offer continuation ladder to the human) or **`auto`** (run ladder rungs **5 → 4 → 6**, then human escalation if still stuck).
 
 ```mermaid
 stateDiagram-v2
@@ -229,11 +229,12 @@ stateDiagram-v2
     FixCycle --> Evaluating: re-evaluate
     FixCycle --> LadderChoice: cycle 3 exhausted
     state "Ladder auto" as LadderAuto
+    FixCycle --> LadderAuto: repeated structural key · early entry
     state "Ladder escalate" as LadderEsc
     LadderChoice --> LadderAuto: phases.ladder auto
     LadderChoice --> LadderEsc: phases.ladder escalate default
     LadderAuto --> Rung5: arbitration
-    Rung5 --> Rung4: criteria-sound after cycle 3
+    Rung5 --> Rung4: criteria-sound
     Rung5 --> HumanEsc: criteria-defective, disagreement, or early criteria-sound
     Rung4 --> Evaluating: re-evaluate after ladder fix
     Rung4 --> Rung6: decomposition optional
@@ -242,6 +243,8 @@ stateDiagram-v2
     LadderEsc --> HumanEsc: user offered ladder
     HumanEsc --> [*]
 ```
+
+Early arbitration (`criteria-defect`) ends at the human on criteria-sound; early ladder entry (a repeated `[structural]` key) continues to rung 4 on criteria-sound.
 
 Verdict vocabulary and invariants: [`templates/ORCHESTRATION.md`](../../../skills/agent-kit/templates/ORCHESTRATION.md) § Feature Flow · [`evaluation-system.md`](evaluation-system.md). Ladder detail: [`continuation-ladder.md`](../../../skills/agent-kit/templates/skills/feature/reference/continuation-ladder.md).
 
@@ -418,7 +421,7 @@ Stop on first failing rung; after a fix, restart at rung 1 for that fix.
 - [`skills/agent-kit/templates/skills/feature/reference/memory-protocol.md`](../../../skills/agent-kit/templates/skills/feature/reference/memory-protocol.md) — prune, recall, fence, archive, brief status updates
 - [`skills/agent-kit/templates/skills/feature/reference/continuation-ladder.md`](../../../skills/agent-kit/templates/skills/feature/reference/continuation-ladder.md) — rungs 5, 4, 6 after fix-cycle exhaustion
 - [`skills/agent-kit/templates/skills/feature/reference/fix-cycles.md`](../../../skills/agent-kit/templates/skills/feature/reference/fix-cycles.md) — Phase 4 fix cycles: line-patch resume, bypass and criteria-defect routing, cycle-3 ladder, model rotation, provenance
-- [`skills/agent-kit/templates/tools/log-spawn.sh`](../../../skills/agent-kit/templates/tools/log-spawn.sh) — spawn/outcome/note ledger
+- [`skills/agent-kit/templates/tools/log-spawn.sh`](../../../skills/agent-kit/templates/tools/log-spawn.sh) — spawn/outcome/note/keys ledger
 - [`skills/agent-kit/templates/skills/research/SKILL.template.md`](../../../skills/agent-kit/templates/skills/research/SKILL.template.md) — research scratch vs brief promotion
 - [`skills/agent-kit/templates/skills/memory-capture/SKILL.template.md`](../../../skills/agent-kit/templates/skills/memory-capture/SKILL.template.md) — capture/distillation pipeline
 - [`skills/agent-kit/templates/loop/SKILL.template.md`](../../../skills/agent-kit/templates/loop/SKILL.template.md) — backlog fields, quarantine, integrator boundaries
