@@ -46,8 +46,11 @@ Windows) or `_loop\loop.cmd 10` from cmd or PowerShell on Windows (Git for Windo
   [bradygaster/squad](https://github.com/bradygaster/squad)): existence checks with a
   ✅/⚠️/❌/🔍 confidence ladder and anti-fabrication rules, a required devil's-advocate
   section in goal evaluation, fix-cycle **model rotation**, execute-before-score,
-  `PASS (with notes)` for wording-only minors, `eval_depth: light` default (with stated
-  `full` triggers), a post-exhaustion **continuation ladder**, and an append-only
+  `PASS (with notes)` for minors and uncited findings (a blocking finding must cite an
+  acceptance criterion or a floor item; the rest go to a `follow-ups.md` backlog),
+  `eval_depth: light` default (with stated `full` triggers), a post-exhaustion
+  **continuation ladder** (entered early under `ladder: auto` when a `[structural]`
+  finding repeats), and an append-only
   **orchestration log** per goal with `io_est_tokens` (orchestrator I/O proxy, chars/4)
   and `work_est_tokens` (subagent self-reported Footprint /4) — appended by the emitted
   `_kit/log-spawn.sh` (Windows outside Git Bash: `_kit\log-spawn.cmd`; Git for Windows required), with every context package and verbatim report
@@ -183,7 +186,7 @@ exit codes.
 | `skills/ship-pr` | Phase 7: approval-gated forge delivery (GitHub / Azure DevOps / GitLab / hand-over) |
 | `skills/auto-loop` + `_loop/` (including `_loop\loop.cmd` on Windows) + `_memory/loop/backlog.md` | Autonomous loop with structural guards (optional) |
 | `skills/agent-kit-models.map.md` | The model map — the only place model IDs live per install |
-| `_kit/log-spawn.sh` + `_kit/log-spawn.cmd` | Single-copy orchestration-log writer + Windows launcher (`spawn` / `outcome` / `note`) |
+| `_kit/log-spawn.sh` + `_kit/log-spawn.cmd` | Single-copy orchestration-log writer + Windows launcher (`spawn` / `outcome` / `note` / `keys`) |
 | `_kit/memory.sh` + `_kit/memory.cmd` | Single-copy memory store + Windows launcher (`add` / `index` / `search` / `show` / `redact` / `check` / `rm` / `capture` / `backfill` / `prune`) |
 | `_memory/` | Tracked records (`records/`, `quarantine/`, `loop/`); gitignored scratch `work/` plus derived `.index/` and `raw/` |
 | `ORCHESTRATION.md` | The architecture doc, filled in for the project |

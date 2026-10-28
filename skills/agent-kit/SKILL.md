@@ -228,7 +228,7 @@ Ask (multiple-choice where possible) only what you could not infer:
 2. **Execution layer order** — confirm your inferred chain.
 3. **Model tiers** — for each target harness: pick CURRENT **frontier**, **light**,
    and optional **fast** model IDs, plus **alt-family** (fix-cycle rotation) and
-   **frontier-alt-family** (post-cycle-3 arbiter). Verify **every** ID against a
+   **frontier-alt-family** (post-exhaustion arbiter). Verify **every** ID against a
    live source; record the verification date and source in the
    `models-map-live-check` bootstrap text. Offer "inherit/unpinned" as an option
    (`flags.models_pinned` false). Live sources by harness:
@@ -361,7 +361,7 @@ rung-5 arbiter — the emitter warns if the IDs match without this flag).
 | `{{MODEL_FAST}}` | derived — do not set. Fast-tier model ID for the primary harness; defaults to the light ID |
 | `{{CLAUDE_MODEL_*}}`, `{{CURSOR_MODEL_*}}`, `{{COPILOT_MODEL_*}}`, `{{CODEX_MODEL_*}}` | derived — do not set. Per-harness tier IDs (model map only); includes `*_MODEL_FAST` |
 | `{{MODEL_ALT_FAMILY}}` | derived — do not set. Different-family model at light-comparable tier, used by fix-cycle rotation (model map) |
-| `{{MODEL_FRONTIER_ALT_FAMILY}}` | derived — do not set. Different-family model at frontier tier, used by evaluator arbitration mode after cycle 3 (model map) |
+| `{{MODEL_FRONTIER_ALT_FAMILY}}` | derived — do not set. Different-family model at frontier tier, used by evaluator arbitration mode after fix-cycle exhaustion (model map) |
 | `{{LOOP_MODEL_CHAIN}}` | derived — do not set. Comma-separated loop fallback chain, first = preferred (from the model map's "Loop fallback chain" row); empty ⇒ the breaker still tracks state but never passes a model flag |
 | `{{LOOP_WORKTREE_DEFAULT}}` | derived — do not set. `1` when `flags.loop_worktree` is true, else `0`; default for `LOOP_WORKTREE` in `_loop/*` when the env var is unset |
 | `{{OPT_IN_AGENT_PREFIX}}` | derived — do not set. When `flags.opt_in` is true, the orchestration-kit agent description prefix (`Orchestration-kit agent — spawn only from the /feature, /research or /align-docs workflow, never for ordinary work. `); empty when false |
