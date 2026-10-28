@@ -9,7 +9,7 @@
 #
 # Options:
 #   --no-install     Skip scripts/agent-kit/self-install.sh (use the current instance).
-#   -j N               Run up to N suites in parallel (default: CPU count capped at 8).
+#   -j N               Run up to N suites in parallel (default: CPU count capped at 16).
 #   --only SUBSTR      Run suites whose path contains SUBSTR (repeatable).
 #   --quick            Run a fast subset (see usage(): checks, docs-link-check, research-docs-check, …).
 #
@@ -34,8 +34,8 @@ _cpu_jobs() {
   case "$n" in
     '' | *[!0-9]*) n=1 ;;
   esac
-  if [ "$n" -gt 8 ]; then
-    n=8
+  if [ "$n" -gt 16 ]; then
+    n=16
   fi
   if [ "$n" -lt 1 ]; then
     n=1
@@ -58,7 +58,7 @@ usage: $0 [--no-install] [-j N] [--only SUBSTR]... [--quick]
 
 Options:
   --no-install   Skip scripts/agent-kit/self-install.sh (use the current instance).
-  -j N           Run up to N suites in parallel (default: CPU count capped at 8).
+  -j N           Run up to N suites in parallel (default: CPU count capped at 16).
   --only SUBSTR  Run suites whose path contains SUBSTR (repeatable).
   --quick        Fast subset: checks.sh, docs-link-check.sh, research-docs-check.sh,
                  template-currency.sh, skill-slimming.sh, model-enforcement.sh,
@@ -160,16 +160,22 @@ fi
 
 # Slowest suites first when scheduling parallel jobs (stable print order is separate).
 PRIORITY=(
-  tests/agent-kit/templates/memory.sh
   tests/agent-kit/loop-harness/run.sh
+  tests/agent-kit/templates/memory.sh
   tests/agent-kit/templates/emit-determinism.sh
   tests/agent-kit/templates/emit-portability.sh
   tests/agent-kit/templates/model-currency.sh
-  tests/agent-kit/templates/legacy-paths.sh
   tests/agent-kit/templates/memory-wiring.sh
+  tests/agent-kit/templates/loop-guards.sh
+  tests/agent-kit/templates/install-feedback.sh
+  tests/agent-kit/templates/memory-backfill.sh
   tests/agent-kit/templates/emit-migrate.sh
-  tests/agent-kit/templates/emit-golden.sh
+  tests/agent-kit/templates/loop-retry-breaker.sh
   tests/agent-kit/templates/windows-launcher.sh
+  tests/agent-kit/templates/legacy-paths.sh
+  tests/agent-kit/templates/opt-in.sh
+  tests/agent-kit/templates/kit-guard.sh
+  tests/agent-kit/templates/emit-golden.sh
   tests/agent-kit/templates/log-spawn.sh
 )
 

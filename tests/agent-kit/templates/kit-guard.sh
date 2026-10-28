@@ -15,6 +15,7 @@ export TMPDIR="$FIXTURE_TMPDIR"
 # shellcheck source=../lib/kit-version.sh
 . "$HERE/../lib/kit-version.sh"
 . "$HERE/../lib/emit-cache.sh"
+. "$HERE/../lib/parallel.sh"
 
 EMIT_SH="${EMIT_SH:-$REPO_ROOT/skills/agent-kit/bin/emit.sh}"
 KIT="${EMIT_KIT:-$REPO_ROOT/skills/agent-kit}"
@@ -30,6 +31,7 @@ if command -v jq >/dev/null 2>&1; then HAVE_JQ=1; else HAVE_JQ=0; fi
 
 _suite_cleanup() {
   rm -rf "$TMP_BASE"
+  par_cleanup
   emit_cache_cleanup
 }
 trap _suite_cleanup EXIT
@@ -41,6 +43,10 @@ report() { # report <PASS|FAIL|SKIP> <name> [detail]
     SKIP) skip=$((skip + 1)); echo "SKIP: $name${detail:+ -- $detail}" ;;
     *)    fail=$((fail + 1)); echo "FAIL: $name${detail:+ -- $detail}" >&2 ;;
   esac
+}
+
+par_fail() {
+  report FAIL "$1"
 }
 
 alloc_root() {
@@ -669,40 +675,58 @@ check_validation() {
   return 0
 }
 
+check_rendered_variant() { # research loop
+  local r="$1" l="$2" mode ans root orch a
+  for mode in true false absent; do
+    alloc_path ansfile
+    answers_both "$ALLOC_PATH" "$r" "$l" "$mode" || return 1
+    ans="$ALLOC_PATH"
+    alloc_root; root="$ALLOC_PATH"
+    emit_cache_copy "$root" "$ans" || return 1
+    orch="$root/.claude/ORCHESTRATION.md"
+    case "$mode" in
+      true)
+        section_has_block "$orch" '### Repository safety' "$ORCH_KG_ITEM4" || return 1
+        [[ "$(grep -cF "$FILE_LOC_LINE" "$orch" || true)" -eq 1 ]] || return 1
+        content_has "$root/.claude/skills/feature/SKILL.md" "$FEATURE_KG_GATE" || return 1
+        for a in "${WRITER_AGENTS[@]}"; do
+          content_has "$root/.claude/agents/$a.md" "$WRITER_KG_BULLET" || return 1
+        done
+        content_has "$root/.claude/agents/evaluator.md" "$EVAL_KG_BULLET" || return 1
+        ;;
+      *)
+        grep -qF 'Kit-owned files are read-only' "$orch" && return 1
+        grep -qF "$FILE_LOC_LINE" "$orch" && return 1
+        grep -qF "$FEATURE_KG_GATE" "$root/.claude/skills/feature/SKILL.md" && return 1
+        for a in "${WRITER_AGENTS[@]}"; do
+          grep -qF 'Never work around a kit-guard denial' "$root/.claude/agents/$a.md" && return 1
+        done
+        grep -qF 'kit-owned file (`_kit/kit-guard.sh check` exits 4)' "$root/.claude/agents/evaluator.md" && return 1
+        ;;
+    esac
+  done
+  return 0
+}
+
 check_rendered_text() {
-  local r l ans root orch f a
+  local r l ans root pid rc=0
+  local pids=()
   for r in 0 1; do
     for l in 0 1; do
-      for mode in true false absent; do
-        alloc_path ansfile
-        answers_both "$ALLOC_PATH" "$r" "$l" "$mode" || return 1
-        ans="$ALLOC_PATH"
-        alloc_root; root="$ALLOC_PATH"
-        emit_cache_copy "$root" "$ans" || return 1
-        orch="$root/.claude/ORCHESTRATION.md"
-        case "$mode" in
-          true)
-            section_has_block "$orch" '### Repository safety' "$ORCH_KG_ITEM4" || return 1
-            [[ "$(grep -cF "$FILE_LOC_LINE" "$orch" || true)" -eq 1 ]] || return 1
-            content_has "$root/.claude/skills/feature/SKILL.md" "$FEATURE_KG_GATE" || return 1
-            for a in "${WRITER_AGENTS[@]}"; do
-              content_has "$root/.claude/agents/$a.md" "$WRITER_KG_BULLET" || return 1
-            done
-            content_has "$root/.claude/agents/evaluator.md" "$EVAL_KG_BULLET" || return 1
-            ;;
-          *)
-            grep -qF 'Kit-owned files are read-only' "$orch" && return 1
-            grep -qF "$FILE_LOC_LINE" "$orch" && return 1
-            grep -qF "$FEATURE_KG_GATE" "$root/.claude/skills/feature/SKILL.md" && return 1
-            for a in "${WRITER_AGENTS[@]}"; do
-              grep -qF 'Never work around a kit-guard denial' "$root/.claude/agents/$a.md" && return 1
-            done
-            grep -qF 'kit-owned file (`_kit/kit-guard.sh check` exits 4)' "$root/.claude/agents/evaluator.md" && return 1
-            ;;
-        esac
-      done
+      if [[ "${PAR_JOBS:-1}" -gt 1 ]]; then
+        check_rendered_variant "$r" "$l" &
+        pids+=("$!")
+      else
+        check_rendered_variant "$r" "$l" || rc=1
+      fi
     done
   done
+  if [[ "${#pids[@]}" -gt 0 ]]; then
+    for pid in "${pids[@]}"; do
+      wait "$pid" || rc=1
+    done
+  fi
+  [[ "$rc" -eq 0 ]] || return 1
 
   alloc_path ans-both
   jq '.flags.kit_guard = true | .flags.opt_in = true' "$FIXTURE" > "$ALLOC_PATH" || return 1
@@ -815,23 +839,28 @@ run_check() {
   fi
 }
 
-emit_cache_init
+PAR_COUNTERS="pass fail skip"
+PAR_REPORT_FAIL=par_fail
 
-run_check a check_guard_modes 'kit-guard check modes (clean, modified, missing, exclusions, manifest, _kit absent)'
-run_check b check_hook_claude 'hook claude deny/allow, notebook_path, AGENT_KIT_GUARD=0, JSON escapes'
-run_check c check_hook_cursor 'hook cursor keys, deny JSON, allow exact bytes'
-run_check d check_usage 'usage exit 2 for missing/invalid args'
-run_check e check_emit_on 'emit kit_guard on: tool, configs, hook e2e, second emit written 0'
-run_check f check_existing_configs 'existing settings/hooks warnings once; pre-merged settings silent'
-run_check g check_partial_harnesses 'copilot and codex partial-support warnings'
-run_check h check_emit_check_flag 'emit.sh --check mirrors check exit codes'
-run_check i check_flag_off 'kit_guard absent vs false byte identity'
-run_check j check_validation 'non-boolean kit_guard exit 3; manifest options'
-run_check k check_rendered_text 'rendered gate text four research×loop×flag variants'
-run_check l check_turning_off 're-emit kit_guard false prunes tools, hook warnings'
-run_check m check_cursor_caller_claude 'hook claude Cursor-caller JSON and CURSOR_PROJECT_DIR'
-run_check n check_progress_location 'feature progress.md vs ORCHESTRATION.md'
-run_check o check_evaluator_bootstrap 'evaluator kit-guard bullet after bootstrap text'
+emit_cache_init
+par_init
+
+par_block run_check a check_guard_modes 'kit-guard check modes (clean, modified, missing, exclusions, manifest, _kit absent)'
+par_block run_check b check_hook_claude 'hook claude deny/allow, notebook_path, AGENT_KIT_GUARD=0, JSON escapes'
+par_block run_check c check_hook_cursor 'hook cursor keys, deny JSON, allow exact bytes'
+par_block run_check d check_usage 'usage exit 2 for missing/invalid args'
+par_block run_check e check_emit_on 'emit kit_guard on: tool, configs, hook e2e, second emit written 0'
+par_block run_check f check_existing_configs 'existing settings/hooks warnings once; pre-merged settings silent'
+par_block run_check g check_partial_harnesses 'copilot and codex partial-support warnings'
+par_block run_check h check_emit_check_flag 'emit.sh --check mirrors check exit codes'
+par_block run_check i check_flag_off 'kit_guard absent vs false byte identity'
+par_block run_check j check_validation 'non-boolean kit_guard exit 3; manifest options'
+par_block run_check k check_rendered_text 'rendered gate text four research×loop×flag variants'
+par_block run_check l check_turning_off 're-emit kit_guard false prunes tools, hook warnings'
+par_block run_check m check_cursor_caller_claude 'hook claude Cursor-caller JSON and CURSOR_PROJECT_DIR'
+par_block run_check n check_progress_location 'feature progress.md vs ORCHESTRATION.md'
+par_block run_check o check_evaluator_bootstrap 'evaluator kit-guard bullet after bootstrap text'
+par_finish
 
 emit_cache_verify
 

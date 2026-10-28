@@ -16,6 +16,7 @@ export TMPDIR="$FIXTURE_TMPDIR"
 # shellcheck source=../lib/kit-version.sh
 . "$HERE/../lib/kit-version.sh"
 . "$HERE/../lib/emit-cache.sh"
+. "$HERE/../lib/parallel.sh"
 
 EMIT_SH="${EMIT_SH:-$REPO_ROOT/skills/agent-kit/bin/emit.sh}"
 KIT="${EMIT_KIT:-$REPO_ROOT/skills/agent-kit}"
@@ -31,6 +32,7 @@ if command -v jq >/dev/null 2>&1; then HAVE_JQ=1; else HAVE_JQ=0; fi
 
 _suite_cleanup() {
   rm -rf "$TMP_BASE"
+  par_cleanup
   emit_cache_cleanup
 }
 trap _suite_cleanup EXIT
@@ -42,6 +44,10 @@ report() { # report <PASS|FAIL|SKIP> <name> [detail]
     SKIP) skip=$((skip + 1)); echo "SKIP: $name${detail:+ -- $detail}" ;;
     *)    fail=$((fail + 1)); echo "FAIL: $name${detail:+ -- $detail}" >&2 ;;
   esac
+}
+
+par_fail() {
+  report FAIL "$1"
 }
 
 alloc_root() {
@@ -639,23 +645,28 @@ run_check() {
   fi
 }
 
-PAR_REPORT_FAIL="report"
-emit_cache_init
-
-run_check a check_done_when 'claude-code opt_in: agents, skills, ORCHESTRATION (research on, loop off)'
-run_check b check_four_variants 'four research×loop ORCHESTRATION opt-in blocks'
-run_check c check_auto_loop 'auto-loop feature path Read when opt_in'
-run_check d check_byte_identity 'byte identity absent vs opt_in false (manifest opt_in only)'
-run_check e check_non_boolean 'non-boolean opt_in exit 3 (emit, dry-run, check-answers)'
-run_check f check_manifest 'manifest options.opt_in persistence and sorted keys'
-run_check g check_cursor 'cursor opt_in agents, skills, orchestration.mdc variants'
-run_check h check_copilot 'copilot opt_in agents and skill flags'
-run_check i check_codex 'codex partial opt_in warning and description prefix behavior'
 check_migration_off() { check_migration_one 0; }
 check_migration_on() { check_migration_one 1; }
-run_check j check_migration_off 'migration hand-edit upgrade loop off'
-run_check k check_migration_on 'migration hand-edit upgrade loop on'
-run_check l check_migration_negative 'migration negative control blocked ORCHESTRATION then --force'
+
+PAR_COUNTERS="pass fail skip"
+PAR_REPORT_FAIL=par_fail
+
+emit_cache_init
+par_init
+
+par_block run_check a check_done_when 'claude-code opt_in: agents, skills, ORCHESTRATION (research on, loop off)'
+par_block run_check b check_four_variants 'four research×loop ORCHESTRATION opt-in blocks'
+par_block run_check c check_auto_loop 'auto-loop feature path Read when opt_in'
+par_block run_check d check_byte_identity 'byte identity absent vs opt_in false (manifest opt_in only)'
+par_block run_check e check_non_boolean 'non-boolean opt_in exit 3 (emit, dry-run, check-answers)'
+par_block run_check f check_manifest 'manifest options.opt_in persistence and sorted keys'
+par_block run_check g check_cursor 'cursor opt_in agents, skills, orchestration.mdc variants'
+par_block run_check h check_copilot 'copilot opt_in agents and skill flags'
+par_block run_check i check_codex 'codex partial opt_in warning and description prefix behavior'
+par_block run_check j check_migration_off 'migration hand-edit upgrade loop off'
+par_block run_check k check_migration_on 'migration hand-edit upgrade loop on'
+par_block run_check l check_migration_negative 'migration negative control blocked ORCHESTRATION then --force'
+par_finish
 
 emit_cache_verify
 
