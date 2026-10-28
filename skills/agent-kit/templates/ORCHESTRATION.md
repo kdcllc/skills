@@ -160,6 +160,20 @@ non-independent and disclosed to the user and in the PR draft).
 3. **Fixtures never touch the real repo.** Tests and fixtures must never act on the real
    repository. Fixture roots live under a private temp directory, and explicitly empty path
    arguments are rejected.
+<!-- IF kit_guard -->
+4. **Kit-owned files are read-only.** Every path under `files` in
+   `orchestration-kit.manifest.json` belongs to the kit, except the user-owned harness
+   configs (the Claude Code settings file, `.codex/config.toml`, `.cursor/hooks.json`).
+   Change kit behavior through the answers file and `emit.sh --answers <file> --upgrade`
+   — never by editing those files. After every subagent returns, run
+   `_kit/kit-guard.sh check` inline (one-line output when clean); exit 4 stops the goal:
+   restore tracked files from git, delete a modified `_kit/` file and re-run
+   `emit.sh --upgrade`, log a note, then continue. `_kit/` is gitignored, so on a fresh
+   clone the script is missing until `emit.sh --upgrade` runs — run it first and log a
+   note. The edit-blocking hooks (Claude Code `PreToolUse`, Cursor `preToolUse`) stop
+   most agent edits up front; the check also catches shell edits and harnesses without
+   hooks.
+<!-- ENDIF kit_guard -->
 
 ---
 
@@ -1061,6 +1075,9 @@ _memory/loop/ledger.jsonl             # Run ledger — one JSON line per reaped/
 _memory/loop/attempts/                # Attempt dossiers per story (runtime, gitignored)
 _kit/{log-spawn.sh,log-spawn.cmd}  # Single-copy tools: orchestration-log writer + Windows launcher
 _kit/{memory.sh,memory.cmd}  # Single-copy tools: memory store (add / index / search / show / redact / check / rm / capture / backfill / prune)
+<!-- IF kit_guard -->
+_kit/{kit-guard.sh,kit-guard.cmd}  # Single-copy tools: kit-file guard (check / hook) + Windows launcher
+<!-- ENDIF kit_guard -->
 _memory/records/ · _memory/quarantine/  # Tracked memory records (immutable, one per file) — see _memory/README.md
 _memory/research/               # Tracked research briefs (<topic>.md) + README.md status index (orchestrator-owned)
 _memory/work/                   # Gitignored in-flight goal and research scratch (research: work/research/<topic>/) — see _memory/README.md
@@ -1107,6 +1124,9 @@ _memory/work/goals/<goal>/spawns/NN-context.md  # Context package sent to spawn 
 _memory/work/goals/<goal>/spawns/NN-report.md   # Report returned by spawn #NN (verbatim)
 _kit/{log-spawn.sh,log-spawn.cmd}  # Single-copy tools: orchestration-log writer + Windows launcher
 _kit/{memory.sh,memory.cmd}  # Single-copy tools: memory store (add / index / search / show / redact / check / rm / capture / backfill / prune)
+<!-- IF kit_guard -->
+_kit/{kit-guard.sh,kit-guard.cmd}  # Single-copy tools: kit-file guard (check / hook) + Windows launcher
+<!-- ENDIF kit_guard -->
 _memory/records/ · _memory/quarantine/  # Tracked memory records (immutable, one per file) — see _memory/README.md
 _memory/research/               # Tracked research briefs (<topic>.md) + README.md status index (orchestrator-owned)
 _memory/work/                   # Gitignored in-flight goal and research scratch (research: work/research/<topic>/) — see _memory/README.md
@@ -1154,6 +1174,9 @@ _memory/loop/ledger.jsonl             # Run ledger — one JSON line per reaped/
 _memory/loop/attempts/                # Attempt dossiers per story (runtime, gitignored)
 _kit/{log-spawn.sh,log-spawn.cmd}  # Single-copy tools: orchestration-log writer + Windows launcher
 _kit/{memory.sh,memory.cmd}  # Single-copy tools: memory store (add / index / search / show / redact / check / rm / capture / backfill / prune)
+<!-- IF kit_guard -->
+_kit/{kit-guard.sh,kit-guard.cmd}  # Single-copy tools: kit-file guard (check / hook) + Windows launcher
+<!-- ENDIF kit_guard -->
 _memory/records/ · _memory/quarantine/  # Tracked memory records (immutable, one per file) — see _memory/README.md
 _memory/work/                   # Gitignored in-flight goal and research scratch — see _memory/README.md
 _memory/loop/                   # Tracked loop ledgers and archive (breaker-state.json, ledger.jsonl, attempts/ gitignored)
@@ -1195,6 +1218,9 @@ _memory/work/goals/<goal>/spawns/NN-context.md  # Context package sent to spawn 
 _memory/work/goals/<goal>/spawns/NN-report.md   # Report returned by spawn #NN (verbatim)
 _kit/{log-spawn.sh,log-spawn.cmd}  # Single-copy tools: orchestration-log writer + Windows launcher
 _kit/{memory.sh,memory.cmd}  # Single-copy tools: memory store (add / index / search / show / redact / check / rm / capture / backfill / prune)
+<!-- IF kit_guard -->
+_kit/{kit-guard.sh,kit-guard.cmd}  # Single-copy tools: kit-file guard (check / hook) + Windows launcher
+<!-- ENDIF kit_guard -->
 _memory/records/ · _memory/quarantine/  # Tracked memory records (immutable, one per file) — see _memory/README.md
 _memory/work/                   # Gitignored in-flight goal and research scratch — see _memory/README.md
 _memory/.index/ · _memory/raw/  # Derived index; capture output, ledgers and drafts (gitignored)
@@ -1315,6 +1341,10 @@ evaluator subagents — they are not invoked directly.
 ### Workflow State Tracking
 
 The orchestrator maintains this state throughout execution:
+<!-- IF kit_guard -->
+With the kit-file guard on, keep this block in `_memory/work/goals/[goal]/progress.md` —
+never in this file, which is kit-owned.
+<!-- ENDIF kit_guard -->
 
 ```markdown
 ## Orchestration Progress: [Goal Name]

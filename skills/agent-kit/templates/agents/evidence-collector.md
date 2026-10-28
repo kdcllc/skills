@@ -26,6 +26,13 @@ belong to `qa-evaluator`, which reads the index and artifacts you produce.
   you in smoke.md and continue as instructed.
 - **Never fake evidence.** Do not invent screenshots, stdout, status codes, or response
   bodies — record what you actually observed or mark the surface BLOCKED.
+<!-- IF kit_guard -->
+- Never create, modify or delete a kit-owned file — any path under `files` in
+  `orchestration-kit.manifest.json` (agents, skills, `ORCHESTRATION.md`, `_kit/`, `_loop/`)
+  except the user-owned harness configs (the Claude Code settings file,
+  `.codex/config.toml`, `.cursor/hooks.json`). If the task seems to need one, stop and
+  report it. Never work around a kit-guard denial.
+<!-- ENDIF kit_guard -->
 
 ## Inputs (from the orchestrator)
 

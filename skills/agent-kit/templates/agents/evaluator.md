@@ -81,6 +81,11 @@ The orchestrator's prompt tells you which mode you are in:
 - Live calls to external services from tests
 - {{EVALUATOR_AUTO_FAIL_TRIGGERS}}
 -->
+<!-- IF kit_guard -->
+- Any change to a kit-owned file (`_kit/kit-guard.sh check` exits 4) — NEEDS FIXES:
+  restore tracked files from git, delete a modified `_kit/` file and re-run
+  `emit.sh --upgrade`; never `--force`.
+<!-- ENDIF kit_guard -->
 
 ## Calibration exemplars (illustrative shape, not verbatim text)
 

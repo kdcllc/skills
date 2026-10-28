@@ -37,7 +37,12 @@ inline by the orchestrator (single-line output), never via `terminal`.
 
 Re-evaluations RESUME the same evaluator with a delta: Phase 4/5 list applied fixes and carry earlier required-fix lists; Phase 3 quotes newly written passages verbatim, attempt 3 fresh (`reference/goal-revisions.md`). Implementer resume and rotation per fix cycle: `reference/fix-cycles.md`.
 
+<!-- IF !kit_guard -->
 Update ORCHESTRATION.md Orchestration Progress after each step.
+<!-- ENDIF !kit_guard -->
+<!-- IF kit_guard -->
+Update `_memory/work/goals/[goal]/progress.md` (Orchestration Progress) after each step — ORCHESTRATION.md is kit-owned.
+<!-- ENDIF kit_guard -->
 
 ## Phase 1 — Alignment (no files)
 
@@ -113,6 +118,12 @@ Launch `evaluator` in audit mode with matching rule files: every task's requirem
 **Quality Checks failure**: non-zero exit with truncated excerpt ⇒ **Read** the log path
 (failure section or last ≤80 lines), route to `implementer`, re-spawn `terminal`
 with a **narrower** command — never dump the full suite here.
+<!-- IF kit_guard -->
+
+**Kit-file gate**: run `_kit/kit-guard.sh check` inline after every spawn and in Quality
+Checks; exit 4 ⇒ restore tracked files from git, delete a modified `_kit/` file and re-run
+`emit.sh --upgrade`, log a note; never `--force`.
+<!-- ENDIF kit_guard -->
 
 If `qa: run`: after QC, spawn `evidence-collector` → `qa-evaluator` with index; re-runs re-collect.
 
