@@ -16,6 +16,7 @@ update brief status; **worker tasks never write here** — only orchestrator-own
 | [model-currency-2026-10.md](model-currency-2026-10.md) | shipped | 2026-10-08 | 2026-11-08 | Oct 2026 model-map audit and harness-native orchestration developments. |
 | [runtime-language.md](runtime-language.md) | shipped | 2026-10-12 | 2027-04-12 | Bash as single script source of truth; retire PowerShell twins incrementally. |
 | [orchestration-loop-review.md](orchestration-loop-review.md) | shipped | 2026-10-20 | — | Loop hardening: driver budgets and timeouts, run ledger, test-tamper check, retry dossier, structured breaker recovery. |
+| [gate-hardening.md](gate-hardening.md) | ingested | 2026-10-27 | 2027-01-27 | Planner-written consumer trace, cite-or-backlog, repeat keys inside the cycle cap, failure classes, Cursor hook field notes. |
 
 Scratch reports and prompts stay gitignored under `_memory/work/research/<topic>/`
 (for example `<topic>/report.md`, `<topic>/prompt.md`).
