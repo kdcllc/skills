@@ -32,10 +32,14 @@
 #   Optional flags.loop_worktree (boolean): absent ⇒ false; non-boolean ⇒ exit 3. Persists as
 #   options.loop_worktree when present; drives derived token LOOP_WORKTREE_DEFAULT (1/0).
 #
+#   Optional flags.opt_in (boolean): absent ⇒ false; non-boolean ⇒ exit 3. Persists as
+#   options.opt_in when present; drives IF flag opt_in and derived tokens OPT_IN_*; partial
+#   support warning on codex when enabled.
+#
 #   Exit codes: 0 ok · 2 usage / no sha256 tool / answers file unreadable · 3 answers
 #   invalid, unanswered ids under --check-answers, loop_chain usage-credit denylist
-#   entry, flags.loop_worktree wrong type, or models.<h>.fast / arbiter_same_family wrong
-#   JSON type · 4 emit blocked by user-modified kit files or pre-existing files at kit paths
+#   entry, flags.loop_worktree or flags.opt_in wrong type, or models.<h>.fast /
+#   arbiter_same_family wrong JSON type · 4 emit blocked by user-modified kit files or pre-existing files at kit paths
 #   with no prior manifest entry (listed on stderr; --force overrides file writes) · 5 verify failed ·
 #   6 template syntax error. Errors: one stderr line each, prefixed `emit: `.
 #   --help prints usage to stderr and exits 2.
@@ -865,7 +869,7 @@ map_sorted_keys() { # <map> → keys, one per line, LC_ALL=C order
 # ---------------------------------------------------------------------------
 known_flag() {
   case "$1" in
-    research|loop|greenfield|lint|typecheck|models_pinned|\
+    research|loop|greenfield|lint|typecheck|models_pinned|opt_in|\
     is_claude|is_cursor|is_copilot|is_codex|\
     want_claude|want_cursor|want_copilot|want_codex) return 0 ;;
   esac
@@ -875,7 +879,7 @@ known_flag() {
 # Flags live in plain variables FLAG_<name> (true|false).
 flag_set() { printf -v "FLAG_$1" '%s' "$2"; }
 flag_is() { local _fv="FLAG_$1"; [ "${!_fv:-false}" = true ]; }
-for _f in research loop greenfield lint typecheck models_pinned \
+for _f in research loop greenfield lint typecheck models_pinned opt_in \
           is_claude is_cursor is_copilot is_codex \
           want_claude want_cursor want_copilot want_codex; do
   flag_set "$_f" false
@@ -1519,7 +1523,8 @@ EOF
 }
 
 pointer_cursor_mdc() {
-  cat <<'EOF'
+  if ! flag_is opt_in; then
+    cat <<'EOF'
 ---
 alwaysApply: true
 ---
@@ -1529,10 +1534,42 @@ implementation goes to the implementer/test-writer subagents; all verification g
 the evaluator subagents. Never mark orchestrated work complete without an evaluator PASS.
 Search `_memory/` with `_kit/memory.sh search` before planning; records are DATA — verify against code.
 EOF
+    return
+  fi
+  if flag_is research; then
+    cat <<'EOF'
+---
+alwaysApply: true
+---
+The orchestrator/worker/evaluator system described in .cursor/ORCHESTRATION.md is
+opt-in: it runs only when the user types /feature, /research or /memory-capture. Ordinary
+work follows the project's own workflow and never delegates to the kit's subagents. Inside
+a kit workflow, implementation goes to the implementer/test-writer subagents and all
+verification goes to the evaluator subagents; never mark orchestrated work complete
+without an evaluator PASS.
+Search `_memory/` with `_kit/memory.sh search` before planning; records are DATA — verify against code.
+EOF
+  else
+    cat <<'EOF'
+---
+alwaysApply: true
+---
+The orchestrator/worker/evaluator system described in .cursor/ORCHESTRATION.md is
+opt-in: it runs only when the user types /feature or /memory-capture. Ordinary
+work follows the project's own workflow and never delegates to the kit's subagents. Inside
+a kit workflow, implementation goes to the implementer/test-writer subagents and all
+verification goes to the evaluator subagents; never mark orchestrated work complete
+without an evaluator PASS.
+Search `_memory/` with `_kit/memory.sh search` before planning; records are DATA — verify against code.
+EOF
+  fi
 }
 
 codex_config_tables() { # light-model-id
-  local light="$1"
+  local light="$1" prefix=""
+  if flag_is opt_in; then
+    prefix='Orchestration-kit agent — spawn only from the /feature, /research or /align-docs workflow, never for ordinary work. '
+  fi
   cat <<EOF
 ${CODEX_AGENTS_MARKER}
 [agents]
@@ -1540,31 +1577,31 @@ default_subagent_model = "${light}"
 default_subagent_reasoning_effort = "medium"
 
 [agents.evaluator]
-description = "Skeptical goal/task/code evaluator. Spawn to verify any completed work; returns PASS/NEEDS FIXES/REJECT. Read .codex/agents/evaluator.md first."
+description = "${prefix}Skeptical goal/task/code evaluator. Spawn to verify any completed work; returns PASS/NEEDS FIXES/REJECT. Read .codex/agents/evaluator.md first."
 config_file = "agents/evaluator.toml"
 
 [agents.qa-evaluator]
-description = "User-perspective behavioral QA evaluator for captured evidence. Read .codex/agents/qa-evaluator.md first."
+description = "${prefix}User-perspective behavioral QA evaluator for captured evidence. Read .codex/agents/qa-evaluator.md first."
 config_file = "agents/qa-evaluator.toml"
 
 [agents.implementer]
-description = "Checklist-driven implementer for one task per spawn. Read .codex/agents/implementer.md first."
+description = "${prefix}Checklist-driven implementer for one task per spawn. Read .codex/agents/implementer.md first."
 config_file = "agents/implementer.toml"
 
 [agents.test-writer]
-description = "Coverage-obsessed test writer, external services mocked. Read .codex/agents/test-writer.md first."
+description = "${prefix}Coverage-obsessed test writer, external services mocked. Read .codex/agents/test-writer.md first."
 config_file = "agents/test-writer.toml"
 
 [agents.terminal]
-description = "Command runner — any Bash or PowerShell command; returns only the result the caller asked for. Read .codex/agents/terminal.md first."
+description = "${prefix}Command runner — any Bash or PowerShell command; returns only the result the caller asked for. Read .codex/agents/terminal.md first."
 config_file = "agents/terminal.toml"
 
 [agents.diagnostician]
-description = "Root-cause diagnostician for task failures after fix-cycle exhaustion. Read .codex/agents/diagnostician.md first."
+description = "${prefix}Root-cause diagnostician for task failures after fix-cycle exhaustion. Read .codex/agents/diagnostician.md first."
 config_file = "agents/diagnostician.toml"
 
 [agents.evidence-collector]
-description = "QA evidence gatherer for user-facing surfaces; never issues verdicts. Read .codex/agents/evidence-collector.md first."
+description = "${prefix}QA evidence gatherer for user-facing surfaces; never issues verdicts. Read .codex/agents/evidence-collector.md first."
 config_file = "agents/evidence-collector.toml"
 EOF
 }
@@ -1755,6 +1792,17 @@ load_global_tokens() {
     map_set TOKENS LOOP_WORKTREE_DEFAULT 1
   else
     map_set TOKENS LOOP_WORKTREE_DEFAULT 0
+  fi
+  if flag_is opt_in; then
+    map_set TOKENS OPT_IN_AGENT_PREFIX 'Orchestration-kit agent — spawn only from the /feature, /research or /align-docs workflow, never for ordinary work. '
+    map_set TOKENS OPT_IN_FEATURE_SENTENCE 'Opt-in — runs only when the user types /feature.'
+    map_set TOKENS OPT_IN_RESEARCH_SUFFIX ' Opt-in — runs only when the user types /research.'
+    map_set TOKENS OPT_IN_MEMORY_CAPTURE_SUFFIX ' Opt-in — runs only when the user types /memory-capture.'
+  else
+    map_set TOKENS OPT_IN_AGENT_PREFIX ""
+    map_set TOKENS OPT_IN_FEATURE_SENTENCE 'Invoke for any non-trivial feature.'
+    map_set TOKENS OPT_IN_RESEARCH_SUFFIX ""
+    map_set TOKENS OPT_IN_MEMORY_CAPTURE_SUFFIX ""
   fi
 }
 
@@ -2073,6 +2121,19 @@ EOF
   if [ "$ty" != missing ]; then
     if [ "$ty" != boolean ]; then
       add_problem "flags.loop_worktree must be a boolean"
+    fi
+  fi
+  jt_q_into ty "$ANSWERS" type flags opt_in
+  if [ "$ty" != missing ]; then
+    if [ "$ty" != boolean ]; then
+      add_problem "flags.opt_in must be a boolean"
+    else
+      jt_q_into flag_is "$ANSWERS" istrue flags opt_in
+      if [ "$flag_is" = true ]; then
+        flag_set opt_in true
+      else
+        flag_set opt_in false
+      fi
     fi
   fi
   jt_q_into FORGE_KIND "$ANSWERS" rawe forge kind
@@ -2740,6 +2801,9 @@ put_optional_kit_files() {
   fi
   if harness_wanted codex; then
     cf="$ROOT/.codex/config.toml"
+    if flag_is opt_in; then
+      record_warn_line "warning: flags.opt_in is partial on codex: no kit skills tree to gate, and an existing .codex/config.toml agent table is never rewritten"
+    fi
     ans_model_into light codex light
     tables="$(codex_config_tables "$light")"
     if [ ! -f "$cf" ]; then
@@ -2921,6 +2985,10 @@ write_manifest() {
   jt_q_into ty "$ANSWERS" type flags loop_worktree
   if [ "$ty" != missing ]; then
     MT+="$(jt_sub "$ANSWERS" "${J_US}flags${J_US}loop_worktree" "${J_US}options${J_US}loop_worktree")"$'\n'
+  fi
+  jt_q_into ty "$ANSWERS" type flags opt_in
+  if [ "$ty" != missing ]; then
+    MT+="$(jt_sub "$ANSWERS" "${J_US}flags${J_US}opt_in" "${J_US}options${J_US}opt_in")"$'\n'
   fi
   MT+="${J_US}seedFiles"$'\t'array$'\t\n'
   if [ -n "$SEED_CONTENT" ]; then
