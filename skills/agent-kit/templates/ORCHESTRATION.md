@@ -186,30 +186,70 @@ non-independent and disclosed to the user and in the PR draft).
 
 <!-- IF research -->
 <!-- IF loop -->
+<!-- IF !opt_in -->
 > `goal-criteria`, `task-criteria`, `qa-criteria`, `test-ladder`, `align-docs`,
 > `ship-pr`, and `auto-loop` set `disable-model-invocation: true` — they load via
 > `/name` or a cited path, not session-start auto-discovery. `feature`,
 > `research`, and `memory-capture` remain auto-invocable.
+<!-- ENDIF !opt_in -->
+<!-- IF opt_in -->
+> Every kit skill (`goal-criteria`, `task-criteria`, `qa-criteria`, `test-ladder`, `align-docs`,
+> `ship-pr`, `auto-loop`, and `feature`, `research` and `memory-capture` too) sets
+> `disable-model-invocation: true` — they load via `/name` or a cited path, never by
+> auto-discovery. The kit is **opt-in**: ordinary work in this repo follows the project's own
+> workflow and never enters these phases, and the seven agents' descriptions scope them to the
+> kit's workflows so a normal session does not delegate to them.
+<!-- ENDIF opt_in -->
 <!-- ENDIF loop -->
 <!-- IF !loop -->
+<!-- IF !opt_in -->
 > `goal-criteria`, `task-criteria`, `qa-criteria`, `test-ladder`, `align-docs`,
 > and `ship-pr` set `disable-model-invocation: true` — they load via
 > `/name` or a cited path, not session-start auto-discovery. `feature`,
 > `research`, and `memory-capture` remain auto-invocable.
+<!-- ENDIF !opt_in -->
+<!-- IF opt_in -->
+> Every kit skill (`goal-criteria`, `task-criteria`, `qa-criteria`, `test-ladder`, `align-docs`,
+> `ship-pr`, and `feature`, `research` and `memory-capture` too) sets
+> `disable-model-invocation: true` — they load via `/name` or a cited path, never by
+> auto-discovery. The kit is **opt-in**: ordinary work in this repo follows the project's own
+> workflow and never enters these phases, and the seven agents' descriptions scope them to the
+> kit's workflows so a normal session does not delegate to them.
+<!-- ENDIF opt_in -->
 <!-- ENDIF !loop -->
 <!-- ENDIF research -->
 <!-- IF !research -->
 <!-- IF loop -->
+<!-- IF !opt_in -->
 > `goal-criteria`, `task-criteria`, `qa-criteria`, `test-ladder`, `align-docs`,
 > `ship-pr`, and `auto-loop` set `disable-model-invocation: true` — they load via
 > `/name` or a cited path, not session-start auto-discovery. `feature` and
 > `memory-capture` remain auto-invocable.
+<!-- ENDIF !opt_in -->
+<!-- IF opt_in -->
+> Every kit skill (`goal-criteria`, `task-criteria`, `qa-criteria`, `test-ladder`, `align-docs`,
+> `ship-pr`, `auto-loop`, and `feature` and `memory-capture` too) sets
+> `disable-model-invocation: true` — they load via `/name` or a cited path, never by
+> auto-discovery. The kit is **opt-in**: ordinary work in this repo follows the project's own
+> workflow and never enters these phases, and the seven agents' descriptions scope them to the
+> kit's workflows so a normal session does not delegate to them.
+<!-- ENDIF opt_in -->
 <!-- ENDIF loop -->
 <!-- IF !loop -->
+<!-- IF !opt_in -->
 > `goal-criteria`, `task-criteria`, `qa-criteria`, `test-ladder`, `align-docs`,
 > and `ship-pr` set `disable-model-invocation: true` — they load via
 > `/name` or a cited path, not session-start auto-discovery. `feature` and
 > `memory-capture` remain auto-invocable.
+<!-- ENDIF !opt_in -->
+<!-- IF opt_in -->
+> Every kit skill (`goal-criteria`, `task-criteria`, `qa-criteria`, `test-ladder`, `align-docs`,
+> `ship-pr`, and `feature` and `memory-capture` too) sets
+> `disable-model-invocation: true` — they load via `/name` or a cited path, never by
+> auto-discovery. The kit is **opt-in**: ordinary work in this repo follows the project's own
+> workflow and never enters these phases, and the seven agents' descriptions scope them to the
+> kit's workflows so a normal session does not delegate to them.
+<!-- ENDIF opt_in -->
 <!-- ENDIF !loop -->
 <!-- ENDIF !research -->
 

@@ -180,6 +180,11 @@ writes this counter — the driver already incremented it at claim time.
 
 ## 2. Run the orchestration flow for the story
 
+<!-- IF opt_in -->
+Read `{{IDE_DIR}}/skills/feature/SKILL.md` by path before Phase 2: this install is opt-in,
+so `feature` sets `disable-model-invocation: true` and never auto-loads.
+
+<!-- ENDIF opt_in -->
 Follow the `feature` skill's Phases 2–6 with three substitutions: **the story's
 acceptance criteria replace Phase 1 alignment** (there is no user to ask),
 **Phase 7 (`pull_request`) is deferred to the end of the whole run** — the loop

@@ -1,6 +1,6 @@
 ---
 name: evidence-collector
-description: Behavioral QA evidence gatherer for {{PROJECT_NAME}}. Launch when a goal runs the optional QA gate, with the changed user-facing surfaces and the goal's visual-QA choice. Exercises surfaces, captures smoke and optional visual artifacts, and writes an index under the goal's qa folder — never issues verdicts.
+description: {{OPT_IN_AGENT_PREFIX}}Behavioral QA evidence gatherer for {{PROJECT_NAME}}. Launch when a goal runs the optional QA gate, with the changed user-facing surfaces and the goal's visual-QA choice. Exercises surfaces, captures smoke and optional visual artifacts, and writes an index under the goal's qa folder — never issues verdicts.
 model: {{MODEL_LIGHT}}
 effort: medium
 ---

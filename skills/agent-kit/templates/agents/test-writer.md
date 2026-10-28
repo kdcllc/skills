@@ -1,6 +1,6 @@
 ---
 name: test-writer
-description: Coverage-obsessed test writer for {{PROJECT_NAME}}. Launch for the dedicated test task of a goal, with the list of implemented modules/functions. Writes outcome-verifying tests with all external services mocked.
+description: {{OPT_IN_AGENT_PREFIX}}Coverage-obsessed test writer for {{PROJECT_NAME}}. Launch for the dedicated test task of a goal, with the list of implemented modules/functions. Writes outcome-verifying tests with all external services mocked.
 model: {{MODEL_LIGHT}}
 effort: medium
 ---

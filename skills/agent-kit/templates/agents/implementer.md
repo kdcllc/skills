@@ -1,6 +1,6 @@
 ---
 name: implementer
-description: Focused, checklist-driven implementer for {{PROJECT_NAME}} tasks. Launch with a complete context package (task definition, requirements, files to read, constraints). Executes exactly one task or one fix cycle per invocation.
+description: {{OPT_IN_AGENT_PREFIX}}Focused, checklist-driven implementer for {{PROJECT_NAME}} tasks. Launch with a complete context package (task definition, requirements, files to read, constraints). Executes exactly one task or one fix cycle per invocation.
 model: {{MODEL_LIGHT}}
 effort: medium
 ---

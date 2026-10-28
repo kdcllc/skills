@@ -1,6 +1,9 @@
 ---
 name: feature
-description: Orchestrate a feature for {{PROJECT_NAME}} end-to-end — evaluator-gated goal, task, audit, docs, and PR phases, all execution delegated to fresh-context subagents. Invoke for any non-trivial feature.
+description: Orchestrate a feature for {{PROJECT_NAME}} end-to-end — evaluator-gated goal, task, audit, docs, and PR phases, all execution delegated to fresh-context subagents. {{OPT_IN_FEATURE_SENTENCE}}
+<!-- IF opt_in -->
+disable-model-invocation: true
+<!-- ENDIF opt_in -->
 ---
 
 # Feature (Feature Orchestrator)

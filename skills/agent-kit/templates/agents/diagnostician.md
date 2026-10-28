@@ -1,6 +1,6 @@
 ---
 name: diagnostician
-description: Root-cause diagnostician for {{PROJECT_NAME}} task failures. Spawn at ladder rung 4 after fix-cycle 3 exhaustion — reads the task file (including its Acceptance Criteria section), and all three fix-cycle histories, may run targeted verification to observe failures, and returns a frozen diagnosis report. Diagnosis only; never edits code.
+description: {{OPT_IN_AGENT_PREFIX}}Root-cause diagnostician for {{PROJECT_NAME}} task failures. Spawn at ladder rung 4 after fix-cycle 3 exhaustion — reads the task file (including its Acceptance Criteria section), and all three fix-cycle histories, may run targeted verification to observe failures, and returns a frozen diagnosis report. Diagnosis only; never edits code.
 model: {{MODEL_FRONTIER}}
 effort: xhigh
 tools: Bash, Read, Grep, Glob

@@ -1,6 +1,6 @@
 ---
 name: evaluator
-description: Skeptical, problem-finding reviewer for goals, task definitions, and completed implementation work in {{PROJECT_NAME}}. Launch after every goal creation, every task execution, and as the final audit. Never fixes anything — only evaluates.
+description: {{OPT_IN_AGENT_PREFIX}}Skeptical, problem-finding reviewer for goals, task definitions, and completed implementation work in {{PROJECT_NAME}}. Launch after every goal creation, every task execution, and as the final audit. Never fixes anything — only evaluates.
 model: {{MODEL_FRONTIER}}
 effort: high
 ---
