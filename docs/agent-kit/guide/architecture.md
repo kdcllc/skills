@@ -91,7 +91,7 @@ sequenceDiagram
 | **5** | Post-emit verify failed |
 | **6** | Template syntax error |
 
-`emit.sh --check` reuses exits 0/2/4, where 4 means a kit-owned file is missing or differs from the manifest.
+`emit.sh --check` exits 0 when every manifest-listed kit file matches, 2 on a usage error or a missing manifest, and 4 when a kit-owned file is missing or differs from the manifest.
 
 Sources: [`bin/README.md`](../../../skills/agent-kit/bin/README.md), [`SKILL.md`](../../../skills/agent-kit/SKILL.md) Steps 4–6. Windows: [`reference/windows-launcher.md`](../../../skills/agent-kit/reference/windows-launcher.md).
 

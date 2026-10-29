@@ -291,7 +291,7 @@ Marks follow **this addendum's** legend, which differs from the top legend:
      How reliable the Cursor-caller detection is stays **unconfirmed**.
    - **Copilot.** On an install with both Claude Code and Copilot, Copilot may also run the guard's Claude hook from `.claude/settings.json` (fact 8) when its agent hooks are enabled, although the Kit-file guard entry says agent-kit doesn't use Copilot hooks.
      Two things are **unconfirmed**: whether `$CLAUDE_PROJECT_DIR` is set under Copilot, and how the guard's `claude` mode handles Copilot's input.
-     For PascalCase events, Copilot sends snake_case fields and reports Claude tool names (docs.github.com/en/copilot/reference/hooks-configuration, "VS Code compatible format" and "Claude-format matchers"; research brief source 11).
+     For PascalCase events, Copilot sends snake_case fields and reports Claude tool names (docs.github.com/en/copilot/reference/hooks-configuration, "VS Code compatible format" and "Claude-format matchers").
    - **Copilot fails closed.** Copilot `preToolUse` command hooks deny the tool call on a crash or non-zero exit (**documented**: docs.github.com/en/copilot/reference/hooks-reference).
      So if `$CLAUDE_PROJECT_DIR` is unset under Copilot, the guard's Claude hook could deny every matched edit.
      This consequence is **unconfirmed**; it is stated as a risk to check.

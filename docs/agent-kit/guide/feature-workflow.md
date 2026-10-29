@@ -411,6 +411,20 @@ Entries are never edited or deleted. Rejections and respawns are new entries wit
 
 ---
 
+## Guarded installs (`flags.kit_guard`)
+
+The rules below are emitted only when the install's answers set `flags.kit_guard` to true (they sit in `kit_guard` IF blocks of [`ORCHESTRATION.md`](../../../skills/agent-kit/templates/ORCHESTRATION.md), the feature skill, the writer agents, and the evaluator). They treat every path under `files` in `orchestration-kit.manifest.json` as kit-owned — except the user-owned harness configs (the Claude Code settings file, `.codex/config.toml`, `.cursor/hooks.json`) — and change kit behavior only through the answers file and `emit.sh --answers <file> --upgrade`.
+
+- **Kit-file gate.** After every subagent returns, the orchestrator runs `_kit/kit-guard.sh check` inline (one-line output when clean); the feature skill's Phase 5 section adds the same check after every spawn and in Quality Checks. Exit 4 stops the goal: restore tracked files from git, delete a modified `_kit/` file and re-run `emit.sh --upgrade`, log a note, then continue — never `--force`. `_kit/` is gitignored, so on a fresh clone the script is missing until `emit.sh --upgrade` runs; run it first and log a note. The edit-blocking hooks (Claude Code `PreToolUse`, Cursor `preToolUse`) stop most agent edits up front; the check also catches shell edits and harnesses without hooks.
+- **Orchestration Progress.** The orchestrator keeps it in `_memory/work/goals/[goal]/progress.md`, never in `ORCHESTRATION.md`, which is kit-owned.
+- **Writer agents are read-only toward kit-owned files.** `implementer`, `test-writer` and `evidence-collector` never create, modify or delete a kit-owned file; if a task seems to need one they stop and report it, and they never work around a kit-guard denial.
+- **Evaluator auto-fail.** Any change to a kit-owned file (`_kit/kit-guard.sh check` exits 4) is an auto-fail trigger with verdict **NEEDS FIXES**: restore tracked files from git, delete a modified `_kit/` file and re-run `emit.sh --upgrade`; never `--force`.
+- **`emit.sh --check`.** It needs no `--answers` and reports changed kit files: exit 0 when every manifest-listed kit file matches its recorded hash, 2 on a usage error or a missing manifest, 4 when any kit-owned file is missing or its bytes differ (stdout lists each path). [`bin/README.md`](../../../skills/agent-kit/bin/README.md) has the CI recipe.
+
+For the agent roster see [agents-and-models.md](agents-and-models.md); for the emitted `_kit/kit-guard.sh` and hook config files see [getting-started.md](getting-started.md).
+
+---
+
 ## Your role at human touchpoints
 
 These are what **you** do in a typical `/feature` run — separate from any specific exemplar below:
@@ -478,6 +492,7 @@ Shipped on `migrate/agent-kit` (local commit, no PR, no push) per archived goal-
 - [`skills/agent-kit/templates/skills/ship-pr/SKILL.template.md`](../../../skills/agent-kit/templates/skills/ship-pr/SKILL.template.md) — Phase 7 workflow
 - [`skills/agent-kit/templates/ORCHESTRATION.md`](../../../skills/agent-kit/templates/ORCHESTRATION.md) — architecture invariants, retry limits, continuation ladder, escalation format
 - [`skills/agent-kit/templates/models.map.md`](../../../skills/agent-kit/templates/models.map.md) — continuation-ladder model pins
+- [`skills/agent-kit/bin/README.md`](../../../skills/agent-kit/bin/README.md) — `emit.sh --check` and `kit-guard.sh` behavior and exit codes (guarded installs)
 - `_memory/work/goals/test-suite-speed/goal.md` — exemplar goal problem and task table (gitignored scratch)
 - `_memory/work/goals/test-suite-speed/orchestration-log.md` — exemplar spawn ledger (gitignored scratch)
 - `_memory/records/2026/10/20261015T092947Z-e0dacf8b.md` — archived goal-summary outcome for this walkthrough

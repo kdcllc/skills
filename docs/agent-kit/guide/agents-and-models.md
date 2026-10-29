@@ -16,7 +16,7 @@ The kit uses **three model tiers**: **coordination and verification** on the **f
 | `terminal` | `fast` (`{{MODEL_FAST}}`; falls back to light when an install omits `fast`) | Shell side effects only (no Edit/Write tools) | Dump raw command streams into the caller session |
 | `diagnostician` | `frontier` (`{{MODEL_FRONTIER}}`) | Nothing — diagnosis-only report | Edit files or write product code; re-litigate whether the acceptance criteria are sound (rung-5 arbitration's job) |
 
-The sections below quote or paraphrase the canonical agent templates under [`skills/agent-kit/templates/agents/`](../../../skills/agent-kit/templates/agents/). Capabilities not confirmed there are omitted.
+The sections below quote or paraphrase the canonical agent templates under [`skills/agent-kit/templates/agents/`](../../../skills/agent-kit/templates/agents/). Capabilities not confirmed there are omitted. With `flags.kit_guard`, the writer agents (`implementer`, `test-writer`, `evidence-collector`) treat kit-owned files as read-only (see [feature-workflow.md](feature-workflow.md) § Guarded installs).
 
 ## Report Footprint (all seven agents)
 
