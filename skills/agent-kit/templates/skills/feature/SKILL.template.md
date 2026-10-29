@@ -115,7 +115,7 @@ Launch `evaluator` in audit mode with matching rule files: every task's requirem
 `terminal` with `{{FULL_TEST_COMMAND}}`. **ISSUES** → fix via executor + re-evaluate
 (rungs 1–2), re-audit (max 3); re-audits follow `reference/fix-cycles.md` § Provenance.
 
-**Quality Checks failure**: **Read** the log path, classify per ORCHESTRATION.md § Quality Checks, re-spawn `terminal` narrower — never dump the full suite here.
+**Quality Checks failure**: **Read** the log path, re-spawn `terminal` narrower, classify per ORCHESTRATION.md § Quality Checks — never dump the full suite here.
 <!-- IF kit_guard -->
 
 **Kit-file gate**: run `_kit/kit-guard.sh check` inline after every spawn and in Quality
