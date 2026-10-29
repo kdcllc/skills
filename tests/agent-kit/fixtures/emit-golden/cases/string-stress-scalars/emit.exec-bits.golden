@@ -1,4 +1,5 @@
 _kit/log-spawn.sh
 _kit/memory.sh
+_kit/trace-lint.sh
 _loop/breaker.sh
 _loop/loop.sh

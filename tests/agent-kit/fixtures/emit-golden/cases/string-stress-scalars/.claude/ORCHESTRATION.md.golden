@@ -125,6 +125,8 @@ non-independent and disclosed to the user and in the PR draft).
 `git status --porcelain --untracked-files=all` to
 `_memory/work/goals/<goal>/preexisting-dirty.txt`. Those paths are never staged or edited
 by the goal, and Quality Checks classify failures against them (see **Quality Checks**).
+At the same moment the orchestrator saves `git rev-parse HEAD` to
+`_memory/work/goals/<goal>/base-commit.txt`.
 
 ---
 
@@ -284,14 +286,25 @@ are committed and merged (memory protocol, Prune). Create `_memory/work/goals/[n
 `goal.md`. For each task: if multiple viable approaches exist, present them to the
 user and WAIT for the decision; only then create the task file. Each task file carries
 `## Acceptance Criteria` (criterion + verification method each); the Phase 3 evaluator
-validates these once for all tasks.
+validates these once for all tasks. For a goal that changes a shared surface, the
+orchestrator writes `## Searches` (each command run by `terminal`) and `## Consumers`
+into `goal.md`, and sets `trace:` (absent means `planner`).
 
 **Phase 3 — Goal evaluation (mandatory re-evaluate loop).** Once before evaluation
 attempt 1, run the read-only pre-flight in `reference/preflight.md` (no score); it
-records `criteria-evidence.md` and `reference-sweep.md` and runs check 5 Stated facts.
+records `criteria-evidence.md` (including the `_kit/trace-lint.sh` run) and runs check 5 Stated facts.
+Under `trace: blind`, after pre-flight and before attempt 1, the orchestrator spawns a fresh
+read-only evaluator in consumer-trace mode with the Problem Statement and the Surface column
+only. It diffs that trace's Consumer paths against `## Consumers`; every consumer the planner
+missed is added to the trace as a pre-flight fix, then `_kit/trace-lint.sh` is re-run and
+logged, all before attempt 1.
 The orchestrator fixes failures and logs them, then launches the evaluator with the Phase 1
-Q&A included (for the Discovery Coverage check). The Phase 3 evaluator checks both
-artifacts when applicable. PASS → Phase 4; NEEDS REVISION →
+Q&A included (for the Discovery Coverage check). The Phase 3 evaluator checks the evidence and
+the consumer trace. When `## Searches` is non-empty, the evaluator names one to three `S<n>`
+under `### Searches to re-run`, and that verdict is provisional: the orchestrator runs those
+searches through `terminal` and resumes the same evaluator with the output (or fresh-spawns the
+same model with the package and output when resume is unavailable). Only the resumed verdict
+counts, and the round trip consumes no attempt. PASS → Phase 4; NEEDS REVISION →
 revise the goal + tasks and re-evaluate (3 max); REJECT → escalate to the user.
 Re-checks follow `reference/goal-revisions.md` (delta prompts quote newly written text
 verbatim; attempt 3 is a fresh full evaluation on the arbiter model, pinned in that reference).
@@ -343,7 +356,21 @@ resume from `goal.md` and the orchestration log) — never compact automatically
 recommendation via `note`.
 
 **Phase 5 — Final audit (mandatory re-audit loop).** All tasks complete → final
-evaluator audit. APPROVED → Quality Checks (ladder rung 3: full suites, via a
+evaluator audit. The orchestrator adds the goal's changed paths to the audit package: the
+union of `git diff --name-only $(cat _memory/work/goals/<goal>/base-commit.txt)` and
+`git ls-files --others --exclude-standard`, minus the paths in `preexisting-dirty.txt`
+(strip the two-character status and the space from each `git status --porcelain` line
+first) and minus `_memory/`. It also adds the diff of the tracked paths; generated
+fixtures such as goldens stay in the path list but out of the diff, and untracked new
+files are read in full. The audit then checks (a) every `changes` row whose evidence names
+a task has its Consumer path among the changed paths (`Phase 6` rows are skipped here),
+and (b) every shared surface the diff adds, removes, renames or reshapes has a Surface
+row. A shared surface means one another component reads (goal-criteria § Consumer trace
+item 1); private identifiers, new tests and internal headings are not. Under
+`none — <reason>`, the audit checks the reason still holds, and a changed shared surface
+is the finding. A failure of either is a blocking finding citing `F6`, resolved by the
+`goal-revisions.md` amendment. The audit runs this check on the first audit.
+APPROVED → Quality Checks (ladder rung 3: full suites, via a
 `terminal` spawn); ISSUES → fix (ladder rungs 1–2), then re-audit (3 max). When
 `goal.md` has `qa: run`, after Quality Checks spawn `evidence-collector` then
 `qa-evaluator` with its index (`qa: skip` or absent key omits the gate).
@@ -361,6 +388,8 @@ skip Phase 6 with an orchestration-log entry ("Phase 6 skipped per goal.md"). Wh
 enabled, Quality Checks green → the align-docs skill: discover the shipped surface →
 per-doc edit plan → evaluate the plan → implementer per doc → evaluate each doc →
 final doc audit (same re-evaluate invariants and 3-cycle limits as Phases 3–5).
+The orchestrator lists every `changes` row with `Phase 6` evidence in the align-docs
+package, and the Phase 6 docs pass confirms each consumer was updated or states why not.
 RULES: docs-only (never code), anti-invention (every claim traces to a read file),
 `_memory/` is READ-ONLY.
 
@@ -952,6 +981,7 @@ _memory/loop/ledger.jsonl             # Run ledger — one JSON line per reaped/
 _memory/loop/attempts/                # Attempt dossiers per story (runtime, gitignored)
 _kit/{log-spawn.sh,log-spawn.cmd}  # Single-copy tools: orchestration-log writer + Windows launcher
 _kit/{memory.sh,memory.cmd}  # Single-copy tools: memory store (add / index / search / show / redact / check / rm / capture / backfill / prune)
+_kit/{trace-lint.sh,trace-lint.cmd}  # Single-copy tools: consumer-trace lint + Windows launcher
 _memory/records/ · _memory/quarantine/  # Tracked memory records (immutable, one per file) — see _memory/README.md
 _memory/research/               # Tracked research briefs (<topic>.md) + README.md status index (orchestrator-owned)
 _memory/work/                   # Gitignored in-flight goal and research scratch (research: work/research/<topic>/) — see _memory/README.md
