@@ -104,7 +104,7 @@ Launch `evaluator` in audit mode with matching rule files: every task's requirem
 `terminal` with `bash scripts/validate-skills.sh && bash tests/agent-kit/run-all.sh`. **ISSUES** → fix via executor + re-evaluate
 (rungs 1–2), re-audit (max 3); re-audits follow `reference/fix-cycles.md` § Provenance.
 
-**Quality Checks failure**: **Read** the log path, classify per ORCHESTRATION.md § Quality Checks, re-spawn `terminal` narrower — never dump the full suite here.
+**Quality Checks failure**: **Read** the log path, re-spawn `terminal` narrower, classify per ORCHESTRATION.md § Quality Checks — never dump the full suite here.
 
 If `qa: run`: after QC, spawn `evidence-collector` → `qa-evaluator` with index; re-runs re-collect.
 

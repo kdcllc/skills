@@ -215,7 +215,8 @@ backlog frontmatter and run configuration only (same naming as `goal.md`'s `phas
 - **`ladder`** (per story, fixed `auto`): loop-created goals always set
   `ladder: auto` in `goal.md`'s `phases:` block
   so cycle-3 exhaustion, or an earlier repeated structural fix (early ladder entry), runs the continuation ladder unattended;
-  the driver's attempt cap and circuit breakers remain the outer backstop. Interactive `/feature` goals default to `escalate` instead.
+  the driver's attempt cap and circuit breakers remain the outer backstop.
+  Interactive `/feature` goals default to `escalate` instead.
 
 ## 3. Gate, commit, record
 

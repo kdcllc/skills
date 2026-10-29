@@ -2,6 +2,8 @@
 
 Read this before acting on **NEEDS FIXES**, **REJECT**, a verdict tagged `destructive`/`security`/`infra`, `failure_class: criteria-defect`, or Phase 4 cycle-3 exhaustion.
 
+Also read it before every Phase 4 task evaluation and Phase 5 audit, the first ones included: the tree snapshot (§ Provenance) and the citation check, backlog append and keys call (§ Citation checks, backlog and keys) apply to every evaluation.
+
 ## Cycle cap
 
 - Max 3 evaluation cycles per phase/task; on Phase 4 cycle-3 exhaustion, read

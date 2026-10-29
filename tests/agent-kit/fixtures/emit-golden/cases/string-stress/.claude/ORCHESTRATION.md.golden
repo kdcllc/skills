@@ -335,9 +335,9 @@ member reaches task-evaluation PASS or PASS (with notes).
   A verdict tagged with a bypass failure class (destructive/security/infra)
   escalates at detection, on any cycle.
   On re-evaluation, each required fix is tagged `[carried]` / `[regression]` / `[new]` after its kind tag; context packages carry every earlier required-fixes list; the orchestrator logs a `late finding:` note per `[new]` item; a reversal (`reverses cycle N:`) is a `criteria-defect`; see `reference/fix-cycles.md` § Provenance.
-  A `[new]` item outside the changed list that cites no `F1`, `F3`, `F4`, `F7` or `AC<n>` and is not a reversal is demoted to a `[backlog] [late]` note and never blocks (late-finding rule: `reference/fix-cycles.md` § Citation checks, backlog and keys).
+  A `[new]` item outside the changed list that cites no `F1`, `F3`, `F4`, `F7` or `AC<n>` and is not a reversal is demoted to a `[backlog] [late]` note and never blocks (late-finding rule: task-criteria § Provenance tags).
   At every evaluator spawn the orchestrator records a working-tree snapshot, logged as `eval-tree [#NN] task <TT|audit>: <sha>`, and each re-evaluation package carries `## Changed since last evaluation` (`reference/fix-cycles.md` § Provenance).
-  The tag-check round trip also checks that each blocking item cites an `AC<n>` within the task's criteria count, an existing `SC` label or `F1`–`F7`, and on re-evaluations the late-finding scope; this citation and scope check covers Phase 4 task evaluations, ladder re-evaluations and Phase 5 audits (`reference/fix-cycles.md` § Citation checks, backlog and keys).
+  The tag-check round trip also checks that each blocking item cites an `AC<n>` within the task's criteria count (audits: `<TT>/AC<n>` within task TT's count), an existing `SC` label or `F1`–`F7`, and on re-evaluations the late-finding scope; this citation and scope check covers Phase 4 task evaluations, ladder re-evaluations and Phase 5 audits (`reference/fix-cycles.md` § Citation checks, backlog and keys).
   The orchestrator appends every `[backlog]` note to `_memory/work/goals/<goal>/follow-ups.md` and runs `_kit/log-spawn.sh keys` once per evaluation; only `ladder: auto` reads the result, and a `[structural]` `REPEAT` there starts the ladder early (`reference/fix-cycles.md` § Citation checks, backlog and keys and § Early ladder entry).
 
 INVARIANT: A task is only marked complete after the evaluator returns PASS or
@@ -619,7 +619,9 @@ Four subcommands (`--help` lists every flag):
   where `model_check` compares provider **families** (not exact IDs) for the SPAWN
   `model requested:` id and `--model-reported`: `match` (both known, same family),
   `MISMATCH` (both known, different — one stderr warning, exit still 0), or
-  `unverified` (either side unknown/`inherit`/empty). On `MISMATCH` for an
+  `unverified` (either side unknown/`inherit`/empty).
+  When the report has no model line, pass `--model-reported unknown`; a reported value starting with `unknown` always gives `model_check: unverified`.
+  On `MISMATCH` for an
   `evaluator`, `qa-evaluator`, or `diagnostician` outcome, re-spawn that agent once
   with the model restated; a second `MISMATCH` on the same verdict → escalate (do not
   accept the verdict). Worker spawns (`implementer`, `test-writer`, `evidence-collector`,
@@ -1001,7 +1003,7 @@ full suite never lands in this session), then classifies the failure in this ord
   detached worktree under the OS temp dir and removed afterwards. Interactive runs report it,
   add a backlog row with the base output and offer a separate commit; loop and autonomous
   runs only add the backlog row.
-- **introduced** — everything else; it goes to the implementer as before.
+- **introduced** — everything else; it goes to the implementer as a narrow fix.
 
 ### Common Commands
 

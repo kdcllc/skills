@@ -27,6 +27,9 @@
 #     model_check compares model families (case-insensitive, first match wins) for the
 #     SPAWN block's `model requested:` id and --model-reported; on MISMATCH one stderr
 #     line `log-spawn: MODEL-FAMILY-MISMATCH requested=<id> reported=<text>` (exit 0).
+#     A --model-reported text that begins with `unknown` (case-insensitive, after leading
+#     whitespace) is `unverified` before any family comparison, even when it names a family
+#     (e.g. `unknown (not stated; requested <model-id>)`).
 #     R = byte length of the report file; T = floor((context_chars of SPAWN #NN + R) / 4);
 #     C/W parsed from report line `files_read: <N> (~<C> chars)` (digit-only C) or
 #     overridden by --work-chars (digits only, else exit 2); W = floor(C/4) or n/a;
@@ -54,6 +57,13 @@
 #     `<citation> <location> :: <defect>`, lower-cased, whitespace collapsed, `|` → `/` (so the
 #     ` | ` separator is unambiguous). No backtick span: `<citation> - :: <rest>`. No ` — `:
 #     the whole text keys, after the trailing kind/provenance tags are stripped.
+#     Uncited item: when the first word starts with a backtick (the older
+#     `- [ ] `file:line`: <defect> — …` shape) the item has no citation. The citation is
+#     `uncited`, the location is that first backtick span's content minus the same suffix, and
+#     the defect is the text after the span's `: ` (or after the span when there is no `: `),
+#     so `- [ ] `src/a.sh:12`: missing guard — fix it [structural]` keys as
+#     `uncited src/a.sh :: missing guard`. A first word that opens a backtick which never
+#     closes keeps the cited-form key above.
 #     <kind> = line-patch|structural and <provenance> = carried|regression|new, read from the
 #     item's trailing tags; either is `-` when absent (so a missing tag prints as `[-]`).
 #     REPEAT: each item whose key is also in the most recent earlier KEYS line with the same
@@ -185,7 +195,10 @@ model_family() { # <model-id> → family on stdout; 1 if none
 }
 
 derive_model_check() { # <requested-id> <reported-text>
-  local fam_req fam_rep
+  local fam_req fam_rep lc_rep
+  lc_rep="$(printf '%s' "$2" | LC_ALL=C tr 'A-Z' 'a-z')"
+  lc_rep="${lc_rep#"${lc_rep%%[![:space:]]*}"}"       # ltrim
+  case "$lc_rep" in unknown*) printf 'unverified'; return ;; esac
   fam_req="$(model_family "$1")" || { printf 'unverified'; return; }
   fam_rep="$(model_family "$2")" || { printf 'unverified'; return; }
   if [ "$fam_req" = "$fam_rep" ]; then
@@ -236,6 +249,10 @@ compute_key() { # <item text, `- [ ]` already dropped> → 0 sets item_key/item_
   cit="${head%%[[:space:]]*}"                      # citation = first word
   rest="${head#"$cit"}"
   rest="${rest#"${rest%%[![:space:]]*}"}"
+  case "$cit" in
+    "$BT"*)                                        # first word opens a backtick span: no citation
+      case "$head" in *"$BT"*"$BT"*) cit="uncited"; rest="$head" ;; esac ;;
+  esac
   case "$rest" in
     *"$BT"*"$BT"*)
       after="${rest#*"$BT"}"

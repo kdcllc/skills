@@ -179,6 +179,8 @@ leaves open, and no other section claims one of those findings as resolved.
 The section belongs to the one approved body, so every forge branch (`github`,
 `azuredevops`, `gitlab`, `none`) carries it unchanged.
 
+When the PR carries more than one goal, prefix each row with its goal: `- <goal>/B<n> (<source>): <finding>`.
+
 Drafting rules: the Summary is outcomes and impact, never a commit log; derive content
 from the diff, not just commit subjects; omit empty sections; match the repo's tone.
 
