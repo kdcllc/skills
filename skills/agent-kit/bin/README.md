@@ -84,7 +84,7 @@ top-level key order is pinned (see Manifest); nested objects are ordinal-sorted.
 Windows launcher copied from `templates/tools/bash-launcher.cmd`. Invokes this
 script through Git for Windows Bash: `bin\emit.cmd --answers F --root DIR` (use
 forward slashes in path arguments). The emitter also writes the same launcher
-bytes to `_kit/memory.cmd`, `_kit/log-spawn.cmd`, `_kit/kit-guard.cmd` (when
+bytes to `_kit/memory.cmd`, `_kit/log-spawn.cmd`, `_kit/trace-lint.cmd`, `_kit/kit-guard.cmd` (when
 `flags.kit_guard` is true), and — for loop-enabled installs — `_loop/loop.cmd`.
 
 ## `_kit/kit-guard.sh`
@@ -117,3 +117,26 @@ open.
 **CI recipe:** install the kit (e.g.
 `npx skills add kdcllc/skills#agent-kit/v2.2.0 --skill agent-kit`) and run
 `bash <kit>/bin/emit.sh --check --root .`.
+
+## `_kit/trace-lint.sh`
+
+Emitted single-copy to `_kit/trace-lint.sh` on every install (Windows: `_kit/trace-lint.cmd`,
+a byte copy of the one launcher template). Canonical source:
+`templates/tools/trace-lint.sh`. Pre-flight check 2 runs it on a goal's `goal.md`; it reads
+that one file and writes nothing. Bash 3.2 and `sed` only.
+
+- **`trace-lint.sh <goal.md>`** — checks `## Searches` and `## Consumers` against the goal
+  template's format: every search item is ``- **S<n>** `<command>` — <N> hit|hits`` followed by
+  a `text` block of `<path>:<line>:<text>` hit lines (N of them, ids unique), every hit path
+  outside `_memory/` is listed as a Consumer, and each Consumer row's class (`changes`,
+  `unaffected`, `owner-excluded`) carries evidence of the matching shape (`task NN` or
+  `Phase 6` under `align_docs: true`; `test:` / `diff:` / `search: S<n>` with 0 hits;
+  `Q&A row <n>` naming a Discovery Summary row). A goal that changes no shared surface writes
+  `none — <reason>` under `## Consumers` and omits `## Searches`.
+- **`--help`** — usage on stdout, exit **0**.
+- **Exit codes** — **0** valid, printing `trace-lint: ok (<S> searches, <C> consumers)` or
+  `trace-lint: ok (none — <reason>)` · **2** usage (wrong argument count, unknown flag) ·
+  **3** findings, one `trace-lint: <file>:<line>: <message>` stdout line each, then a last
+  line `trace-lint: <N> finding(s)` · **4** the file is missing or unreadable.
+- **Emitted paths** — `_kit/trace-lint.sh` (executable) and `_kit/trace-lint.cmd`, on every
+  install regardless of flags.

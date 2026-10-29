@@ -158,7 +158,8 @@ static_emitted_cmd_identity() {
   local emit_root=""
   emit_cache_root emit_root "$FIXTURE" || return 1
   cmp -s "$LAUNCHER_CMD" "$emit_root/_kit/memory.cmd" \
-    && cmp -s "$LAUNCHER_CMD" "$emit_root/_kit/log-spawn.cmd"
+    && cmp -s "$LAUNCHER_CMD" "$emit_root/_kit/log-spawn.cmd" \
+    && cmp -s "$LAUNCHER_CMD" "$emit_root/_kit/trace-lint.cmd"
 }
 
 static_loop_cmd_emit() {
@@ -399,9 +400,9 @@ else
 fi
 
 if static_emitted_cmd_identity; then
-  report PASS "emitted _kit/memory.cmd and log-spawn.cmd match template (cached emit)"
+  report PASS "emitted _kit/memory.cmd, log-spawn.cmd and trace-lint.cmd match template (cached emit)"
 else
-  report FAIL "emitted _kit/memory.cmd and log-spawn.cmd match template (cached emit)"
+  report FAIL "emitted _kit/memory.cmd, log-spawn.cmd and trace-lint.cmd match template (cached emit)"
 fi
 
 if static_loop_cmd_emit; then

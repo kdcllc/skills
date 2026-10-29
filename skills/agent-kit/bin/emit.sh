@@ -2081,7 +2081,7 @@ emit_single_copy() {
       fi
     done
   fi
-  for f in log-spawn.sh memory.sh; do
+  for f in log-spawn.sh memory.sh trace-lint.sh; do
     if [ -f "$TPL/tools/$f" ]; then
       resolve_template "$TPL/tools/$f" "tools/$f"
       content="$RESOLVED"
@@ -2099,13 +2099,14 @@ emit_single_copy() {
       map_set EMIT "_kit/kit-guard.cmd" "$content"
     fi
   fi
-  # Windows launchers (_kit/memory.cmd, _kit/log-spawn.cmd, _loop/loop.cmd when
-  # loop is on): byte copies of the one template (CRLF must survive, so never
-  # through read_file_raw_into / resolve_template).
+  # Windows launchers (_kit/memory.cmd, _kit/log-spawn.cmd, _kit/trace-lint.cmd,
+  # _loop/loop.cmd when loop is on): byte copies of the one template (CRLF must
+  # survive, so never through read_file_raw_into / resolve_template).
   if [ -f "$TPL/tools/bash-launcher.cmd" ]; then
     tpl_bytes_into content "$TPL/tools/bash-launcher.cmd"
     map_set EMIT "_kit/memory.cmd" "$content"
     map_set EMIT "_kit/log-spawn.cmd" "$content"
+    map_set EMIT "_kit/trace-lint.cmd" "$content"
     if flag_is loop; then
       map_set EMIT "_loop/loop.cmd" "$content"
     fi
