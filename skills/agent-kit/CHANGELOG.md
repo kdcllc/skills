@@ -6,6 +6,10 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 
 ## [Unreleased]
 
+### Changed
+
+- **README rewritten as the kit's overview** — leads with what the kit does and why to use it, adds a feature-flow diagram and an agent/tier table, and drops the security-scan section, the loop sandbox notes, and every hard-coded version number (the install pin now uses a `v<version>` placeholder). The README no longer carries a `Kit version` line; the test suite instead fails if a hard-coded `X.Y.Z` appears in it.
+
 ## [2.2.0] - 2026-10-28
 
 ### Added

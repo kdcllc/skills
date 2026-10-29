@@ -6,7 +6,7 @@
 # semantics and multiline-safe absence of the pre-fix Cursor-reuse pairing, the
 # harness matrix's non-contradictory Cursor model-pin / effort-pin cells, the
 # model map's live-verification guidance, root ORCHESTRATION.md's `self-contained`
-# anchor (7c), and a dynamic VERSION pin from skills/agent-kit/SKILL.md metadata.version through README,
+# anchor (7c), and a dynamic VERSION pin from skills/agent-kit/SKILL.md metadata.version through
 # instance VERSION copies, and manifest kitVersion (7d). Tracked,
 # self-install-independent — checks canonical templates, root docs, and instance
 # paths when present.
@@ -329,16 +329,13 @@ else
   report FAIL "docs hub: mentions self-contained"
 fi
 
-# 7d. skills/agent-kit/SKILL.md metadata.version semver, README Kit version line, instance VERSIONs (SKIP if absent).
+# 7d. skills/agent-kit/SKILL.md metadata.version semver, instance VERSIONs (SKIP if absent).
 KIT_VERSION="$(kit_version "$VERSION_FILE" 2>/dev/null || true)"
 check7d_ok=1
 check7d_detail=""
 if [[ ! "$KIT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   check7d_ok=0
   check7d_detail="VERSION not semver: '${KIT_VERSION:-<missing>}'"
-elif ! grep -qF -- "Kit version: **$KIT_VERSION**" "$ROOT_README" 2>/dev/null; then
-  check7d_ok=0
-  check7d_detail="README missing Kit version: **$KIT_VERSION**"
 else
   for ivf in "$REPO_ROOT/.claude/skills/agent-kit/SKILL.md" "$REPO_ROOT/.cursor/skills/agent-kit/SKILL.md"; do
     rel="${ivf#"$REPO_ROOT"/}"
@@ -364,9 +361,9 @@ else
   fi
 fi
 if [[ $check7d_ok -eq 1 ]]; then
-  report PASS "skills/agent-kit/SKILL.md metadata.version semver + README Kit version **$KIT_VERSION** (+ instance/manifest when present)"
+  report PASS "skills/agent-kit/SKILL.md metadata.version semver $KIT_VERSION (+ instance/manifest when present)"
 else
-  report FAIL "skills/agent-kit/SKILL.md metadata.version semver + README Kit version **$KIT_VERSION** (+ instance/manifest when present)" \
+  report FAIL "skills/agent-kit/SKILL.md metadata.version semver $KIT_VERSION (+ instance/manifest when present)" \
     "$check7d_detail"
 fi
 

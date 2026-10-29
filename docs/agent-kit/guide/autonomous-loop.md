@@ -2,7 +2,7 @@
 
 # Autonomous Loop
 
-The autonomous loop is **optional**. It drives unattended runs: the loop driver (`_loop/loop.sh`; Windows: `_loop\loop.cmd`) repeatedly dispatches the `auto-loop` skill with fresh context until the run budget is exhausted or a structural guard stops the run. **SAFETY: run inside a sandbox** (worktree/container) with minimal credentials. A worktree only separates the git tree — it gives no filesystem, network, or credential isolation — so any CLI flag that skips permission prompts or disables the CLI's own sandbox (for example Cursor `--force` or Codex `--sandbox danger-full-access`) needs a container or VM. The driver never pushes and never bypasses permission prompts by itself — the same sandbox warning appears in the skill [README](../../../skills/agent-kit/README.md) and the loop driver header.
+The autonomous loop is **optional**. It drives unattended runs: the loop driver (`_loop/loop.sh`; Windows: `_loop\loop.cmd`) repeatedly dispatches the `auto-loop` skill with fresh context until the run budget is exhausted or a structural guard stops the run. **SAFETY: run inside a sandbox** (worktree/container) with minimal credentials. A worktree only separates the git tree — it gives no filesystem, network, or credential isolation — so any CLI flag that skips permission prompts or disables the CLI's own sandbox (for example Cursor `--force` or Codex `--sandbox danger-full-access`) needs a container or VM. The driver never pushes and never bypasses permission prompts by itself; the loop driver header carries the same warning.
 
 This guide describes **canonical shipped behavior** — what `/agent-kit` emits from `skills/agent-kit/templates/loop/` into your project's `_loop/` tree. In **this kit repo**, the emitted instance is gitignored and `_memory/loop/` is not tracked, so live runs here stay serial on the main tree; `LOOP_WORKTREE=1` requires a **tracked** `_memory/loop/backlog.md` (and harness directory) in the install, which is labeled explicitly wherever it matters below.
 
@@ -340,5 +340,5 @@ At run end, review commits on the branch and run **`ship-pr`** (Phase 7) once to
 - [`skills/agent-kit/templates/loop/PROMPT.md`](../../../skills/agent-kit/templates/loop/PROMPT.md) — dispatched prompt shape
 - [`skills/agent-kit/templates/loop/backlog.md`](../../../skills/agent-kit/templates/loop/backlog.md) — canonical backlog story format
 - [`skills/agent-kit/templates/ORCHESTRATION.md`](../../../skills/agent-kit/templates/ORCHESTRATION.md) — autonomous loop guard table
-- [`README.md`](../../../skills/agent-kit/README.md) — loop feature summary, sandbox warning, knob overview
+- [`README.md`](../../../skills/agent-kit/README.md) — loop feature summary, knob overview
 - [`docs/agent-kit/guide/architecture.md`](architecture.md) — loop dispatch, worktrees, integrator step 3b

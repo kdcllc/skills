@@ -445,7 +445,7 @@ else
 fi
 
 # ===========================================================================
-# 12. Dynamic VERSION, README version prose, instance/manifest pins, no five-subagent phrasing.
+# 12. Dynamic VERSION, instance/manifest pins, no five-subagent phrasing.
 # ===========================================================================
 check12_ok=1
 check12_detail=""
@@ -456,10 +456,6 @@ CURSOR_VERSION="$REPO_ROOT/.cursor/skills/agent-kit/SKILL.md"
 if [[ ! -f "$VERSION_FILE" ]] || [[ ! "$KIT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
   check12_ok=0
   check12_detail="skills/agent-kit/SKILL.md metadata.version missing or not semver"
-fi
-if [[ $check12_ok -eq 1 ]] && ! grep -qF -- "Kit version: **$KIT_VERSION**" "$ROOT_README" 2>/dev/null; then
-  check12_ok=0
-  check12_detail="README Kit version line missing or wrong"
 fi
 if [[ $check12_ok -eq 1 ]]; then
   for ivf in "$CLAUDE_VERSION" "$CURSOR_VERSION"; do
@@ -496,9 +492,9 @@ if [[ $check12_ok -eq 1 ]] && ! grep -qF 'seven subagents' "$SETUP_SKILL" 2>/dev
   check12_detail="seven subagents missing from setup SKILL"
 fi
 if [[ $check12_ok -eq 1 ]]; then
-  report PASS "VERSION $KIT_VERSION, README Kit version prose, instance/manifest pins, no five-subagent phrasing"
+  report PASS "VERSION $KIT_VERSION, instance/manifest pins, no five-subagent phrasing"
 else
-  report FAIL "VERSION $KIT_VERSION, README Kit version prose, instance/manifest pins, no five-subagent phrasing" \
+  report FAIL "VERSION $KIT_VERSION, instance/manifest pins, no five-subagent phrasing" \
     "$check12_detail"
 fi
 

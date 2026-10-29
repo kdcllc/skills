@@ -153,13 +153,13 @@ order-independent relative to Claude Code (self-contained emission).
 
 `metadata.version` in [`skills/agent-kit/SKILL.md`](../../../skills/agent-kit/SKILL.md) holds the kit version; `bin/emit.*` reads it from there (the old `VERSION` file is gone). Record every kit change under `## [Unreleased]` in [`skills/agent-kit/CHANGELOG.md`](../../../skills/agent-kit/CHANGELOG.md). Changes confined to `docs/agent-kit/`, `tests/agent-kit/`, or `scripts/` ship nothing to users and need no release.
 
-Unlike other skills in this repo, agent-kit bumps its version **inside the PR that ships the release**, not with `release-skill.sh` after the merge. Other tracked files encode the version and the suite checks them: the `Kit version: **X.Y.Z**` line in [`skills/agent-kit/README.md`](../../../skills/agent-kit/README.md) (asserted by `cursor-isolation.sh`, `forge-adapter.sh`, `escalation-ladder.sh`, and the loop harness) and every emit golden (`kitVersion` in `orchestration-kit.manifest.json.golden`, `kit X.Y.Z` in `emit.stdout.golden`). A bump made only by the release script on `master` leaves them stale, so the tagged commit fails `run-all.sh` and the README advertises the old version.
+Unlike other skills in this repo, agent-kit bumps its version **inside the PR that ships the release**, not with `release-skill.sh` after the merge. Other tracked files encode the version and the suite checks them: every emit golden (`kitVersion` in `orchestration-kit.manifest.json.golden`, `kit X.Y.Z` in `emit.stdout.golden`). A bump made only by the release script on `master` leaves them stale, so the tagged commit fails `run-all.sh`. The skill README is deliberately unversioned (it is the kit's public pitch); the loop harness fails if a hard-coded `X.Y.Z` appears in it, and its install pin uses a `v<version>` placeholder.
 
 In the release PR:
 
 1. Set `metadata.version` to `"X.Y.Z"` in `skills/agent-kit/SKILL.md`.
 2. In `CHANGELOG.md`, insert `## [X.Y.Z] - YYYY-MM-DD` directly under `## [Unreleased]`, so Unreleased is empty and the release notes sit under the new heading.
-3. Update `Kit version: **X.Y.Z**` and the `#agent-kit/vX.Y.Z` install pin in `skills/agent-kit/README.md`, and the install pin in [getting-started.md](getting-started.md).
+3. Update the `#agent-kit/vX.Y.Z` install pin in [getting-started.md](getting-started.md).
 4. Regenerate goldens with `bash tests/agent-kit/templates/emit-golden.sh --update`; beyond the PR's own template changes, the diff should touch only the `kitVersion` and `kit X.Y.Z` lines.
 5. Run `bash scripts/validate-skills.sh && bash tests/agent-kit/run-all.sh`.
 
