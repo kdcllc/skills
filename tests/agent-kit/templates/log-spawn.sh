@@ -21,7 +21,11 @@
 #         [structural] REPEAT, a repeated [line-patch] REPEAT, `none`, line stripping,
 #         justification-clause exclusion, `[-]` for absent tags, `audit` / `09a` task values,
 #         duplicate-KEYS / missing-SPAWN / missing-log exit 3, exit 2 / 4 in the frozen order,
-#         KEYS text never feeding running totals, and an unchanged spawn/outcome/note literal
+#         KEYS text never feeding running totals, an old-shape uncited item keying as
+#         `uncited <loc> :: <defect>`, and an unchanged spawn/outcome/note log literal plus an
+#         unchanged stdout / `note` usage-error (stderr text + exit code) literal
+#   model_check: a --model-reported text beginning with `unknown` → unverified (even when it
+#         names the requested family); later `unknown` and other results unchanged
 #   Structural checks align emitters/manifest/instance with _kit/log-spawn.sh + .cmd
 #   (retired log-spawn.ps1 twin must not appear).
 # Structural section — emitters, canonical + instance feature skills / ORCHESTRATION
@@ -501,6 +505,64 @@ run_model_reported_self_case() { # <label> <runner...>
 run_model_reported_self_case bash bash "$BIN"
 
 # ---------------------------------------------------------------------------
+# model-reported starting with `unknown` → unverified before any family comparison
+# ---------------------------------------------------------------------------
+unknown_outcome() { # <reported-text> <runner...> → U_LOG / U_OUT / U_RC (spawn requests claude-sonnet-5-5-xhigh)
+  local txt="$1" fx; shift
+  fx="$(alloc_fx)"
+  mkdir -p "$fx/_memory/work/goals/demo/spawns"
+  head -c 20 /dev/zero | tr '\0' 'a' > "$fx/_memory/work/goals/demo/spawns/10-context.md"
+  head -c 10 /dev/zero | tr '\0' 'b' > "$fx/_memory/work/goals/demo/spawns/10-report.md"
+  U_LOG="$fx/_memory/work/goals/demo/orchestration-log.md"
+  cd "$fx" || return 1
+  "$@" spawn --goal demo --agent implementer --phase P4 --model-requested claude-sonnet-5-5-xhigh \
+       --context _memory/work/goals/demo/spawns/10-context.md >/dev/null 2>&1
+  U_OUT="$("$@" outcome --goal demo --spawn 10 --report _memory/work/goals/demo/spawns/10-report.md \
+        --verdict PASS --model-reported "$txt" 2>&1)"; U_RC=$?
+}
+
+run_model_reported_unknown_case() { # <label> <runner...>
+  local label="$1" txt; shift
+
+  # (b) names the requested family but starts with `unknown` → unverified, not match
+  txt='unknown (not stated; requested claude-sonnet-5-5-xhigh)'
+  unknown_outcome "$txt" "$@"
+  if [[ $U_RC -eq 0 && "$U_OUT" == *'model_check: unverified'* && "$U_OUT" != *MISMATCH* ]] \
+     && grep -qF -- "model reported: $txt · model_check: unverified" "$U_LOG"; then
+    report PASS "[$label] model-reported 'unknown (not stated; requested claude-sonnet-5-5-xhigh)' vs requested claude-sonnet-5-5-xhigh → model_check: unverified"
+  else
+    report FAIL "[$label] model-reported unknown naming the requested family" "rc=$U_RC out='$U_OUT'"
+  fi
+
+  # (c) bare "Unknown" → unverified
+  unknown_outcome "Unknown" "$@"
+  if [[ $U_RC -eq 0 && "$U_OUT" == *'model reported: Unknown · model_check: unverified'* ]] \
+     && grep -qF -- 'model reported: Unknown · model_check: unverified' "$U_LOG"; then
+    report PASS "[$label] model-reported 'Unknown' → model_check: unverified"
+  else
+    report FAIL "[$label] model-reported Unknown" "rc=$U_RC out='$U_OUT'"
+  fi
+
+  # Case-insensitive and after leading whitespace, even when a family name follows.
+  unknown_outcome "  UNKNOWN claude-sonnet-5-5-xhigh" "$@"
+  if [[ $U_RC -eq 0 && "$U_OUT" == *'model_check: unverified'* && "$U_OUT" != *MISMATCH* ]]; then
+    report PASS "[$label] model-reported '  UNKNOWN claude-…' (leading whitespace, upper case) → model_check: unverified"
+  else
+    report FAIL "[$label] model-reported leading-whitespace UNKNOWN" "rc=$U_RC out='$U_OUT'"
+  fi
+
+  # Only a leading `unknown` counts: the word later in the text leaves the family match alone.
+  unknown_outcome "claude-sonnet-5-5-xhigh (unknown build)" "$@"
+  if [[ $U_RC -eq 0 && "$U_OUT" == *'model_check: match'* ]]; then
+    report PASS "[$label] model-reported 'claude-sonnet-5-5-xhigh (unknown build)' → model_check: match (only a leading 'unknown' is special)"
+  else
+    report FAIL "[$label] model-reported with a later 'unknown'" "rc=$U_RC out='$U_OUT'"
+  fi
+}
+
+run_model_reported_unknown_case bash bash "$BIN"
+
+# ---------------------------------------------------------------------------
 # keys — KEYS / REPEAT lines computed from a report's `### Required fixes` items
 # ---------------------------------------------------------------------------
 KEYS_G="_memory/work/goals/demo"
@@ -731,6 +793,27 @@ keys_running_totals_case() {
 }
 keys_running_totals_case
 
+# Old-shape uncited items (first word is a backtick span) key as `uncited <loc> :: <defect>`.
+keys_uncited_case() {
+  local fx log wk
+  fx="$(make_keys_fixture)"
+  log="$fx/$KEYS_G/orchestration-log.md"
+  kreport "$fx" r.md '### Required fixes (if NEEDS FIXES)' \
+    '- [ ] `src/a.sh:12`: missing guard — fix it [structural]' \
+    '- [ ] `b.sh#L7`: Wrong   exit — fix it [line-patch]' \
+    '- [ ] `c.sh:3-5` no colon form — fix it [structural]' \
+    '- [ ] `d.sh#L7-L9`: range anchor — fix it [structural]' \
+    '- [ ] AC2 `src/a.sh:12-14`: missing guard — add the check [structural]'
+  kkeys "$fx" 01 01 r.md
+  wk='- KEYS [#01] task 01: uncited src/a.sh :: missing guard [structural] [-] | uncited b.sh :: wrong exit [line-patch] [-] | uncited c.sh :: no colon form [structural] [-] | uncited d.sh :: range anchor [structural] [-] | ac2 src/a.sh :: missing guard [structural] [-]'
+  if [[ $K_RC -eq 0 && "$K_OUT" == "$wk" ]] && grep -qxF -- "$wk" "$log"; then
+    report PASS "keys: old-shape uncited items → 'uncited <loc> :: <defect>' with :N / #LN / :N-M / #LN-LM stripped; cited item keeps its citation"
+  else
+    report FAIL "keys: old-shape uncited items" "rc=$K_RC out='$K_OUT' want='$wk' err='$K_ERR'"
+  fi
+}
+keys_uncited_case
+
 # spawn / outcome / note output is unchanged: the whole log matches a literal (timestamps normalized).
 unchanged_output_case() {
   local fx log exp
@@ -767,6 +850,36 @@ EOF
   fi
 }
 unchanged_output_case
+
+# Same inputs as unchanged_output_case, but compares what the commands PRINT: the stdout of
+# spawn / outcome / note, plus one usage error (note without --text: stderr text and exit
+# code), against a literal captured from the script before the model_check / uncited-key edits.
+unchanged_stdout_case() {
+  local fx exp got s o n err rc
+  fx="$(make_fixture)"
+  exp="$FIXTURE_TMPDIR/expected-stdout.txt"
+  got="$FIXTURE_TMPDIR/got-stdout.txt"
+  cat > "$exp" <<'EOF'
+### TS — SPAWN implementer (P4) [#01]
+- OUTCOME [#01]: PASS · model reported: X · model_check: unverified · report: _memory/work/goals/demo/spawns/01-report.md · report_chars: 40 · io_est_tokens: 35 · work_read_chars: n/a · work_est_tokens: n/a · running io: 35 · running work: 0
+### TS — Phase 4 complete
+exit: 2
+log-spawn: 'note' requires --text
+EOF
+  s="$(cd "$fx" && bash "$BIN" spawn --goal demo --agent implementer --phase P4 --model-requested light-model \
+         --context _memory/work/goals/demo/spawns/01-context.md 2>/dev/null)"
+  o="$(cd "$fx" && bash "$BIN" outcome --goal demo --spawn 01 --report _memory/work/goals/demo/spawns/01-report.md \
+         --verdict PASS --model-reported X 2>/dev/null)"
+  n="$(cd "$fx" && bash "$BIN" note --goal demo --text "Phase 4 complete" 2>/dev/null)"
+  err="$(cd "$fx" && bash "$BIN" note --goal demo 2>&1 >/dev/null)"; rc=$?
+  printf '%s\n%s\n%s\nexit: %s\n%s\n' "$s" "$o" "$n" "$rc" "$err" | sed -E "$TS_RE" > "$got"
+  if cmp -s "$got" "$exp"; then
+    report PASS "spawn / outcome / note stdout and the 'note' usage error (stderr text, exit 2) match the pre-edit literal"
+  else
+    report FAIL "spawn / outcome / note stdout or usage error changed" "$(diff "$got" "$exp" | head -n 6)"
+  fi
+}
+unchanged_stdout_case
 
 # --task belongs to keys alone: spawn / outcome / note keep rejecting it as an unknown flag.
 task_flag_rejected_case() {
