@@ -304,6 +304,7 @@ check_evaluator() {
   need_flat "$f" 'add a `### Searches to re-run` section to the verdict'
   need_flat "$f" 'run the Phase 5 consumer check'
   need_flat "$f" "$F6_AUDIT_SENTENCE"
+  need_ge "$f" 'skips checks (a) and (b)' 1
   [[ -z "$MISSING" ]]
 }
 
@@ -397,6 +398,7 @@ check_orchestration() {
   need_ge "$f" 'citing `F6`' 1
   need_ge "$f" 'base-commit.txt' 2
   need_ge "$f" 'git ls-files --others --exclude-standard' 1
+  need_ge "$f" 'skips checks (a) and (b)' 1
   need_eq "$f" 'reference-sweep' 0
   [[ -z "$MISSING" ]]
 }
@@ -1104,6 +1106,8 @@ mutation_proof 'ORCHESTRATION: untracked-path listing dropped from the changed p
   m_sub 'git ls-files --others --exclude-standard' 'git ls-files --modified'
 mutation_proof 'ORCHESTRATION: retired reference-sweep artifact reintroduced' "$ORCH_TEMPLATE" check_orchestration \
   m_append 'Pre-flight records reference-sweep.md.'
+mutation_proof 'ORCHESTRATION: Phase 5 legacy-goal skip sentence altered' "$ORCH_TEMPLATE" check_orchestration \
+  m_sub 'skips checks (a) and (b)' 'runs checks (a) and (b)'
 
 mutation_proof 'evaluator: consumer-trace mode heading removed' "$EVALUATOR" check_evaluator \
   m_del_lines '## Consumer-trace mode'
@@ -1119,6 +1123,8 @@ mutation_proof 'evaluator: Phase 5 F6 audit citation altered' "$EVALUATOR" check
   m_sub 'citing **`F6`** against' 'citing **`F3`** against'
 mutation_proof 'evaluator: Phase 5 consumer check removed from the final audit' "$EVALUATOR" check_evaluator \
   m_sub 'run the Phase 5 consumer check' 'run the Phase 5 check'
+mutation_proof 'evaluator: Phase 5 legacy-goal skip sentence altered' "$EVALUATOR" check_evaluator \
+  m_sub 'skips checks (a) and (b)' 'runs checks (a) and (b)'
 
 mutation_proof 'emit.sh: trace-lint dropped from the single-copy tools loop' "$EMIT_BIN" check_emit_pointer \
   m_sub 'for f in log-spawn.sh memory.sh trace-lint.sh' 'for f in log-spawn.sh memory.sh'

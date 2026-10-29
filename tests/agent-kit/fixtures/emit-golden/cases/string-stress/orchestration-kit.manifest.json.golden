@@ -20,9 +20,9 @@
     "_memory/loop/backlog.md"
   ],
   "files": {
-    ".claude/ORCHESTRATION.md": "cd0e198a7106b5b88770d573e4074a65258fe0d1da3bb115a0f23bbc124ce696",
+    ".claude/ORCHESTRATION.md": "9c3fe92f8129aef05636db888ffe21650491ccd59c8befd9966e1a4ea351e4c5",
     ".claude/agents/diagnostician.md": "f83c712d52d09d7e4771d1ac65cea1b8bda9268406d39a10e689d5d1ff350f52",
-    ".claude/agents/evaluator.md": "0059daaabd4b38f33cc951a7bdad3bf7d021e8bb29a205e91a34940325882d47",
+    ".claude/agents/evaluator.md": "3f59f53989cf36918886dbe53a840f116bf174882294d11f98c99d796c5900ca",
     ".claude/agents/evidence-collector.md": "a630ada9902d0e1e883d040019752a0a310fef839c224f14847d7c87bd1844e2",
     ".claude/agents/implementer.md": "2d8be2c1e912cf4b4783abeabb815831e597b57a499fec617192e1347020ef81",
     ".claude/agents/qa-evaluator.md": "d59376fd94473b2d1a0ed6cfc8a4ae0cf0663df3c42827edd73d11b282d41a94",
@@ -55,9 +55,9 @@
     ".claude/skills/ship-pr/SKILL.md": "0e19d5ae702eff4fc29422295378d0f465ef12a5d1a32af772c4bf8404b371af",
     ".claude/skills/task-criteria/SKILL.md": "da7d99f51fdc3094b883a32936405a9aa05ac68109588768db690717da46a1c8",
     ".claude/skills/test-ladder/SKILL.md": "8a827155a5573366649c8f034cf5c279c4056a7dee0c07b3515f1043e651238d",
-    ".cursor/ORCHESTRATION.md": "b5aa642b4d2fc05ad24c9c301b8886764e1db03aac70d627ebdd6954ed90a415",
+    ".cursor/ORCHESTRATION.md": "8ed91fd11d1a07b850b45f1b5ea292695d398ad03a30a9b13ccafe4e1cb92c2c",
     ".cursor/agents/diagnostician.md": "d4370abc3eda5ca6b281fec41086d71b83f12cc0dda073b9bc4dcbcf29db30e3",
-    ".cursor/agents/evaluator.md": "70117e368912657367bac6eedf5097a78082b022a95f6a1dc5924856493dd549",
+    ".cursor/agents/evaluator.md": "00c1e3501fa27850f9607f3622bec269cac501342d7072ba33c6147f2dee1472",
     ".cursor/agents/evidence-collector.md": "504796bb266dae1998e7f9a369a3b9d6ed0d2497b7daead9a05396baa6cd2195",
     ".cursor/agents/implementer.md": "dc4f8eea133bad95b394918671fad99e49a9f965da5b7297d683689366a94c4b",
     ".cursor/agents/qa-evaluator.md": "d7dbc8fc491bf6ef0c8e0c54c16e12aa48fadd0a570d4b944bee62590ec28c5f",

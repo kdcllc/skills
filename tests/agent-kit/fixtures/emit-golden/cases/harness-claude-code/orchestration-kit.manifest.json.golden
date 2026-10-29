@@ -19,9 +19,9 @@
     "_memory/loop/backlog.md"
   ],
   "files": {
-    ".claude/ORCHESTRATION.md": "ee9a0b776f0dd2f70408b8c5db5f60066cb365d3333cf8c8633ea5fa2252c3c0",
+    ".claude/ORCHESTRATION.md": "66100c19a272f4898dc9cf36a2a0e4ca34f5eaea183ab72c9c2e4c132dc54a0d",
     ".claude/agents/diagnostician.md": "cbcbaecf95fe98f3218e20b6b0fff3d949647710ede58a026d5106d973e97510",
-    ".claude/agents/evaluator.md": "9dd0e378d71f7db205b1f851eda8a4360f64a9cdcfc69ef1f30cf1898fcd199c",
+    ".claude/agents/evaluator.md": "6bae7d7fc05931bfe4bc732d39c4a607188b9d375a9f2efc0774f8c285f5ec35",
     ".claude/agents/evidence-collector.md": "1e73d369a9fb92b7aa7f017b9f43c6d24b6151cfb5ad8526d752b3bcec55bf45",
     ".claude/agents/implementer.md": "052f7f10bd35b66bec2a420d1a74302a1c46aa5728f0dc9dfe9e4e1524d00469",
     ".claude/agents/qa-evaluator.md": "99f06ffaafb8f0fd1e896d0dc686b12f29bdd5a90d646a6f6e0cebb5ba28b1fd",

@@ -431,7 +431,8 @@ user and WAIT for the decision; only then create the task file. Each task file c
 `## Acceptance Criteria` (criterion + verification method each); the Phase 3 evaluator
 validates these once for all tasks. For a goal that changes a shared surface, the
 orchestrator writes `## Searches` (each command run by `terminal`) and `## Consumers`
-into `goal.md`, and sets `trace:` (absent means `planner`).
+into `goal.md`, and sets `trace:` (absent means `planner`); every other goal writes
+`## Consumers` with `none — <reason>`.
 
 **Phase 3 — Goal evaluation (mandatory re-evaluate loop).** Once before evaluation
 attempt 1, run the read-only pre-flight in `reference/preflight.md` (no score); it
@@ -513,6 +514,9 @@ item 1); private identifiers, new tests and internal headings are not. Under
 `none — <reason>`, the audit checks the reason still holds, and a changed shared surface
 is the finding. A failure of either is a blocking finding citing `F6`, resolved by the
 `goal-revisions.md` amendment. The audit runs this check on the first audit.
+A goal under the transition rule in the feature skill's `reference/preflight.md` check 2
+(no `## Consumers` section) skips checks (a) and (b); the audit checks its legacy artifact
+as that rule states.
 APPROVED → Quality Checks (ladder rung 3: full suites, via a
 `terminal` spawn); ISSUES → fix (ladder rungs 1–2), then re-audit (3 max). When
 `goal.md` has `qa: run`, after Quality Checks spawn `evidence-collector` then

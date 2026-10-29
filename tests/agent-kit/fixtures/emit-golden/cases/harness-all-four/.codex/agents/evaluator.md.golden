@@ -71,6 +71,9 @@ The orchestrator's prompt tells you which mode you are in:
   surface (one another component reads) that the diff adds, removes, renames or reshapes
   has a Surface row in `## Consumers`; under `none — <reason>`, check the reason still holds.
   A failure of either is a blocking finding citing **`F6`** against the goal's `## Consumers`.
+  A goal under the transition rule in the feature skill's `reference/preflight.md` check 2
+  (no `## Consumers` section) skips checks (a) and (b); check its legacy artifact as that
+  rule states.
 - **Arbitration mode** — criteria-only review at ladder rung 5; see **Arbitration mode**
   below. Does not run tests, read diffs, or emit PASS/NEEDS FIXES/REJECT — output is
   only `criteria-sound` or `criteria-defective`.

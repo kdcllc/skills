@@ -19,9 +19,9 @@
     "_memory/loop/backlog.md"
   ],
   "files": {
-    ".cursor/ORCHESTRATION.md": "7550d605aa71ec60313883ea649994bea86c3746b7c6831e0a23804fb0c29baa",
+    ".cursor/ORCHESTRATION.md": "04075922ea4bd7701fbafdc6f1a9f02091228e50b2b6b0b9ccde2514a1cbf96c",
     ".cursor/agents/diagnostician.md": "b928d0d486f8f451901617f54c59eb1ab18ddc2462b2e346932df0a77a34c4de",
-    ".cursor/agents/evaluator.md": "da0702f692841e6a11167565ae73b5991b5ed4109fbe0995b40e1b383af51bff",
+    ".cursor/agents/evaluator.md": "447836674fa63e38b26aa53c50c877f3980d2013903d9342736e67e98bc443b4",
     ".cursor/agents/evidence-collector.md": "681a2ee685962cd275e19e49138e179abcfe11f982f3c9f0e9d5d8f92f5386a6",
     ".cursor/agents/implementer.md": "73a2aa7940c1a13276d7aa3254003c3b0b15715027a5197b6724ddf14136338e",
     ".cursor/agents/qa-evaluator.md": "4143bee2950d4ef44a42f663645732405df60b044c4bf04e62db78f69e753cc2",
