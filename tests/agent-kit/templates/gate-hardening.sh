@@ -8,6 +8,10 @@
 # Goal gate-hardening-backlog, task 06 adds exact anchors for the keys wording, the
 # copied-template grouped-check proofs, and locks for the F5 mapping, the `uncited` key form,
 # the every-evaluation fix-cycles paragraph and the `unknown` model_check sentence.
+# Goal consumer-trace, task 06 locks the consumer-trace contract and flow: the goal template's
+# `## Searches` / `## Consumers` / `trace:` key, the goal-criteria Phase 3 gate, pre-flight
+# check 2, the goal-revisions amendment, the ORCHESTRATION flow, the evaluator consumer-trace
+# mode and F6 audit item, and the emitter's `_kit/trace-lint` entries, each with a mutation proof.
 # Sections:
 #   1. canonical checks — one named check per template or doc, every anchor a literal the
 #      owning task wrote (no line numbers);
@@ -39,6 +43,9 @@ FEATURE_SKILL="$TEMPLATES/skills/feature/SKILL.template.md"
 SHIP_PR="$TEMPLATES/skills/ship-pr/SKILL.template.md"
 TEST_LADDER="$TEMPLATES/skills/test-ladder/SKILL.template.md"
 GOAL_TEMPLATE="$TEMPLATES/skills/feature/templates/goal.md"
+GOAL_CRITERIA="$TEMPLATES/skills/goal-criteria/SKILL.template.md"
+PREFLIGHT_REF="$TEMPLATES/skills/feature/reference/preflight.md"
+GOAL_REVISIONS_REF="$TEMPLATES/skills/feature/reference/goal-revisions.md"
 LOOP_SKILL="$TEMPLATES/loop/SKILL.template.md"
 MODELS_MAP="$TEMPLATES/models.map.md"
 LOG_SPAWN_CANON="$TEMPLATES/tools/log-spawn.sh"
@@ -113,6 +120,12 @@ ORCH_KEYS_PHRASE='appends a `KEYS` line (and a `REPEAT` line for each repeated k
 EVALSYS_F7_PHRASE='(including **F7** for bypass-class problems'
 EVALSYS_CITATIONS_PHRASE='§ **Citations** applies **only** to Phase 4 task evaluations'
 WORKFLOW_KEYS_PHRASE='appends a `KEYS` line and a `REPEAT` line for each repeated key, each carrying kind and provenance tags'
+F6_AUDIT_SENTENCE="A failure of either is a blocking finding citing **\`F6\`** against the goal's \`## Consumers\`."
+PREFLIGHT_TRANSITION='**Transition:** a goal planned before this rule (no `## Consumers` section, with a `reference-sweep.md`) is checked against that artifact until its next material amendment.'
+REVISIONS_STEP5='5. Confirm every `changes` row in `goal.md` `## Consumers` names a task that still exists after the renumbering.'
+REVISIONS_AMEND='A surface the Phase 5 audit finds changed but not listed in `## Consumers` is an amendment: add the search, its hits and the row with evidence, re-run `_kit/trace-lint.sh`, then a targeted evaluation.'
+TRACE_GATE_START='^[*][*]Consumer trace [(]Phase 3 gate[)][.][*][*]'
+TRACE_GATE_END='^[*][*]Corrective tasks'
 
 # ---------------------------------------------------------------------------
 # Helpers — every need_* records the first-order cause in MISSING instead of printing
@@ -284,6 +297,13 @@ check_evaluator() {
   need_none_flat "$f" 'fix cycles 1–3|after cycle-3 exhaustion|the three fix-cycle evaluator verdicts|after three implement' 'cycle-3 wording' -i
   need_no_colon_space_description "$f"
   need_citation_sentence "$f" "$EVALSYS_DOC"
+  # consumer-trace mode, the Phase 3 re-run section and the Phase 5 F6 audit item
+  need_line_eq "$f" '## Consumer-trace mode' 1
+  need_ge "$f" '## Consumer trace (blind)' 1
+  need_eq "$f" 'and consumer-trace mode excepted' 2
+  need_flat "$f" 'add a `### Searches to re-run` section to the verdict'
+  need_flat "$f" 'run the Phase 5 consumer check'
+  need_flat "$f" "$F6_AUDIT_SENTENCE"
   [[ -z "$MISSING" ]]
 }
 
@@ -371,6 +391,13 @@ check_orchestration() {
   need_ge "$f" 'Diagnosis-only (post-exhaustion, no code writes)' 1
   need_flat "$f" 'fewer on early ladder entry'
   need_none_flat "$f" 'all three fix-cycle|after cycle 3|post-cycle-3|If cycles 1–3 all' 'cycle-3 wording'
+  # consumer-trace flow: blind mode, Phase 3 re-runs, the Phase 5 changed-path list and F6
+  need_ge "$f" 'consumer-trace mode' 1
+  need_ge "$f" '### Searches to re-run' 1
+  need_ge "$f" 'citing `F6`' 1
+  need_ge "$f" 'base-commit.txt' 2
+  need_ge "$f" 'git ls-files --others --exclude-standard' 1
+  need_eq "$f" 'reference-sweep' 0
   [[ -z "$MISSING" ]]
 }
 
@@ -511,6 +538,9 @@ check_emit_pointer() {
   [[ -f "$f" ]] || { note_miss "file missing"; return 1; }
   need_eq "$f" "When fix cycles are exhausted $EARLY_WORDING" 1
   need_eq "$f" 'After three fix cycles' 0
+  # the consumer-trace lint is a single-copy kit tool with a Windows launcher
+  need_eq "$f" 'for f in log-spawn.sh memory.sh trace-lint.sh' 1
+  need_ge "$f" '"_kit/trace-lint.cmd"' 1
   [[ -z "$MISSING" ]]
 }
 
@@ -546,6 +576,56 @@ check_goal_template() {
   line="$(grep -F -- 'auto may enter it early' "$f" | head -n 1)"
   [[ "$line" == *'ladder: escalate|auto'* ]] || note_miss "early-entry note is not on the 'ladder:' line"
   need_ge "$f" 'escalate (default): on cycle-3 exhaustion, escalate to the user with the continuation ladder offered' 1
+  # consumer trace: the two sections, the table header and the `trace` phases key with its default
+  need_line_eq "$f" '## Searches' 1
+  need_line_eq "$f" '## Consumers' 1
+  need_line_eq "$f" '| Surface | Consumer | Class | Evidence |' 1
+  need_ge "$f" 'trace: planner|blind' 1
+  need_ge "$f" 'planner (default): the planner-written trace only' 1
+  [[ -z "$MISSING" ]]
+}
+
+check_goal_criteria() {
+  local f="$1"
+  MISSING=""
+  [[ -f "$f" ]] || { note_miss "file missing"; return 1; }
+  need_eq "$f" '**Consumer trace (Phase 3 gate).**' 1
+  need_ge "$f" '### Searches to re-run' 1
+  need_ge "$f" '_kit/trace-lint.sh' 1
+  need_eq "$f" 'reference-sweep' 0
+  need_eq "$f" 'follows the transition rule in the feature skill' 1
+  # the five points of the gate, each inside the gate's own paragraph
+  local t
+  for t in '**Who.**' '**Format.**' '**Lint.**' '**Re-runs (mandatory).**' '**Trace choice.**'; do
+    need_sec_flat "$f" "$TRACE_GATE_START" "$TRACE_GATE_END" "$t"
+  done
+  need_sec_flat "$f" "$TRACE_GATE_START" "$TRACE_GATE_END" '**Lint.** `_kit/trace-lint.sh <goal.md>` exits 0'
+  need_sec_flat "$f" "$TRACE_GATE_START" "$TRACE_GATE_END" 'under `### Searches to re-run`'
+  need_sec_flat "$f" "$TRACE_GATE_START" "$TRACE_GATE_END" '**provisional**'
+  need_sec_flat "$f" "$TRACE_GATE_START" "$TRACE_GATE_END" '`trace: blind` is required when any surface is destructive'
+  [[ -z "$MISSING" ]]
+}
+
+check_preflight() {
+  local f="$1" s='^### 2[.] Missed callers' x='^### 3[.] '
+  MISSING=""
+  [[ -f "$f" ]] || { note_miss "file missing"; return 1; }
+  need_sec_flat "$f" "$s" "$x" '`goal.md` carries `## Searches` and `## Consumers`'
+  need_sec_flat "$f" "$s" "$x" 'Run `_kit/trace-lint.sh _memory/work/goals/<goal>/goal.md`'
+  need_sec_flat "$f" "$s" "$x" '`trace-lint` exits non-zero'
+  need_eq "$f" 'reference-sweep' 1
+  need_sec_flat "$f" "$s" "$x" "$PREFLIGHT_TRANSITION"
+  [[ -z "$MISSING" ]]
+}
+
+check_goal_revisions() {
+  local f="$1"
+  MISSING=""
+  [[ -f "$f" ]] || { note_miss "file missing"; return 1; }
+  need_eq "$f" "$REVISIONS_STEP5" 1
+  need_eq "$f" "$REVISIONS_AMEND" 1
+  need_ge "$f" 'It is additive; when a missed consumer needs an edit, it is a corrective task' 1
+  need_eq "$f" 'reference-sweep' 0
   [[ -z "$MISSING" ]]
 }
 
@@ -680,7 +760,10 @@ canonical_entries() { # name<TAB>path<TAB>check function
     'test-ladder/SKILL.template.md' "$TEST_LADDER" check_test_ladder \
     'reference/harness-matrix.md' "$HARNESS_MATRIX" check_harness_matrix \
     'feature/templates/goal.md' "$GOAL_TEMPLATE" check_goal_template \
-    'bin/emit.sh (Codex pointer)' "$EMIT_BIN" check_emit_pointer \
+    'goal-criteria/SKILL.template.md (consumer trace gate)' "$GOAL_CRITERIA" check_goal_criteria \
+    'feature/reference/preflight.md (check 2)' "$PREFLIGHT_REF" check_preflight \
+    'feature/reference/goal-revisions.md' "$GOAL_REVISIONS_REF" check_goal_revisions \
+    'bin/emit.sh (Codex pointer, trace-lint tool)' "$EMIT_BIN" check_emit_pointer \
     'models.map.md' "$MODELS_MAP" check_models_map \
     'loop/SKILL.template.md' "$LOOP_SKILL" check_loop_skill \
     'docs evaluation-system.md' "$EVALSYS_DOC" check_eval_system_doc \
@@ -833,8 +916,48 @@ check_emitted_gate_anchors() { # check_emitted_gate_anchors <emit root>
     need_ge "$orch" 'Backlog (not fixed here)' 1
     need_ge "$orch" 'preexisting-dirty.txt' 1
     need_ge "$orch" '**Early ladder entry**' 1
+    # consumer-trace contract: the emitted feature goal template carries the two sections
+    local gt="$base/skills/feature/templates/goal.md"
+    if [[ ! -f "$gt" ]]; then
+      note_miss "$ide: skills/feature/templates/goal.md missing"
+    else
+      need_line_eq "$gt" '## Searches' 1
+      need_line_eq "$gt" '## Consumers' 1
+      need_ge "$gt" 'trace: planner|blind' 1
+    fi
   done
+  # the consumer-trace lint is emitted once, under _kit/, with its Windows launcher
+  [[ -f "$root/_kit/trace-lint.sh" ]] || note_miss "_kit/trace-lint.sh missing from the emit"
+  [[ -f "$root/_kit/trace-lint.cmd" ]] || note_miss "_kit/trace-lint.cmd missing from the emit"
   [[ -z "$MISSING" ]]
+}
+
+emit_mutant() { # emit_mutant <name> <emit root> <path under root> <mutator> [args…]
+  # Copies the fresh emit, mutates one emitted file (or removes it with m_rm), and asserts that
+  # check_emitted_gate_anchors fails on the copy.
+  local name="$1" root="$2" rel="$3" mut="$4" d copy
+  shift 4
+  d="$(mktemp -d "$FIXTURE_TMPDIR/emm.XXXXXX")" || { report FAIL "mutation-proof $name" "mktemp failed"; return; }
+  assert_fixture_root "$d" || { report FAIL "mutation-proof $name" "bad fixture root"; return; }
+  cp -Rp "$root/." "$d/" || { report FAIL "mutation-proof $name" "copy failed"; rm -rf "$d"; return; }
+  copy="$d/$rel"
+  if [[ ! -f "$copy" ]]; then
+    report FAIL "mutation-proof $name" "emitted file $rel missing"
+  elif ! check_emitted_gate_anchors "$d"; then
+    report FAIL "mutation-proof $name" "clean copy was rejected: $MISSING"
+  else
+    "$mut" "$copy" "$@"
+    if check_emitted_gate_anchors "$d"; then
+      report FAIL "mutation-proof $name" "check still passed on the mutated emit"
+    else
+      report PASS "mutation-proof $name" "check failed on: ${MISSING:0:110}"
+    fi
+  fi
+  rm -rf "$d"
+}
+
+m_rm() { # m_rm <file> — remove the file
+  rm -f "$1"
 }
 
 # ===========================================================================
@@ -918,6 +1041,90 @@ mutation_proof 'agents-and-models doc: loop-range wording restored' "$AGENTS_MOD
 mutation_proof 'goal template: early-entry note dropped from the ladder line' "$GOAL_TEMPLATE" check_goal_template \
   m_sub '; auto may enter it early (reference/fix-cycles.md § Early ladder entry)' ''
 
+# Consumer-trace rules (goal consumer-trace, task 06): each proof removes or alters one anchor.
+mutation_proof 'goal template: ## Searches heading renamed' "$GOAL_TEMPLATE" check_goal_template \
+  m_sub '## Searches' '## Search list'
+mutation_proof 'goal template: ## Consumers heading renamed' "$GOAL_TEMPLATE" check_goal_template \
+  m_sub '## Consumers' '## Consumer list'
+mutation_proof 'goal template: consumers table header removed' "$GOAL_TEMPLATE" check_goal_template \
+  m_del_lines '| Surface | Consumer | Class | Evidence |'
+mutation_proof 'goal template: trace phases key narrowed to planner' "$GOAL_TEMPLATE" check_goal_template \
+  m_sub 'trace: planner|blind' 'trace: planner'
+mutation_proof 'goal template: trace key default wording dropped' "$GOAL_TEMPLATE" check_goal_template \
+  m_sub 'planner (default): the planner-written trace only' 'planner: the planner-written trace only'
+
+mutation_proof 'goal-criteria: Consumer trace gate heading replaced' "$GOAL_CRITERIA" check_goal_criteria \
+  m_sub '**Consumer trace (Phase 3 gate).**' '**Reference sweep (Phase 3 gate).**'
+mutation_proof 'goal-criteria: Searches to re-run section name dropped' "$GOAL_CRITERIA" check_goal_criteria \
+  m_sub '### Searches to re-run' '### Re-run list'
+mutation_proof 'goal-criteria: lint tool pointer dropped' "$GOAL_CRITERIA" check_goal_criteria \
+  m_sub '_kit/trace-lint.sh' '_kit/lint.sh'
+mutation_proof 'goal-criteria: retired sweep artifact reintroduced' "$GOAL_CRITERIA" check_goal_criteria \
+  m_append 'A reference-sweep.md artifact lists every hit.'
+mutation_proof 'goal-criteria: transition-rule pointer removed' "$GOAL_CRITERIA" check_goal_criteria \
+  m_sub 'follows the transition rule in the feature skill' 'follows the usual rule'
+mutation_proof 'goal-criteria: Who clause removed' "$GOAL_CRITERIA" check_goal_criteria \
+  m_del_lines '1. **Who.**'
+mutation_proof 'goal-criteria: Lint clause removed' "$GOAL_CRITERIA" check_goal_criteria \
+  m_del_lines '3. **Lint.**'
+mutation_proof 'goal-criteria: Re-runs clause made optional' "$GOAL_CRITERIA" check_goal_criteria \
+  m_sub '**Re-runs (mandatory).**' '**Re-runs (optional).**'
+mutation_proof 'goal-criteria: provisional-verdict rule dropped' "$GOAL_CRITERIA" check_goal_criteria \
+  m_sub '**provisional**' 'final'
+mutation_proof 'goal-criteria: Trace choice clause removed' "$GOAL_CRITERIA" check_goal_criteria \
+  m_del_lines '5. **Trace choice.**'
+
+mutation_proof 'preflight: check 2 lint run removed' "$PREFLIGHT_REF" check_preflight \
+  m_sub '_kit/trace-lint.sh' '_kit/lint.sh'
+mutation_proof 'preflight: check 2 failure rule altered' "$PREFLIGHT_REF" check_preflight \
+  m_sub '`trace-lint` exits non-zero' '`trace-lint` prints a warning'
+mutation_proof 'preflight: second reference-sweep mention added' "$PREFLIGHT_REF" check_preflight \
+  m_append 'Pre-flight writes reference-sweep.md for every goal.'
+mutation_proof 'preflight: transition sentence removed' "$PREFLIGHT_REF" check_preflight \
+  m_del_lines '**Transition:**'
+
+mutation_proof 'goal-revisions: renumbering step 5 removed' "$GOAL_REVISIONS_REF" check_goal_revisions \
+  m_del_lines 'names a task that still exists after the renumbering'
+mutation_proof 'goal-revisions: step 5 reverted to the old sweep wording' "$GOAL_REVISIONS_REF" check_goal_revisions \
+  m_sub 'Confirm every `changes` row in `goal.md` `## Consumers` names a task' 'Confirm renamed symbols from `reference-sweep.md` match across tasks'
+mutation_proof 'goal-revisions: unlisted-surface amendment sentence removed' "$GOAL_REVISIONS_REF" check_goal_revisions \
+  m_del_lines 'A surface the Phase 5 audit finds changed but not listed'
+mutation_proof 'goal-revisions: amendment no longer re-runs the lint' "$GOAL_REVISIONS_REF" check_goal_revisions \
+  m_sub 're-run `_kit/trace-lint.sh`, then a targeted evaluation' 'then a targeted evaluation'
+
+mutation_proof 'ORCHESTRATION: consumer-trace mode named differently' "$ORCH_TEMPLATE" check_orchestration \
+  m_sub 'consumer-trace mode' 'blind mode'
+mutation_proof 'ORCHESTRATION: Searches to re-run section renamed' "$ORCH_TEMPLATE" check_orchestration \
+  m_sub '### Searches to re-run' '### Re-runs'
+mutation_proof 'ORCHESTRATION: Phase 5 unlisted-surface finding no longer cites F6' "$ORCH_TEMPLATE" check_orchestration \
+  m_sub 'citing `F6`' 'citing `F3`'
+mutation_proof 'ORCHESTRATION: base-commit file name dropped' "$ORCH_TEMPLATE" check_orchestration \
+  m_sub 'base-commit.txt' 'base.txt'
+mutation_proof 'ORCHESTRATION: untracked-path listing dropped from the changed paths' "$ORCH_TEMPLATE" check_orchestration \
+  m_sub 'git ls-files --others --exclude-standard' 'git ls-files --modified'
+mutation_proof 'ORCHESTRATION: retired reference-sweep artifact reintroduced' "$ORCH_TEMPLATE" check_orchestration \
+  m_append 'Pre-flight records reference-sweep.md.'
+
+mutation_proof 'evaluator: consumer-trace mode heading removed' "$EVALUATOR" check_evaluator \
+  m_del_lines '## Consumer-trace mode'
+mutation_proof 'evaluator: blind trace output header altered' "$EVALUATOR" check_evaluator \
+  m_sub '## Consumer trace (blind)' '## Consumer trace'
+mutation_proof 'evaluator: consumer-trace exception dropped from the arbitration line' "$EVALUATOR" check_evaluator \
+  m_sub 'Arbitration mode and consumer-trace mode excepted' 'Arbitration mode excepted'
+mutation_proof 'evaluator: third consumer-trace exception added' "$EVALUATOR" check_evaluator \
+  m_append 'Phase 4 output and consumer-trace mode excepted.'
+mutation_proof 'evaluator: Searches to re-run section dropped' "$EVALUATOR" check_evaluator \
+  m_sub '`### Searches to re-run` section' '`### Re-runs` section'
+mutation_proof 'evaluator: Phase 5 F6 audit citation altered' "$EVALUATOR" check_evaluator \
+  m_sub 'citing **`F6`** against' 'citing **`F3`** against'
+mutation_proof 'evaluator: Phase 5 consumer check removed from the final audit' "$EVALUATOR" check_evaluator \
+  m_sub 'run the Phase 5 consumer check' 'run the Phase 5 check'
+
+mutation_proof 'emit.sh: trace-lint dropped from the single-copy tools loop' "$EMIT_BIN" check_emit_pointer \
+  m_sub 'for f in log-spawn.sh memory.sh trace-lint.sh' 'for f in log-spawn.sh memory.sh'
+mutation_proof 'emit.sh: trace-lint Windows launcher entry dropped' "$EMIT_BIN" check_emit_pointer \
+  m_sub '"_kit/trace-lint.cmd"' '"_kit/launcher.cmd"'
+
 # Grouped checks: each mutates a copy of a real template or doc; the clean copy passes, the
 # mutated one fails.
 mutation_proof_copy 'vocabulary: a stale word inserted into a copied agent template' "$EVALUATOR" check_vocabulary \
@@ -979,6 +1186,15 @@ else
   root="$EMIT_ALLOC_PATH"
   if emit_cache_copy "$root" "$ans" && check_emitted_gate_anchors "$root"; then
     report PASS 'fresh emit: floor and citation anchors in emitted claude+cursor copies'
+    # Mutations on copies of the fresh emit: the emitted goal template and the emitted lint tool.
+    emit_mutant 'fresh emit: goal template ## Consumers heading renamed' "$root" \
+      .claude/skills/feature/templates/goal.md m_sub '## Consumers' '## Consumer list'
+    emit_mutant 'fresh emit: cursor goal template ## Searches heading renamed' "$root" \
+      .cursor/skills/feature/templates/goal.md m_sub '## Searches' '## Search list'
+    emit_mutant 'fresh emit: _kit/trace-lint.sh removed from the emit' "$root" \
+      _kit/trace-lint.sh m_rm
+    emit_mutant 'fresh emit: _kit/trace-lint.cmd launcher removed from the emit' "$root" \
+      _kit/trace-lint.cmd m_rm
   else
     report FAIL 'fresh emit: floor and citation anchors in emitted claude+cursor copies' "$MISSING"
   fi
