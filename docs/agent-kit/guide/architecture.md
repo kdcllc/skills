@@ -97,7 +97,7 @@ Sources: [`bin/README.md`](../../../skills/agent-kit/bin/README.md), [`SKILL.md`
 
 ## Installed layout
 
-Each targeted harness gets a **native tree** (for example `.claude/`, `.cursor/`, `.github/`, or `.codex/` plus root `AGENTS.md` for Codex). **Single-copy** artifacts shared across harnesses live under **`_kit/`** (`log-spawn.sh`, `memory.sh`, `kit-guard.sh` when `flags.kit_guard` is set, and `.cmd` launchers), which emit adds to `.gitignore` on every install, and **`_loop/`** (loop drivers), which is emitted only on loop installs and is **not** added to `.gitignore` by emit ([getting-started.md](getting-started.md)). **`_memory/`** splits tracked immutable knowledge from gitignored scratch.
+Each targeted harness gets a **native tree** (for example `.claude/`, `.cursor/`, `.github/`, or `.codex/` plus root `AGENTS.md` for Codex). **Single-copy** artifacts shared across harnesses live under **`_kit/`** (`log-spawn.sh`, `memory.sh`, `trace-lint.sh`, `kit-guard.sh` when `flags.kit_guard` is set, and `.cmd` launchers), which emit adds to `.gitignore` on every install, and **`_loop/`** (loop drivers), which is emitted only on loop installs and is **not** added to `.gitignore` by emit ([getting-started.md](getting-started.md)). **`_memory/`** splits tracked immutable knowledge from gitignored scratch.
 
 ```mermaid
 flowchart TD
@@ -109,7 +109,7 @@ flowchart TD
     end
 
     subgraph singleCopy ["Single-copy (_kit gitignored · _loop on loop installs)"]
-        Kit["_kit/\nlog-spawn · memory · kit-guard (kit_guard) · launchers"]
+        Kit["_kit/\nlog-spawn · memory · trace-lint · kit-guard (kit_guard) · launchers"]
         Loop["_loop/\nloop.sh · loop.cmd"]
     end
 
