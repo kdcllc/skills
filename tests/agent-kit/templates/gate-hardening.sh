@@ -5,13 +5,16 @@
 # changed list, citation and scope checks, backlog, keys, early ladder entry), the
 # continuation-ladder and ORCHESTRATION mirrors, the quality-failure classes, the ship-pr
 # backlog section, the harness-matrix hook addendum, and the maintainer-guide mirrors.
+# Goal gate-hardening-backlog, task 06 adds exact anchors for the keys wording, the
+# copied-template grouped-check proofs, and locks for the F5 mapping, the `uncited` key form,
+# the every-evaluation fix-cycles paragraph and the `unknown` model_check sentence.
 # Sections:
 #   1. canonical checks — one named check per template or doc, every anchor a literal the
 #      owning task wrote (no line numbers);
 #   2. grouped checks — vocabulary, frontmatter validity and sibling-project naming;
 #   3. a behavioral check of the canonical log-spawn.sh `keys` subcommand on fixture reports;
-#   4. mutation proofs — each copies a template or doc to a temp dir, removes or alters one
-#      anchor, and asserts the matching check fails; a base run afterwards still passes;
+#   4. mutation proofs — each copies a real template or doc to a temp dir, removes or alters
+#      one anchor, and asserts the matching check fails; a base run afterwards still passes;
 #   5. a fresh-emit check of the floor and citation anchors in the emitted copies.
 # Tracked, self-install-independent — no network, no LLM, no dependence on an emitted instance.
 set -u
@@ -102,6 +105,14 @@ TERMINOLOGY_SENTENCE='Early arbitration (`criteria-defect`) ends at the human on
 EARLY_WORDING='(cycle 3, or earlier on early ladder entry)'
 CYCLES_RAN='every cycle that ran (three, fewer on early ladder entry)'
 FEATURE_SKILL_MAX_BYTES=11264
+F5_SENTENCE='requirement that no `AC<n>` or `SC<n>` covers cites **`F5`**'
+UNCITED_FORM='keys as `uncited <location> :: <defect>`, with the line suffix removed from the location'
+EVERY_EVAL_READ='Also read it before every Phase 4 task evaluation and Phase 5 audit'
+UNKNOWN_SENTENCE='a reported value starting with `unknown` always gives `model_check: unverified`'
+ORCH_KEYS_PHRASE='appends a `KEYS` line (and a `REPEAT` line for each repeated key)'
+EVALSYS_F7_PHRASE='(including **F7** for bypass-class problems'
+EVALSYS_CITATIONS_PHRASE='§ **Citations** applies **only** to Phase 4 task evaluations'
+WORKFLOW_KEYS_PHRASE='appends a `KEYS` line and a `REPEAT` line for each repeated key, each carrying kind and provenance tags'
 
 # ---------------------------------------------------------------------------
 # Helpers — every need_* records the first-order cause in MISSING instead of printing
@@ -248,6 +259,8 @@ check_task_criteria() {
   done
   need_sec_flat "$f" '^### Issue key$' '^##' 'A `|` inside a key becomes `/`'
   need_sec_flat "$f" '^### Issue key$' '^##' '<citation> <location> :: <defect>'
+  need_eq "$f" "$F5_SENTENCE" 1
+  need_sec_flat "$f" '^### Issue key$' '^##' "$UNCITED_FORM"
   [[ -z "$MISSING" ]]
 }
 
@@ -315,6 +328,7 @@ check_fix_cycles() {
   need_sec_flat "$f" "$e" "$x" 'a task never gets more attempts than on cycle-3 exhaustion'
   need_sec_flat "$f" '^## On cycle-3 exhaustion' "$x" '§ Early ladder entry'
   need_sec_flat "$f" '^## On cycle-3 exhaustion' "$x" 'rung 5 runs first'
+  need_flat "$f" "$EVERY_EVAL_READ"
   [[ -z "$MISSING" ]]
 }
 
@@ -342,7 +356,8 @@ check_orchestration() {
   need_re_ge "$f" 'flaky \(.*local-edits \(.*pre-existing \(.*introduced \(' 1 'Phase 5 class summary line'
   need_flat "$f" 'Loop runs never commit fixes for pre-existing failures'
   need_flat "$f" 'those failures become `follow-ups.md` rows'
-  need_ge "$f" 'KEYS' 1
+  need_flat "$f" "$ORCH_KEYS_PHRASE"
+  need_flat "$f" "$UNKNOWN_SENTENCE"
   need_ge "$f" 'eval-tree' 1
   need_ge "$f" 'log-spawn.sh keys' 1
   need_ge "$f" '**Early ladder entry** (`reference/fix-cycles.md` § Early ladder entry)' 1
@@ -412,7 +427,11 @@ check_eval_system_doc() {
   local f="$1" t
   MISSING=""
   [[ -f "$f" ]] || { note_miss "file missing"; return 1; }
-  for t in 'F7' 'Citations' 'Issue key' '[backlog] [late]' 'Changed since last evaluation'; do
+  local h='^## Floor, citations, and issue keys' x='^## '
+  need_re_eq "$f" "$h" 1 'floor, citations, and issue keys heading'
+  need_sec_flat "$f" "$h" "$x" "$EVALSYS_F7_PHRASE"
+  need_sec_flat "$f" "$h" "$x" "$EVALSYS_CITATIONS_PHRASE"
+  for t in 'Issue key' '[backlog] [late]' 'Changed since last evaluation'; do
     need_ge "$f" "$t" 1
   done
   need_ge "$f" "$DRIFT_SENTENCE" 3
@@ -426,9 +445,10 @@ check_feature_workflow() {
   local f="$1" t
   MISSING=""
   [[ -f "$f" ]] || { note_miss "file missing"; return 1; }
-  for t in 'preexisting-dirty.txt' 'follow-ups.md' 'Backlog (not fixed here)' 'KEYS' 'eval-tree'; do
+  for t in 'preexisting-dirty.txt' 'follow-ups.md' 'Backlog (not fixed here)' 'eval-tree'; do
     need_ge "$f" "$t" 1
   done
+  need_flat "$f" "$WORKFLOW_KEYS_PHRASE"
   need_re_ge "$f" '[Ee]arly ladder entry' 1 'early ladder entry'
   need_ge "$f" "$DRIFT_SENTENCE" 2
   need_eq "$f" 'Eval2 --> LadderEntry: repeated structural key · ladder auto' 1
@@ -615,6 +635,15 @@ check_keys_behavior() {
   grep -qxF -- "$want_a" "$log" 2>/dev/null || note_miss "[line-patch] REPEAT line absent or wrong"
   [[ "$(grep -c '^- REPEAT ' "$log" 2>/dev/null || true)" == 2 ]] || note_miss "line-patch repeat did not yield the second REPEAT"
 
+  # An old-shape uncited item (first word is a backtick span) keys as `uncited <location> :: <defect>`.
+  printf '%s\n' '### Required fixes (if NEEDS FIXES)' \
+    '- [ ] `src/a.sh:12`: missing guard — fix it [structural]' > "$fx/$KEYS_G/spawns/r5.md"
+  keys_call "$bin" "$fx" 05 03 r5.md
+  [[ $KRC -eq 0 ]] || note_miss "uncited item: keys exited $KRC (want 0)"
+  want_a='- KEYS [#05] task 03: uncited src/a.sh :: missing guard [structural] [-]'
+  grep -qxF -- "$want_a" "$log" 2>/dev/null || note_miss "uncited KEYS line absent or wrong"
+  [[ "$(grep -c '^- REPEAT ' "$log" 2>/dev/null || true)" == 2 ]] || note_miss "an uncited first appearance produced a REPEAT"
+
   # Ledger integrity (exit 3): a duplicate KEYS [#NN], and a spawn number with no SPAWN heading.
   lines_a="$(wc -l < "$log" | tr -d ' ')"
   keys_call "$bin" "$fx" 01 01 r1.md; rc_dup=$KRC
@@ -730,24 +759,34 @@ mutation_proof() { # mutation_proof <name> <src> <check_fn> <mutator> [args…]
   rm -rf "$d"
 }
 
-mutation_proof_group() { # mutation_proof_group <name> <check_fn> <fixture file name> <contents-writer…>
-  # Builds a one-file temp directory, writes a clean file, then a mutated variant, and asserts
-  # the grouped check passes the clean one and fails the mutated one (true negative + positive).
-  local name="$1" check_fn="$2" fname="$3" clean="$4" mutated="$5" d
+mutation_proof_copy() { # mutation_proof_copy <name> <src> <check_fn> <mutator> [args…]
+  # For the grouped checks (they scan a directory). Copies a real template or doc into a fresh
+  # temp directory, asserts the check passes on the clean copy (true negative), mutates the
+  # copy, and asserts the check then fails (true positive).
+  local name="$1" src="$2" check_fn="$3" mut="$4" d copy
+  shift 4
   d="$(mktemp -d "$FIXTURE_TMPDIR/grp.XXXXXX")" || { report FAIL "mutation-proof $name" "mktemp failed"; return; }
-  printf '%s\n' "$clean" > "$d/$fname"
+  copy="$d/$(basename "$src")"
+  cp "$src" "$copy" || { report FAIL "mutation-proof $name" "copy failed"; rm -rf "$d"; return; }
   if ! "$check_fn" "$d"; then
-    report FAIL "mutation-proof $name" "clean fixture was rejected: $MISSING"
+    report FAIL "mutation-proof $name" "clean copy was rejected: $MISSING"
     rm -rf "$d"; return
   fi
-  printf '%s\n' "$mutated" > "$d/$fname"
-  if "$check_fn" "$d"; then
-    report FAIL "mutation-proof $name" "check still passed on the mutated fixture"
+  "$mut" "$copy" "$@"
+  if cmp -s "$src" "$copy"; then
+    report FAIL "mutation-proof $name" "the mutation changed nothing"
+  elif "$check_fn" "$d"; then
+    report FAIL "mutation-proof $name" "check still passed on the mutated copy"
   else
     report PASS "mutation-proof $name" "check failed on: ${MISSING:0:110}"
   fi
   rm -rf "$d"
 }
+
+# The stale-vocabulary stem and the sibling-project name are assembled at run time, so this
+# file never holds either one literally.
+stale_stem() { printf '%s%s' ju dg; }
+sibling_name() { printf '%s%s' ar gus; }
 
 # ---------------------------------------------------------------------------
 # Fresh-emit check
@@ -818,6 +857,10 @@ mutation_proof 'task-criteria: worked-example key altered' "$TASK_CRITERIA" chec
   m_sub 'ac2 src/a.sh :: missing guard' 'ac2 src/a.sh :: missing check'
 mutation_proof 'task-criteria: ### Issue key heading removed' "$TASK_CRITERIA" check_task_criteria m_del_lines '### Issue key'
 mutation_proof 'task-criteria: drift sentence removed' "$TASK_CRITERIA" check_task_criteria m_del_lines "$DRIFT_SENTENCE"
+mutation_proof 'task-criteria: F5 mapping sentence altered' "$TASK_CRITERIA" check_task_criteria \
+  m_sub 'covers cites **`F5`**' 'covers cites **`F3`**'
+mutation_proof 'task-criteria: uncited key form altered' "$TASK_CRITERIA" check_task_criteria \
+  m_sub 'keys as `uncited <location> :: <defect>`' 'keys as `<location> :: <defect>`'
 mutation_proof 'evaluator: Citations paragraph pointer removed' "$EVALUATOR" check_evaluator m_del_lines '**Citations** — '
 mutation_proof 'evaluator: pinned tag literal duplicated' "$EVALUATOR" check_evaluator m_append "$TAG_PLACEHOLDER"
 mutation_proof 'evaluator: citation-mode sentence altered' "$EVALUATOR" check_evaluator \
@@ -830,6 +873,8 @@ mutation_proof 'fix-cycles: Early ladder entry heading removed' "$FIX_CYCLES_REF
   m_del_lines '## Early ladder entry'
 mutation_proof 'fix-cycles: keys ordering sentence removed' "$FIX_CYCLES_REF" check_fix_cycles \
   m_del_lines 'round trip settles'
+mutation_proof 'fix-cycles: every-evaluation read paragraph removed' "$FIX_CYCLES_REF" check_fix_cycles \
+  m_del_lines "$EVERY_EVAL_READ"
 mutation_proof 'continuation-ladder: budget literal altered' "$LADDER_REF" check_ladder \
   m_sub '3 additional implementation attempts' '5 additional implementation attempts'
 mutation_proof 'continuation-ladder: all-three wording wrapped across a line break' "$LADDER_REF" check_ladder \
@@ -840,6 +885,10 @@ mutation_proof 'ORCHESTRATION: dirty-snapshot file name dropped' "$ORCH_TEMPLATE
   m_sub 'preexisting-dirty.txt' 'dirty.txt'
 mutation_proof 'ORCHESTRATION: old after-cycle-3 guard wording back' "$ORCH_TEMPLATE" check_orchestration \
   m_append 'At most 3 additional implementation attempts after cycle 3.'
+mutation_proof 'ORCHESTRATION: unknown model_check sentence weakened' "$ORCH_TEMPLATE" check_orchestration \
+  m_sub 'always gives `model_check: unverified`' 'may give `model_check: unverified`'
+mutation_proof 'ORCHESTRATION: issue-keys bullet phrase altered' "$ORCH_TEMPLATE" check_orchestration \
+  m_sub "$ORCH_KEYS_PHRASE" 'appends a keys line'
 mutation_proof 'feature skill: over the byte budget' "$FEATURE_SKILL" check_feature_skill m_pad 400
 mutation_proof 'feature skill: Quality Checks pointer removed' "$FEATURE_SKILL" check_feature_skill \
   m_sub 'classify per ORCHESTRATION.md § Quality Checks' 'classify the failure'
@@ -852,6 +901,10 @@ mutation_proof 'harness-matrix: kit_guard interaction lines removed' "$HARNESS_M
   m_del_lines 'kit_guard'
 mutation_proof 'evaluation-system doc: citation sentence altered' "$EVALSYS_DOC" check_eval_system_doc \
   m_sub 'uncited findings never block' 'uncited findings may block'
+mutation_proof 'evaluation-system doc: floor, citations and keys heading removed' "$EVALSYS_DOC" check_eval_system_doc \
+  m_del_lines '## Floor, citations, and issue keys'
+mutation_proof 'feature-workflow doc: orchestration-log keys sentence altered' "$FEATURE_WORKFLOW_DOC" check_feature_workflow \
+  m_sub "$WORKFLOW_KEYS_PHRASE" 'appends a keys line'
 mutation_proof 'feature-workflow doc: terminology sentence removed' "$FEATURE_WORKFLOW_DOC" check_feature_workflow \
   m_del_lines "$TERMINOLOGY_SENTENCE"
 mutation_proof 'feature-workflow doc: ladder diagram edge removed' "$FEATURE_WORKFLOW_DOC" check_feature_workflow \
@@ -865,14 +918,14 @@ mutation_proof 'agents-and-models doc: loop-range wording restored' "$AGENTS_MOD
 mutation_proof 'goal template: early-entry note dropped from the ladder line' "$GOAL_TEMPLATE" check_goal_template \
   m_sub '; auto may enter it early (reference/fix-cycles.md § Early ladder entry)' ''
 
-# Grouped checks: the clean fixture passes, the mutated one fails.
-mutation_proof_group 'vocabulary: a stale word in a template' check_vocabulary 'sample.md' \
-  'The evaluator reviews the work.' 'The LLM ju''dge reviews the work.'
-mutation_proof_group 'frontmatter: colon-space in a description' check_frontmatter_descriptions 'sample.md' \
-  $'---\nname: sample\ndescription: Reviews work after exhaustion (cycle 3)\n---' \
-  $'---\nname: sample\ndescription: Reviews work: after exhaustion (cycle 3)\n---'
-mutation_proof_group 'naming: a sibling-project name' check_sibling_names 'sample.md' \
-  'A neutral sentence.' "A sentence naming the $(printf '%s%s' ar gus) project."
+# Grouped checks: each mutates a copy of a real template or doc; the clean copy passes, the
+# mutated one fails.
+mutation_proof_copy 'vocabulary: a stale word inserted into a copied agent template' "$EVALUATOR" check_vocabulary \
+  m_append "The LLM $(stale_stem)e reviews the work."
+mutation_proof_copy 'frontmatter: colon-space in a copied agent template description' "$EVALUATOR" check_frontmatter_descriptions \
+  m_sub 'description: ' 'description: Reviews work: '
+mutation_proof_copy 'naming: a sibling-project name inserted into a copied doc' "$DECISION_DOC" check_sibling_names \
+  m_append "A sentence naming the $(sibling_name) project."
 
 # Behavioral mutations on copies of the canonical tool.
 keys_mutant() { # keys_mutant <name> <from> <to> — a mutated log-spawn.sh must fail the behavior check
@@ -898,6 +951,8 @@ keys_mutant 'log-spawn keys: duplicate-KEYS refusal removed' \
   'die 3 "KEYS [#$nn] already present in $log"' ':'
 keys_mutant 'log-spawn keys: missing-SPAWN refusal removed' \
   'die 3 "SPAWN [#$nn] not found in $log"' ':'
+keys_mutant 'log-spawn keys: uncited old-shape key form dropped' \
+  'cit="uncited"; rest="$head"' 'cit="cited"; rest="$head"'
 
 # The originals are untouched: the base run still passes after every mutation.
 base_ok=1
