@@ -55,6 +55,26 @@ With `kit_guard` off but a stale hook reference left in user config, emit warns:
 Copilot and Codex partial warnings when `kit_guard` is on:
 `warning: flags.kit_guard is partial on copilot: no edit-blocking hook; run emit.sh --check in CI (_kit/ is gitignored)`
 `warning: flags.kit_guard is partial on codex: no edit-blocking hook; run emit.sh --check in CI (_kit/ is gitignored)`
+Optional `flags.hook_telemetry` (boolean): absent ⇒ false; a present non-boolean ⇒ exit **3**
+(`flags.hook_telemetry must be a boolean`); persists as `options.hook_telemetry` when present
+and emits `_kit/hook-log.sh` and `_kit/hook-log.cmd`. Claude Code gets `Stop` and
+`SubagentStop` hooks in `.claude/settings.json`, and Cursor gets `stop` and `subagentStop`
+hooks (each with `"loop_limit": 1`) in `.cursor/hooks.json`, written only when those files are
+absent. With `kit_guard` on too, the same created file holds both, with `PreToolUse` /
+`preToolUse` first. The Claude Code command is guarded
+(`test -f "$CLAUDE_PROJECT_DIR/_kit/hook-log.sh" && bash … hook claude || true`), so a fresh
+clone without `_kit/` shows no hook error on every stop. When those config files already exist
+without the hooks, emit leaves them untouched and warns (merge the snippet from stderr):
+`warning: .claude/settings.json exists without the hook-telemetry hooks — left untouched; merge into it: {"hooks":{"Stop":[{"hooks":[{"type":"command","command":"test -f \"$CLAUDE_PROJECT_DIR/_kit/hook-log.sh\" && bash \"$CLAUDE_PROJECT_DIR/_kit/hook-log.sh\" hook claude || true"}]}],"SubagentStop":[{"hooks":[{"type":"command","command":"test -f \"$CLAUDE_PROJECT_DIR/_kit/hook-log.sh\" && bash \"$CLAUDE_PROJECT_DIR/_kit/hook-log.sh\" hook claude || true"}]}]}}`
+`warning: .cursor/hooks.json exists without the hook-telemetry hooks — left untouched; add to its "hooks" object: "stop":[{"command":"bash _kit/hook-log.sh hook cursor","loop_limit":1}],"subagentStop":[{"command":"bash _kit/hook-log.sh hook cursor","loop_limit":1}]`
+With `hook_telemetry` off but a stale hook reference left in user config, emit warns:
+`warning: .claude/settings.json still references _kit/hook-log.sh but flags.hook_telemetry is off — remove those hook entries`
+`warning: .cursor/hooks.json still references _kit/hook-log.sh but flags.hook_telemetry is off — remove those hook entries`
+Copilot and Codex partial warnings when `hook_telemetry` is on:
+`warning: flags.hook_telemetry is partial on copilot: no telemetry hook`
+`warning: flags.hook_telemetry is partial on codex: no telemetry hook`
+These warnings go through the same sorted flush as the kit-guard ones, and the spawn-depth
+message for an existing `.claude/settings.json` still prints at most once per run.
 
 Emit warnings (stderr, counted in `warnings W`, exit unchanged) include unanswered bootstrap
 ids, same-family / reused arbiter model lines from the model map, and
@@ -66,9 +86,9 @@ when `alt_family` equals that harness's `light` tier.
 Top-level key order: `kit`, `kitVersion`, `installedAt`, `harnesses`, `primary`,
 `options`, `seedFiles`, `files`, `answers`. `options` is flat: `forge` (string),
 optional `forgeHost`, booleans `greenfield`, `lint`, `typecheck`,
-`models_pinned`, `research`, `loop`, and optional `loop_worktree`, `opt_in`, and
-`kit_guard` (each copied from answers only when the matching `flags.*` key is
-present). `files` maps emit-set paths → sha256
+`models_pinned`, `research`, `loop`, and optional `loop_worktree`, `opt_in`,
+`kit_guard`, and `hook_telemetry` (each copied from answers only when the matching
+`flags.*` key is present). `files` maps emit-set paths → sha256
 (compiler copies and seeds excluded; foreign entries carried). `seedFiles`
 lists seeds written only if absent. Nested object keys are ordinal-sorted.
 Rewriting the manifest never counts toward `written`.
@@ -85,7 +105,8 @@ Windows launcher copied from `templates/tools/bash-launcher.cmd`. Invokes this
 script through Git for Windows Bash: `bin\emit.cmd --answers F --root DIR` (use
 forward slashes in path arguments). The emitter also writes the same launcher
 bytes to `_kit/memory.cmd`, `_kit/log-spawn.cmd`, `_kit/trace-lint.cmd`, `_kit/kit-guard.cmd` (when
-`flags.kit_guard` is true), and — for loop-enabled installs — `_loop/loop.cmd`.
+`flags.kit_guard` is true), `_kit/hook-log.cmd` (when `flags.hook_telemetry` is true), and — for
+loop-enabled installs — `_loop/loop.cmd`.
 
 ## `_kit/kit-guard.sh`
 
@@ -140,3 +161,45 @@ that one file and writes nothing. Bash 3.2 and `sed` only.
   line `trace-lint: <N> finding(s)` · **4** the file is missing or unreadable.
 - **Emitted paths** — `_kit/trace-lint.sh` (executable) and `_kit/trace-lint.cmd`, on every
   install regardless of flags.
+
+## `_kit/hook-log.sh`
+
+Emitted single-copy to `_kit/hook-log.sh` (Windows: `_kit/hook-log.cmd`, a byte copy of the one
+launcher template) when `flags.hook_telemetry` is true. Canonical source:
+`templates/tools/hook-log.sh`. Telemetry only: it records how agent loops and subagents stop and
+never steers them. Bash 3.2, `awk` and `LC_ALL=C`; no runtime JSON tool.
+
+- **`hook <claude|cursor> [--root DIR]`** — read one stop-hook payload from stdin (Claude Code
+  `Stop` / `SubagentStop`, Cursor `stop` / `subagentStop`) and append one metadata line to the
+  log. Always exits **0** and fails open: `hook cursor` prints exactly `{}` on every path,
+  `hook claude` prints nothing, and neither ever returns a follow-up message, block decision,
+  continue flag or permission verdict, so the hook cannot start or extend an agent loop. Skipped without
+  writing: `AGENT_KIT_HOOK_LOG=0`; empty or non-JSON-looking stdin; `hook claude` with a Cursor
+  caller (`CURSOR_PROJECT_DIR` set, or a payload containing `cursor_version`), so a dual
+  Claude Code + Cursor install logs through the Cursor hook only; an event name outside the
+  four above; a payload already logged (idempotent); any write failure.
+- **`summary [--root DIR]`** — read-only. Reads `events.1.jsonl` then `events.jsonl` (either may be
+  missing) and prints the event count with the log path, then counts by event, by
+  `harness/agent_type`, by status and by model (`  <count> <value>`, sorted by value, null shown
+  as `-`), then an `errors and aborts` section listing `ts harness event agent_type status` for
+  every line whose status is `error` or `aborted` (or `  none`).
+- **`--help`** — usage on stdout, exit **0**.
+- **Exit codes** — **0** ok (hook mode always, once its arguments parse) · **2** usage error in any
+  mode, or an unreadable root in `summary` (`hook-log: cannot read root: <dir>`).
+- **Root** — `--root DIR` when given, else the parent of the script's directory (`_kit/..`).
+- **Log path** — `<root>/_memory/work/hooks/events.jsonl`, under the gitignored `_memory/work/`.
+  Once the file reaches the size cap it is moved once to `events.1.jsonl` under a `mkdir` lock
+  (`hooks/.rotate.lock`, treated as stale after 10 minutes), replacing an older
+  `events.1.jsonl`. The tool writes nowhere else.
+- **Line fields, in order** — `ts` (UTC), `harness` (`claude` | `cursor`), `event`, `session`,
+  `generation`, `agent_id`, `agent_type`, `status`, `duration_ms`, `message_count`,
+  `tool_call_count`, `loop_count`, `model`, `modified_files` (the element count of the Cursor
+  array), `key` (first 16 hex of the SHA-256 of the raw payload — the idempotency key). A field the
+  payload lacks, or whose value has the wrong type, is `null`; the status, count and model fields
+  come from Cursor payloads only. Metadata only: the task prompt, summary, last-message text,
+  transcript and workspace paths, and user email are never read into the log.
+- **Environment** — `AGENT_KIT_HOOK_LOG=0` turns logging off (anything else leaves it on);
+  `AGENT_KIT_HOOK_LOG_MAX_BYTES` sets the rotation cap in bytes (default `5242880`; a non-numeric
+  value uses the default).
+- **Hook configs** — emit writes the hooks that call it only into a `.claude/settings.json` /
+  `.cursor/hooks.json` it creates (see `flags.hook_telemetry` under Answers).

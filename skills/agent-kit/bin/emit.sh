@@ -47,6 +47,17 @@
 #   edit-blocking hook; run emit.sh --check in CI). The existing spawn-depth warning is
 #   independent.
 #
+#   Optional flags.hook_telemetry (boolean): absent ⇒ false; non-boolean ⇒ exit 3. Persists as
+#   options.hook_telemetry when present; emits _kit/hook-log.sh and _kit/hook-log.cmd, plus stop
+#   hooks (Claude Code Stop / SubagentStop in .claude/settings.json, Cursor stop / subagentStop in
+#   .cursor/hooks.json) only into a config file that is absent, combined with the kit-guard hook
+#   when that flag is on too. Warnings (stderr `emit: warning: …`, counted in W, exit unchanged):
+#   enabled + existing settings.json / hooks.json without _kit/hook-log.sh ⇒ left untouched,
+#   warning prints the exact hook snippet to merge; flag absent/false + an existing one still
+#   referencing _kit/hook-log.sh ⇒ warning to remove those hook entries; enabled with copilot or
+#   codex ⇒ one partial-support warning per harness (no telemetry hook). The spawn-depth warning
+#   is independent.
+#
 #   --check  run kit-guard check against --root (default cwd); needs no --answers.
 #   Delegates to <kit>/templates/tools/kit-guard.sh check --root "<root>" (same exit
 #   codes: 0 clean · 2 usage/no manifest · 4 kit files modified or missing). Mutually
@@ -54,8 +65,8 @@
 #
 #   Exit codes: 0 ok · 2 usage / no sha256 tool / answers file unreadable · 3 answers
 #   invalid, unanswered ids under --check-answers, loop_chain usage-credit denylist
-#   entry, flags.loop_worktree, flags.opt_in, or flags.kit_guard wrong type, or models.<h>.fast /
-#   arbiter_same_family wrong JSON type · 4 emit blocked by user-modified kit files or pre-existing files at kit paths
+#   entry, flags.loop_worktree, flags.opt_in, flags.kit_guard, or flags.hook_telemetry wrong type,
+#   or models.<h>.fast / arbiter_same_family wrong JSON type · 4 emit blocked by user-modified kit files or pre-existing files at kit paths
 #   with no prior manifest entry (listed on stderr; --force overrides file writes) · 5 verify failed ·
 #   6 template syntax error. Errors: one stderr line each, prefixed `emit: `.
 #   --help prints usage to stderr and exits 2.
@@ -93,6 +104,7 @@ usage: emit.sh [--answers F] [--upgrade] [--dry-run] [--force] [--check-answers]
   --check-answers  list unanswered class-a bootstrap ids; exit 3 if any
   --check      run kit-guard check on --root (0 clean · 2 usage/no manifest · 4 modified/missing)
   answers flags.kit_guard (boolean; absent ⇒ false, non-boolean ⇒ exit 3): emits _kit/kit-guard.sh/.cmd + absent hook configs; hook warnings on stderr (see header)
+  answers flags.hook_telemetry (boolean; absent ⇒ false, non-boolean ⇒ exit 3): emits _kit/hook-log.sh/.cmd + stop hooks in absent configs; hook warnings on stderr (see header)
 exit: 0 ok · 2 usage/sha256/unreadable · 3 answers invalid · 4 blocked · 5 verify · 6 template syntax
 EOF
 }
@@ -911,7 +923,7 @@ map_sorted_keys() { # <map> → keys, one per line, LC_ALL=C order
 # ---------------------------------------------------------------------------
 known_flag() {
   case "$1" in
-    research|loop|greenfield|lint|typecheck|models_pinned|opt_in|kit_guard|\
+    research|loop|greenfield|lint|typecheck|models_pinned|opt_in|kit_guard|hook_telemetry|\
     is_claude|is_cursor|is_copilot|is_codex|\
     want_claude|want_cursor|want_copilot|want_codex) return 0 ;;
   esac
@@ -921,7 +933,7 @@ known_flag() {
 # Flags live in plain variables FLAG_<name> (true|false).
 flag_set() { printf -v "FLAG_$1" '%s' "$2"; }
 flag_is() { local _fv="FLAG_$1"; [ "${!_fv:-false}" = true ]; }
-for _f in research loop greenfield lint typecheck models_pinned opt_in kit_guard \
+for _f in research loop greenfield lint typecheck models_pinned opt_in kit_guard hook_telemetry \
           is_claude is_cursor is_copilot is_codex \
           want_claude want_cursor want_copilot want_codex; do
   flag_set "$_f" false
@@ -1705,6 +1717,97 @@ cursor_hooks_json_kit_guard() {
 EOF
 }
 
+# Hook configs for a run that creates the file and has flags.hook_telemetry on (with or without
+# kit_guard). Keys in order: PreToolUse (kit_guard only), Stop, SubagentStop — the kit-guard-only
+# and flag-off files stay the two functions above. The Claude Code command is guarded so a fresh
+# clone (no _kit/ yet) shows no hook error on every stop.
+settings_hooks_claude_pretooluse() {
+  cat <<'EOF'
+    "PreToolUse": [
+      {
+        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"$CLAUDE_PROJECT_DIR/_kit/kit-guard.sh\" hook claude"
+          }
+        ]
+      }
+    ]
+EOF
+}
+
+settings_hooks_claude_stops() {
+  cat <<'EOF'
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "test -f \"$CLAUDE_PROJECT_DIR/_kit/hook-log.sh\" && bash \"$CLAUDE_PROJECT_DIR/_kit/hook-log.sh\" hook claude || true"
+          }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "test -f \"$CLAUDE_PROJECT_DIR/_kit/hook-log.sh\" && bash \"$CLAUDE_PROJECT_DIR/_kit/hook-log.sh\" hook claude || true"
+          }
+        ]
+      }
+    ]
+EOF
+}
+
+settings_json_hooks() {
+  local pre="" stops
+  if flag_is kit_guard; then
+    pre="$(settings_hooks_claude_pretooluse),"$'\n'
+  fi
+  stops="$(settings_hooks_claude_stops)"
+  printf '{\n  "env": {\n    "CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH": "3"\n  },\n  "hooks": {\n%s%s\n  }\n}\n' "$pre" "$stops"
+}
+
+cursor_hooks_pretooluse() {
+  cat <<'EOF'
+    "preToolUse": [
+      {
+        "command": "bash _kit/kit-guard.sh hook cursor",
+        "matcher": "Write|Delete"
+      }
+    ]
+EOF
+}
+
+cursor_hooks_stops() {
+  cat <<'EOF'
+    "stop": [
+      {
+        "command": "bash _kit/hook-log.sh hook cursor",
+        "loop_limit": 1
+      }
+    ],
+    "subagentStop": [
+      {
+        "command": "bash _kit/hook-log.sh hook cursor",
+        "loop_limit": 1
+      }
+    ]
+EOF
+}
+
+cursor_hooks_json_hooks() {
+  local pre="" stops
+  if flag_is kit_guard; then
+    pre="$(cursor_hooks_pretooluse),"$'\n'
+  fi
+  stops="$(cursor_hooks_stops)"
+  printf '{\n  "version": 1,\n  "hooks": {\n%s%s\n  }\n}\n' "$pre" "$stops"
+}
+
 # ---------------------------------------------------------------------------
 # emit-set
 # ---------------------------------------------------------------------------
@@ -2099,6 +2202,17 @@ emit_single_copy() {
       map_set EMIT "_kit/kit-guard.cmd" "$content"
     fi
   fi
+  if flag_is hook_telemetry; then
+    if [ -f "$TPL/tools/hook-log.sh" ]; then
+      resolve_template "$TPL/tools/hook-log.sh" "tools/hook-log.sh"
+      content="$RESOLVED"
+      put_emit "_kit/hook-log.sh" "$content"
+    fi
+    if [ -f "$TPL/tools/bash-launcher.cmd" ]; then
+      tpl_bytes_into content "$TPL/tools/bash-launcher.cmd"
+      map_set EMIT "_kit/hook-log.cmd" "$content"
+    fi
+  fi
   # Windows launchers (_kit/memory.cmd, _kit/log-spawn.cmd, _kit/trace-lint.cmd,
   # _loop/loop.cmd when loop is on): byte copies of the one template (CRLF must
   # survive, so never through read_file_raw_into / resolve_template).
@@ -2241,6 +2355,19 @@ EOF
         flag_set kit_guard true
       else
         flag_set kit_guard false
+      fi
+    fi
+  fi
+  jt_q_into ty "$ANSWERS" type flags hook_telemetry
+  if [ "$ty" != missing ]; then
+    if [ "$ty" != boolean ]; then
+      add_problem "flags.hook_telemetry must be a boolean"
+    else
+      jt_q_into flag_is "$ANSWERS" istrue flags hook_telemetry
+      if [ "$flag_is" = true ]; then
+        flag_set hook_telemetry true
+      else
+        flag_set hook_telemetry false
       fi
     fi
   fi
@@ -2900,44 +3027,59 @@ put_optional_kit_files() {
   local cf light tables existing out sf hf
   if harness_wanted claude-code; then
     sf="$ROOT/.claude/settings.json"
-    if flag_is kit_guard; then
-      if [ ! -f "$sf" ]; then
+    if [ ! -f "$sf" ]; then
+      if flag_is hook_telemetry; then
+        put_emit ".claude/settings.json" "$(settings_json_hooks)"
+      elif flag_is kit_guard; then
         put_emit ".claude/settings.json" "$(settings_json_kit_guard)"
-      elif ! grep -Fq '_kit/kit-guard.sh' "$sf"; then
-        record_warn_line 'warning: .claude/settings.json exists without the kit-guard hook — left untouched; merge into it: {"hooks":{"PreToolUse":[{"matcher":"Edit|Write|MultiEdit|NotebookEdit","hooks":[{"type":"command","command":"bash \"$CLAUDE_PROJECT_DIR/_kit/kit-guard.sh\" hook claude"}]}]}}'
-        if ! settings_has_spawn_depth "$sf"; then
-          bump_warn
-          dry_action warn ".claude/settings.json"
-          printf 'emit: .claude/settings.json present without CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH — left untouched\n' >&2
-        fi
-      elif ! settings_has_spawn_depth "$sf"; then
-        bump_warn
-        dry_action warn ".claude/settings.json"
-        printf 'emit: .claude/settings.json present without CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH — left untouched\n' >&2
+      else
+        put_emit ".claude/settings.json" "$(settings_json_min)"
       fi
     else
-      if [ ! -f "$sf" ]; then
-        put_emit ".claude/settings.json" "$(settings_json_min)"
-      elif ! settings_has_spawn_depth "$sf"; then
+      if flag_is kit_guard; then
+        if ! grep -Fq '_kit/kit-guard.sh' "$sf"; then
+          record_warn_line 'warning: .claude/settings.json exists without the kit-guard hook — left untouched; merge into it: {"hooks":{"PreToolUse":[{"matcher":"Edit|Write|MultiEdit|NotebookEdit","hooks":[{"type":"command","command":"bash \"$CLAUDE_PROJECT_DIR/_kit/kit-guard.sh\" hook claude"}]}]}}'
+        fi
+      elif grep -Fq '_kit/kit-guard.sh' "$sf"; then
+        record_warn_line "warning: .claude/settings.json still references _kit/kit-guard.sh but flags.kit_guard is off — remove that hook entry"
+      fi
+      if flag_is hook_telemetry; then
+        if ! grep -Fq '_kit/hook-log.sh' "$sf"; then
+          record_warn_line 'warning: .claude/settings.json exists without the hook-telemetry hooks — left untouched; merge into it: {"hooks":{"Stop":[{"hooks":[{"type":"command","command":"test -f \"$CLAUDE_PROJECT_DIR/_kit/hook-log.sh\" && bash \"$CLAUDE_PROJECT_DIR/_kit/hook-log.sh\" hook claude || true"}]}],"SubagentStop":[{"hooks":[{"type":"command","command":"test -f \"$CLAUDE_PROJECT_DIR/_kit/hook-log.sh\" && bash \"$CLAUDE_PROJECT_DIR/_kit/hook-log.sh\" hook claude || true"}]}]}}'
+        fi
+      elif grep -Fq '_kit/hook-log.sh' "$sf"; then
+        record_warn_line "warning: .claude/settings.json still references _kit/hook-log.sh but flags.hook_telemetry is off — remove those hook entries"
+      fi
+      if ! settings_has_spawn_depth "$sf"; then
         bump_warn
         dry_action warn ".claude/settings.json"
         printf 'emit: .claude/settings.json present without CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH — left untouched\n' >&2
-      fi
-      if [ -f "$sf" ] && grep -Fq '_kit/kit-guard.sh' "$sf"; then
-        record_warn_line "warning: .claude/settings.json still references _kit/kit-guard.sh but flags.kit_guard is off — remove that hook entry"
       fi
     fi
   fi
   if harness_wanted cursor; then
     hf="$ROOT/.cursor/hooks.json"
-    if flag_is kit_guard; then
-      if [ ! -f "$hf" ]; then
+    if [ ! -f "$hf" ]; then
+      if flag_is hook_telemetry; then
+        put_emit ".cursor/hooks.json" "$(cursor_hooks_json_hooks)"
+      elif flag_is kit_guard; then
         put_emit ".cursor/hooks.json" "$(cursor_hooks_json_kit_guard)"
-      elif ! grep -Fq '_kit/kit-guard.sh' "$hf"; then
-        record_warn_line 'warning: .cursor/hooks.json exists without the kit-guard hook — left untouched; add to its "hooks" object: "preToolUse":[{"command":"bash _kit/kit-guard.sh hook cursor","matcher":"Write|Delete"}]'
       fi
-    elif [ -f "$hf" ] && grep -Fq '_kit/kit-guard.sh' "$hf"; then
-      record_warn_line "warning: .cursor/hooks.json still references _kit/kit-guard.sh but flags.kit_guard is off — remove that hook entry"
+    else
+      if flag_is kit_guard; then
+        if ! grep -Fq '_kit/kit-guard.sh' "$hf"; then
+          record_warn_line 'warning: .cursor/hooks.json exists without the kit-guard hook — left untouched; add to its "hooks" object: "preToolUse":[{"command":"bash _kit/kit-guard.sh hook cursor","matcher":"Write|Delete"}]'
+        fi
+      elif grep -Fq '_kit/kit-guard.sh' "$hf"; then
+        record_warn_line "warning: .cursor/hooks.json still references _kit/kit-guard.sh but flags.kit_guard is off — remove that hook entry"
+      fi
+      if flag_is hook_telemetry; then
+        if ! grep -Fq '_kit/hook-log.sh' "$hf"; then
+          record_warn_line 'warning: .cursor/hooks.json exists without the hook-telemetry hooks — left untouched; add to its "hooks" object: "stop":[{"command":"bash _kit/hook-log.sh hook cursor","loop_limit":1}],"subagentStop":[{"command":"bash _kit/hook-log.sh hook cursor","loop_limit":1}]'
+        fi
+      elif grep -Fq '_kit/hook-log.sh' "$hf"; then
+        record_warn_line "warning: .cursor/hooks.json still references _kit/hook-log.sh but flags.hook_telemetry is off — remove those hook entries"
+      fi
     fi
   fi
   if flag_is kit_guard; then
@@ -2946,6 +3088,14 @@ put_optional_kit_files() {
     fi
     if harness_wanted codex; then
       record_warn_line "warning: flags.kit_guard is partial on codex: no edit-blocking hook; run emit.sh --check in CI (_kit/ is gitignored)"
+    fi
+  fi
+  if flag_is hook_telemetry; then
+    if harness_wanted copilot; then
+      record_warn_line "warning: flags.hook_telemetry is partial on copilot: no telemetry hook"
+    fi
+    if harness_wanted codex; then
+      record_warn_line "warning: flags.hook_telemetry is partial on codex: no telemetry hook"
     fi
   fi
   if harness_wanted codex; then
@@ -3142,6 +3292,10 @@ write_manifest() {
   jt_q_into ty "$ANSWERS" type flags kit_guard
   if [ "$ty" != missing ]; then
     MT+="$(jt_sub "$ANSWERS" "${J_US}flags${J_US}kit_guard" "${J_US}options${J_US}kit_guard")"$'\n'
+  fi
+  jt_q_into ty "$ANSWERS" type flags hook_telemetry
+  if [ "$ty" != missing ]; then
+    MT+="$(jt_sub "$ANSWERS" "${J_US}flags${J_US}hook_telemetry" "${J_US}options${J_US}hook_telemetry")"$'\n'
   fi
   MT+="${J_US}seedFiles"$'\t'array$'\t\n'
   if [ -n "$SEED_CONTENT" ]; then
