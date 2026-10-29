@@ -164,8 +164,8 @@ the task-criteria skill's **Provenance tags** section for late-finding justifica
 reversal classification.
 
 **Citations** — in citation modes every `blocker` or `major` finding cites exactly one
-`AC<n>`, `SC<n>` or `F<n>`. The floor (`## Floor`), the citation rule and its scope
-(`## Citations`), the issue key and the late-finding rule (`## Provenance tags`) are defined in
+`AC<n>` (audits: `<TT>/AC<n>`), `SC<n>` or `F<n>`. The floor (`## Floor`), the citation rule and its scope
+(`## Citations`), the issue key (`### Issue key` under `## Citations`) and the late-finding rule (`## Provenance tags`) are defined in
 `{{IDE_DIR}}/skills/task-criteria/SKILL.md`; the rules live there, per the Tuning note below.
 
 Every **non-PASS** verdict (`NEEDS FIXES` or `REJECT`) MUST include `failure_class:`.
