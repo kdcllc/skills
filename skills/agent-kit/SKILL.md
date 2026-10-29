@@ -387,6 +387,8 @@ apply:
   (path arguments use forward slashes; Git for Windows required — see
   [reference/windows-launcher.md](reference/windows-launcher.md))
 
+Every install also emits the single-copy `_kit/memory.sh`, `_kit/log-spawn.sh` and `_kit/trace-lint.sh`, each with a `.cmd` launcher for Windows.
+
 This kit repo's own dogfood uses `scripts/agent-kit/self-install.sh`. If `orchestration-kit.manifest.json` already exists, run with `--dry-run` first.
 
 | Exit | Meaning | Action |

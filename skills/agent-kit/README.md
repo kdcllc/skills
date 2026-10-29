@@ -191,6 +191,7 @@ exit codes.
 | `skills/agent-kit-models.map.md` | The model map — the only place model IDs live per install |
 | `_kit/log-spawn.sh` + `_kit/log-spawn.cmd` | Single-copy orchestration-log writer + Windows launcher (`spawn` / `outcome` / `note` / `keys`) |
 | `_kit/memory.sh` + `_kit/memory.cmd` | Single-copy memory store + Windows launcher (`add` / `index` / `search` / `show` / `redact` / `check` / `rm` / `capture` / `backfill` / `prune`) |
+| `_kit/trace-lint.sh` + `_kit/trace-lint.cmd` | Single-copy consumer-trace lint for `goal.md` (`## Searches` / `## Consumers`) + Windows launcher |
 | `_kit/kit-guard.sh` + `_kit/kit-guard.cmd` | Kit-file guard + Windows launcher, emitted only with `flags.kit_guard`; Claude Code and Cursor also get hook configs in `.claude/settings.json` / `.cursor/hooks.json` when those files are absent (if a file exists without the hook, emit leaves it untouched and prints a snippet to merge) |
 | `_memory/` | Tracked records (`records/`, `quarantine/`, `loop/`); gitignored scratch `work/` plus derived `.index/` and `raw/` |
 | `ORCHESTRATION.md` | The architecture doc, filled in for the project |

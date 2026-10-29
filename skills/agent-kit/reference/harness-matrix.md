@@ -86,7 +86,7 @@ All harnesses: hooks cover agent edit tools, not shell or human edits; `check` d
 
 Windows note: per-harness CLI availability on Windows is unverified — the loop
 drivers assume the harness CLI runs natively where invoked. **Kit tools** (`bin/emit.*`,
-`_kit/memory.*`, `_kit/log-spawn.*`, `_kit/kit-guard.*` on `flags.kit_guard` installs, and `_loop/loop.cmd` on loop installs) require **Git for Windows** when invoked from cmd
+`_kit/memory.*`, `_kit/log-spawn.*`, `_kit/trace-lint.*`, `_kit/kit-guard.*` on `flags.kit_guard` installs, and `_loop/loop.cmd` on loop installs) require **Git for Windows** when invoked from cmd
 or PowerShell via the `.cmd` launchers; inside Git Bash, call the `.sh` scripts with
 `bash` directly ([windows-launcher.md](windows-launcher.md)). Loop-specific Windows caveats are in [windows-launcher.md § Loop on Windows: known limitations](windows-launcher.md#loop-on-windows-known-limitations).
 
