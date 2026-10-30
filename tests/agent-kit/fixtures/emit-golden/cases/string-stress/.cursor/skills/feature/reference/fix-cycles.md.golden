@@ -24,11 +24,12 @@ Implementer MAY be resumed for fix cycle 1; cycles 2–3 fresh spawns
 **`criteria-defect`** (not bypass): route at detection per `reference/continuation-ladder.md`. **Bypass at detection (every verdict, cycles 1–3).** Verdicts tagged `destructive`,
 `security`, or `infra` stop all cycles immediately and escalate — from cycle 1.
 
-## Provenance (re-evaluations and re-audits)
+## Provenance
 
-This section applies to Phase 4 task re-evaluations and Phase 5 final-audit re-audits. It
-does not apply to Phase 3 goal re-checks. The tree snapshot below is the exception: it is
-taken at every Phase 4 and Phase 5 evaluator spawn, first evaluations included.
+The tree snapshot below applies to every evaluator spawn in Phases 4 and 5, first
+evaluations included; the provenance tags apply to re-evaluations and re-audits (Phase 4
+task re-evaluations and Phase 5 final-audit re-audits). Neither applies to Phase 3 goal
+re-checks.
 
 Every re-evaluation and re-audit context package must include every earlier required-fixes list verbatim for that task or audit, labeled by cycle and copied from
 the earlier `spawns/NN-report.md`, whether the evaluator is resumed or freshly spawned.

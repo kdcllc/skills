@@ -36,8 +36,9 @@ never edit files and never fix anything — you read, verify, and return a verdi
   as an issue — never a pass. Otherwise, if **What I verified** shows no execution
   evidence (a command you ran plus its output), the verdict is invalid.
   (Arbitration mode and consumer-trace mode excepted — see **Arbitration mode** and
-  **Consumer-trace mode**; no code is under review, so arbiter evidence is
-  acceptance-criteria citation only.)
+  **Consumer-trace mode**. Arbitration reviews criteria, not code, so its evidence is
+  acceptance-criteria citation only; consumer-trace mode scores no work, so its evidence
+  is the output of the searches it runs.)
 - **Use the file-read tool.** Where your harness has a file-read tool, read files with it rather than `cat`/`head`/`sed` through the shell (running a criterion's or test's command is still fine); at least one harness loads path-scoped rules only on file-read tool reads.
 - **Placement against routed rules.** When the package lists path-scoped rule files, check every created or moved file against them; a placement that violates a routed rule is an issue, not a note.
 
@@ -67,7 +68,8 @@ The orchestrator's prompt tells you which mode you are in:
   **Searches to re-run:** whenever the goal's `## Searches` is non-empty, add a
   `### Searches to re-run` section to the verdict listing one to three `S<n>` ids. The
   verdict is provisional until the orchestrator resumes you with the output of those
-  searches; the comparison rule is `.cursor/skills/goal-criteria/SKILL.md` § Consumer trace.
+  searches; the comparison rule is item 4 of the **Consumer trace (Phase 3 gate)**
+  paragraph of `.cursor/skills/goal-criteria/SKILL.md`.
 - **Task evaluation** — apply the criteria in `.cursor/skills/task-criteria/SKILL.md`.
 - **Final audit** — evaluate the whole goal: every task's requirements, cross-task
   integration, and no regressions in touched areas. Also run the Phase 5 consumer check
@@ -179,9 +181,11 @@ the task-criteria skill's **Provenance tags** section for late-finding justifica
 reversal classification.
 
 **Citations** — in citation modes every `blocker` or `major` finding cites exactly one
-`AC<n>` (audits: `<TT>/AC<n>`), `SC<n>` or `F<n>`. The floor (`## Floor`), the citation rule and its scope
-(`## Citations`), the issue key (`### Issue key` under `## Citations`) and the late-finding rule (`## Provenance tags`) are defined in
-`.cursor/skills/task-criteria/SKILL.md`; the rules live there, per the Tuning note below.
+`AC<n>` (audits: `<TT>/AC<n>`), `SC<n>` or `F<n>`. The floor (`## Floor`), the citation
+rule and its scope (`## Citations`), the issue key (`### Issue key` under `## Citations`)
+and the late-finding rule (`## Provenance tags`) are defined in
+`.cursor/skills/task-criteria/SKILL.md`; the rules live there, per the Tuning note
+below.
 
 Every **non-PASS** verdict (`NEEDS FIXES` or `REJECT`) MUST include `failure_class:`.
 Omit it on PASS only. `PASS (with notes)` is a PASS for `failure_class` purposes
@@ -275,7 +279,10 @@ so the trace stays independent of the plan.
 **Work** — Read-only; never edit. Search the repository with the read-only search tool for
 every name variant of each surface: identifier, string key, command, flag, heading, file
 name, serialized field and re-export. Exclude `_memory/`. Run each search yourself and
-record its command and hits in the goal template's format.
+record its command and hits in the goal template's format. A search-tool call prints no
+`rg` line, so write the equivalent command, such as
+`rg -n -H '<pattern>' <paths> --glob '!_memory/**'`, then one `<path>:<line>:<text>` hit
+per match.
 
 **Output** — A header `## Consumer trace (blind)`, then `## Searches` and `## Consumers`
 sections in the format of the goal template (`.cursor/skills/feature/templates/goal.md`),
