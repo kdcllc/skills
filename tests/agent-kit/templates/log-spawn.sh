@@ -25,7 +25,18 @@
 #         `uncited <loc> :: <defect>`, and an unchanged spawn/outcome/note log literal plus an
 #         unchanged stdout / `note` usage-error (stderr text + exit code) literal
 #   model_check: a --model-reported text beginning with `unknown` → unverified (even when it
-#         names the requested family); later `unknown` and other results unchanged
+#         names the requested family); later `unknown` and other results unchanged. Case (c)
+#         pairs bare `Unknown` with `Unknown gpt-4.1` (a different family): the bare word alone
+#         is `unverified` with or without the `unknown*` mapping, so only the pair can fail
+#         when the mapping is removed
+#   Footprint commas: `files_read: 9 (~85,000 chars)` → work_read_chars: 85000, `1,234` N and a
+#         `1,234,567` C parse, plain integers still parse, malformed groups (85,00 · ,850 ·
+#         1,2 · 8,5000 · 85,,000) stay n/a
+#   unclosed backtick: a first word that opens a backtick which never closes keys in the cited
+#         form (`<word> - :: <rest>`, exact key asserted), not as `uncited ...`
+#   mutation_caught: each of the above runs its check against the canonical script (must pass)
+#         and against a one-line mutant of it (must fail): digit-only Footprint regex, loose
+#         comma grouping, `unknown*` mapping removed, unclosed-backtick guard widened
 #   Structural checks align emitters/manifest/instance with _kit/log-spawn.sh + .cmd
 #   (retired log-spawn.ps1 twin must not appear).
 # Structural section — emitters, canonical + instance feature skills / ORCHESTRATION
@@ -357,6 +368,33 @@ log_spawn_mut_empty_root() {
   return 0
 }
 
+# mutation_caught <name> <sed-script> <check-fn> — runs <check-fn> (called as `<check-fn> bash <script>`;
+# returns 0 when the script behaves) against the canonical script, which must pass, and against a copy
+# of it that <sed-script> changes by exactly one line, which must fail. A sed that changes nothing, or
+# more than one line, or leaves a syntax error, is reported as a FAIL (an equivalent or broken mutant
+# proves nothing).
+mutation_caught() {
+  local name="$1" sedscript="$2" check="$3" mut changed rc_canon rc_mut
+  mut="$(mktemp "$FIXTURE_TMPDIR/mutant.XXXXXX")" || { report FAIL "mutation $name" "mktemp failed"; return; }
+  sed "$sedscript" "$CANON_SH" > "$mut"
+  changed="$(diff "$CANON_SH" "$mut" | grep -c '^<' || true)"
+  if [[ "$changed" -ne 1 ]]; then
+    report FAIL "mutation $name" "sed changed $changed canonical lines (want exactly 1)"
+    return
+  fi
+  if ! bash -n "$mut" 2>/dev/null; then
+    report FAIL "mutation $name" "mutant has a syntax error"
+    return
+  fi
+  "$check" bash "$CANON_SH"; rc_canon=$?
+  "$check" bash "$mut"; rc_mut=$?
+  if [[ "$rc_canon" -eq 0 && "$rc_mut" -ne 0 ]]; then
+    report PASS "mutation $name: canonical passes, mutant fails (check rc=$rc_mut)"
+  else
+    report FAIL "mutation $name" "canonical rc=$rc_canon (want 0), mutant rc=$rc_mut (want non-zero)"
+  fi
+}
+
 # ---------------------------------------------------------------------------
 # Behavioral — bash twin
 # ---------------------------------------------------------------------------
@@ -391,6 +429,65 @@ fi
 
 run_suite bash bash "$BIN"
 run_work_suite bash bash "$BIN"
+
+# ---------------------------------------------------------------------------
+# Footprint numbers with comma thousands separators (~85,000)
+# ---------------------------------------------------------------------------
+# footprint_work <footprint-line> <runner...> → prints the OUTCOME's work_read_chars value
+# (runs in the caller's command substitution, so its cd stays local)
+footprint_work() {
+  local line="$1" fx out; shift
+  fx="$(alloc_fx)"
+  mkdir -p "$fx/_memory/work/goals/demo/spawns"
+  printf 'ctx\n' > "$fx/_memory/work/goals/demo/spawns/11-context.md"
+  printf '%s\n' '### Footprint' "$line" 'commands_run: 1' > "$fx/_memory/work/goals/demo/spawns/11-report.md"
+  cd "$fx" || return 1
+  "$@" spawn --goal demo --agent implementer --phase P4 --model-requested m \
+       --context _memory/work/goals/demo/spawns/11-context.md >/dev/null 2>&1 || return 1
+  out="$("$@" outcome --goal demo --spawn 11 --report _memory/work/goals/demo/spawns/11-report.md \
+        --verdict PASS --model-reported X 2>/dev/null)" || return 1
+  printf '%s' "$out" | sed -n 's/.*work_read_chars: \([^ ]*\) ·.*/\1/p'
+}
+
+# footprint_comma_check <runner...> → 0 when comma-grouped numbers parse and plain integers still do
+footprint_comma_check() {
+  local pair line want got
+  FC_DETAIL=""
+  for pair in 'files_read: 9 (~85,000 chars)|85000' 'files_read: 1,234 (~1,234,567 chars)|1234567' \
+              'files_read: 3 (~12000 chars)|12000' 'files_read: 9 (~999 chars)|999'; do
+    line="${pair%|*}"; want="${pair##*|}"
+    got="$(footprint_work "$line" "$@")"
+    if [[ "$got" != "$want" ]]; then FC_DETAIL="'$line' → work_read_chars '$got' (want $want)"; return 1; fi
+  done
+  return 0
+}
+
+# footprint_malformed_check <runner...> → 0 when a malformed comma group leaves work_read_chars n/a
+footprint_malformed_check() {
+  local line got
+  FM_DETAIL=""
+  for line in 'files_read: 9 (~85,00 chars)' 'files_read: 9 (~,850 chars)' 'files_read: 9 (~1,2 chars)' \
+              'files_read: 9 (~8,5000 chars)' 'files_read: 9 (~85,,000 chars)' 'files_read: 9 (~85,000, chars)'; do
+    got="$(footprint_work "$line" "$@")"
+    if [[ "$got" != "n/a" ]]; then FM_DETAIL="'$line' → work_read_chars '$got' (want n/a)"; return 1; fi
+  done
+  return 0
+}
+
+if footprint_comma_check bash "$BIN"; then
+  report PASS "[bash] Footprint comma thousands: ~85,000 → 85000, 1,234 / ~1,234,567 → 1234567, plain integers unchanged"
+else
+  report FAIL "[bash] Footprint comma thousands" "$FC_DETAIL"
+fi
+if footprint_malformed_check bash "$BIN"; then
+  report PASS "[bash] malformed comma groups (85,00 · ,850 · 1,2 · 8,5000 · 85,,000 · 85,000,) → work_read_chars: n/a"
+else
+  report FAIL "[bash] malformed comma groups" "$FM_DETAIL"
+fi
+# the digit-only pattern of the earlier script: ~85,000 is n/a
+mutation_caught "Footprint regex back to digit-only" '/fp_re=/s/\[0-9\]\[0-9,\]\*/[0-9]+/g' footprint_comma_check
+# the strict group check removed: 85,00 is accepted as 8500
+mutation_caught "Footprint group validation removed" 's/if \[\[ "\$c" =~ \$num_re \]\]; then/if true; then/' footprint_malformed_check
 
 # ---------------------------------------------------------------------------
 # model_check — match / MISMATCH / unverified / openai family (log-spawn emitter)
@@ -521,8 +618,27 @@ unknown_outcome() { # <reported-text> <runner...> → U_LOG / U_OUT / U_RC (spaw
         --verdict PASS --model-reported "$txt" 2>&1)"; U_RC=$?
 }
 
+# unknown_bare_check <runner...> → 0 ok · 1 bare `Unknown` wrong · 2 `Unknown gpt-4.1` wrong (sets UB_DETAIL).
+# model_family finds no family in the bare word, so bare `Unknown` is `unverified` with or without
+# the `unknown*` mapping and cannot fail alone. `Unknown gpt-4.1` against a claude request can: the
+# mapping makes it `unverified`; without it the gpt family is read and the result is MISMATCH.
+unknown_bare_check() {
+  UB_DETAIL=""
+  unknown_outcome "Unknown" "$@"
+  if ! { [[ $U_RC -eq 0 && "$U_OUT" == *'model reported: Unknown · model_check: unverified'* ]] \
+         && grep -qF -- 'model reported: Unknown · model_check: unverified' "$U_LOG"; }; then
+    UB_DETAIL="bare: rc=$U_RC out='$U_OUT'"; return 1
+  fi
+  unknown_outcome "Unknown gpt-4.1" "$@"
+  if ! { [[ $U_RC -eq 0 && "$U_OUT" == *'model reported: Unknown gpt-4.1 · model_check: unverified'* && "$U_OUT" != *MISMATCH* ]] \
+         && grep -qF -- 'model reported: Unknown gpt-4.1 · model_check: unverified' "$U_LOG"; }; then
+    UB_DETAIL="Unknown gpt-4.1: rc=$U_RC out='$U_OUT'"; return 2
+  fi
+  return 0
+}
+
 run_model_reported_unknown_case() { # <label> <runner...>
-  local label="$1" txt; shift
+  local label="$1" txt rc; shift
 
   # (b) names the requested family but starts with `unknown` → unverified, not match
   txt='unknown (not stated; requested claude-sonnet-5-5-xhigh)'
@@ -534,13 +650,12 @@ run_model_reported_unknown_case() { # <label> <runner...>
     report FAIL "[$label] model-reported unknown naming the requested family" "rc=$U_RC out='$U_OUT'"
   fi
 
-  # (c) bare "Unknown" → unverified
-  unknown_outcome "Unknown" "$@"
-  if [[ $U_RC -eq 0 && "$U_OUT" == *'model reported: Unknown · model_check: unverified'* ]] \
-     && grep -qF -- 'model reported: Unknown · model_check: unverified' "$U_LOG"; then
-    report PASS "[$label] model-reported 'Unknown' → model_check: unverified"
+  # (c) bare "Unknown" → unverified, plus `Unknown gpt-4.1` (another family) → unverified, no MISMATCH
+  unknown_bare_check "$@"; rc=$?
+  if [[ $rc -eq 0 ]]; then
+    report PASS "[$label] model-reported 'Unknown' → model_check: unverified; 'Unknown gpt-4.1' vs a claude request → unverified, no MISMATCH"
   else
-    report FAIL "[$label] model-reported Unknown" "rc=$U_RC out='$U_OUT'"
+    report FAIL "[$label] model-reported Unknown (check rc=$rc)" "$UB_DETAIL"
   fi
 
   # Case-insensitive and after leading whitespace, even when a family name follows.
@@ -561,6 +676,9 @@ run_model_reported_unknown_case() { # <label> <runner...>
 }
 
 run_model_reported_unknown_case bash bash "$BIN"
+
+# the `unknown*` → unverified mapping removed: check (c) must fail on the copy
+mutation_caught "unknown* → unverified mapping removed" '/case "\$lc_rep" in unknown\*)/d' unknown_bare_check
 
 # ---------------------------------------------------------------------------
 # keys — KEYS / REPEAT lines computed from a report's `### Required fixes` items
@@ -813,6 +931,36 @@ keys_uncited_case() {
   fi
 }
 keys_uncited_case
+
+# A first word that opens a backtick which never closes keeps the cited-form key (header note):
+# the first word is the citation, there is no span, so the key is `<word> - :: <rest>`. The widened
+# guard (any single backtick → `uncited`) would key it as `uncited - :: ...` instead.
+keys_unclosed_backtick_check() { # <runner...> → 0 when the item keys in the cited form (sets KU_DETAIL)
+  local fx out rc wk
+  KU_DETAIL=""
+  fx="$(alloc_fx)"
+  mkdir -p "$fx/$KEYS_G/spawns"
+  printf 'ctx\n' > "$fx/$KEYS_G/spawns/01-context.md"
+  printf '%s\n' '### Required fixes (if NEEDS FIXES)' \
+    '- [ ] `src/a.sh:12 missing guard — fix it [structural]' > "$fx/$KEYS_G/spawns/r.md"
+  "$@" spawn --root "$fx" --goal demo --agent evaluator --phase P4 --model-requested m \
+    --context "$KEYS_G/spawns/01-context.md" >/dev/null 2>&1 || { KU_DETAIL="spawn failed"; return 1; }
+  out="$("$@" keys --root "$fx" --goal demo --spawn 01 --task 01 --report "$KEYS_G/spawns/r.md" 2>&1)"; rc=$?
+  wk='- KEYS [#01] task 01: `src/a.sh:12 - :: missing guard [structural] [-]'
+  if [[ $rc -eq 0 && "$out" == "$wk" ]] && grep -qxF -- "$wk" "$fx/$KEYS_G/orchestration-log.md"; then
+    return 0
+  fi
+  KU_DETAIL="rc=$rc out='$out' want='$wk'"
+  return 1
+}
+if keys_unclosed_backtick_check bash "$BIN"; then
+  report PASS "keys: first word opening a never-closed backtick keeps the cited-form key '\`src/a.sh:12 - :: missing guard' (not 'uncited ...')"
+else
+  report FAIL "keys: unclosed-backtick fallback" "$KU_DETAIL"
+fi
+mutation_caught "unclosed-backtick guard widened to any single backtick" \
+  's/case "\$head" in \*"\$BT"\*"\$BT"\*) cit="uncited"/case "$head" in *"$BT"*) cit="uncited"/' \
+  keys_unclosed_backtick_check
 
 # spawn / outcome / note output is unchanged: the whole log matches a literal (timestamps normalized).
 unchanged_output_case() {
