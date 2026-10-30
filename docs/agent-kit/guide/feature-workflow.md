@@ -427,6 +427,12 @@ For the agent roster see [agents-and-models.md](agents-and-models.md); for the e
 
 ---
 
+## Hook telemetry (`flags.hook_telemetry`)
+
+The text below is emitted only when the install's answers set `flags.hook_telemetry` to true (it sits in `hook_telemetry` IF blocks of [`ORCHESTRATION.md`](../../../skills/agent-kit/templates/ORCHESTRATION.md)). The Claude Code and Cursor stop hooks append one metadata line per subagent or agent stop to `_memory/work/hooks/events.jsonl` (gitignored), and `_kit/hook-log.sh summary` (Windows outside Git Bash: `_kit\hook-log.cmd`) prints the counts and the error and aborted runs. It is telemetry only: never a gate, never cited in a verdict, and not a replacement for the orchestration log. On a fresh clone `_kit/` is missing until `emit.sh --upgrade` runs, so no events are logged: the Claude Code hook command is guarded (`test -f … || true`) and stays silent, while the Cursor hook fails open and Cursor records the missing-script failure in its hook log. For the tool's modes, log fields and exit codes see [`bin/README.md`](../../../skills/agent-kit/bin/README.md) § `_kit/hook-log.sh`.
+
+---
+
 ## Your role at human touchpoints
 
 These are what **you** do in a typical `/feature` run — separate from any specific exemplar below:
@@ -495,6 +501,7 @@ Shipped on `migrate/agent-kit` (local commit, no PR, no push) per archived goal-
 - [`skills/agent-kit/templates/ORCHESTRATION.md`](../../../skills/agent-kit/templates/ORCHESTRATION.md) — architecture invariants, retry limits, continuation ladder, escalation format
 - [`skills/agent-kit/templates/models.map.md`](../../../skills/agent-kit/templates/models.map.md) — continuation-ladder model pins
 - [`skills/agent-kit/bin/README.md`](../../../skills/agent-kit/bin/README.md) — `emit.sh --check` and `kit-guard.sh` behavior and exit codes (guarded installs)
+- [`skills/agent-kit/templates/tools/hook-log.sh`](../../../skills/agent-kit/templates/tools/hook-log.sh) — stop-hook telemetry tool (`hook` and `summary` modes)
 - `_memory/work/goals/test-suite-speed/goal.md` — exemplar goal problem and task table (gitignored scratch)
 - `_memory/work/goals/test-suite-speed/orchestration-log.md` — exemplar spawn ledger (gitignored scratch)
 - `_memory/records/2026/10/20261015T092947Z-e0dacf8b.md` — archived goal-summary outcome for this walkthrough

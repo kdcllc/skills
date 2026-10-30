@@ -97,7 +97,7 @@ Sources: [`bin/README.md`](../../../skills/agent-kit/bin/README.md), [`SKILL.md`
 
 ## Installed layout
 
-Each targeted harness gets a **native tree** (for example `.claude/`, `.cursor/`, `.github/`, or `.codex/` plus root `AGENTS.md` for Codex). **Single-copy** artifacts shared across harnesses live under **`_kit/`** (`log-spawn.sh`, `memory.sh`, `trace-lint.sh`, `kit-guard.sh` when `flags.kit_guard` is set, and `.cmd` launchers), which emit adds to `.gitignore` on every install, and **`_loop/`** (loop drivers), which is emitted only on loop installs and is **not** added to `.gitignore` by emit ([getting-started.md](getting-started.md)). **`_memory/`** splits tracked immutable knowledge from gitignored scratch.
+Each targeted harness gets a **native tree** (for example `.claude/`, `.cursor/`, `.github/`, or `.codex/` plus root `AGENTS.md` for Codex). **Single-copy** artifacts shared across harnesses live under **`_kit/`** (`log-spawn.sh`, `memory.sh`, `trace-lint.sh`, `kit-guard.sh` when `flags.kit_guard` is set, `hook-log.sh` when `flags.hook_telemetry` is set, and `.cmd` launchers), which emit adds to `.gitignore` on every install, and **`_loop/`** (loop drivers), which is emitted only on loop installs and is **not** added to `.gitignore` by emit ([getting-started.md](getting-started.md)). **`_memory/`** splits tracked immutable knowledge from gitignored scratch.
 
 ```mermaid
 flowchart TD
@@ -109,7 +109,7 @@ flowchart TD
     end
 
     subgraph singleCopy ["Single-copy (_kit gitignored · _loop on loop installs)"]
-        Kit["_kit/\nlog-spawn · memory · trace-lint · kit-guard (kit_guard) · launchers"]
+        Kit["_kit/\nlog-spawn · memory · trace-lint · kit-guard (kit_guard) · hook-log (hook_telemetry) · launchers"]
         Loop["_loop/\nloop.sh · loop.cmd"]
     end
 
@@ -120,7 +120,7 @@ flowchart TD
     end
 
     subgraph memIgnored ["_memory/ gitignored"]
-        Work["work/goals/ · work/research/"]
+        Work["work/goals/ · work/research/ · work/hooks/ (hook_telemetry)"]
         Derive[".index/ · raw/"]
         Brk["loop/breaker-state.json · loop/ledger.jsonl · loop/attempts/"]
     end
@@ -148,6 +148,7 @@ Write authority is **contract-driven**. Task files declare a YAML `writes:` fenc
 | **Loop driver / integrator** | Driver: `_memory/loop/backlog.md`, outbox, integration commits; integrator step **3b**: `_memory/records/` or `quarantine/` via `_kit/memory.* add` |
 | **`log-spawn.sh`** | Appends to `_memory/work/goals/<goal>/orchestration-log.md` only |
 | **`memory.sh`** | Creates files under `_memory/records/` or `_memory/quarantine/` via `add`; never edits existing record bodies; `prune --apply` deletes direct child folders of `_memory/work/goals/` and `_memory/work/research/` that pass the `prune` decision rules (record ids durable) |
+| **`hook-log.sh`** (`flags.hook_telemetry`) | Appends to `_memory/work/hooks/events.jsonl` only (rotates once to `events.1.jsonl`); `summary` never writes |
 
 ```mermaid
 flowchart TD
