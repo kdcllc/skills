@@ -184,7 +184,8 @@ fresh_emit() { # base ht kg [research loop] → FE_ROOT FE_ERR (a cached emit co
   alloc_root
   FE_ROOT="$ALLOC_PATH"
   if ! emit_cache_copy "$FE_ROOT" "$ans"; then
-    no 'emit'
+    # Record emit's own error text (first lines of its stderr), so a proof can require the intended error.
+    no "emit failed: $(head -n 3 "${EMIT_CACHE_ERR:-/dev/null}" 2>/dev/null | tr '\n' ' ')"
     return 1
   fi
   cp "$EMIT_CACHE_ERR" "$FE_ERR" 2>/dev/null || : > "$FE_ERR"
@@ -269,6 +270,16 @@ read -r -d '' EXP_SETTINGS_HOOKS <<'EOF' || true
           }
         ]
       }
+    ],
+    "StopFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "test -f \"$CLAUDE_PROJECT_DIR/_kit/hook-log.sh\" && bash \"$CLAUDE_PROJECT_DIR/_kit/hook-log.sh\" hook claude || true"
+          }
+        ]
+      }
     ]
   }
 }
@@ -280,13 +291,13 @@ read -r -d '' EXP_CURSOR_HOOKS <<'EOF' || true
   "hooks": {
     "stop": [
       {
-        "command": "bash _kit/hook-log.sh hook cursor",
+        "command": "test -f _kit/hook-log.sh && bash _kit/hook-log.sh hook cursor || echo '{}'",
         "loop_limit": 1
       }
     ],
     "subagentStop": [
       {
-        "command": "bash _kit/hook-log.sh hook cursor",
+        "command": "test -f _kit/hook-log.sh && bash _kit/hook-log.sh hook cursor || echo '{}'",
         "loop_limit": 1
       }
     ]
@@ -330,6 +341,16 @@ read -r -d '' EXP_SETTINGS_BOTH <<'EOF' || true
           }
         ]
       }
+    ],
+    "StopFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "test -f \"$CLAUDE_PROJECT_DIR/_kit/hook-log.sh\" && bash \"$CLAUDE_PROJECT_DIR/_kit/hook-log.sh\" hook claude || true"
+          }
+        ]
+      }
     ]
   }
 }
@@ -347,13 +368,13 @@ read -r -d '' EXP_CURSOR_BOTH <<'EOF' || true
     ],
     "stop": [
       {
-        "command": "bash _kit/hook-log.sh hook cursor",
+        "command": "test -f _kit/hook-log.sh && bash _kit/hook-log.sh hook cursor || echo '{}'",
         "loop_limit": 1
       }
     ],
     "subagentStop": [
       {
-        "command": "bash _kit/hook-log.sh hook cursor",
+        "command": "test -f _kit/hook-log.sh && bash _kit/hook-log.sh hook cursor || echo '{}'",
         "loop_limit": 1
       }
     ]
@@ -375,11 +396,16 @@ emit: warning: flags.kit_guard is partial on copilot: no edit-blocking hook; run
 EOF
 
 read -r -d '' WARN_SETTINGS_MERGE <<'EOF' || true
-warning: .claude/settings.json exists without the hook-telemetry hooks — left untouched; merge into it: {"hooks":{"Stop":[{"hooks":[{"type":"command","command":"test -f \"$CLAUDE_PROJECT_DIR/_kit/hook-log.sh\" && bash \"$CLAUDE_PROJECT_DIR/_kit/hook-log.sh\" hook claude || true"}]}],"SubagentStop":[{"hooks":[{"type":"command","command":"test -f \"$CLAUDE_PROJECT_DIR/_kit/hook-log.sh\" && bash \"$CLAUDE_PROJECT_DIR/_kit/hook-log.sh\" hook claude || true"}]}]}}
+warning: .claude/settings.json exists without the hook-telemetry hooks — left untouched; merge into it: {"hooks":{"Stop":[{"hooks":[{"type":"command","command":"test -f \"$CLAUDE_PROJECT_DIR/_kit/hook-log.sh\" && bash \"$CLAUDE_PROJECT_DIR/_kit/hook-log.sh\" hook claude || true"}]}],"SubagentStop":[{"hooks":[{"type":"command","command":"test -f \"$CLAUDE_PROJECT_DIR/_kit/hook-log.sh\" && bash \"$CLAUDE_PROJECT_DIR/_kit/hook-log.sh\" hook claude || true"}]}],"StopFailure":[{"hooks":[{"type":"command","command":"test -f \"$CLAUDE_PROJECT_DIR/_kit/hook-log.sh\" && bash \"$CLAUDE_PROJECT_DIR/_kit/hook-log.sh\" hook claude || true"}]}]}}
+EOF
+
+# An existing settings.json that carries the Stop / SubagentStop hooks but no StopFailure hook.
+read -r -d '' WARN_SETTINGS_NO_SF <<'EOF' || true
+warning: .claude/settings.json has the hook-telemetry hooks but no StopFailure hook — left untouched; add to its "hooks" object: "StopFailure":[{"hooks":[{"type":"command","command":"test -f \"$CLAUDE_PROJECT_DIR/_kit/hook-log.sh\" && bash \"$CLAUDE_PROJECT_DIR/_kit/hook-log.sh\" hook claude || true"}]}]
 EOF
 
 read -r -d '' WARN_CURSOR_MERGE <<'EOF' || true
-warning: .cursor/hooks.json exists without the hook-telemetry hooks — left untouched; add to its "hooks" object: "stop":[{"command":"bash _kit/hook-log.sh hook cursor","loop_limit":1}],"subagentStop":[{"command":"bash _kit/hook-log.sh hook cursor","loop_limit":1}]
+warning: .cursor/hooks.json exists without the hook-telemetry hooks — left untouched; add to its "hooks" object: "stop":[{"command":"test -f _kit/hook-log.sh && bash _kit/hook-log.sh hook cursor || echo '{}'","loop_limit":1}],"subagentStop":[{"command":"test -f _kit/hook-log.sh && bash _kit/hook-log.sh hook cursor || echo '{}'","loop_limit":1}]
 EOF
 
 read -r -d '' WARN_SETTINGS_REMOVE <<'EOF' || true
@@ -406,6 +432,11 @@ ORCH_FILES='.claude/ORCHESTRATION.md .cursor/ORCHESTRATION.md ORCHESTRATION.md'
 # Hook payloads.
 P_CLAUDE_STOP='{"session_id":"sess-e2e","prompt_id":"prm-e2e","hook_event_name":"Stop","stop_hook_active":false}'
 P_CLAUDE_SUB='{"session_id":"sess-e2e","prompt_id":"prm-e2e","hook_event_name":"SubagentStop","agent_id":"ag-e2e","agent_type":"implementer"}'
+# The guarded commands the emitted configs carry (JSON-decoded).
+CLAUDE_GUARDED_CMD='test -f "$CLAUDE_PROJECT_DIR/_kit/hook-log.sh" && bash "$CLAUDE_PROJECT_DIR/_kit/hook-log.sh" hook claude || true'
+CURSOR_GUARDED_CMD="test -f _kit/hook-log.sh && bash _kit/hook-log.sh hook cursor || echo '{}'"
+P_CLAUDE_FAIL='{"session_id":"sess-e2e","prompt_id":"prm-e2e","hook_event_name":"StopFailure","error":"rate_limit","error_details":"DETAILS-MARKER-7f3a","last_assistant_message":"MESSAGE-MARKER-7f3a"}'
+P_CURSOR_STOP='{"conversation_id":"conv-e2e","generation_id":"gen-e2e-stop","model":"test-model","hook_event_name":"stop","cursor_version":"1.0.0","status":"completed","loop_count":0}'
 P_CURSOR_SUB='{"conversation_id":"conv-e2e","generation_id":"gen-e2e","model":"test-model","hook_event_name":"subagentStop","cursor_version":"1.0.0","workspace_roots":["/w"],"user_email":"MAIL-MARKER-7f3a@example.invalid","transcript_path":"/t/c.jsonl","subagent_type":"explore","status":"completed","task":"TASK-MARKER-7f3a","description":"desc","summary":"sum","duration_ms":1234,"message_count":5,"tool_call_count":7,"loop_count":0,"modified_files":["a.txt","b.txt"]}'
 
 # ===========================================================================
@@ -453,6 +484,20 @@ c1_manifest() {
   sh_hash="$(sha256_file "$r/_kit/hook-log.sh")"
   ck 'manifest sha of hook-log.sh' jq -e --arg h "$sh_hash" '.files["_kit/hook-log.sh"] == $h' "$mf" >/dev/null || return 1
   ck 'manifest kit version' test "$(jq -r '.kitVersion' "$mf")" = "$(kit_version "$ORIG_KIT/SKILL.md")" || return 1
+  return 0
+}
+
+c1_stopfailure_entry() { # the Claude Code StopFailure hook sits after SubagentStop, with the guarded command
+  local r
+  fresh_emit "$BASE_ALL" true absent || return 1
+  r="$FE_ROOT"
+  ck 'StopFailure entry present' jq -e '(.hooks.StopFailure | length) == 1' "$r/.claude/settings.json" >/dev/null || return 1
+  ck 'StopFailure command is the guarded one' test "$(jq -r '.hooks.StopFailure[0].hooks[0].command' "$r/.claude/settings.json")" = "$CLAUDE_GUARDED_CMD" || return 1
+  ck 'hook keys order (telemetry only)' test "$(jq -r '.hooks | keys_unsorted | join(",")' "$r/.claude/settings.json")" = 'Stop,SubagentStop,StopFailure' || return 1
+  ck 'cursor has no StopFailure hook' jq -e '.hooks | has("StopFailure") | not' "$r/.cursor/hooks.json" >/dev/null || return 1
+  fresh_emit "$BASE_ALL" true true || return 1
+  r="$FE_ROOT"
+  ck 'hook keys order (with kit-guard)' test "$(jq -r '.hooks | keys_unsorted | join(",")' "$r/.claude/settings.json")" = 'PreToolUse,Stop,SubagentStop,StopFailure' || return 1
   return 0
 }
 
@@ -568,6 +613,42 @@ c4_existing() { # claude|cursor
   capture_emit_sh "$root" --answers "$ans"
   ck 'control rc 0' test "$EMIT_RC" -eq 0 || return 1
   ck 'control: no merge warning when already merged' test "$(count_text "$EMIT_STDERR" 'exists without the hook-telemetry hooks')" -eq 0 || return 1
+  return 0
+}
+
+# An existing settings.json from an earlier emit (Stop / SubagentStop hooks, no StopFailure): left untouched,
+# exactly one StopFailure warning with the exact entry to add — on emit and on --upgrade. Control: a config
+# that already has the StopFailure hook gets no such warning.
+c4_existing_no_stopfailure() {
+  local ans root sha0 pass_name old
+  answers_file "$BASE_CLAUDE" true absent || { no 'answers file'; return 1; }
+  ans="$ALLOC_PATH"
+  old="$(jq '.hooks |= del(.StopFailure)' <<<"$EXP_SETTINGS_HOOKS")" || { no 'build the older config'; return 1; }
+  ck 'older config really lacks StopFailure' not grep -qF 'StopFailure' <<<"$old" || return 1
+  alloc_root; root="$ALLOC_PATH"
+  mkdir -p "$root/.claude"
+  printf '%s\n' "$old" > "$root/.claude/settings.json"
+  sha0="$(sha256_file "$root/.claude/settings.json")"
+
+  for pass_name in emit upgrade; do
+    if [[ "$pass_name" == emit ]]; then
+      capture_emit_sh "$root" --answers "$ans"
+    else
+      capture_emit_sh "$root" --answers "$ans" --upgrade
+    fi
+    ck "$pass_name rc 0" test "$EMIT_RC" -eq 0 || return 1
+    ck "file unchanged after $pass_name" test "$(sha256_file "$root/.claude/settings.json")" = "$sha0" || return 1
+    ck "StopFailure warning once ($pass_name)" test "$(count_line "$EMIT_STDERR" "emit: $WARN_SETTINGS_NO_SF")" -eq 1 || return 1
+    ck "no merge warning for the present hooks ($pass_name)" test "$(count_text "$EMIT_STDERR" 'exists without the hook-telemetry hooks')" -eq 0 || return 1
+    ck "that is the only stderr line ($pass_name)" test "$(nlines "$EMIT_STDERR")" -eq 1 || return 1
+  done
+
+  alloc_root; root="$ALLOC_PATH"
+  mkdir -p "$root/.claude"
+  printf '%s\n' "$EXP_SETTINGS_HOOKS" > "$root/.claude/settings.json"
+  capture_emit_sh "$root" --answers "$ans"
+  ck 'control rc 0' test "$EMIT_RC" -eq 0 || return 1
+  ck 'control: no StopFailure warning when the hook is present' test "$(count_text "$EMIT_STDERR" 'but no StopFailure hook')" -eq 0 || return 1
   return 0
 }
 
@@ -766,7 +847,7 @@ c8_readme_off() { # absent|false
 }
 
 # ===========================================================================
-# Case 9 — fresh-clone guard on the emitted Claude Code commands
+# Case 9 — fresh-clone guard on the emitted Claude Code commands (Stop, SubagentStop, StopFailure)
 # ===========================================================================
 
 # run_cmd_in <root> <command-string> <payload> → CMD_RC CMD_OUT CMD_ERR (sh -c, CLAUDE_PROJECT_DIR=<root>)
@@ -780,17 +861,23 @@ run_cmd_in() {
 }
 
 c9_fresh_clone_guard() {
-  local r cmd_stop cmd_sub empty which cmd payload
+  local r cmd_stop cmd_sub cmd_fail empty which cmd payload
   fresh_emit "$BASE_ALL" true absent || return 1
   r="$FE_ROOT"
   cmd_stop="$(jq -r '.hooks.Stop[0].hooks[0].command' "$r/.claude/settings.json")"
   cmd_sub="$(jq -r '.hooks.SubagentStop[0].hooks[0].command' "$r/.claude/settings.json")"
+  cmd_fail="$(jq -r '.hooks.StopFailure[0].hooks[0].command' "$r/.claude/settings.json")"
   ck 'extracted Stop command' test -n "$cmd_stop" -a "$cmd_stop" != null || return 1
   ck 'extracted SubagentStop command' test -n "$cmd_sub" -a "$cmd_sub" != null || return 1
+  ck 'extracted StopFailure command' test -n "$cmd_fail" -a "$cmd_fail" != null || return 1
 
   # Root without _kit/hook-log.sh: a fresh clone (no _kit at all) and a kit missing only this tool.
-  for which in stop sub; do
-    if [[ "$which" == stop ]]; then cmd="$cmd_stop"; payload="$P_CLAUDE_STOP"; else cmd="$cmd_sub"; payload="$P_CLAUDE_SUB"; fi
+  for which in stop sub fail; do
+    case "$which" in
+      stop) cmd="$cmd_stop"; payload="$P_CLAUDE_STOP" ;;
+      sub)  cmd="$cmd_sub"; payload="$P_CLAUDE_SUB" ;;
+      *)    cmd="$cmd_fail"; payload="$P_CLAUDE_FAIL" ;;
+    esac
     alloc_root; empty="$ALLOC_PATH"
     run_cmd_in "$empty" "$cmd" "$payload"
     ck "no-script exit 0 ($which)" test "$CMD_RC" -eq 0 || return 1
@@ -821,6 +908,12 @@ c9_fresh_clone_guard() {
   ck 'script present: SubagentStop prints nothing' test ! -s "$CMD_OUT" -a ! -s "$CMD_ERR" || return 1
   ck 'script present: second line' test "$(nlines "$empty/_memory/work/hooks/events.jsonl")" -eq 2 || return 1
   ck 'script present: SubagentStop line' grep -qF '"event":"SubagentStop","session":"sess-e2e","generation":"prm-e2e","agent_id":"ag-e2e","agent_type":"implementer"' "$empty/_memory/work/hooks/events.jsonl" || return 1
+  run_cmd_in "$empty" "$cmd_fail" "$P_CLAUDE_FAIL"
+  ck 'script present: StopFailure exit 0' test "$CMD_RC" -eq 0 || return 1
+  ck 'script present: StopFailure prints nothing' test ! -s "$CMD_OUT" -a ! -s "$CMD_ERR" || return 1
+  ck 'script present: third line' test "$(nlines "$empty/_memory/work/hooks/events.jsonl")" -eq 3 || return 1
+  ck 'script present: StopFailure line' grep -qF '"event":"StopFailure","session":"sess-e2e","generation":"prm-e2e","agent_id":null,"agent_type":null,"status":"error","error":"rate_limit"' "$empty/_memory/work/hooks/events.jsonl" || return 1
+  ck 'StopFailure free text never logged' not grep -qE 'DETAILS-MARKER-7f3a|MESSAGE-MARKER-7f3a' "$empty/_memory/work/hooks/events.jsonl" || return 1
   return 0
 }
 
@@ -829,12 +922,12 @@ c9_fresh_clone_guard() {
 # ===========================================================================
 
 c10_emitted_hook_e2e() {
-  local r cmd_stop cmd_sub log key want out err rc summary
+  local r cmd_stop cmd_sub log key want out err rc summary sumline
   fresh_emit "$BASE_ALL" true absent || return 1
   r="$FE_ROOT"
   cmd_sub="$(jq -r '.hooks.subagentStop[0].command' "$r/.cursor/hooks.json")"
   cmd_stop="$(jq -r '.hooks.stop[0].command' "$r/.cursor/hooks.json")"
-  ck 'cursor command text' test "$cmd_sub" = 'bash _kit/hook-log.sh hook cursor' -a "$cmd_stop" = 'bash _kit/hook-log.sh hook cursor' || return 1
+  ck 'cursor command text' test "$cmd_sub" = "$CURSOR_GUARDED_CMD" -a "$cmd_stop" = "$CURSOR_GUARDED_CMD" || return 1
 
   log="$r/_memory/work/hooks/events.jsonl"
   alloc_path e2e
@@ -848,21 +941,134 @@ c10_emitted_hook_e2e() {
   ck 'one log line' test "$(nlines "$log")" -eq 1 || return 1
 
   key="$(printf '%s' "$P_CURSOR_SUB" | { if command -v sha256sum >/dev/null 2>&1; then sha256sum; else shasum -a 256; fi; } | cut -c1-16)"
-  want='{"ts":"2026-10-29T12:00:00Z","harness":"cursor","event":"subagentStop","session":"conv-e2e","generation":"gen-e2e","agent_id":null,"agent_type":"explore","status":"completed","duration_ms":1234,"message_count":5,"tool_call_count":7,"loop_count":0,"model":"test-model","modified_files":2,"key":"'"$key"'"}'
+  want='{"ts":"2026-10-29T12:00:00Z","harness":"cursor","event":"subagentStop","session":"conv-e2e","generation":"gen-e2e","agent_id":null,"agent_type":"explore","status":"completed","error":null,"duration_ms":1234,"message_count":5,"tool_call_count":7,"loop_count":0,"model":"test-model","modified_files":2,"key":"'"$key"'"}'
   ck 'log line bytes' eq_text "$log" "$want" || return 1
   ck 'metadata only (task)' not grep -qF 'TASK-MARKER-7f3a' "$log" || return 1
   ck 'metadata only (email)' not grep -qF 'MAIL-MARKER-7f3a' "$log" || return 1
 
+  sumline="hook-log: 1 events ($(cd "$r" && pwd -P)/_memory/work/hooks/events.jsonl)"
   summary="$(cd "$r" && bash _kit/hook-log.sh summary)"
-  ck 'summary 1 events' grep -qF '1 events' <<<"$summary" || return 1
+  ck 'summary 1 events' grep -qxF "$sumline" <<<"$summary" || return 1
   ck 'summary by event' grep -qxF '  1 subagentStop' <<<"$summary" || return 1
   ck 'summary by status' grep -qxF '  1 completed' <<<"$summary" || return 1
 
-  # The same payload again is not appended twice, and the summary still reports one event.
+  # The same payload again is not appended again while its key is in events.jsonl, and the summary still
+  # reports one event.
   (cd "$r" && printf '%s' "$P_CURSOR_SUB" | sh -c "$cmd_sub") >"$out" 2>"$err" || true
   ck 'duplicate not appended' test "$(nlines "$log")" -eq 1 || return 1
   summary="$(cd "$r" && bash _kit/hook-log.sh summary)"
-  ck 'summary still 1 events' grep -qF '1 events' <<<"$summary" || return 1
+  ck 'summary still 1 events' grep -qxF "$sumline" <<<"$summary" || return 1
+  return 0
+}
+
+# ===========================================================================
+# Case 11 — fresh-clone guard on the emitted Cursor commands
+# ===========================================================================
+
+# run_cursor_cmd_in <root> <command-string> <payload> → CMD_RC CMD_OUT CMD_ERR (sh -c from <root>, as Cursor runs it)
+run_cursor_cmd_in() {
+  local root="$1" cmd="$2" payload="$3"
+  alloc_path cmd-out
+  CMD_OUT="$ALLOC_PATH.out"
+  CMD_ERR="$ALLOC_PATH.err"
+  (cd "$root" && sh -c "$cmd" >"$CMD_OUT" 2>"$CMD_ERR" <<<"$payload")
+  CMD_RC=$?
+}
+
+c11_cursor_fresh_clone_guard() {
+  local r cmd_stop cmd_sub empty which cmd payload log
+  fresh_emit "$BASE_ALL" true absent || return 1
+  r="$FE_ROOT"
+  cmd_stop="$(jq -r '.hooks.stop[0].command' "$r/.cursor/hooks.json")"
+  cmd_sub="$(jq -r '.hooks.subagentStop[0].command' "$r/.cursor/hooks.json")"
+  ck 'extracted stop command' test -n "$cmd_stop" -a "$cmd_stop" != null || return 1
+  ck 'extracted subagentStop command' test -n "$cmd_sub" -a "$cmd_sub" != null || return 1
+
+  # Root without _kit/hook-log.sh: a fresh clone (no _kit at all) and a kit missing only this tool.
+  # The command still answers with the empty JSON object, prints nothing else and writes nothing.
+  for which in stop sub; do
+    if [[ "$which" == stop ]]; then cmd="$cmd_stop"; payload="$P_CURSOR_STOP"; else cmd="$cmd_sub"; payload="$P_CURSOR_SUB"; fi
+    alloc_root; empty="$ALLOC_PATH"
+    run_cursor_cmd_in "$empty" "$cmd" "$payload"
+    ck "no-script exit 0 ($which)" test "$CMD_RC" -eq 0 || return 1
+    ck "no-script stdout {} ($which)" eq_text "$CMD_OUT" '{}' || return 1
+    ck "no-script stderr empty ($which)" test ! -s "$CMD_ERR" || return 1
+    ck "no-script writes nothing ($which)" not test -e "$empty/_memory" || return 1
+
+    alloc_root; empty="$ALLOC_PATH"
+    cp -Rp "$r/_kit" "$empty/_kit"
+    rm -f "$empty/_kit/hook-log.sh"
+    run_cursor_cmd_in "$empty" "$cmd" "$payload"
+    ck "no-script (kit present) exit 0 ($which)" test "$CMD_RC" -eq 0 || return 1
+    ck "no-script (kit present) stdout {} ($which)" eq_text "$CMD_OUT" '{}' || return 1
+    ck "no-script (kit present) stderr empty ($which)" test ! -s "$CMD_ERR" || return 1
+    ck "no-script (kit present) writes nothing ($which)" not test -e "$empty/_memory" || return 1
+  done
+
+  # With the script present each command prints {} once and writes exactly one line.
+  alloc_root; empty="$ALLOC_PATH"
+  cp -Rp "$r/_kit" "$empty/_kit"
+  log="$empty/_memory/work/hooks/events.jsonl"
+  run_cursor_cmd_in "$empty" "$cmd_stop" "$P_CURSOR_STOP"
+  ck 'script present: stop exit 0' test "$CMD_RC" -eq 0 || return 1
+  ck 'script present: stop stdout {}' eq_text "$CMD_OUT" '{}' || return 1
+  ck 'script present: stop stderr empty' test ! -s "$CMD_ERR" || return 1
+  ck 'script present writes one line' test "$(nlines "$log")" -eq 1 || return 1
+  ck 'script present: stop line' grep -qF '"harness":"cursor","event":"stop","session":"conv-e2e","generation":"gen-e2e-stop"' "$log" || return 1
+  run_cursor_cmd_in "$empty" "$cmd_sub" "$P_CURSOR_SUB"
+  ck 'script present: subagentStop exit 0' test "$CMD_RC" -eq 0 || return 1
+  ck 'script present: subagentStop stdout {}' eq_text "$CMD_OUT" '{}' || return 1
+  ck 'script present: second line' test "$(nlines "$log")" -eq 2 || return 1
+  ck 'script present: subagentStop line' grep -qF '"harness":"cursor","event":"subagentStop","session":"conv-e2e","generation":"gen-e2e"' "$log" || return 1
+  return 0
+}
+
+# ===========================================================================
+# Case 12 — the stdout `warnings N` equals the number of warning lines printed to stderr
+# ===========================================================================
+
+stdout_warnings() { # file → the N of `warnings N` on the summary line
+  sed -n 's/.* warnings \([0-9][0-9]*\) · manifest .*/\1/p' "$1" | head -1
+}
+
+warn_lines_printed() { # file → how many stderr lines start with `emit: `
+  local n
+  n="$(grep -c '^emit: ' "$1" 2>/dev/null || true)"
+  printf '%s' "${n:-0}"
+}
+
+c12_warnings_equal_printed() {
+  local ht kg ans root want w e
+  for ht in absent true; do
+    for kg in absent true; do
+      want=0
+      [[ "$ht" == true ]] && want=$((want + 2))
+      [[ "$kg" == true ]] && want=$((want + 2))
+      answers_file "$BASE_ALL" "$ht" "$kg" || { no 'answers file'; return 1; }
+      ans="$ALLOC_PATH"
+      alloc_root; root="$ALLOC_PATH"
+      capture_emit_sh "$root" --answers "$ans"
+      ck "rc 0 (ht=$ht kg=$kg)" test "$EMIT_RC" -eq 0 || return 1
+      w="$(stdout_warnings "$EMIT_STDOUT")"
+      e="$(warn_lines_printed "$EMIT_STDERR")"
+      ck "warnings N equals the printed lines (ht=$ht kg=$kg)" test -n "$w" -a "$w" = "$e" || return 1
+      ck "warnings N is the expected count (ht=$ht kg=$kg)" test "$w" -eq "$want" || return 1
+    done
+  done
+
+  # Existing settings without the spawn-depth env, both flags on: the spawn-depth line, the two merge
+  # warnings and the four partial-support warnings are each printed once and each counted once.
+  answers_file "$BASE_ALL" true true || { no 'answers file'; return 1; }
+  ans="$ALLOC_PATH"
+  alloc_root; root="$ALLOC_PATH"
+  mkdir -p "$root/.claude"
+  printf '%s\n' '{"hooks":{}}' > "$root/.claude/settings.json"
+  capture_emit_sh "$root" --answers "$ans"
+  ck 'rc 0 (existing settings)' test "$EMIT_RC" -eq 0 || return 1
+  w="$(stdout_warnings "$EMIT_STDOUT")"
+  e="$(warn_lines_printed "$EMIT_STDERR")"
+  ck 'warnings N equals the printed lines (existing settings)' test -n "$w" -a "$w" = "$e" || return 1
+  ck 'warnings N is the expected count (existing settings)' test "$w" -eq 7 || return 1
   return 0
 }
 
@@ -977,6 +1183,7 @@ par_block run_check 1a c1_tool_files 'flag on, four harnesses: _kit/hook-log.sh 
 par_block run_check 1b c1_configs 'flag on, four harnesses: .claude/settings.json and .cursor/hooks.json exact bytes'
 par_block run_check 1c c1_stderr 'flag on, four harnesses: stderr is exactly the two partial warnings'
 par_block run_check 1d c1_manifest 'flag on, four harnesses: manifest options.hook_telemetry true, both _kit/hook-log.* files listed with their hashes'
+par_block run_check 1e c1_stopfailure_entry 'flag on: the Claude Code StopFailure hook follows SubagentStop with the guarded command, with and without kit-guard; Cursor has none'
 
 # Case 2 — both flags
 par_block run_check 2a c2_both_configs 'kit_guard + hook_telemetry: both configs equal their exact combined bytes'
@@ -993,6 +1200,7 @@ par_block run_check 3e c3_off_identity 'flag absent vs false: identical trees an
 # Cases 4-6 — existing and stale configs, spawn-depth message
 par_block run_check 4a c4_existing 'existing .claude/settings.json: untouched by emit and --upgrade, merge warning exactly once with the exact text' claude
 par_block run_check 4b c4_existing 'existing .cursor/hooks.json: untouched by emit and --upgrade, merge warning exactly once with the exact text' cursor
+par_block run_check 4c c4_existing_no_stopfailure 'existing .claude/settings.json with the Stop hooks but no StopFailure hook: untouched, exactly one warning with the entry to add; none when present'
 par_block run_check 5a c5_stale 'stale _kit/hook-log.sh reference in .claude/settings.json, flag off: removal warning exactly once' claude
 par_block run_check 5b c5_stale 'stale _kit/hook-log.sh reference in .cursor/hooks.json, flag off: removal warning exactly once' cursor
 par_block run_check 6 c6_spawn_depth 'existing settings without the spawn-depth env, both flags on: spawn-depth message exactly once'
@@ -1011,11 +1219,15 @@ par_block run_check 8f c8_readme_off '_memory/README.md, flag absent: no hooks/ 
 par_block run_check 8g c8_readme_off '_memory/README.md, flag false: no hooks/ line, no IF marker left' false
 
 # Cases 9-10 — emitted hook behavior
-par_block run_check 9 c9_fresh_clone_guard 'emitted Claude Code Stop/SubagentStop commands: silent no-op without _kit/hook-log.sh, one line with it'
+par_block run_check 9 c9_fresh_clone_guard 'emitted Claude Code Stop/SubagentStop/StopFailure commands: silent no-op without _kit/hook-log.sh, one line with it'
 par_block run_check 10 c10_emitted_hook_e2e 'emitted Cursor hook command prints {} and logs one exact line; emitted summary reports 1 events'
+par_block run_check 11 c11_cursor_fresh_clone_guard 'emitted Cursor stop/subagentStop commands: print {} and write nothing without _kit/hook-log.sh, print {} and write one line with it'
+
+# Case 12 — warnings count
+par_block run_check 12 c12_warnings_equal_printed 'all-four emits (flags off, telemetry, kit-guard, both, existing settings): stdout warnings N equals the number of emit: warning lines on stderr'
 
 # Mutation proofs (each on a copy of the kit; the file must change; the check must fail for the stated reason)
-par_block mutation_proof '(1a) drop hook_telemetry from known_flag' c1_tool_files 'emit' "$EMIT_REL" m_sub 'kit_guard|hook_telemetry|\' 'kit_guard|\'
+par_block mutation_proof '(1a) drop hook_telemetry from known_flag' c1_tool_files "unknown IF flag 'hook_telemetry'" "$EMIT_REL" m_sub 'kit_guard|hook_telemetry|\' 'kit_guard|\'
 par_block mutation_proof '(1a) never emit _kit/hook-log.sh' c1_tool_files 'hook-log.sh present' "$EMIT_REL" m_sub 'put_emit "_kit/hook-log.sh" "$content"' ': "_kit/hook-log.sh" "$content"'
 par_block mutation_proof '(1a) never emit _kit/hook-log.cmd' c1_tool_files 'hook-log.cmd present' "$EMIT_REL" m_sub 'map_set EMIT "_kit/hook-log.cmd" "$content"' ': "_kit/hook-log.cmd" "$content"'
 par_block mutation_proof '(1b) remove the Stop entry' c1_configs 'claude config bytes' "$EMIT_REL" m_sub '    "Stop": [' '    "StopX": ['
@@ -1042,9 +1254,18 @@ par_block mutation_proof '(8e) drop the _memory/README.md block' c8_readme_on 'r
 par_block mutation_proof '(8f) _memory/README.md block rendered unconditionally' 'c8_readme_off absent' 'readme flag off line absent' "$README_REL" m_block 'hooks/' unwrap
 par_block mutation_proof '(9) drop the test -f guard from the Claude Code command' c9_fresh_clone_guard 'no-script stderr empty' "$EMIT_REL" m_sub 'test -f \"$CLAUDE_PROJECT_DIR/_kit/hook-log.sh\" && ' ''
 par_block mutation_proof '(9) drop the || true from the Claude Code command' c9_fresh_clone_guard 'no-script exit 0' "$EMIT_REL" m_sub 'hook claude || true' 'hook claude'
+par_block mutation_proof '(9) drop the test -f guard from the StopFailure command only' c9_fresh_clone_guard 'no-script stderr empty (fail)' "$EMIT_REL" m_sub $'"StopFailure": [\n      {\n        "hooks": [\n          {\n            "type": "command",\n            "command": "test -f \\"$CLAUDE_PROJECT_DIR/_kit/hook-log.sh\\" && ' $'"StopFailure": [\n      {\n        "hooks": [\n          {\n            "type": "command",\n            "command": "'
 par_block mutation_proof '(10) emitted cursor hook prints nothing' c10_emitted_hook_e2e 'cursor stdout {}' "$TOOL_REL" m_sub "= 'cursor' ]; then" "= 'cursorX' ]; then"
 par_block mutation_proof '(10) emitted tool logs to another directory' c10_emitted_hook_e2e 'one log line' "$TOOL_REL" m_sub "LOG_SUBDIR='_memory/work/hooks'" "LOG_SUBDIR='_memory/work/hooksX'"
 par_block mutation_proof '(10) emitted summary changes its count line' c10_emitted_hook_e2e 'summary 1 events' "$TOOL_REL" m_sub 'hook-log: %d events (%s)' 'hook-log: %d evts (%s)'
+par_block mutation_proof '(1e) remove the StopFailure entry' c1_stopfailure_entry 'StopFailure entry present' "$EMIT_REL" m_sub '    "StopFailure": [' '    "StopFailureX": ['
+par_block mutation_proof '(4a) merge snippet drops the StopFailure entry' 'c4_existing claude' 'merge warning once' "$EMIT_REL" m_sub '}]}],"StopFailure":[{' '}]}],"StopFailureX":[{'
+par_block mutation_proof '(4c) drop the StopFailure warning' c4_existing_no_stopfailure 'StopFailure warning once' "$EMIT_REL" m_sub "record_warn_line 'warning: .claude/settings.json has the hook-telemetry hooks but no StopFailure hook" ": 'warning: .claude/settings.json has the hook-telemetry hooks but no StopFailure hook"
+par_block mutation_proof '(4c) warn about StopFailure even when the hook is present' c4_existing_no_stopfailure 'control: no StopFailure warning' "$EMIT_REL" m_sub "elif ! grep -Fq 'StopFailure' \"\$sf\"; then" 'elif true; then'
+par_block mutation_proof '(11) drop the test -f guard from the Cursor command' c11_cursor_fresh_clone_guard 'no-script stderr empty' "$EMIT_REL" m_sub 'test -f _kit/hook-log.sh && ' ''
+par_block mutation_proof '(11) drop the || echo {} from the Cursor command' c11_cursor_fresh_clone_guard 'no-script exit 0' "$EMIT_REL" m_sub " || echo '{}'\"," '",'
+par_block mutation_proof '(12) count the unanswered bootstrap ids again' c12_warnings_equal_printed 'warnings N equals the printed lines' "$EMIT_REL" m_sub '  # Unanswered bootstrap ids are not warnings: --check-answers lists them, and they are not counted.' $'for _mid in "${MISSING_BOOTSTRAP[@]+"${MISSING_BOOTSTRAP[@]}"}"; do\n    bump_warn\n  done'
+par_block mutation_proof '(12) a printed warning line is not counted' c12_warnings_equal_printed 'warnings N equals the printed lines' "$EMIT_REL" m_sub 'record_warn_line() { WARN_LINES+=("$1"); bump_warn; }' 'record_warn_line() { WARN_LINES+=("$1"); }'
 par_finish
 
 emit_cache_verify

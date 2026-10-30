@@ -48,15 +48,23 @@
 #   independent.
 #
 #   Optional flags.hook_telemetry (boolean): absent ⇒ false; non-boolean ⇒ exit 3. Persists as
-#   options.hook_telemetry when present; emits _kit/hook-log.sh and _kit/hook-log.cmd, plus stop
-#   hooks (Claude Code Stop / SubagentStop in .claude/settings.json, Cursor stop / subagentStop in
-#   .cursor/hooks.json) only into a config file that is absent, combined with the kit-guard hook
-#   when that flag is on too. Warnings (stderr `emit: warning: …`, counted in W, exit unchanged):
+#   options.hook_telemetry when present; drives IF flag hook_telemetry; emits _kit/hook-log.sh and
+#   _kit/hook-log.cmd, plus stop hooks (Claude Code Stop / SubagentStop / StopFailure in
+#   .claude/settings.json, Cursor stop / subagentStop in .cursor/hooks.json) only into a config
+#   file that is absent, combined with the kit-guard hook when that flag is on too. Both commands
+#   are guarded so a fresh clone without _kit/ stays silent (Claude Code: `|| true`; Cursor:
+#   `|| echo '{}'`). Warnings (stderr `emit: warning: …`, counted in W, exit unchanged):
 #   enabled + existing settings.json / hooks.json without _kit/hook-log.sh ⇒ left untouched,
-#   warning prints the exact hook snippet to merge; flag absent/false + an existing one still
-#   referencing _kit/hook-log.sh ⇒ warning to remove those hook entries; enabled with copilot or
-#   codex ⇒ one partial-support warning per harness (no telemetry hook). The spawn-depth warning
-#   is independent.
+#   warning prints the exact hook snippet to merge; enabled + an existing settings.json with
+#   _kit/hook-log.sh but no StopFailure ⇒ left untouched, warning prints the StopFailure entry to
+#   add; flag absent/false + an existing one still referencing _kit/hook-log.sh ⇒ warning to
+#   remove those hook entries; enabled with copilot or codex ⇒ one partial-support warning per
+#   harness (no telemetry hook). The spawn-depth warning is independent.
+#
+#   Every warning counted in the stdout `warnings W` prints one stderr line. A retired kit-owned
+#   file kept because it was modified, and a file recorded in the previous manifest that is now
+#   missing, each print a warning line; unanswered bootstrap ids are not counted (--check-answers
+#   lists them). Informational `emit:` lines (the legacy-migration notes) are not counted.
 #
 #   --check  run kit-guard check against --root (default cwd); needs no --answers.
 #   Delegates to <kit>/templates/tools/kit-guard.sh check --root "<root>" (same exit
@@ -158,12 +166,12 @@ else
   die 2 "neither sha256sum nor shasum found on PATH — install coreutils (sha256sum) or perl's shasum"
 fi
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_DIR="$(CDPATH= cd "$(dirname "$0")" && pwd)"
 if [ -z "$KIT" ]; then
-  KIT="$(cd "$SCRIPT_DIR/.." && pwd)"
+  KIT="$(CDPATH= cd "$SCRIPT_DIR/.." && pwd)"
 else
   [ -d "$KIT" ] || die 2 "kit directory not found: $KIT"
-  KIT="$(cd "$KIT" && pwd)"
+  KIT="$(CDPATH= cd "$KIT" && pwd)"
 fi
 if [ "$ROOT_EXPLICIT" -eq 1 ] && [ -z "$ROOT" ]; then
   usage >&2
@@ -179,7 +187,7 @@ if [ "$DO_CHECK" -eq 1 ]; then
   if [ -z "$ROOT" ]; then
     _check_root="$(pwd)"
   elif [ -d "$ROOT" ]; then
-    _check_root="$(cd "$ROOT" && pwd)"
+    _check_root="$(CDPATH= cd "$ROOT" && pwd)"
   else
     _check_root="$ROOT"
   fi
@@ -195,7 +203,7 @@ else
     fi
     mkdir -p "$ROOT"
   fi
-  ROOT="$(cd "$ROOT" && pwd)"
+  ROOT="$(CDPATH= cd "$ROOT" && pwd)"
 fi
 
 VERSION=""
@@ -1678,49 +1686,8 @@ settings_json_min() {
 EOF
 }
 
-settings_json_kit_guard() {
-  cat <<'EOF'
-{
-  "env": {
-    "CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH": "3"
-  },
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": "Edit|Write|MultiEdit|NotebookEdit",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "bash \"$CLAUDE_PROJECT_DIR/_kit/kit-guard.sh\" hook claude"
-          }
-        ]
-      }
-    ]
-  }
-}
-EOF
-}
-
-cursor_hooks_json_kit_guard() {
-  cat <<'EOF'
-{
-  "version": 1,
-  "hooks": {
-    "preToolUse": [
-      {
-        "command": "bash _kit/kit-guard.sh hook cursor",
-        "matcher": "Write|Delete"
-      }
-    ]
-  }
-}
-EOF
-}
-
-# Hook configs for a run that creates the file and has flags.hook_telemetry on (with or without
-# kit_guard). Keys in order: PreToolUse (kit_guard only), Stop, SubagentStop — the kit-guard-only
-# and flag-off files stay the two functions above. The Claude Code command is guarded so a fresh
-# clone (no _kit/ yet) shows no hook error on every stop.
+# The kit-guard PreToolUse / preToolUse blocks are defined once, here, and used by both the
+# kit-guard-only config and the combined telemetry config (the two outputs share these bytes).
 settings_hooks_claude_pretooluse() {
   cat <<'EOF'
     "PreToolUse": [
@@ -1737,6 +1704,30 @@ settings_hooks_claude_pretooluse() {
 EOF
 }
 
+cursor_hooks_pretooluse() {
+  cat <<'EOF'
+    "preToolUse": [
+      {
+        "command": "bash _kit/kit-guard.sh hook cursor",
+        "matcher": "Write|Delete"
+      }
+    ]
+EOF
+}
+
+settings_json_kit_guard() {
+  printf '{\n  "env": {\n    "CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH": "3"\n  },\n  "hooks": {\n%s\n  }\n}\n' "$(settings_hooks_claude_pretooluse)"
+}
+
+cursor_hooks_json_kit_guard() {
+  printf '{\n  "version": 1,\n  "hooks": {\n%s\n  }\n}\n' "$(cursor_hooks_pretooluse)"
+}
+
+# Hook configs for a run that creates the file and has flags.hook_telemetry on (with or without
+# kit_guard). Keys in order: PreToolUse (kit_guard only), Stop, SubagentStop, StopFailure — the
+# kit-guard-only and flag-off files stay the functions above. Both harness commands are guarded so
+# a fresh clone (no _kit/ yet) shows no hook error on every stop: Claude Code ends in `|| true`,
+# Cursor in `|| echo '{}'` (its hook protocol expects a JSON object on stdout).
 settings_hooks_claude_stops() {
   cat <<'EOF'
     "Stop": [
@@ -1758,6 +1749,16 @@ settings_hooks_claude_stops() {
           }
         ]
       }
+    ],
+    "StopFailure": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "test -f \"$CLAUDE_PROJECT_DIR/_kit/hook-log.sh\" && bash \"$CLAUDE_PROJECT_DIR/_kit/hook-log.sh\" hook claude || true"
+          }
+        ]
+      }
     ]
 EOF
 }
@@ -1771,28 +1772,17 @@ settings_json_hooks() {
   printf '{\n  "env": {\n    "CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH": "3"\n  },\n  "hooks": {\n%s%s\n  }\n}\n' "$pre" "$stops"
 }
 
-cursor_hooks_pretooluse() {
-  cat <<'EOF'
-    "preToolUse": [
-      {
-        "command": "bash _kit/kit-guard.sh hook cursor",
-        "matcher": "Write|Delete"
-      }
-    ]
-EOF
-}
-
 cursor_hooks_stops() {
   cat <<'EOF'
     "stop": [
       {
-        "command": "bash _kit/hook-log.sh hook cursor",
+        "command": "test -f _kit/hook-log.sh && bash _kit/hook-log.sh hook cursor || echo '{}'",
         "loop_limit": 1
       }
     ],
     "subagentStop": [
       {
-        "command": "bash _kit/hook-log.sh hook cursor",
+        "command": "test -f _kit/hook-log.sh && bash _kit/hook-log.sh hook cursor || echo '{}'",
         "loop_limit": 1
       }
     ]
@@ -2950,7 +2940,7 @@ plan_prune_and_foreign() {
           PRUNED_P=$((PRUNED_P + 1))
           dry_action prune "$p"
         else
-          bump_warn
+          record_warn_line "warning: kept $p: kit-owned file from an earlier emit, modified locally, no longer emitted — delete it or keep it as your own"
           dry_action warn "$p"
         fi
       else
@@ -2964,7 +2954,7 @@ plan_prune_and_foreign() {
         map_set NEWF "$p" "$disk"
         dry_action keep "$p"
       else
-        bump_warn
+        record_warn_line "warning: $p is recorded in the previous manifest but missing — nothing to prune"
         dry_action warn "$p"
       fi
     fi
@@ -3045,7 +3035,9 @@ put_optional_kit_files() {
       fi
       if flag_is hook_telemetry; then
         if ! grep -Fq '_kit/hook-log.sh' "$sf"; then
-          record_warn_line 'warning: .claude/settings.json exists without the hook-telemetry hooks — left untouched; merge into it: {"hooks":{"Stop":[{"hooks":[{"type":"command","command":"test -f \"$CLAUDE_PROJECT_DIR/_kit/hook-log.sh\" && bash \"$CLAUDE_PROJECT_DIR/_kit/hook-log.sh\" hook claude || true"}]}],"SubagentStop":[{"hooks":[{"type":"command","command":"test -f \"$CLAUDE_PROJECT_DIR/_kit/hook-log.sh\" && bash \"$CLAUDE_PROJECT_DIR/_kit/hook-log.sh\" hook claude || true"}]}]}}'
+          record_warn_line 'warning: .claude/settings.json exists without the hook-telemetry hooks — left untouched; merge into it: {"hooks":{"Stop":[{"hooks":[{"type":"command","command":"test -f \"$CLAUDE_PROJECT_DIR/_kit/hook-log.sh\" && bash \"$CLAUDE_PROJECT_DIR/_kit/hook-log.sh\" hook claude || true"}]}],"SubagentStop":[{"hooks":[{"type":"command","command":"test -f \"$CLAUDE_PROJECT_DIR/_kit/hook-log.sh\" && bash \"$CLAUDE_PROJECT_DIR/_kit/hook-log.sh\" hook claude || true"}]}],"StopFailure":[{"hooks":[{"type":"command","command":"test -f \"$CLAUDE_PROJECT_DIR/_kit/hook-log.sh\" && bash \"$CLAUDE_PROJECT_DIR/_kit/hook-log.sh\" hook claude || true"}]}]}}'
+        elif ! grep -Fq 'StopFailure' "$sf"; then
+          record_warn_line 'warning: .claude/settings.json has the hook-telemetry hooks but no StopFailure hook — left untouched; add to its "hooks" object: "StopFailure":[{"hooks":[{"type":"command","command":"test -f \"$CLAUDE_PROJECT_DIR/_kit/hook-log.sh\" && bash \"$CLAUDE_PROJECT_DIR/_kit/hook-log.sh\" hook claude || true"}]}]'
         fi
       elif grep -Fq '_kit/hook-log.sh' "$sf"; then
         record_warn_line "warning: .claude/settings.json still references _kit/hook-log.sh but flags.hook_telemetry is off — remove those hook entries"
@@ -3075,7 +3067,7 @@ put_optional_kit_files() {
       fi
       if flag_is hook_telemetry; then
         if ! grep -Fq '_kit/hook-log.sh' "$hf"; then
-          record_warn_line 'warning: .cursor/hooks.json exists without the hook-telemetry hooks — left untouched; add to its "hooks" object: "stop":[{"command":"bash _kit/hook-log.sh hook cursor","loop_limit":1}],"subagentStop":[{"command":"bash _kit/hook-log.sh hook cursor","loop_limit":1}]'
+          record_warn_line 'warning: .cursor/hooks.json exists without the hook-telemetry hooks — left untouched; add to its "hooks" object: "stop":[{"command":"test -f _kit/hook-log.sh && bash _kit/hook-log.sh hook cursor || echo '"'"'{}'"'"'","loop_limit":1}],"subagentStop":[{"command":"test -f _kit/hook-log.sh && bash _kit/hook-log.sh hook cursor || echo '"'"'{}'"'"'","loop_limit":1}]'
         fi
       elif grep -Fq '_kit/hook-log.sh' "$hf"; then
         record_warn_line "warning: .cursor/hooks.json still references _kit/hook-log.sh but flags.hook_telemetry is off — remove those hook entries"
@@ -3427,7 +3419,7 @@ print_summary() {
 # main
 # ---------------------------------------------------------------------------
 run_emit() {
-  local id n rc bp _mid
+  local id n rc bp
 
   map_clear JTQ
   load_old_manifest
@@ -3477,11 +3469,7 @@ run_emit() {
     exit "$rc"
   fi
 
-  for _mid in "${MISSING_BOOTSTRAP[@]+"${MISSING_BOOTSTRAP[@]}"}"; do
-    [ -z "$_mid" ] && continue
-    bump_warn
-  done
-
+  # Unanswered bootstrap ids are not warnings: --check-answers lists them, and they are not counted.
   collect_emit_set
   put_optional_kit_files
   flush_syntax
