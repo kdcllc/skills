@@ -66,14 +66,15 @@ triggers.
 
 ### Why This Architecture?
 
-Traditional single-agent execution suffers from:
+Traditional single-agent execution plans, executes, and reviews its own work in one
+context window, and suffers from:
 
-| Problem | Cause | Impact |
-|---------|-------|--------|
-| **Context Fatigue** | Long conversations exhaust attention | Late tasks get less quality |
-| **Sunk Cost Bias** | Agent invested in previous work | Reluctant to reject own output |
-| **Optimism Creep** | Desire to "finish" | Cuts corners, skips edge cases |
-| **Self-Review Blindness** | Reviewing own work | Misses obvious issues |
+| Problem | Cause | Impact | How this architecture answers it |
+|---------|-------|--------|----------------------------------|
+| **Agentic laziness** (optimism creep) | Desire to "finish" | Declares the job done after partial progress; cuts corners, skips edge cases | Nothing advances without an evaluator PASS against acceptance criteria written at planning time; the `task-criteria` floor fails any completion claim the evidence contradicts (F5) |
+| **Self-preferential bias** (self-review blindness, sunk cost) | Reviewing, or invested in, its own work | Misses obvious issues; reluctant to reject its own output | Evaluators are separate subagents with no stake in the outcome whose scores start low and must be earned; fix cycle 2 rotates to a different model family, and continuation-ladder arbitration uses a different-family frontier model when one is reachable |
+| **Goal drift** | Constraints fade across many turns and compactions | Late work no longer matches the original objective | `goal.md` and the task files hold the objective, constraints, and acceptance criteria on disk; every spawn receives them in its context package, and every fix is re-evaluated against them (Mandatory Re-Evaluate Invariants) |
+| **Context fatigue** | Long conversations exhaust attention | Late tasks get less quality | Fresh context per subagent; the orchestrator recommends compaction or a fresh session once its context window is about 60% full, then resumes from `goal.md` and the orchestration log |
 
 ### The Solution: Separation of Concerns
 
@@ -103,7 +104,9 @@ Each subagent invocation:
 - Returns **one response** to the orchestrator
 - Has **no knowledge** of previous attempts or other tasks
 
-This eliminates fatigue and bias completely.
+No subagent inherits the fatigue, sunk cost, or drifted assumptions of the session that
+spawned it. The orchestrator itself is still one long session, which is why its state
+lives in files rather than in the conversation.
 
 Exception for re-checks: the evaluator is resumed with a delta prompt listing the applied fixes (Phase 4/5 deltas list the applied fixes plus every earlier required-fixes list); Phase 3 deltas quote newly written passages and Phase 3 attempt 3 is a fresh spawn per `reference/goal-revisions.md`. The implementer may be resumed for fix cycle 1 only (cycles 2–3
 are fresh spawns) except a line-patch-only NEEDS FIXES verdict (every required fix
@@ -1503,7 +1506,7 @@ See ### Forge adapter (Phase 7 delivery).
 ## Summary
 
 1. **Orchestrators coordinate, never execute** - They prepare context and make decisions
-2. **Subagents execute with fresh context** - No fatigue, no bias
+2. **Subagents execute with fresh context** - No inherited fatigue, bias, or drift
 3. **Evaluation is always separate** - Pessimistic evaluators review all work (code AND behavior)
 4. **Re-evaluate is mandatory** - Fixes/revisions MUST be re-verified by an evaluator subagent
 5. **Retries have limits (3 cycles)** - Phase 4 task execution then reads `phases.ladder`: `auto` continues through the continuation ladder (rungs 5→4→6) before escalation; `escalate` (default) escalates with the ladder offered; other phases escalate after 3 cycles

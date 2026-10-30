@@ -28,13 +28,31 @@ skills, and an architecture doc tailored to your stack.
 
 ## Why agent-kit
 
-A single long AI session drifts. It loses context, grades its own work, and tells you it is
-finished when it isn't. `agent-kit` fixes that with structure:
+A single long AI session that plans, builds, and checks its own work fails in three
+predictable ways. It stops after partial progress and says it's finished, it grades its
+own work too kindly, and it drifts away from the original goal as the conversation grows
+and gets compacted. Anthropic's Claude Code team calls these
+[agentic laziness, self-preferential bias, and goal drift](https://claude.dev/blog/a-harness-for-every-task-dynamic-workflows-in-claude-code/).
+`agent-kit` answers each one with structure:
 
-- **Every result is verified.** Evaluators run the code, check that cited files and
-  functions actually exist, and score the work against acceptance criteria written at
-  planning time. Failed work goes back for a fix and is evaluated again, with a hard limit
-  on retries and a clear escalation when it's stuck.
+- **Stopping early: nothing is done until an evaluator says so.** Every task is checked
+  against acceptance criteria written at planning time, before any code exists.
+  Evaluators run the code, check that cited files and functions actually exist, and fail
+  any completion claim the evidence contradicts. Failed work goes back for a fix and is
+  evaluated again, with a hard limit on retries and a clear escalation when it's stuck.
+- **Grading its own work: the reviewer never wrote the code.** A separate, skeptical
+  evaluator with no stake in the result gates the plan, every task, and the final audit.
+  Its score starts low and has to be earned with evidence. Retries rotate to a different
+  model, and a task that stays stuck can go to an arbiter from another model family when
+  your harness offers one.
+- **Drifting from the goal: the goal lives on disk, not in the chat.** The goal, its
+  tasks, and their acceptance criteria are files that every worker and evaluator receives
+  fresh, so a constraint agreed at planning still binds the last task. Every fix is
+  re-evaluated against those files, and the orchestrator tells you when its own session
+  is getting long enough to need compaction or a fresh start.
+
+It also gives you:
+
 - **The right model for each job.** Frontier models plan and review; lighter models
   implement and write tests; a fast model runs shell commands and returns only the answer.
   You get frontier-quality reviewing without paying frontier prices for every keystroke.
@@ -47,7 +65,12 @@ finished when it isn't. `agent-kit` fixes that with structure:
 - **It remembers.** A git-tracked memory store keeps what each feature learned, and the
   orchestrator searches it before planning the next one.
 - **It can run unattended.** An optional autonomous loop works through a backlog story by
-  story and hands you one pull request to approve at the end.
+  story and hands you one pull request to approve at the end. It follows the rules in
+  Anthropic's
+  [Building effective agent automations](https://claude.dev/blog/building-effective-agent-automations/):
+  it resumes from backlog state instead of a time window, reports a failed read loudly
+  instead of as "nothing to do", checks each slot's actual commits before integrating
+  them, and keeps its own rules out of the agent's reach.
 - **Upgrades are safe.** Every generated file is hashed. Re-running the kit never
   overwrites a file you changed without asking first.
 

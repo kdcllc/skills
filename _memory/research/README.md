@@ -17,6 +17,7 @@ update brief status; **worker tasks never write here** — only orchestrator-own
 | [runtime-language.md](runtime-language.md) | shipped | 2026-10-12 | 2027-04-12 | Bash as single script source of truth; retire PowerShell twins incrementally. |
 | [orchestration-loop-review.md](orchestration-loop-review.md) | shipped | 2026-10-20 | — | Loop hardening: driver budgets and timeouts, run ledger, test-tamper check, retry dossier, structured breaker recovery. |
 | [gate-hardening.md](gate-hardening.md) | shipped | 2026-10-27 | 2027-01-27 | Cite-or-backlog, repeat keys inside the cycle cap, failure classes and Cursor hook field notes shipped in agent-kit 2.2.0; the planner-written consumer trace (item 1) is a later goal. |
+| [agent-automations.md](agent-automations.md) | ingested | 2026-10-30 | — | Anthropic's six unattended-run rules mapped to the loop (documented in 2.2.0); candidates: confirm commit and merge before `passes: true`, screen outbox learnings/escalations, flag unavailable recall, post-merge check, run-end notify hook. |
 
 Scratch reports and prompts stay gitignored under `_memory/work/research/<topic>/`
 (for example `<topic>/report.md`, `<topic>/prompt.md`).

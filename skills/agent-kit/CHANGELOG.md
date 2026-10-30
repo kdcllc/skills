@@ -6,10 +6,6 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 
 ## [Unreleased]
 
-### Changed
-
-- **README rewritten as the kit's overview** — leads with what the kit does and why to use it, adds a feature-flow diagram and an agent/tier table, and drops the security-scan section, the loop sandbox notes, and every hard-coded version number (the install pin now uses a `v<version>` placeholder). The README no longer carries a `Kit version` line; the test suite instead fails if a hard-coded `X.Y.Z` appears in it.
-
 ## [2.2.0] - 2026-10-28
 
 ### Added
@@ -33,6 +29,9 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 - Default unchanged (auto-invocable orchestrator skills). With all three opt-in flags (`opt_in`, `kit_guard`, `hook_telemetry`) absent, emitted output is byte-identical to 2.1.0 apart from the evaluator-gate changes listed in this release. Harness matrix and emitter docs record partial-support gaps on Codex and Copilot. `invocation-flags.sh` guard tolerates the IF-guarded flag line.
 - **Gate-hardening follow-ups** — an unmet requirement that no acceptance or success criterion covers cites `F5`; `log-spawn.sh keys` keys an old-shape item without a citation as `uncited <location> :: <defect>` (lower-casing is ASCII-only); a reported model value starting with `unknown` logs `model_check: unverified`; and `ship-pr` prefixes backlog rows `<goal>/B<n>` in the PR body when it carries more than one goal. The pointers in ORCHESTRATION.md, the feature references, `test-ladder` and `ship-pr` are corrected, and the guide gains a "Guarded installs (`flags.kit_guard`)" section.
 - **Reference sweep retired** — pre-flight check 2 (missed callers) now verifies the `goal.md` consumer trace with `_kit/trace-lint.sh` instead of a free-form sweep, and `reference-sweep.md` is no longer written. Previously check 2 ran only for renamed or reshaped symbols and wrote a sweep file that nothing checked mechanically.
+- **README rewritten as the kit's overview** — leads with what the kit does and why to use it (the "Why agent-kit" section cites Anthropic's [A harness for every task: dynamic workflows in Claude Code](https://claude.dev/blog/a-harness-for-every-task-dynamic-workflows-in-claude-code/) for the failure modes it addresses), adds a feature-flow diagram and an agent/tier table, and drops the security-scan section, the loop sandbox notes, and every hard-coded version number (the install pin now uses a `v<version>` placeholder). The README no longer carries a `Kit version` line; the test suite instead fails if a hard-coded `X.Y.Z` appears in it.
+- **Failure modes stated explicitly** — the README's "Why agent-kit" section, the emitted ORCHESTRATION.md § Why This Architecture?, and the architecture guide now name the three single-session failure modes from Anthropic's [dynamic workflows article](https://claude.dev/blog/a-harness-for-every-task-dynamic-workflows-in-claude-code/) (agentic laziness, self-preferential bias, goal drift) and pair each with the kit mechanism that addresses it. ORCHESTRATION.md's problem table gains a goal-drift row and a "How this architecture answers it" column, and no longer claims fresh context "eliminates fatigue and bias completely". Documentation only; no behavior change.
+- **Unattended-run rules stated explicitly** — the autonomous-loop guide gains § Unattended-run rules, mapping the six rules from Anthropic's [Building effective agent automations](https://claude.dev/blog/building-effective-agent-automations/) (resume from a bookmark, report a failed read as unreadable, re-check before acting, record only what is confirmed, keep the agent's rules out of its reach, read-only access plus spending caps) to the loop mechanisms that apply them, plus guidance on setting story budgets at three to five times a typical story's cost from the run ledger. The README's "It can run unattended" bullet cites the article. Documentation only; no behavior change.
 
 ### Upgrade notes
 

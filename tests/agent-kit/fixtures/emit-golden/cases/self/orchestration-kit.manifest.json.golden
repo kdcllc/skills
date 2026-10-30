@@ -20,7 +20,7 @@
     "_memory/loop/backlog.md"
   ],
   "files": {
-    ".claude/ORCHESTRATION.md": "66100c19a272f4898dc9cf36a2a0e4ca34f5eaea183ab72c9c2e4c132dc54a0d",
+    ".claude/ORCHESTRATION.md": "b3a5ff6fcabcfae02de7639bb18511edd4b915f401e19d1e2a6ecfc8cbc45484",
     ".claude/agents/diagnostician.md": "cbcbaecf95fe98f3218e20b6b0fff3d949647710ede58a026d5106d973e97510",
     ".claude/agents/evaluator.md": "6bae7d7fc05931bfe4bc732d39c4a607188b9d375a9f2efc0774f8c285f5ec35",
     ".claude/agents/evidence-collector.md": "1e73d369a9fb92b7aa7f017b9f43c6d24b6151cfb5ad8526d752b3bcec55bf45",
@@ -55,7 +55,7 @@
     ".claude/skills/ship-pr/SKILL.md": "1c43663fcf044eedee45b8968e18ffe7d13bc210d358b6f9b16f45185702d17b",
     ".claude/skills/task-criteria/SKILL.md": "2b3159fa76b6ab5939b208cbf317101cf6d770a13f0a6ea75c5c98862acea536",
     ".claude/skills/test-ladder/SKILL.md": "d9d866d4a76cf85a2d765daebc43aa9265466da4427a4783d3d8e2f2c377e7ae",
-    ".cursor/ORCHESTRATION.md": "04075922ea4bd7701fbafdc6f1a9f02091228e50b2b6b0b9ccde2514a1cbf96c",
+    ".cursor/ORCHESTRATION.md": "3b788c025aa525e3b880e417dc15705d841516b7575adc3d610eddfc6bcb908e",
     ".cursor/agents/diagnostician.md": "b928d0d486f8f451901617f54c59eb1ab18ddc2462b2e346932df0a77a34c4de",
     ".cursor/agents/evaluator.md": "447836674fa63e38b26aa53c50c877f3980d2013903d9342736e67e98bc443b4",
     ".cursor/agents/evidence-collector.md": "681a2ee685962cd275e19e49138e179abcfe11f982f3c9f0e9d5d8f92f5386a6",
@@ -95,7 +95,7 @@
     "_kit/memory.cmd": "ae9541294a03f741311ff8bc0d5c6f9985d6947fb42f7aaeaf6613088e34bf7e",
     "_kit/memory.sh": "db4762042b2dcaeccdd7018b5e05619909bcbe28567427a0d914286f1764e62c",
     "_kit/trace-lint.cmd": "ae9541294a03f741311ff8bc0d5c6f9985d6947fb42f7aaeaf6613088e34bf7e",
-    "_kit/trace-lint.sh": "1a1aeded31472364bd832e7734ec0c84d51d300ee1044d7a4c49313bb8b9b67e",
+    "_kit/trace-lint.sh": "59f4dab86dbf0f985402ce8c02ccb362dabf5fd575a39f0dfdebec46f34b6713",
     "_loop/PROMPT.md": "b1d5e2dde377179fa67edddd5a2d42981965bcc31f99762d9db298e39724a00c",
     "_loop/breaker.sh": "c759672682f3c3e2dd62781560ff11a00aecb5b31a88ac2d4af03dbfd39c26e5",
     "_loop/loop.cmd": "ae9541294a03f741311ff8bc0d5c6f9985d6947fb42f7aaeaf6613088e34bf7e",

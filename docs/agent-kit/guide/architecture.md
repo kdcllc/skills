@@ -33,6 +33,20 @@ flowchart TD
 
 The orchestrator never substitutes implementation work: it prepares context packages, spawns subagents, logs outcomes, and advances phases only on evaluator **PASS** (or **APPROVED** for audits). See [agents-and-models.md](agents-and-models.md) for role boundaries.
 
+## Failure modes the architecture addresses
+
+A single agent that plans, executes, and reviews its own work in one context window degrades in three ways. Anthropic's Claude Code team names them in [A harness for every task: dynamic workflows in Claude Code](https://claude.dev/blog/a-harness-for-every-task-dynamic-workflows-in-claude-code/); the emitted `ORCHESTRATION.md` § Why This Architecture? carries the same table for installs.
+
+| Failure mode | What goes wrong | What the kit does about it |
+|--------------|-----------------|----------------------------|
+| **Agentic laziness** | The agent declares a multi-part job done after partial progress | No task or phase advances without an evaluator **PASS** (or **APPROVED**) against acceptance criteria written at planning time. The [`task-criteria`](../../../skills/agent-kit/templates/skills/task-criteria/SKILL.template.md) floor fails unmet criteria (**F1**) and any completion claim the evidence contradicts (**F5**). Fix cycles are capped at three, then the continuation ladder or an explicit escalation runs; work is never silently dropped. |
+| **Self-preferential bias** | The agent favors its own output when reviewing it | Verdicts come only from separate subagents ([`evaluator`](../../../skills/agent-kit/templates/agents/evaluator.md), `qa-evaluator`) with no stake in the outcome; scoring starts at 2/5 and must be earned with evidence. Fix cycle 2 rotates to a different model family, and rung-5 arbitration uses `{{MODEL_FRONTIER_ALT_FAMILY}}` (same-family on Claude Code, disclosed). |
+| **Goal drift** | Constraints and edge-case requirements fade across turns and compactions | `goal.md` and the task files hold the objective, constraints, and acceptance criteria on disk. Every spawn gets them in a fresh context package, and the Mandatory Re-Evaluate Invariants re-check every fix against them, not against the conversation. The orchestrator's own progress lives in files (the orchestration log, plus `progress.md` on guarded installs), and it recommends compaction or a fresh session past ~60% of its context window. |
+
+Fresh context per subagent also removes **context fatigue** (late tasks getting less attention), the fourth row of the emitted table.
+
+Two limits remain. The orchestrator is still one long-running session, so drift protection for it rests on its state living in files. And in [degraded mode](../../../skills/agent-kit/templates/skills/feature/reference/degraded-mode.md) Case 2 (no spawn tool), the orchestrator performs verdict roles itself; every such gate is disclosed to the user as **self-evaluated** (see [evaluation-system.md](evaluation-system.md) § Self-evaluated gates (degraded mode)).
+
 ## Package components
 
 Canonical source lives under `skills/agent-kit/`. **`SKILL.md`** is the `/agent-kit` workflow (detect harnesses, greenfield gate, inspect, interview, answers file, emit, report). **`templates/`** holds agents, skills, loop drivers, tools, memory layout, `ORCHESTRATION.md`, and `models.map.md`. **`emitters/`** are **caveats only** — translation rules live in **`bin/emit.sh`** (**`bin/emit.cmd`** is its Windows launcher). **`reference/`** holds the harness capability matrix, bootstrap ids, and Windows launcher notes.
