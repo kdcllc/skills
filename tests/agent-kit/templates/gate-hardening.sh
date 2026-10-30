@@ -12,6 +12,10 @@
 # `## Searches` / `## Consumers` / `trace:` key, the goal-criteria Phase 3 gate, pre-flight
 # check 2, the goal-revisions amendment, the ORCHESTRATION flow, the evaluator consumer-trace
 # mode and F6 audit item, and the emitter's `_kit/trace-lint` entries, each with a mutation proof.
+# Goal release-backlog, task 06 isolates the evaluation-system F7 and Citations phrases, holds the KEYS
+# anchors to an exact count of 1, locks the legacy-goal skip qualifier and clause, adds single-anchor
+# proofs (the Who and Format labels, the preflight Searches sentence, the goal-revisions additive and
+# no-sweep rules), and gives `emit_mutant` the same "nothing changed" guard as `mutation_proof`.
 # Sections:
 #   1. canonical checks — one named check per template or doc, every anchor a literal the
 #      owning task wrote (no line numbers);
@@ -126,6 +130,17 @@ REVISIONS_STEP5='5. Confirm every `changes` row in `goal.md` `## Consumers` name
 REVISIONS_AMEND='A surface the Phase 5 audit finds changed but not listed in `## Consumers` is an amendment: add the search, its hits and the row with evidence, re-run `_kit/trace-lint.sh`, then a targeted evaluation.'
 TRACE_GATE_START='^[*][*]Consumer trace [(]Phase 3 gate[)][.][*][*]'
 TRACE_GATE_END='^[*][*]Corrective tasks'
+# Goal release-backlog, task 06: the legacy-goal skip carries its qualifier and its clause, the
+# uncited old-shape example carries defect text, and the pointers name the bold paragraph.
+LEGACY_SKIP_EVAL='(no `## Consumers` section) skips checks (a) and (b); check its legacy artifact as that rule states'
+LEGACY_SKIP_ORCH='(no `## Consumers` section) skips checks (a) and (b); the audit checks its legacy artifact as that rule states'
+UNCITED_OLD_SHAPE='the older ``- [ ] `file:line`: <defect> — fix`` shape'
+EVAL_TRACE_POINTER='item 4 of the **Consumer trace (Phase 3 gate)** paragraph of'
+ORCH_TRACE_POINTER='item 1 of the goal-criteria **Consumer trace (Phase 3 gate)** paragraph'
+SHIP_PR_PREFIX='`- <goal>/B<n> (<source>): <finding>`'
+CORRECTIVE_CHECKS='satisfies the Pairwise disjointness and Single owner checks of the seven write-set checks above'
+PREFLIGHT_SEARCHES='`goal.md` carries `## Searches` and `## Consumers`'
+REVISIONS_ADDITIVE='It is additive; when a missed consumer needs an edit, it is a corrective task'
 
 # ---------------------------------------------------------------------------
 # Helpers — every need_* records the first-order cause in MISSING instead of printing
@@ -274,6 +289,7 @@ check_task_criteria() {
   need_sec_flat "$f" '^### Issue key$' '^##' '<citation> <location> :: <defect>'
   need_eq "$f" "$F5_SENTENCE" 1
   need_sec_flat "$f" '^### Issue key$' '^##' "$UNCITED_FORM"
+  need_sec_flat "$f" '^### Issue key$' '^##' "$UNCITED_OLD_SHAPE"
   [[ -z "$MISSING" ]]
 }
 
@@ -305,6 +321,14 @@ check_evaluator() {
   need_flat "$f" 'run the Phase 5 consumer check'
   need_flat "$f" "$F6_AUDIT_SENTENCE"
   need_ge "$f" 'skips checks (a) and (b)' 1
+  need_flat "$f" "$LEGACY_SKIP_EVAL"
+  # goal release-backlog, task 06: the two modes' evidence is separated, and the pointers name the bold paragraph
+  need_flat "$f" 'Arbitration reviews criteria, not code, so its evidence is acceptance-criteria citation only'
+  need_flat "$f" 'consumer-trace mode scores no work, so its evidence is the output of the searches it runs'
+  need_flat "$f" 'A search-tool call prints no `rg` line, so write the equivalent command'
+  need_flat "$f" 'then one `<path>:<line>:<text>` hit per match'
+  need_flat "$f" "$EVAL_TRACE_POINTER"
+  need_none_flat "$f" '§ Consumer trace' 'pointer to a heading that does not exist'
   [[ -z "$MISSING" ]]
 }
 
@@ -377,7 +401,7 @@ check_orchestration() {
   need_re_ge "$f" 'flaky \(.*local-edits \(.*pre-existing \(.*introduced \(' 1 'Phase 5 class summary line'
   need_flat "$f" 'Loop runs never commit fixes for pre-existing failures'
   need_flat "$f" 'those failures become `follow-ups.md` rows'
-  need_flat "$f" "$ORCH_KEYS_PHRASE"
+  need_eq "$f" "$ORCH_KEYS_PHRASE" 1
   need_flat "$f" "$UNKNOWN_SENTENCE"
   need_ge "$f" 'eval-tree' 1
   need_ge "$f" 'log-spawn.sh keys' 1
@@ -399,7 +423,14 @@ check_orchestration() {
   need_ge "$f" 'base-commit.txt' 2
   need_ge "$f" 'git ls-files --others --exclude-standard' 1
   need_ge "$f" 'skips checks (a) and (b)' 1
+  need_flat "$f" "$LEGACY_SKIP_ORCH"
   need_eq "$f" 'reference-sweep' 0
+  # goal release-backlog, task 06: the orchestrator is the subject, the fix is a pre-flight fix,
+  # and the pointer names the bold paragraph
+  need_flat "$f" "The orchestrator diffs that trace's Consumer paths against"
+  need_flat "$f" 'The orchestrator fixes pre-flight failures and logs them'
+  need_none_flat "$f" 'It diffs that trace|§ Consumer trace' 'subject-less diff sentence or pointer to a heading that does not exist'
+  need_flat "$f" "$ORCH_TRACE_POINTER"
   [[ -z "$MISSING" ]]
 }
 
@@ -424,6 +455,8 @@ check_ship_pr() {
   need_flat "$f" 'Omit this section when there are no open rows'
   need_flat "$f" 'Backlog rows are never described as fixed in the PR body'
   need_ge "$f" '- B<n> (<source>): <finding>' 1
+  # the multi-goal prefix is in the body template as well as in the prose below it
+  need_ge "$f" "$SHIP_PR_PREFIX" 2
   [[ -z "$MISSING" ]]
 }
 
@@ -477,7 +510,7 @@ check_feature_workflow() {
   for t in 'preexisting-dirty.txt' 'follow-ups.md' 'Backlog (not fixed here)' 'eval-tree'; do
     need_ge "$f" "$t" 1
   done
-  need_flat "$f" "$WORKFLOW_KEYS_PHRASE"
+  need_eq "$f" "$WORKFLOW_KEYS_PHRASE" 1
   need_re_ge "$f" '[Ee]arly ladder entry' 1 'early ladder entry'
   need_ge "$f" "$DRIFT_SENTENCE" 2
   need_eq "$f" 'Eval2 --> LadderEntry: repeated structural key · ladder auto' 1
@@ -605,6 +638,11 @@ check_goal_criteria() {
   need_sec_flat "$f" "$TRACE_GATE_START" "$TRACE_GATE_END" 'under `### Searches to re-run`'
   need_sec_flat "$f" "$TRACE_GATE_START" "$TRACE_GATE_END" '**provisional**'
   need_sec_flat "$f" "$TRACE_GATE_START" "$TRACE_GATE_END" '`trace: blind` is required when any surface is destructive'
+  # goal release-backlog, task 06: the lead names which points are mechanical, and the corrective-task
+  # clause names the write-set checks it relies on instead of numbering them after the new list
+  need_flat "$f" 'checked on five points. Points 2 and 3 are mechanical, enforced by the pre-flight lint; points 1, 4 and 5 state their own verdict.'
+  need_flat "$f" "$CORRECTIVE_CHECKS"
+  need_none_flat "$f" 'checks 3–4' 'write-set checks numbered after the Consumer trace list'
   [[ -z "$MISSING" ]]
 }
 
@@ -612,7 +650,7 @@ check_preflight() {
   local f="$1" s='^### 2[.] Missed callers' x='^### 3[.] '
   MISSING=""
   [[ -f "$f" ]] || { note_miss "file missing"; return 1; }
-  need_sec_flat "$f" "$s" "$x" '`goal.md` carries `## Searches` and `## Consumers`'
+  need_sec_flat "$f" "$s" "$x" "$PREFLIGHT_SEARCHES"
   need_sec_flat "$f" "$s" "$x" 'Run `_kit/trace-lint.sh _memory/work/goals/<goal>/goal.md`'
   need_sec_flat "$f" "$s" "$x" '`trace-lint` exits non-zero'
   need_eq "$f" 'reference-sweep' 1
@@ -626,7 +664,7 @@ check_goal_revisions() {
   [[ -f "$f" ]] || { note_miss "file missing"; return 1; }
   need_eq "$f" "$REVISIONS_STEP5" 1
   need_eq "$f" "$REVISIONS_AMEND" 1
-  need_ge "$f" 'It is additive; when a missed consumer needs an edit, it is a corrective task' 1
+  need_ge "$f" "$REVISIONS_ADDITIVE" 1
   need_eq "$f" 'reference-sweep' 0
   [[ -z "$MISSING" ]]
 }
@@ -949,7 +987,9 @@ emit_mutant() { # emit_mutant <name> <emit root> <path under root> <mutator> [ar
     report FAIL "mutation-proof $name" "clean copy was rejected: $MISSING"
   else
     "$mut" "$copy" "$@"
-    if check_emitted_gate_anchors "$d"; then
+    if cmp -s "$root/$rel" "$copy"; then
+      report FAIL "mutation-proof $name" "the mutation changed nothing"
+    elif check_emitted_gate_anchors "$d"; then
       report FAIL "mutation-proof $name" "check still passed on the mutated emit"
     else
       report PASS "mutation-proof $name" "check failed on: ${MISSING:0:110}"
@@ -986,6 +1026,8 @@ mutation_proof 'task-criteria: F5 mapping sentence altered' "$TASK_CRITERIA" che
   m_sub 'covers cites **`F5`**' 'covers cites **`F3`**'
 mutation_proof 'task-criteria: uncited key form altered' "$TASK_CRITERIA" check_task_criteria \
   m_sub 'keys as `uncited <location> :: <defect>`' 'keys as `<location> :: <defect>`'
+mutation_proof 'task-criteria: uncited old-shape example loses its defect text' "$TASK_CRITERIA" check_task_criteria \
+  m_sub '`file:line`: <defect> — fix``' '`file:line` — fix``'
 mutation_proof 'evaluator: Citations paragraph pointer removed' "$EVALUATOR" check_evaluator m_del_lines '**Citations** — '
 mutation_proof 'evaluator: pinned tag literal duplicated' "$EVALUATOR" check_evaluator m_append "$TAG_PLACEHOLDER"
 mutation_proof 'evaluator: citation-mode sentence altered' "$EVALUATOR" check_evaluator \
@@ -1014,10 +1056,14 @@ mutation_proof 'ORCHESTRATION: unknown model_check sentence weakened' "$ORCH_TEM
   m_sub 'always gives `model_check: unverified`' 'may give `model_check: unverified`'
 mutation_proof 'ORCHESTRATION: issue-keys bullet phrase altered' "$ORCH_TEMPLATE" check_orchestration \
   m_sub "$ORCH_KEYS_PHRASE" 'appends a keys line'
+mutation_proof 'ORCHESTRATION: issue-keys bullet phrase duplicated' "$ORCH_TEMPLATE" check_orchestration \
+  m_append "$ORCH_KEYS_PHRASE"
 mutation_proof 'feature skill: over the byte budget' "$FEATURE_SKILL" check_feature_skill m_pad 400
 mutation_proof 'feature skill: Quality Checks pointer removed' "$FEATURE_SKILL" check_feature_skill \
   m_sub 'classify per ORCHESTRATION.md § Quality Checks' 'classify the failure'
 mutation_proof 'ship-pr: backlog heading removed' "$SHIP_PR" check_ship_pr m_del_lines '## Backlog (not fixed here)'
+mutation_proof 'ship-pr: body template loses the multi-goal prefix' "$SHIP_PR" check_ship_pr \
+  m_sub 'write each bullet as `- <goal>/B<n> (<source>): <finding>`. ' ''
 mutation_proof 'test-ladder: class order swapped on the pointer line' "$TEST_LADDER" check_test_ladder \
   m_sub '(flaky, local-edits, pre-existing, introduced)' '(flaky, pre-existing, local-edits, introduced)'
 mutation_proof 'harness-matrix: superseded note removed' "$HARNESS_MATRIX" check_harness_matrix \
@@ -1028,8 +1074,15 @@ mutation_proof 'evaluation-system doc: citation sentence altered' "$EVALSYS_DOC"
   m_sub 'uncited findings never block' 'uncited findings may block'
 mutation_proof 'evaluation-system doc: floor, citations and keys heading removed' "$EVALSYS_DOC" check_eval_system_doc \
   m_del_lines '## Floor, citations, and issue keys'
+# The heading proof above breaks every section-scoped anchor at once; these two alter one phrase each.
+mutation_proof 'evaluation-system doc: F7 bypass-class phrase altered' "$EVALSYS_DOC" check_eval_system_doc \
+  m_sub "$EVALSYS_F7_PHRASE" '(including **F6** for bypass-class problems'
+mutation_proof 'evaluation-system doc: Citations scope phrase altered' "$EVALSYS_DOC" check_eval_system_doc \
+  m_sub "$EVALSYS_CITATIONS_PHRASE" '§ **Citations** applies to every evaluator mode'
 mutation_proof 'feature-workflow doc: orchestration-log keys sentence altered' "$FEATURE_WORKFLOW_DOC" check_feature_workflow \
   m_sub "$WORKFLOW_KEYS_PHRASE" 'appends a keys line'
+mutation_proof 'feature-workflow doc: orchestration-log keys sentence duplicated' "$FEATURE_WORKFLOW_DOC" check_feature_workflow \
+  m_append "$WORKFLOW_KEYS_PHRASE"
 mutation_proof 'feature-workflow doc: terminology sentence removed' "$FEATURE_WORKFLOW_DOC" check_feature_workflow \
   m_del_lines "$TERMINOLOGY_SENTENCE"
 mutation_proof 'feature-workflow doc: ladder diagram edge removed' "$FEATURE_WORKFLOW_DOC" check_feature_workflow \
@@ -1065,8 +1118,15 @@ mutation_proof 'goal-criteria: retired sweep artifact reintroduced' "$GOAL_CRITE
   m_append 'A reference-sweep.md artifact lists every hit.'
 mutation_proof 'goal-criteria: transition-rule pointer removed' "$GOAL_CRITERIA" check_goal_criteria \
   m_sub 'follows the transition rule in the feature skill' 'follows the usual rule'
-mutation_proof 'goal-criteria: Who clause removed' "$GOAL_CRITERIA" check_goal_criteria \
-  m_del_lines '1. **Who.**'
+# Single-anchor proofs: each alters one label or sentence, so only its own section check can fail.
+mutation_proof 'goal-criteria: Who clause label renamed' "$GOAL_CRITERIA" check_goal_criteria \
+  m_sub '**Who.**' '**Whom.**'
+mutation_proof 'goal-criteria: Format clause label renamed' "$GOAL_CRITERIA" check_goal_criteria \
+  m_sub '**Format.**' '**Layout.**'
+mutation_proof 'goal-criteria: gate lead repeats the verdict again' "$GOAL_CRITERIA" check_goal_criteria \
+  m_sub 'checked on five points. Points 2 and 3 are mechanical, enforced by the pre-flight lint; points 1, 4 and 5 state their own verdict.' 'checked on five points; each violation is NEEDS REVISION.'
+mutation_proof 'goal-criteria: corrective-task clause numbered after the new list' "$GOAL_CRITERIA" check_goal_criteria \
+  m_sub "$CORRECTIVE_CHECKS" 'satisfies checks 3–4'
 mutation_proof 'goal-criteria: Lint clause removed' "$GOAL_CRITERIA" check_goal_criteria \
   m_del_lines '3. **Lint.**'
 mutation_proof 'goal-criteria: Re-runs clause made optional' "$GOAL_CRITERIA" check_goal_criteria \
@@ -1084,6 +1144,8 @@ mutation_proof 'preflight: second reference-sweep mention added' "$PREFLIGHT_REF
   m_append 'Pre-flight writes reference-sweep.md for every goal.'
 mutation_proof 'preflight: transition sentence removed' "$PREFLIGHT_REF" check_preflight \
   m_del_lines '**Transition:**'
+mutation_proof 'preflight: check 2 Searches and Consumers sentence altered' "$PREFLIGHT_REF" check_preflight \
+  m_sub "$PREFLIGHT_SEARCHES" '`goal.md` carries a trace'
 
 mutation_proof 'goal-revisions: renumbering step 5 removed' "$GOAL_REVISIONS_REF" check_goal_revisions \
   m_del_lines 'names a task that still exists after the renumbering'
@@ -1093,6 +1155,10 @@ mutation_proof 'goal-revisions: unlisted-surface amendment sentence removed' "$G
   m_del_lines 'A surface the Phase 5 audit finds changed but not listed'
 mutation_proof 'goal-revisions: amendment no longer re-runs the lint' "$GOAL_REVISIONS_REF" check_goal_revisions \
   m_sub 're-run `_kit/trace-lint.sh`, then a targeted evaluation' 'then a targeted evaluation'
+mutation_proof 'goal-revisions: additive sentence altered' "$GOAL_REVISIONS_REF" check_goal_revisions \
+  m_sub 'It is additive; when a missed consumer needs an edit' 'It is material; when a missed consumer needs an edit'
+mutation_proof 'goal-revisions: retired reference-sweep artifact reintroduced' "$GOAL_REVISIONS_REF" check_goal_revisions \
+  m_append 'Renumbering re-runs the reference-sweep.md artifact.'
 
 mutation_proof 'ORCHESTRATION: consumer-trace mode named differently' "$ORCH_TEMPLATE" check_orchestration \
   m_sub 'consumer-trace mode' 'blind mode'
@@ -1108,6 +1174,16 @@ mutation_proof 'ORCHESTRATION: retired reference-sweep artifact reintroduced' "$
   m_append 'Pre-flight records reference-sweep.md.'
 mutation_proof 'ORCHESTRATION: Phase 5 legacy-goal skip sentence altered' "$ORCH_TEMPLATE" check_orchestration \
   m_sub 'skips checks (a) and (b)' 'runs checks (a) and (b)'
+mutation_proof 'ORCHESTRATION: legacy-goal skip loses its no-Consumers-section qualifier' "$ORCH_TEMPLATE" check_orchestration \
+  m_sub '(no `## Consumers` section) skips' 'skips'
+mutation_proof 'ORCHESTRATION: legacy-goal skip loses its legacy-artifact clause' "$ORCH_TEMPLATE" check_orchestration \
+  m_sub 'the audit checks its legacy artifact' 'the audit ignores its legacy artifact'
+mutation_proof 'ORCHESTRATION: blind-trace diff sentence loses its subject' "$ORCH_TEMPLATE" check_orchestration \
+  m_sub "The orchestrator diffs that trace's Consumer paths against" "It diffs that trace's Consumer paths against"
+mutation_proof 'ORCHESTRATION: pre-flight fix wording generalized' "$ORCH_TEMPLATE" check_orchestration \
+  m_sub 'The orchestrator fixes pre-flight failures and logs them' 'The orchestrator fixes failures and logs them'
+mutation_proof 'ORCHESTRATION: Consumer trace pointer names a heading again' "$ORCH_TEMPLATE" check_orchestration \
+  m_sub 'item 1 of the goal-criteria' 'goal-criteria § Consumer trace item 1 of the goal-criteria'
 
 mutation_proof 'evaluator: consumer-trace mode heading removed' "$EVALUATOR" check_evaluator \
   m_del_lines '## Consumer-trace mode'
@@ -1125,6 +1201,20 @@ mutation_proof 'evaluator: Phase 5 consumer check removed from the final audit' 
   m_sub 'run the Phase 5 consumer check' 'run the Phase 5 check'
 mutation_proof 'evaluator: Phase 5 legacy-goal skip sentence altered' "$EVALUATOR" check_evaluator \
   m_sub 'skips checks (a) and (b)' 'runs checks (a) and (b)'
+mutation_proof 'evaluator: legacy-goal skip loses its no-Consumers-section qualifier' "$EVALUATOR" check_evaluator \
+  m_sub '(no `## Consumers` section) skips' 'skips'
+mutation_proof 'evaluator: legacy-goal skip loses its legacy-artifact clause' "$EVALUATOR" check_evaluator \
+  m_sub 'check its legacy artifact' 'ignore its legacy artifact'
+mutation_proof 'evaluator: arbitration evidence clause merged back with consumer-trace mode' "$EVALUATOR" check_evaluator \
+  m_sub 'Arbitration reviews criteria, not code, so its evidence is' 'No code is under review, so arbiter evidence is'
+mutation_proof 'evaluator: consumer-trace evidence clause dropped' "$EVALUATOR" check_evaluator \
+  m_sub 'consumer-trace mode scores no work' 'consumer-trace mode scores the work'
+mutation_proof 'evaluator: search-tool rendering sentence altered' "$EVALUATOR" check_evaluator \
+  m_sub 'A search-tool call prints no' 'A search-tool call prints'
+mutation_proof 'evaluator: hit format dropped from consumer-trace mode' "$EVALUATOR" check_evaluator \
+  m_sub 'then one `<path>:<line>:<text>` hit' 'then one hit'
+mutation_proof 'evaluator: Consumer trace pointer names a heading again' "$EVALUATOR" check_evaluator \
+  m_sub 'item 4 of the **Consumer trace (Phase 3 gate)**' '§ Consumer trace'
 
 mutation_proof 'emit.sh: trace-lint dropped from the single-copy tools loop' "$EMIT_BIN" check_emit_pointer \
   m_sub 'for f in log-spawn.sh memory.sh trace-lint.sh' 'for f in log-spawn.sh memory.sh'

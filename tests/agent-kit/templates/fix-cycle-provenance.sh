@@ -2,8 +2,9 @@
 # Regression guard for fix-cycle provenance (tasks 01–03): locks evaluator/diagnostician
 # provenance contracts, task-criteria and fix-cycles reference wording, continuation-ladder
 # drift trigger, feature-skill § Provenance, ORCHESTRATION mirror text, fresh emit copies,
-# and in-suite mutation proofs on copied templates. Tracked, self-install-independent —
-# no network, no LLM.
+# and in-suite mutation proofs on copied templates. Goal release-backlog, task 06: the
+# fix-cycles heading is exactly `## Provenance` and its opening paragraph states both scopes.
+# Tracked, self-install-independent — no network, no LLM.
 set -u
 
 export LC_ALL=C
@@ -87,8 +88,27 @@ task_criteria_provenance_section() {
   awk '/^## Provenance tags \(/{p=1;next} p&&/^## /{exit} p' "$1"
 }
 
+count_line() { # count_line <file> <exact line> → lines equal to it (0 if missing)
+  local f="$1" line="$2" n
+  [[ -f "$f" ]] || { echo 0; return; }
+  n="$(grep -cxF -- "$line" "$f" 2>/dev/null || true)"
+  [[ -n "$n" ]] || n=0
+  echo "$n"
+}
+
+assert_line() { # assert_line <file> <exact line> <want> → 0 if the count == want
+  local got
+  got="$(count_line "$1" "$2")"
+  [[ "$got" == "$3" ]]
+}
+
 fix_cycles_provenance_section() {
-  awk '/^## Provenance \(re-evaluations and re-audits\)/{p=1;next} p&&/^## /{exit} p' "$1"
+  awk '/^## Provenance$/{p=1;next} p&&/^## /{exit} p' "$1"
+}
+
+# The section's opening paragraph (its first sentence states the scope of the snapshot and the tags).
+fix_cycles_provenance_scope() {
+  fix_cycles_provenance_section "$1" | awk 'NF{p=1} p&&!NF{exit} p'
 }
 
 fix_cycles_cycle3_section() {
@@ -143,9 +163,16 @@ check_canonical_task_criteria() {
 }
 
 check_canonical_fix_cycles() {
-  local f="$1" sec sec3 ok=1 n
+  local f="$1" sec sec3 ok=1 n scope
   [[ -f "$f" ]] || return 1
-  assert_anchor "$f" '## Provenance (re-evaluations and re-audits)' 1 || ok=0
+  assert_line "$f" '## Provenance' 1 || ok=0
+  # The heading is exactly `## Provenance`: the tree snapshot applies to every evaluator spawn, so
+  # the heading must not name only re-evaluations; the opening paragraph states both scopes.
+  assert_anchor "$f" '## Provenance (' 0 || ok=0
+  scope="$(fix_cycles_provenance_scope "$f" | tr '\n' ' ')"
+  for needle in 'tree snapshot' 'every evaluator spawn' 'provenance tags' 're-evaluations and re-audits'; do
+    case "$scope" in *"$needle"*) ;; *) ok=0 ;; esac
+  done
   sec="$(fix_cycles_provenance_section "$f")"
   for needle in 'every earlier required-fixes list verbatim' 'consumes no cycle' \
                 'late finding: ' 'no extra cycle' 'reverses cycle N:' 'Phase 5' \
@@ -236,7 +263,7 @@ check_emitted_provenance() {
     .cursor/skills/feature/reference/fix-cycles.md; do
     f="$root/$path"
     [[ -f "$f" ]] || return 1
-    assert_anchor "$f" '## Provenance (re-evaluations and re-audits)' 1 || ok=0
+    assert_line "$f" '## Provenance' 1 || ok=0
     emit_file_clean "$f" || return 1
   done
   for path in \
@@ -261,6 +288,14 @@ _mutate_copy() { # _mutate_copy <kind> <file>
       ;;
     fix-cycles)
       sed '/consumes no cycle/d' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+      ;;
+    fix-cycles-heading)
+      # the old heading, which names only re-evaluations
+      sed 's/^## Provenance$/## Provenance (re-evaluations and re-audits)/' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+      ;;
+    fix-cycles-scope)
+      # the opening sentence stops naming every evaluator spawn
+      sed 's/applies to every evaluator spawn in Phases 4 and 5/applies to re-evaluation spawns/' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
       ;;
     continuation-ladder)
       sed '/drift trigger/d' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
@@ -331,6 +366,8 @@ run_mutation 'evaluator.md' evaluator "$EVALUATOR" check_canonical_evaluator
 run_mutation 'evaluator.md (trigger)' evaluator-trigger "$EVALUATOR" check_canonical_evaluator
 run_mutation 'task-criteria/SKILL.template.md' task-criteria "$TASK_CRITERIA" check_canonical_task_criteria
 run_mutation 'reference/fix-cycles.md' fix-cycles "$FIX_CYCLES_REF" check_canonical_fix_cycles
+run_mutation 'reference/fix-cycles.md (heading names only re-evaluations)' fix-cycles-heading "$FIX_CYCLES_REF" check_canonical_fix_cycles
+run_mutation 'reference/fix-cycles.md (opening sentence scope)' fix-cycles-scope "$FIX_CYCLES_REF" check_canonical_fix_cycles
 run_mutation 'reference/continuation-ladder.md' continuation-ladder "$LADDER_REF" check_canonical_continuation_ladder
 run_mutation 'diagnostician.md' diagnostician "$DIAGNOSTICIAN" check_canonical_diagnostician
 run_mutation 'feature/SKILL.template.md' feature-skill "$FEATURE_SKILL" check_canonical_feature_skill

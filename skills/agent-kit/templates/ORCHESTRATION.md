@@ -439,20 +439,22 @@ into `goal.md`, and sets `trace:` (absent means `planner`); every other goal wri
 
 **Phase 3 — Goal evaluation (mandatory re-evaluate loop).** Once before evaluation
 attempt 1, run the read-only pre-flight in `reference/preflight.md` (no score); it
-records `criteria-evidence.md` (including the `_kit/trace-lint.sh` run) and runs check 5 Stated facts.
-Under `trace: blind`, after pre-flight and before attempt 1, the orchestrator spawns a fresh
-read-only evaluator in consumer-trace mode with the Problem Statement and the Surface column
-only. It diffs that trace's Consumer paths against `## Consumers`; every consumer the planner
-missed is added to the trace as a pre-flight fix, then `_kit/trace-lint.sh` is re-run and
-logged, all before attempt 1.
-The orchestrator fixes failures and logs them, then launches the evaluator with the Phase 1
-Q&A included (for the Discovery Coverage check). The Phase 3 evaluator checks the evidence and
-the consumer trace. When `## Searches` is non-empty, the evaluator names one to three `S<n>`
-under `### Searches to re-run`, and that verdict is provisional: the orchestrator runs those
-searches through `terminal` and resumes the same evaluator with the output (or fresh-spawns the
-same model with the package and output when resume is unavailable). Only the resumed verdict
-counts, and the round trip consumes no attempt. PASS → Phase 4; NEEDS REVISION →
-revise the goal + tasks and re-evaluate (3 max); REJECT → escalate to the user.
+records `criteria-evidence.md` (including the `_kit/trace-lint.sh` run) and runs check 5
+Stated facts.
+Under `trace: blind`, after pre-flight and before attempt 1, the orchestrator spawns a
+fresh read-only evaluator in consumer-trace mode with the Problem Statement and the
+Surface column only. The orchestrator diffs that trace's Consumer paths against
+`## Consumers`; every consumer the planner missed is added to the trace as a pre-flight
+fix, then `_kit/trace-lint.sh` is re-run and logged, all before attempt 1.
+The orchestrator fixes pre-flight failures and logs them, then launches the evaluator
+with the Phase 1 Q&A included (for the Discovery Coverage check). The Phase 3 evaluator
+checks the evidence and the consumer trace. When `## Searches` is non-empty, the
+evaluator names one to three `S<n>` under `### Searches to re-run`, and that verdict is
+provisional: the orchestrator runs those searches through `terminal` and resumes the
+same evaluator with the output (or fresh-spawns the same model with the package and
+output when resume is unavailable). Only the resumed verdict counts, and the round trip
+consumes no attempt. PASS → Phase 4; NEEDS REVISION → revise the goal + tasks and
+re-evaluate (3 max); REJECT → escalate to the user.
 Re-checks follow `reference/goal-revisions.md` (delta prompts quote newly written text
 verbatim; attempt 3 is a fresh full evaluation on the arbiter model, pinned in that reference).
 After a Phase 3 PASS, plan amendments are **material** (full pre-flight and Phase 3
@@ -512,11 +514,12 @@ fixtures such as goldens stay in the path list but out of the diff, and untracke
 files are read in full. The audit then checks (a) every `changes` row whose evidence names
 a task has its Consumer path among the changed paths (`Phase 6` rows are skipped here),
 and (b) every shared surface the diff adds, removes, renames or reshapes has a Surface
-row. A shared surface means one another component reads (goal-criteria § Consumer trace
-item 1); private identifiers, new tests and internal headings are not. Under
-`none — <reason>`, the audit checks the reason still holds, and a changed shared surface
-is the finding. A failure of either is a blocking finding citing `F6`, resolved by the
-`goal-revisions.md` amendment. The audit runs this check on the first audit.
+row. A shared surface means one another component reads (item 1 of the goal-criteria
+**Consumer trace (Phase 3 gate)** paragraph); private identifiers, new tests and internal
+headings are not. Under `none — <reason>`, the audit checks the reason still holds, and a
+changed shared surface is the finding. A failure of either is a blocking finding
+citing `F6`, resolved by the `goal-revisions.md` amendment. The audit runs this check on
+the first audit.
 A goal under the transition rule in the feature skill's `reference/preflight.md` check 2
 (no `## Consumers` section) skips checks (a) and (b); the audit checks its legacy artifact
 as that rule states.
@@ -796,17 +799,18 @@ Four subcommands (`--help` lists every flag):
   `model requested:` id and `--model-reported`: `match` (both known, same family),
   `MISMATCH` (both known, different — one stderr warning, exit still 0), or
   `unverified` (either side unknown/`inherit`/empty).
-  When the report has no model line, pass `--model-reported unknown`; a reported value starting with `unknown` always gives `model_check: unverified`.
-  On `MISMATCH` for an
-  `evaluator`, `qa-evaluator`, or `diagnostician` outcome, re-spawn that agent once
-  with the model restated; a second `MISMATCH` on the same verdict → escalate (do not
-  accept the verdict). Worker spawns (`implementer`, `test-writer`, `evidence-collector`,
-  `terminal`): log and continue. `unverified`: logged only. `io_est_tokens` T =
-  (`context_chars` + `report_chars`) / 4 — orchestrator I/O proxy (chars/4), not the
-  subagent's spend — and `work_est_tokens` W comes from the Footprint `files_read`
-  line (W = C/4; `n/a` if missing/malformed — flag to the evaluator; `--work-chars C`
-  overrides). `running io` / `running work` are the previous totals plus T / W
-  (`running io` falls back to the `running total` field of logs written by the private setup kit before 0.26; W=`n/a` adds 0).
+  When the report has no model line, pass `--model-reported unknown`; a reported value
+  starting with `unknown` always gives `model_check: unverified`.
+  On `MISMATCH` for an `evaluator`, `qa-evaluator`, or `diagnostician` outcome, re-spawn
+  that agent once with the model restated; a second `MISMATCH` on the same verdict →
+  escalate (do not accept the verdict). Worker spawns (`implementer`, `test-writer`,
+  `evidence-collector`, `terminal`): log and continue. `unverified`: logged only.
+  `io_est_tokens` T = (`context_chars` + `report_chars`) / 4 — orchestrator I/O proxy
+  (chars/4), not the subagent's spend — and `work_est_tokens` W comes from the Footprint
+  `files_read` line (W = C/4; `n/a` if missing/malformed — flag to the evaluator;
+  `--work-chars C` overrides). `running io` / `running work` are the previous totals
+  plus T / W (`running io` falls back to the `running total` field of logs written by
+  the private setup kit before 0.26; W=`n/a` adds 0).
 - **Issue keys** — `keys --goal G --spawn NN --task <TT|audit> --report _memory/work/goals/G/spawns/NN-report.md`
   appends a `KEYS` line (and a `REPEAT` line for each repeated key); both carry each item's kind and provenance tags.
   Only the `ladder: auto` early entry reads them, and a duplicate spawn number exits 3. The call runs once per
@@ -829,7 +833,8 @@ subagent or agent stop to `_memory/work/hooks/events.jsonl` (gitignored), and
 Git Bash: `_kit\hook-log.cmd`). It is telemetry only: never a gate, never cited in a verdict,
 and not a replacement for the orchestration log. On a fresh clone `_kit/` is missing until
 `emit.sh --upgrade` runs, so no events are logged. The Claude Code hook command is guarded
-(`test -f … || true`) and stays silent; the Cursor hook fails open, and Cursor records the
+(`test -f … || true`) and stays silent; the Cursor command is guarded the same way
+(`test -f … || echo '{}'`), so on a fresh clone it prints `{}` and Cursor records no
 missing-script failure in its hook log.
 <!-- ENDIF hook_telemetry -->
 
@@ -1167,6 +1172,9 @@ _kit/{hook-log.sh,hook-log.cmd}  # Single-copy tools: stop/subagent-stop hook te
 _memory/records/ · _memory/quarantine/  # Tracked memory records (immutable, one per file) — see _memory/README.md
 _memory/research/               # Tracked research briefs (<topic>.md) + README.md status index (orchestrator-owned)
 _memory/work/                   # Gitignored in-flight goal and research scratch (research: work/research/<topic>/) — see _memory/README.md
+<!-- IF hook_telemetry -->
+_memory/work/hooks/             # events.jsonl: stop/subagent-stop hook telemetry (gitignored; never a gate)
+<!-- ENDIF hook_telemetry -->
 _memory/loop/                   # Tracked loop ledgers and archive (breaker-state.json, ledger.jsonl, attempts/ gitignored)
 _memory/.index/ · _memory/raw/  # Derived index; capture output, ledgers and drafts (gitignored)
 _loop/{loop.sh,loop.cmd,breaker.sh,PROMPT.md}  # Headless loop driver (if enabled)
@@ -1220,6 +1228,9 @@ _kit/{hook-log.sh,hook-log.cmd}  # Single-copy tools: stop/subagent-stop hook te
 _memory/records/ · _memory/quarantine/  # Tracked memory records (immutable, one per file) — see _memory/README.md
 _memory/research/               # Tracked research briefs (<topic>.md) + README.md status index (orchestrator-owned)
 _memory/work/                   # Gitignored in-flight goal and research scratch (research: work/research/<topic>/) — see _memory/README.md
+<!-- IF hook_telemetry -->
+_memory/work/hooks/             # events.jsonl: stop/subagent-stop hook telemetry (gitignored; never a gate)
+<!-- ENDIF hook_telemetry -->
 _memory/.index/ · _memory/raw/  # Derived index; capture output, ledgers and drafts (gitignored)
 ```
 <!-- ENDIF !loop -->
@@ -1273,6 +1284,9 @@ _kit/{hook-log.sh,hook-log.cmd}  # Single-copy tools: stop/subagent-stop hook te
 <!-- ENDIF hook_telemetry -->
 _memory/records/ · _memory/quarantine/  # Tracked memory records (immutable, one per file) — see _memory/README.md
 _memory/work/                   # Gitignored in-flight goal and research scratch — see _memory/README.md
+<!-- IF hook_telemetry -->
+_memory/work/hooks/             # events.jsonl: stop/subagent-stop hook telemetry (gitignored; never a gate)
+<!-- ENDIF hook_telemetry -->
 _memory/loop/                   # Tracked loop ledgers and archive (breaker-state.json, ledger.jsonl, attempts/ gitignored)
 _memory/.index/ · _memory/raw/  # Derived index; capture output, ledgers and drafts (gitignored)
 _loop/{loop.sh,loop.cmd,breaker.sh,PROMPT.md}  # Headless loop driver (if enabled)
@@ -1321,6 +1335,9 @@ _kit/{hook-log.sh,hook-log.cmd}  # Single-copy tools: stop/subagent-stop hook te
 <!-- ENDIF hook_telemetry -->
 _memory/records/ · _memory/quarantine/  # Tracked memory records (immutable, one per file) — see _memory/README.md
 _memory/work/                   # Gitignored in-flight goal and research scratch — see _memory/README.md
+<!-- IF hook_telemetry -->
+_memory/work/hooks/             # events.jsonl: stop/subagent-stop hook telemetry (gitignored; never a gate)
+<!-- ENDIF hook_telemetry -->
 _memory/.index/ · _memory/raw/  # Derived index; capture output, ledgers and drafts (gitignored)
 ```
 <!-- ENDIF !loop -->

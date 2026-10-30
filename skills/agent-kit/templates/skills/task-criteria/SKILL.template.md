@@ -179,7 +179,8 @@ In citation modes, every **`blocker`** or **`major`** finding cites exactly one 
 - **`SC<n>`** — a goal Success Criterion, by its label;
 - **`F<n>`** — a floor item (**`n`** from 1 to 7).
 
-An unmet `- [ ]` requirement that no `AC<n>` or `SC<n>` covers cites **`F5`**: the report's completion claim for it is contradicted by the evidence.
+An unmet `- [ ]` requirement that no `AC<n>` or `SC<n>` covers cites **`F5`**: the report's
+completion claim for it is contradicted by the evidence.
 
 A finding that cites nothing cannot block and goes under **`### Notes (non-blocking)`**
 tagged **`[backlog]`**. A verdict whose only findings are notes is **`PASS (with notes)`**.
@@ -208,7 +209,9 @@ gives the key **`ac2 src/a.sh :: missing guard`**. Tags and the justification cl
 after the first ` — `, so they never enter the key. An item with no ` — ` keys its whole
 text after the trailing kind and provenance tags are stripped. A `|` inside a key becomes
 `/`, so the `KEYS` line's ` | ` separator stays unambiguous.
-An uncited item whose first word is a backtick span (the older ``- [ ] `file:line` — fix`` shape) keys as `uncited <location> :: <defect>`, with the line suffix removed from the location.
+An uncited item whose first word is a backtick span (the older
+``- [ ] `file:line`: <defect> — fix`` shape) keys as `uncited <location> :: <defect>`, with
+the line suffix removed from the location.
 An item with no backtick span keys its location as `-`: `<citation> - :: <rest>`.
 Lower-casing is ASCII-only (`A`–`Z`).
 
