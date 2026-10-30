@@ -7,9 +7,10 @@
 # CLI CONTRACT (frozen — the goal template and goal-criteria describe this):
 #
 #   trace-lint.sh <goal.md>     lint the goal's `## Searches` and `## Consumers`
-#   trace-lint.sh --help        print usage, exit 0
+#   trace-lint.sh --help        print usage, exit 0 (only as the sole argument)
 #
-#   Exit codes: 0 valid · 2 usage (wrong argument count, unknown flag) · 3 findings ·
+#   Exit codes: 0 valid · 2 usage (wrong argument count, unknown flag, `--help` among
+#   other arguments) · 3 findings ·
 #   4 the file is missing or unreadable.
 #   stdout, exit 0:  `trace-lint: ok (<S> searches, <C> consumers)`
 #                    or `trace-lint: ok (none — <reason>)`
@@ -18,28 +19,32 @@
 #   stderr, exit 2 / 4: one `trace-lint: <message>` line (exit 2 adds the usage text).
 #
 # FORMAT (the goal template's `## Searches` / `## Consumers` guidance is the source):
-#   Parsing: a section runs from a `## <name>` heading to the next `## ` heading. Lines
-#   inside fenced blocks are never read as headings.
+#   Parsing: a section runs from a `## <name>` heading to the next `## ` heading. A
+#   heading starts at column 0. Lines inside fenced blocks (backtick or tilde fences,
+#   closed only by the same character with at least as many marks) are never read as
+#   headings.
 #   1. Sections: `## Consumers` must exist. When its first non-blank body line starts
-#      with `none — ` the trace is valid and `## Searches` must be absent. Otherwise
-#      `## Searches` must exist with at least one item, and `## Consumers` must hold the
-#      exact header row `| Surface | Consumer | Class | Evidence |` as its first table row.
+#      with `none — ` the trace is valid, that line is the only non-blank body line of
+#      `## Consumers`, and `## Searches` must be absent. Otherwise `## Searches` must
+#      exist with at least one item, and `## Consumers` must hold the exact header row
+#      `| Surface | Consumer | Class | Evidence |` as its first table row.
 #   2. Search items: every line in `## Searches` that starts with `- **S` matches the
 #      pattern below; `1 hit` is required when N is 1 and `hits` otherwise; the next
-#      non-blank line opens a text fence; the fence holds N non-empty lines.
+#      non-blank line opens a text fence; the fence holds N non-empty lines. An item
+#      starts at column 0; an indented `- **S` line is a finding.
 #        PCRE notation, for readers:
-#          ^\s*- \*\*S([0-9]+)\*\* (`+)(.*)\2 — ([0-9]+) (hit|hits)$
-#        This tool implements it in POSIX terms: [[:space:]] for \s, the backtick-span
-#        back-reference in BRE (sed), and the hit|hits alternation as a separate check.
-#   3. Unique ids: no `S<n>` repeats.
+#          ^- \*\*S([0-9]+)\*\* (`+)(.*)\2 — ([0-9]+) (hit|hits)$
+#        This tool implements it in POSIX terms: the backtick-span back-reference in
+#        BRE (sed) and the hit|hits alternation as a separate check.
+#   3. Unique ids: no `S<n>` repeats. Ids compare as numbers: `S01` and `S1` are one id.
 #   4. Hit lines (after trimming leading whitespace and a leading `./`) match
 #      `^[^:]*[^0-9:][^:]*:[0-9]+:` — a path that is not all digits, then a line number.
 #   5. Every hit path not under `_memory/` is a Consumer: the Consumer column, after
 #      splitting the row on unescaped `|` (`\|` is a literal pipe) and stripping
-#      backticks and spaces.
+#      backticks, spaces and a leading `./` (as hit paths are).
 #   6. Class is exactly `changes`, `unaffected` or `owner-excluded`.
 #   7. `unaffected` evidence starts with `test: `, `diff: ` or `search: S<n>`; a
-#      `search:` reference names an existing search with 0 hits.
+#      `search:` reference names an existing search with 0 hits (ids compare as in 3).
 #   8. `owner-excluded` evidence contains `Q&A row <n>`, and `## Discovery Summary`'s
 #      table has a row whose first cell is `<n>`.
 #   9. `changes` evidence contains `task <NN>` (two digits, optional letter) or is
@@ -50,7 +55,9 @@
 #   then the Consumer rows in row order, then unlisted hits in file order.
 #
 # Zero runtime deps beyond bash + sed. Bash 3.2 compatible: no associative arrays, no
-# case-folding expansions, no JSON tools. No setup placeholders — harness-agnostic.
+# case-folding expansions, no JSON tools, and no here-strings or here-docs (those use
+# temp files on older Bash, so an unwritable $TMPDIR would abort the run). No setup
+# placeholders — harness-agnostic.
 set -u
 LC_ALL=C
 export LC_ALL
@@ -72,11 +79,13 @@ die() { # <code> <message>
   exit "$1"
 }
 
-for a in "$@"; do
-  [ "$a" = "--help" ] && { usage; exit 0; }
-done
+if [ $# -eq 1 ] && [ "$1" = "--help" ]; then
+  usage
+  exit 0
+fi
 for a in "$@"; do
   case "$a" in
+    --help) usage >&2; die 2 "--help must be the only argument" ;;
     -?*) usage >&2; die 2 "unknown flag '$a'" ;;
   esac
 done
@@ -94,9 +103,12 @@ TASK_RE='task [0-9][0-9]([^0-9]|$)'
 HEADER_ROW='| Surface | Consumer | Class | Evidence |'
 # Rule 2 in BRE: \1 = S number, \2 = the backtick run, \3 = the command, \4 = N, \5 = the
 # count word (hit|hits is checked separately). Prints "<S number> <N> <word>" on a match.
-ITEM_SED='s/^[[:space:]]*- \*\*S\([0-9][0-9]*\)\*\* \(`\{1,\}\)\(.*\)\2 — \([0-9][0-9]*\) \([A-Za-z]*\)$/\1 \4 \5/p'
+# The item starts at column 0 (parse_item reports and strips any leading whitespace first).
+ITEM_SED='s/^- \*\*S\([0-9][0-9]*\)\*\* \(`\{1,\}\)\(.*\)\2 — \([0-9][0-9]*\) \([A-Za-z]*\)$/\1 \4 \5/p'
 
 MSG_ITEM='malformed search item (want: - **S<n>** `<command>` — <N> hit, or hits)'
+MSG_INDENT='search item must start at column 0 (remove the leading whitespace)'
+MSG_ONLY="none — <reason> must be the only body line of '## Consumers'"
 MSG_UNAFF="unaffected evidence must start with 'test: ', 'diff: ' or 'search: S<n>'"
 
 # --- helpers --------------------------------------------------------------------------
@@ -109,6 +121,22 @@ finding() { # <line> <message>
 trim() { # <text> → T (leading and trailing whitespace removed)
   T="${1#"${1%%[![:space:]]*}"}"
   T="${T%"${T##*[![:space:]]}"}"
+}
+
+norm_id() { # <digits> → NID (leading zeros removed, so S01 and S1 are one id; all zeros → 0)
+  NID="${1#"${1%%[!0]*}"}"
+  [ -n "$NID" ] || NID=0
+}
+
+next_line() { # pops the first line of $REST into $ROW (a loop over a variable, no temp file)
+  case "$REST" in
+    *"$NL"*)
+      ROW="${REST%%"$NL"*}"
+      REST="${REST#*"$NL"}" ;;
+    *)
+      ROW="$REST"
+      REST="" ;;
+  esac
 }
 
 split_row() { # <table row> → CELLS (trimmed; `\|` becomes `|`), NCELLS
@@ -143,25 +171,36 @@ split_row() { # <table row> → CELLS (trimmed; `\|` becomes `|`), NCELLS
 }
 
 parse_item() { # reads $line / $lineno; registers the search and arms the fence check
-  local m sid sn sw n
+  local m sid sn sw n body rest nid
   items=$((items + 1))
-  m="$(printf '%s\n' "$line" | sed -n "$ITEM_SED")"
+  body="$line"
+  case "$line" in
+    [[:space:]]*)
+      finding "$lineno" "$MSG_INDENT"
+      body="${line#"${line%%[![:space:]]*}"}" ;;
+  esac
+  m="$(printf '%s\n' "$body" | sed -n "$ITEM_SED")"
   if [ -z "$m" ]; then
     finding "$lineno" "$MSG_ITEM"
     return
   fi
-  read -r sid sn sw <<< "$m"
+  sid="${m%% *}"                 # m is "<S number> <N> <word>" (the word may be empty)
+  rest="${m#* }"
+  sn="${rest%% *}"
+  sw="${rest#* }"
   n=$((10#$sn))
   case "$sw" in
     hit)  [ "$n" -eq 1 ] || finding "$lineno" "S$sid: the word 'hit' is only for a count of 1 (write '$n hits')" ;;
     hits) [ "$n" -ne 1 ] || finding "$lineno" "S$sid: '1 hits' is invalid (write '1 hit')" ;;
     *)    finding "$lineno" "$MSG_ITEM"; return ;;
   esac
+  norm_id "$sid"
+  nid="$NID"
   case "$NL$sids" in
-    *"$NL$sid$NL"*) finding "$lineno" "duplicate search id S$sid" ;;
+    *"$NL$nid$NL"*) finding "$lineno" "duplicate search id S$sid" ;;
   esac
-  sids="$sids$sid$NL"
-  counts="$counts$sid:$n$NL"
+  sids="$sids$nid$NL"
+  counts="$counts$nid:$n$NL"
   pending=1
   pend_id="$sid"
   pend_n="$n"
@@ -170,12 +209,14 @@ parse_item() { # reads $line / $lineno; registers the search and arms the fence 
 
 # --- single pass: sections, searches, hits, raw table rows ----------------------------
 lineno=0
-fence=0               # backtick count of the open fence; 0 = not inside one
+fence=0               # mark count of the open fence; 0 = not inside one
+fence_ch=""           # mark character of the open fence: a backtick or a tilde
 sec=""                # consumers | searches | discovery | other ("" before the first ##)
 cons_line=0           # heading line of ## Consumers (0 = absent)
 search_line=0         # heading line of ## Searches (0 = absent)
 cons_first=""         # first non-blank body line of ## Consumers
 cons_first_line=0
+cons_extra_line=0     # second non-blank body line of ## Consumers (0 = none)
 cons_rows=""          # "<lineno> <row>" per table row of ## Consumers
 disc_rows=""          # first cells (digits) of ## Discovery Summary table rows
 sids=""               # search ids, one per line
@@ -195,46 +236,65 @@ while IFS= read -r line || [ -n "$line" ]; do
   trim "$line"
   t="$T"
 
-  if [ "$sec" = consumers ] && [ -n "$t" ] && [ "$cons_first_line" -eq 0 ]; then
-    cons_first="$t"
-    cons_first_line=$lineno
+  # body lines of ## Consumers: the first decides `none — <reason>`, the second is a finding
+  # under it. The next `## ` heading (outside a fence) is not a body line.
+  if [ "$sec" = consumers ] && [ -n "$t" ] && { [ "$fence" -gt 0 ] || [ "${line:0:3}" != '## ' ]; }; then
+    if [ "$cons_first_line" -eq 0 ]; then
+      cons_first="$t"
+      cons_first_line=$lineno
+    elif [ "$cons_extra_line" -eq 0 ]; then
+      cons_extra_line=$lineno
+    fi
   fi
 
-  # fenced blocks: openers, closers and content never reach the heading/section logic
-  if [ "${t:0:3}" = '```' ]; then
+  # fenced blocks (backtick or tilde): openers, closers and content never reach the
+  # heading/section logic. A fence closes only on its own character, with at least as
+  # many marks as the opener and no text after them.
+  mark=""
+  case "${t:0:3}" in
+    '```') mark="$BT" ;;
+    '~~~') mark='~' ;;
+  esac
+  if [ -n "$mark" ]; then
     after="$t"
     ticks=0
-    while [ "${after:0:1}" = "$BT" ]; do
+    while [ "${after:0:1}" = "$mark" ]; do
       ticks=$((ticks + 1))
       after="${after:1}"
     done
     trim "$after"
     info="$T"
     if [ "$fence" -eq 0 ]; then
-      case "$info" in
-        *"$BT"*) ;;                                   # an inline span such as ```x```
-        *)
-          fence=$ticks
-          if [ "$sec" = searches ] && [ "$pending" -eq 1 ]; then
-            pending=0
-            if [ "$info" = text ]; then
-              in_hit=1
-              hit_n=0
-              hit_open=$lineno
-              cur_id="$pend_id"
-              cur_n="$pend_n"
-              cur_line="$pend_line"
-            else
-              finding "$pend_line" "S$pend_id: the next non-blank line must open a "'```text'" block"
-            fi
+      opener=1
+      if [ "$mark" = "$BT" ]; then
+        case "$info" in
+          *"$BT"*) opener=0 ;;                        # an inline span such as ```x```
+        esac
+      fi
+      if [ "$opener" -eq 1 ]; then
+        fence=$ticks
+        fence_ch="$mark"
+        if [ "$sec" = searches ] && [ "$pending" -eq 1 ]; then
+          pending=0
+          if [ "$info" = text ]; then
+            in_hit=1
+            hit_n=0
+            hit_open=$lineno
+            cur_id="$pend_id"
+            cur_n="$pend_n"
+            cur_line="$pend_line"
+          else
+            finding "$pend_line" "S$pend_id: the next non-blank line must open a "'```text'" block"
           fi
-          continue ;;
-      esac
-    elif [ "$ticks" -ge "$fence" ] && [ -z "$info" ]; then
+        fi
+        continue
+      fi
+    elif [ "$mark" = "$fence_ch" ] && [ "$ticks" -ge "$fence" ] && [ -z "$info" ]; then
       if [ "$in_hit" -eq 1 ] && [ "$hit_n" -ne "$cur_n" ]; then
         finding "$cur_line" "S$cur_id declares $cur_n hit(s) but its block has $hit_n non-empty line(s)"
       fi
       fence=0
+      fence_ch=""
       in_hit=0
       continue
     fi
@@ -324,6 +384,9 @@ else
     if [ "$search_line" -ne 0 ]; then
       finding "$search_line" "'## Searches' must be absent when '## Consumers' is 'none — <reason>'"
     fi
+    if [ "$cons_extra_line" -ne 0 ]; then
+      finding "$cons_extra_line" "$MSG_ONLY"
+    fi
   else
     if [ "$search_line" -eq 0 ]; then
       finding "$cons_line" "missing '## Searches' section (a goal that changes no shared surface writes 'none — <reason>' under '## Consumers')"
@@ -333,7 +396,10 @@ else
 
     first_row=1
     cons_paths=""
-    while IFS= read -r row || [ -n "$row" ]; do
+    REST="$cons_rows"
+    while [ -n "$REST" ]; do
+      next_line
+      row="$ROW"
       [ -n "$row" ] || continue
       rl="${row%% *}"
       rt="${row#* }"
@@ -350,7 +416,8 @@ else
       cpath="${CELLS[1]:-}"
       cpath="${cpath//"$BT"/}"
       trim "$cpath"
-      cons_paths="$cons_paths$T$NL"
+      cpath="${T#./}"                           # a leading ./ is ignored, as on hit paths
+      cons_paths="$cons_paths$cpath$NL"
       class="${CELLS[2]:-}"
       ev="${CELLS[3]:-}"
       case "$class" in
@@ -373,9 +440,10 @@ else
               if [ -z "$sid" ]; then
                 finding "$rl" "$MSG_UNAFF"
               else
+                norm_id "$sid"
                 case "$NL$counts" in
-                  *"$NL$sid:0$NL"*) ;;
-                  *"$NL$sid:"*) finding "$rl" "unaffected evidence 'search: S$sid' names a search with hits (needs 0 hits)" ;;
+                  *"$NL$NID:0$NL"*) ;;
+                  *"$NL$NID:"*) finding "$rl" "unaffected evidence 'search: S$sid' names a search with hits (needs 0 hits)" ;;
                   *) finding "$rl" "unaffected evidence 'search: S$sid' names no search in '## Searches'" ;;
                 esac
               fi ;;
@@ -399,13 +467,16 @@ else
         *)
           finding "$rl" "class '$class' must be exactly changes, unaffected or owner-excluded" ;;
       esac
-    done <<< "$cons_rows"
+    done
     if [ "$first_row" -eq 1 ]; then            # no table row at all
       finding "$cons_line" "'## Consumers' must hold the header row '$HEADER_ROW'"
     fi
 
     unlisted=""
-    while IFS= read -r h || [ -n "$h" ]; do
+    REST="$hits"
+    while [ -n "$REST" ]; do
+      next_line
+      h="$ROW"
       [ -n "$h" ] || continue
       hl="${h%% *}"
       hp="${h#* }"
@@ -414,7 +485,7 @@ else
       case "$NL$unlisted" in *"$NL$hp$NL"*) continue ;; esac
       unlisted="$unlisted$hp$NL"
       finding "$hl" "hit path '$hp' is not listed as a Consumer"
-    done <<< "$hits"
+    done
   fi
 fi
 

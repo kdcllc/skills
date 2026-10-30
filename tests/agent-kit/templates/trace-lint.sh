@@ -11,7 +11,15 @@
 #     a last `trace-lint: <N> finding(s)` line whose N matches), plus the edge cases:
 #     a single-file hit with no path, a Consumer cell split by an unescaped pipe, `1 hits`,
 #     `Phase 6` under `align_docs: false` / the `true|false` placeholder / no key
-#   - usage exit 2, missing file exit 4, `--help` exit 0, and a read-only run
+#   - usage exit 2, missing file exit 4, `--help` exit 0 (and exit 2 beside any other
+#     argument), and a read-only run
+#   - the behavior rows closed by the release-backlog goal, each with a passing and a
+#     failing (or mutated) case: `~~~` fences and column-0-only headings, no here-strings
+#     or here-docs (a static check plus a run with an unwritable $TMPDIR), numeric S-ids
+#     (`S01` = `S1`), a leading `./` on Consumer cells, `none — <reason>` as the only
+#     Consumers body line, column-0 search items, and a copy of the canonical goal
+#     template whose `>` guidance blockquotes are never parsed (a mutated tool that
+#     strips the `> ` prefix is caught)
 #   - a fresh emit carries `_kit/trace-lint.sh` (executable, canonical bytes) and
 #     `_kit/trace-lint.cmd` (the launcher template's bytes)
 # Output follows the fix-cycle-provenance suite: PASS:/FAIL: lines, a summary, RESULT.
@@ -28,6 +36,7 @@ REPO_ROOT="$(cd "$HERE/../../.." && pwd)"
 cd "$REPO_ROOT" || exit 1
 
 LINT="${TRACE_LINT_BIN:-$REPO_ROOT/skills/agent-kit/templates/tools/trace-lint.sh}"
+GOAL_TPL="${GOAL_TEMPLATE:-$REPO_ROOT/skills/agent-kit/templates/skills/feature/templates/goal.md}"
 LAUNCHER_TPL="$REPO_ROOT/skills/agent-kit/templates/tools/bash-launcher.cmd"
 EMIT_SH="${EMIT_SH:-$REPO_ROOT/skills/agent-kit/bin/emit.sh}"
 KIT="${EMIT_KIT:-$REPO_ROOT/skills/agent-kit}"
@@ -147,8 +156,10 @@ mk() {
   done
 }
 
+RUN_TMPDIR=""   # set to a path to run the tool with that $TMPDIR (cleared after each use)
+
 run() { # <args...> → RC, OUT (stdout), ERR (stderr)
-  OUT="$("$BASH" "$LINT" "$@" 2>"$FX/stderr.txt")"
+  OUT="$(TMPDIR="${RUN_TMPDIR:-$TMPDIR}" "$BASH" "$LINT" "$@" 2>"$FX/stderr.txt")"
   RC=$?
   ERR="$(cat "$FX/stderr.txt")"
 }
@@ -186,6 +197,17 @@ expect_findings() {
     report FAIL "$name" "want $want finding(s), got $n: out=[$OUT]"
   else
     report PASS "$name"
+  fi
+}
+
+# expect_cite <name> <file> <line> <message-substring>: the run exits 3 and a finding cites
+# exactly `<file>:<line>:` with the message substring.
+expect_cite() {
+  run "$2"
+  if [ "$RC" -eq 3 ] && printf '%s\n' "$OUT" | grep -qF -- "trace-lint: $2:$3: $4"; then
+    report PASS "$1"
+  else
+    report FAIL "$1" "rc=$RC (want 3 citing line $3 with [$4]) out=[$OUT]"
   fi
 }
 
@@ -417,7 +439,311 @@ mk r9-p6-nokey '| changes | task 02 |' '| changes | Phase 6 |' 'align_docs: true
 expect_findings 'rule 9: Phase 6 with no align_docs key fails' "$FX/r9-p6-nokey.md" \
   "'Phase 6' is valid only when the goal sets 'align_docs: true'" 1
 
+# --- CT-B9: ~~~ fences are fenced blocks; headings match only at column 0 ---------------------------------------
+sed 's/^\( *\)```/\1~~~/' "$BASE" > "$FX/b9-tilde-all.md"
+if grep -q '```' "$FX/b9-tilde-all.md"; then
+  report FAIL 'fixture b9-tilde-all' 'a backtick fence is left in the converted base'
+fi
+expect_ok 'CT-B9: ~~~ fences (the hit blocks and the yaml block) parse like backtick fences' \
+  "$FX/b9-tilde-all.md" "$BASE_OK"
+
+mk b9-tilde-headings 'Widgets drift.' 'Widgets drift.
+
+~~~text
+## Consumers
+| fake | row | here | now |
+## Searches
+- **S9** broken
+~~~'
+expect_ok 'CT-B9: headings, rows and items inside a ~~~ fence are never read' \
+  "$FX/b9-tilde-headings.md" "$BASE_OK"
+
+mk b9-tilde-long 'Widgets drift.' 'Widgets drift.
+
+~~~~text
+~~~
+## Consumers
+~~~~'
+expect_ok 'CT-B9: a ~~~~ fence is not closed by a shorter ~~~ line' "$FX/b9-tilde-long.md" "$BASE_OK"
+
+mk b9-tilde-longer-closer 'Widgets drift.' 'Widgets drift.
+
+~~~text
+## Consumers
+~~~~~'
+expect_ok 'CT-B9: a ~~~ fence is closed by a longer run of tildes' "$FX/b9-tilde-longer-closer.md" "$BASE_OK"
+
+mk b9-backtick-holds-tilde 'Widgets drift.' 'Widgets drift.
+
+```text
+~~~
+## Consumers
+| fake | row | here | now |
+```'
+expect_ok 'CT-B9: a ~~~ line inside a backtick fence does not close it' \
+  "$FX/b9-backtick-holds-tilde.md" "$BASE_OK"
+
+mk b9-tilde-holds-backtick 'Widgets drift.' 'Widgets drift.
+
+~~~text
+```
+## Consumers
+~~~'
+expect_ok 'CT-B9: a ``` line inside a ~~~ fence does not close it' \
+  "$FX/b9-tilde-holds-backtick.md" "$BASE_OK"
+
+mk b9-tilde-hides-heading '## Consumers' '## Consumer' 'Widgets drift.' 'Widgets drift.
+
+~~~text
+## Consumers
+~~~'
+expect_findings 'CT-B9: a ## Consumers heading inside a ~~~ fence does not count' \
+  "$FX/b9-tilde-hides-heading.md" "missing '## Consumers' section" 1
+
+mk b9-tilde-short-closer '  ```text
+  src/ref.sh:3:widget_ref=1
+  ```' '  ~~~~text
+  src/ref.sh:3:widget_ref=1
+  ~~~'
+expect_findings 'CT-B9: a ~~~~ hit block closed by a shorter ~~~ line stays open (unterminated)' \
+  "$FX/b9-tilde-short-closer.md" 'unterminated ```text block for S3'
+
+mk b9-heading-indented '## Consumers' '  ## Consumers'
+expect_findings 'CT-B9: an indented "## Consumers" is not a heading (headings match at column 0)' \
+  "$FX/b9-heading-indented.md" "missing '## Consumers' section" 1
+
+mk b9-heading-code '## Consumers' '    ## Consumers'
+expect_findings 'CT-B9: a four-space-indented "## Consumers" (indented code) is not a heading' \
+  "$FX/b9-heading-code.md" "missing '## Consumers' section" 1
+
+# --- CT-B10: no here-strings and no here-docs in the tool ---------------------------------------------------------
+HERE_RE='<<<|<<-?[[:space:]]*['"'"'"]?[A-Za-z_]'
+if grep -nE "$HERE_RE" "$LINT" >/dev/null 2>&1; then
+  report FAIL 'CT-B10: the tool has no here-string and no here-doc'
+else
+  report PASS 'CT-B10: the tool has no here-string and no here-doc'
+fi
+
+printf '%s\n' 'read -r a b <<< "$m"' > "$FX/hs-string.sh"
+printf '%s\n' 'cat <<EOF' > "$FX/hs-doc.sh"
+printf '%s\n' "cat <<-'END'" > "$FX/hs-doc-dash.sh"
+printf '%s\n' 'cat << "EOF"' > "$FX/hs-doc-space.sh"
+hs_miss=""
+for f in hs-string hs-doc hs-doc-dash hs-doc-space; do
+  grep -qE "$HERE_RE" "$FX/$f.sh" || hs_miss="$hs_miss $f"
+done
+if [ -z "$hs_miss" ]; then
+  report PASS 'CT-B10: the here-string/here-doc check flags a seeded here-string and three here-doc forms'
+else
+  report FAIL 'CT-B10: the here-string/here-doc check flags seeded forms' "not flagged:$hs_miss"
+fi
+
+RUN_TMPDIR="$FX/no/such/tmpdir"
+run "$BASE"
+if [ "$RC" -eq 0 ] && [ "$OUT" = "$BASE_OK" ] && [ -z "$ERR" ]; then
+  report PASS 'CT-B10: a valid trace lints with an unwritable $TMPDIR'
+else
+  report FAIL 'CT-B10: a valid trace lints with an unwritable $TMPDIR' "rc=$RC out=[$OUT] err=[$ERR]"
+fi
+run "$FX/r5-unlisted.md"
+if [ "$RC" -eq 3 ] && printf '%s\n' "$OUT" | grep -qF "hit path 'src/ref.sh' is not listed as a Consumer" \
+  && printf '%s\n' "$OUT" | tail -n 1 | grep -qxF 'trace-lint: 1 finding(s)'; then
+  report PASS 'CT-B10: findings are still reported with an unwritable $TMPDIR'
+else
+  report FAIL 'CT-B10: findings are still reported with an unwritable $TMPDIR' "rc=$RC out=[$OUT] err=[$ERR]"
+fi
+RUN_TMPDIR=""
+
+# --- CT-B11: S-ids compare as numbers ----------------------------------------------------------------------------------
+mk b11-dup-padded '- **S3**' '- **S02**'
+expect_findings 'CT-B11: S02 repeats S2 (duplicate id)' "$FX/b11-dup-padded.md" 'duplicate search id S02' 1
+
+mk b11-dup-padded-first '- **S2**' '- **S02**' '- **S3**' '- **S2**'
+expect_findings 'CT-B11: S2 repeats an earlier S02 (duplicate id)' "$FX/b11-dup-padded-first.md" \
+  'duplicate search id S2' 1
+
+mk b11-dup-zero '- **S3**' '- **S00**' '- **S2**' '- **S0**'
+expect_findings 'CT-B11: S00 repeats S0 (all-zero ids compare equal)' "$FX/b11-dup-zero.md" \
+  'duplicate search id S00'
+
+mk b11-declared-padded '- **S2**' '- **S02**'
+expect_ok 'CT-B11: "search: S2" resolves to a search declared as S02' "$FX/b11-declared-padded.md" "$BASE_OK"
+
+mk b11-ref-padded 'search: S2' 'search: S02'
+expect_ok 'CT-B11: "search: S02" resolves to a search declared as S2' "$FX/b11-ref-padded.md" "$BASE_OK"
+
+mk b11-both-padded '- **S2**' '- **S002**' 'search: S2' 'search: S02'
+expect_ok 'CT-B11: S002 and "search: S02" are the same id' "$FX/b11-both-padded.md" "$BASE_OK"
+
+mk b11-ref-padded-hits 'search: S2' 'search: S03'
+expect_findings 'CT-B11: "search: S03" names S3, which has hits' "$FX/b11-ref-padded-hits.md" \
+  "'search: S03' names a search with hits (needs 0 hits)" 1
+
+mk b11-ref-padded-none 'search: S2' 'search: S09'
+expect_findings 'CT-B11: "search: S09" names no search' "$FX/b11-ref-padded-none.md" \
+  "'search: S09' names no search in '## Searches'" 1
+
+# --- CT-B12: a leading ./ is stripped from Consumer cells, as from hit paths ----------------------------------
+mk b12-cons-dot '`src/widget.sh`' '`./src/widget.sh`'
+expect_ok 'CT-B12: a Consumer cell `./src/widget.sh` matches the hit src/widget.sh' \
+  "$FX/b12-cons-dot.md" "$BASE_OK"
+
+mk b12-both-dot '`src/widget.sh`' '`./src/widget.sh`' '  src/widget.sh:12:' '  ./src/widget.sh:12:'
+expect_ok 'CT-B12: ./ on both the Consumer cell and the hit path matches' "$FX/b12-both-dot.md" "$BASE_OK"
+
+mk b12-cons-other '`src/widget.sh`' '`./src/other.sh`'
+expect_findings 'CT-B12: a ./-prefixed Consumer cell for another path does not cover the hit' \
+  "$FX/b12-cons-other.md" "hit path 'src/widget.sh' is not listed as a Consumer" 1
+
+# --- CT-B26: `none — <reason>` is the only body line of ## Consumers --------------------------------------------
+cat > "$FX/b26-extra.md" <<'EOF'
+# Goal: prose
+
+## Consumers
+
+none — the goal edits one paragraph of prose.
+It also names a reader that does not exist.
+
+## Tasks (dependency order)
+EOF
+want_line="$(grep -n 'It also names' "$FX/b26-extra.md" | cut -d: -f1)"
+expect_findings 'CT-B26: a second non-blank line under "none — <reason>" is a finding' "$FX/b26-extra.md" \
+  'none — <reason> must be the only body line' 1
+expect_cite 'CT-B26: the finding cites the extra line' "$FX/b26-extra.md" "$want_line" \
+  'none — <reason> must be the only body line'
+
+cat > "$FX/b26-table.md" <<'EOF'
+# Goal: prose
+
+## Consumers
+
+none — the goal edits one paragraph of prose.
+
+| Surface | Consumer | Class | Evidence |
+|---------|----------|-------|----------|
+
+## Tasks (dependency order)
+EOF
+expect_cite 'CT-B26: a Consumers table after "none — <reason>" is a finding at its first row' \
+  "$FX/b26-table.md" 7 'none — <reason> must be the only body line'
+
+printf '# Goal: prose\n\n## Consumers\n\nnone — nothing reads it.\n\n\n' > "$FX/b26-eof.md"
+expect_ok 'CT-B26: "none — <reason>" followed only by blank lines and end of file passes' \
+  "$FX/b26-eof.md" 'trace-lint: ok (none — nothing reads it.)'
+
+# --- CT-B27: a search item starts at column 0 --------------------------------------------------------------------------
+mk b27-indented '- **S2**' '  - **S2**'
+want_line="$(grep -n '^  - \*\*S2\*\*' "$FX/b27-indented.md" | cut -d: -f1)"
+expect_findings 'CT-B27: an indented "- **S" item is a finding (and only that: the item is otherwise valid)' \
+  "$FX/b27-indented.md" 'search item must start at column 0' 1
+expect_cite 'CT-B27: the finding cites the indented item line' "$FX/b27-indented.md" "$want_line" \
+  'search item must start at column 0'
+
+mk b27-tab '- **S2**' $'\t- **S2**'
+expect_findings 'CT-B27: a tab-indented item is a finding' "$FX/b27-tab.md" \
+  'search item must start at column 0' 1
+
+mk b27-indented-malformed '- **S2** `rg -n -H '"'"'widgetId'"'"' docs` — 0 hits' \
+  '  - **S2** `rg -n -H '"'"'widgetId'"'"' docs` - 0 hits'
+expect_findings 'CT-B27: an indented item that is also malformed is reported as malformed' \
+  "$FX/b27-indented-malformed.md" 'malformed search item'
+expect_findings 'CT-B27: an indented item that is also malformed is reported as indented' \
+  "$FX/b27-indented-malformed.md" 'search item must start at column 0'
+
+# --- CT-B6: a copy of the canonical goal template; its `>` guidance is never parsed ------------------------------
+quote_cited() { # <tool> <file> → NFIND (findings printed), QCITED (findings citing a line that starts with ">")
+  local tool="$1" f="$2" ln n src prefix="trace-lint: $2:"
+  NFIND=0
+  QCITED=0
+  "$BASH" "$tool" "$f" > "$FX/quote.out" 2>/dev/null
+  while IFS= read -r ln || [ -n "$ln" ]; do
+    case "$ln" in
+      "$prefix"*)
+        NFIND=$((NFIND + 1))
+        n="${ln#"$prefix"}"
+        n="${n%%:*}"
+        case "$n" in ''|*[!0-9]*) continue ;; esac
+        src="$(sed -n "${n}p" "$f")"
+        case "$src" in '>'*) QCITED=$((QCITED + 1)) ;; esac ;;
+    esac
+  done < "$FX/quote.out"
+}
+
+if cp "$GOAL_TPL" "$FX/goal-template.md" 2>/dev/null; then
+  quote_cited "$LINT" "$FX/goal-template.md"
+  tpl_nfind="$NFIND"
+  if [ "$tpl_nfind" -ge 1 ] && [ "$QCITED" -eq 0 ]; then
+    report PASS "CT-B6: linting a copy of the goal template, no finding cites a '>' guidance line ($tpl_nfind findings, all on example lines)"
+  else
+    report FAIL "CT-B6: linting a copy of the goal template, no finding cites a '>' guidance line" \
+      "findings=$NFIND cite-quote-lines=$QCITED"
+  fi
+  run "$FX/goal-template.md"
+  if printf '%s\n' "$OUT" | grep -qF 'hit has no path (use -H): <path>:<line>:<text>'; then
+    report PASS 'CT-B6: the template example S1 item and its text block are read (the placeholder hit is flagged)'
+  else
+    report FAIL 'CT-B6: the template example S1 item and its text block are read' "out=[$OUT]"
+  fi
+
+  seed_ok=1
+  lit_replace '## Searches
+' '## Searches
+
+> - **S8** seeded: a quoted item must not be parsed
+' < "$FX/goal-template.md" > "$FX/goal-template-seed1.md" || seed_ok=0
+  lit_replace '## Consumers
+' '## Consumers
+
+> | seeded | quoted | table | row |
+' < "$FX/goal-template-seed1.md" > "$FX/goal-template-seeded.md" || seed_ok=0
+  if [ "$seed_ok" -eq 1 ]; then
+    quote_cited "$LINT" "$FX/goal-template-seeded.md"
+    if [ "$QCITED" -eq 0 ] && [ "$NFIND" -eq "$tpl_nfind" ]; then
+      report PASS 'CT-B6: a quoted item and a quoted table row seeded into the template add no finding'
+    else
+      report FAIL 'CT-B6: a quoted item and a quoted table row seeded into the template add no finding' \
+        "findings=$NFIND (want $tpl_nfind) cite-quote-lines=$QCITED"
+    fi
+    if lit_replace 'lineno=$((lineno + 1))' 'lineno=$((lineno + 1))
+  line="${line#> }"' < "$LINT" > "$FX/lint-quote-mutant.sh"; then
+      quote_cited "$FX/lint-quote-mutant.sh" "$FX/goal-template-seeded.md"
+      if [ "$QCITED" -ge 2 ]; then
+        report PASS "CT-B6: mutation — a tool that strips the '> ' prefix parses the quoted lines and is caught ($QCITED findings cite them)"
+      else
+        report FAIL "CT-B6: mutation — a tool that strips the '> ' prefix is caught" "cite-quote-lines=$QCITED (want >= 2)"
+      fi
+    else
+      report FAIL 'CT-B6: mutation — the tool has the line-counter anchor' 'lineno=$((lineno + 1)) not found in the tool'
+    fi
+  else
+    report FAIL 'CT-B6: fixture goal-template-seeded' 'the template lost its "## Searches" or "## Consumers" heading line'
+  fi
+else
+  report FAIL 'CT-B6: the canonical goal template is readable' "$GOAL_TPL"
+fi
+
 # --- usage, exit codes, read-only -----------------------------------------------------------------------------
+run "$BASE" --help
+if [ "$RC" -eq 2 ] && [ -z "$OUT" ] && printf '%s\n' "$ERR" | grep -qF 'usage: trace-lint.sh <goal.md>'; then
+  report PASS 'CT-B8: "<file> --help" → exit 2 (usage on stderr, nothing on stdout)'
+else
+  report FAIL 'CT-B8: "<file> --help" → exit 2' "rc=$RC out=[$OUT] err=[$ERR]"
+fi
+
+run --help "$BASE"
+if [ "$RC" -eq 2 ] && [ -z "$OUT" ] && printf '%s\n' "$ERR" | grep -qF 'usage: trace-lint.sh <goal.md>'; then
+  report PASS 'CT-B8: "--help <file>" → exit 2 (usage on stderr, nothing on stdout)'
+else
+  report FAIL 'CT-B8: "--help <file>" → exit 2' "rc=$RC out=[$OUT] err=[$ERR]"
+fi
+
+run "$BASE" "$BASE" --help
+if [ "$RC" -eq 2 ] && [ -z "$OUT" ] && printf '%s\n' "$ERR" | grep -qF 'usage: trace-lint.sh <goal.md>'; then
+  report PASS 'CT-B8: "a b --help" → exit 2 (usage on stderr, nothing on stdout)'
+else
+  report FAIL 'CT-B8: "a b --help" → exit 2' "rc=$RC out=[$OUT] err=[$ERR]"
+fi
+
 run
 if [ "$RC" -eq 2 ] && printf '%s\n' "$ERR" | grep -qF 'usage: trace-lint.sh <goal.md>' && [ -z "$OUT" ]; then
   report PASS 'usage: no argument → exit 2 (usage on stderr, nothing on stdout)'
