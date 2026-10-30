@@ -858,6 +858,8 @@ flowchart TD
 | Iteration timeout / budgets | opt-in (`LOOP_ITER_TIMEOUT`, `LOOP_RUN_BUDGET_TOKENS`, `LOOP_STORY_BUDGET_TOKENS`, `LOOP_RUN_BUDGET_USD`, `LOOP_STORY_BUDGET_USD`, `LOOP_ITER_BUDGET_USD`); run-budget stop exits 1 when eligible work remains; missing usage/cost data fails open |
 | Tamper check | `LOOP_TAMPER_CHECK` = `warn` (default) \| `fail` (worktree only — requires `LOOP_WORKTREE=1`) \| `off`; optional `LOOP_TEST_PATTERNS`; `fail` quarantines with reason `tamper` |
 
+These guards follow the unattended-run rules in Anthropic's [Building effective agent automations](https://claude.dev/blog/building-effective-agent-automations/).
+
 **Pre-existing failures.** Loop runs never commit fixes for pre-existing failures (the
 **pre-existing** class under **Quality Checks**); those failures become `follow-ups.md` rows.
 

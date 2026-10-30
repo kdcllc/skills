@@ -31,7 +31,9 @@
 #     whitespace) is `unverified` before any family comparison, even when it names a family
 #     (e.g. `unknown (not stated; requested <model-id>)`).
 #     R = byte length of the report file; T = floor((context_chars of SPAWN #NN + R) / 4);
-#     C/W parsed from report line `files_read: <N> (~<C> chars)` (digit-only C) or
+#     C/W parsed from report line `files_read: <N> (~<C> chars)` (N and C are plain digits or
+#     comma thousands groups such as 85,000 or 1,234,567; commas are stripped before the
+#     arithmetic, and a malformed group such as 85,00 leaves C n/a) or
 #     overridden by --work-chars (digits only, else exit 2); W = floor(C/4) or n/a;
 #     X = last `running io: <n>` (fallback: last `running total: <n>` for pre-v0.26 logs;
 #     0 if none) + T; Y = last `running work: <n>` (0 if none) + W (W treated as 0 when n/a).
@@ -158,12 +160,21 @@ prev_running_work() { # <log> → last running work (else 0)
 }
 
 parse_work_chars() { # <report-path> → 0 ok (sets work_c) · 1 n/a
-  local path="$1" line
+  local path="$1" line c
+  # N and C: plain digits or comma thousands groups (~85,000). The first pattern captures C
+  # loosely; the second accepts only a plain integer or well-formed groups, so a typo such as
+  # ~85,00 stays n/a instead of logging a wrong number. A line that fails either one is
+  # skipped, as any other non-matching line is.
+  local fp_re='^files_read: [0-9][0-9,]* \(~([0-9][0-9,]*) chars\)$'
+  local num_re='^([0-9]+|[0-9]{1,3}(,[0-9]{3})+)$'
   work_c=""
   while IFS= read -r line || [ -n "$line" ]; do
-    if [[ "$line" =~ ^files_read:\ [0-9]+\ \(~([0-9]+)\ chars\)$ ]]; then
-      work_c="${BASH_REMATCH[1]}"
-      return 0
+    if [[ "$line" =~ $fp_re ]]; then
+      c="${BASH_REMATCH[1]}"                       # copy first: the next match resets BASH_REMATCH
+      if [[ "$c" =~ $num_re ]]; then
+        work_c="${c//,/}"
+        return 0
+      fi
     fi
   done < "$path"
   return 1

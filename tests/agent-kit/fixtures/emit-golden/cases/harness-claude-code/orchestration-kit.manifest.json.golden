@@ -19,7 +19,7 @@
     "_memory/loop/backlog.md"
   ],
   "files": {
-    ".claude/ORCHESTRATION.md": "b3a5ff6fcabcfae02de7639bb18511edd4b915f401e19d1e2a6ecfc8cbc45484",
+    ".claude/ORCHESTRATION.md": "7b004fa29d685e5a3c773db0b271e7203f91cca9be66a2c0f07c174744974104",
     ".claude/agents/diagnostician.md": "cbcbaecf95fe98f3218e20b6b0fff3d949647710ede58a026d5106d973e97510",
     ".claude/agents/evaluator.md": "6bae7d7fc05931bfe4bc732d39c4a607188b9d375a9f2efc0774f8c285f5ec35",
     ".claude/agents/evidence-collector.md": "1e73d369a9fb92b7aa7f017b9f43c6d24b6151cfb5ad8526d752b3bcec55bf45",
@@ -55,7 +55,7 @@
     ".claude/skills/task-criteria/SKILL.md": "2b3159fa76b6ab5939b208cbf317101cf6d770a13f0a6ea75c5c98862acea536",
     ".claude/skills/test-ladder/SKILL.md": "d9d866d4a76cf85a2d765daebc43aa9265466da4427a4783d3d8e2f2c377e7ae",
     "_kit/log-spawn.cmd": "ae9541294a03f741311ff8bc0d5c6f9985d6947fb42f7aaeaf6613088e34bf7e",
-    "_kit/log-spawn.sh": "ac96d52aa0cc9c3681972a2fb62f06f9434c3abf18fa08107b36e8fc62a95ae9",
+    "_kit/log-spawn.sh": "1f0942e9fd14bf989991ae940230115570fdd02eb2a115039c023588e36d245e",
     "_kit/memory.cmd": "ae9541294a03f741311ff8bc0d5c6f9985d6947fb42f7aaeaf6613088e34bf7e",
     "_kit/memory.sh": "db4762042b2dcaeccdd7018b5e05619909bcbe28567427a0d914286f1764e62c",
     "_kit/trace-lint.cmd": "ae9541294a03f741311ff8bc0d5c6f9985d6947fb42f7aaeaf6613088e34bf7e",

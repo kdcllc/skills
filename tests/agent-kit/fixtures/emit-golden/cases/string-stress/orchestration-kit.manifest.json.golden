@@ -20,7 +20,7 @@
     "_memory/loop/backlog.md"
   ],
   "files": {
-    ".claude/ORCHESTRATION.md": "ffb8e60794c6b64467569e6f1fac16e84338383ab7f921599261951994f1f16a",
+    ".claude/ORCHESTRATION.md": "b220c21ac362c9b91d5b252da13fb585732f8c7ee8f579dc50937f9d486b87cd",
     ".claude/agents/diagnostician.md": "f83c712d52d09d7e4771d1ac65cea1b8bda9268406d39a10e689d5d1ff350f52",
     ".claude/agents/evaluator.md": "3f59f53989cf36918886dbe53a840f116bf174882294d11f98c99d796c5900ca",
     ".claude/agents/evidence-collector.md": "a630ada9902d0e1e883d040019752a0a310fef839c224f14847d7c87bd1844e2",
@@ -55,7 +55,7 @@
     ".claude/skills/ship-pr/SKILL.md": "0e19d5ae702eff4fc29422295378d0f465ef12a5d1a32af772c4bf8404b371af",
     ".claude/skills/task-criteria/SKILL.md": "da7d99f51fdc3094b883a32936405a9aa05ac68109588768db690717da46a1c8",
     ".claude/skills/test-ladder/SKILL.md": "8a827155a5573366649c8f034cf5c279c4056a7dee0c07b3515f1043e651238d",
-    ".cursor/ORCHESTRATION.md": "43101cee68721f0dc432b5d481c7dfa65540879fe6c226d2e6e71397c0fee0bb",
+    ".cursor/ORCHESTRATION.md": "ec28f1874cec1f67daca79bf1e1b898d1bfbb0995b16741b95796bf984582d02",
     ".cursor/agents/diagnostician.md": "d4370abc3eda5ca6b281fec41086d71b83f12cc0dda073b9bc4dcbcf29db30e3",
     ".cursor/agents/evaluator.md": "00c1e3501fa27850f9607f3622bec269cac501342d7072ba33c6147f2dee1472",
     ".cursor/agents/evidence-collector.md": "504796bb266dae1998e7f9a369a3b9d6ed0d2497b7daead9a05396baa6cd2195",
@@ -91,7 +91,7 @@
     ".cursor/skills/task-criteria/SKILL.md": "482dbbf667326a01b9c8ba60a60eac94b7df341b778d55a83895c99698a8cc90",
     ".cursor/skills/test-ladder/SKILL.md": "8a827155a5573366649c8f034cf5c279c4056a7dee0c07b3515f1043e651238d",
     "_kit/log-spawn.cmd": "ae9541294a03f741311ff8bc0d5c6f9985d6947fb42f7aaeaf6613088e34bf7e",
-    "_kit/log-spawn.sh": "ac96d52aa0cc9c3681972a2fb62f06f9434c3abf18fa08107b36e8fc62a95ae9",
+    "_kit/log-spawn.sh": "1f0942e9fd14bf989991ae940230115570fdd02eb2a115039c023588e36d245e",
     "_kit/memory.cmd": "ae9541294a03f741311ff8bc0d5c6f9985d6947fb42f7aaeaf6613088e34bf7e",
     "_kit/memory.sh": "db4762042b2dcaeccdd7018b5e05619909bcbe28567427a0d914286f1764e62c",
     "_kit/trace-lint.cmd": "ae9541294a03f741311ff8bc0d5c6f9985d6947fb42f7aaeaf6613088e34bf7e",
