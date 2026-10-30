@@ -74,8 +74,11 @@ feature progress behavior as Claude Code.
 
 **Hook telemetry (`flags.hook_telemetry`):** emits `_kit/hook-log.sh` and
 `_kit/hook-log.cmd`. When `.cursor/hooks.json` is absent, emit writes `stop` and
-`subagentStop` hooks, each with command `bash _kit/hook-log.sh hook cursor` and
-`"loop_limit": 1`. With `flags.kit_guard` also on, the one created file holds both,
+`subagentStop` hooks, each with the guarded command
+`test -f _kit/hook-log.sh && bash _kit/hook-log.sh hook cursor || echo '{}'` and
+`"loop_limit": 1` (a fresh clone without `_kit/` answers `{}` instead of failing the hook;
+the guard assumes a POSIX shell, and Cursor's hook shell on Windows is unverified 🔎).
+With `flags.kit_guard` also on, the one created file holds both,
 `preToolUse` first. When the file already exists without the hooks, emit leaves it
 untouched and warns with the merge snippet
 (`warning: .cursor/hooks.json exists without the hook-telemetry hooks — left untouched; add to its "hooks" object: …`,

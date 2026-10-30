@@ -55,4 +55,6 @@ still apply.
 `warning: flags.hook_telemetry is partial on copilot: no telemetry hook`.
 On an install that also targets Claude Code, Copilot may run the repository
 `.claude/settings.json` hooks when its agent hooks are enabled; those runs log under
-harness `claude`.
+harness `claude` only when `$CLAUDE_PROJECT_DIR` is set under Copilot 🔎 (unconfirmed:
+`reference/harness-matrix.md`, 2026-10-27 addendum, fact 9). If it is unset, the guarded
+command's `test -f` fails and nothing is logged.

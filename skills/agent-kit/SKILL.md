@@ -280,14 +280,14 @@ Ask (multiple-choice where possible) only what you could not infer:
    and the agents; Orchestration Progress moves to `_memory/work/goals/[goal]/progress.md`.
    Copilot and Codex get the check and rule text only. Record `flags.kit_guard`.
 9. **Log subagent and session stops?** (default no.) `flags.hook_telemetry: true` emits
-   `_kit/hook-log.sh`, Claude Code / Cursor stop hooks when `.claude/settings.json` /
-   `.cursor/hooks.json` are absent (else emit prints a merge snippet), and metadata-only
-   lines in `_memory/work/hooks/events.jsonl`. Copilot and Codex get none.
-   Record `flags.hook_telemetry`.
+   `_kit/hook-log.sh`, Claude Code (`Stop`, `SubagentStop`, `StopFailure`) and Cursor
+   (`stop`, `subagentStop`) hooks when `.claude/settings.json` / `.cursor/hooks.json` are
+   absent (else emit prints a merge snippet), and metadata-only lines in
+   `_memory/work/hooks/events.jsonl`. Copilot and Codex get none. Record `flags.hook_telemetry`.
 10. **Delivery forge (Phase 7)** — present the detected forge and the chosen remote.
-   Confirm or override with any of `github` / `azuredevops` / `gitlab` / `none`
-   (plus `forgeHost` for self-hosted). The `ship-pr` skill is always emitted;
-   `none` means the draft + hand-over branch.
+    Confirm or override with any of `github` / `azuredevops` / `gitlab` / `none`
+    (plus `forgeHost` for self-hosted). The `ship-pr` skill is always emitted;
+    `none` means the draft + hand-over branch.
 11. **Ground-truth doc** — the committed reference file for domain decisions.
 
 The live model check happens here — the script never fetches anything. See `emitters/`

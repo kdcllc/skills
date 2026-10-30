@@ -58,12 +58,17 @@ item 4 and agent read-only rules apply; the feature skill tracks Orchestration
 Progress under `_memory/work/goals/[goal]/progress.md`.
 
 **Hook telemetry (`flags.hook_telemetry`):** emits `_kit/hook-log.sh` and
-`_kit/hook-log.cmd`. When `.claude/settings.json` is absent, emit writes `Stop` and
-`SubagentStop` hooks with the command
+`_kit/hook-log.cmd`. When `.claude/settings.json` is absent, emit writes `Stop`,
+`SubagentStop` and `StopFailure` hooks (in that order), each with the command
 `test -f "$CLAUDE_PROJECT_DIR/_kit/hook-log.sh" && bash "$CLAUDE_PROJECT_DIR/_kit/hook-log.sh" hook claude || true`
-(guarded, so a fresh clone without `_kit/` shows no hook error). With `flags.kit_guard`
+(guarded, so a fresh clone without `_kit/` shows no hook error). `StopFailure` fires when a
+turn ends on an API error and is logging-only (no decision control); the hook logs it with
+status `error` and the documented `error` type. With `flags.kit_guard`
 also on, the one created file holds both, `PreToolUse` first. When the file already
 exists without the hooks, emit leaves it untouched and warns with the merge snippet
 (`warning: .claude/settings.json exists without the hook-telemetry hooks — left untouched; merge into it: …`,
-see `bin/README.md`). Each stop appends one metadata line to
+see `bin/README.md`); a file that has the telemetry hooks but no `StopFailure` entry gets its own
+warning with the entry to add
+(`warning: .claude/settings.json has the hook-telemetry hooks but no StopFailure hook — left untouched; add to its "hooks" object: "StopFailure":[…]`).
+Each stop appends one metadata line to
 `_memory/work/hooks/events.jsonl` (gitignored); on a Cursor caller the hook skips.

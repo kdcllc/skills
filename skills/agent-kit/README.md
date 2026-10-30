@@ -232,7 +232,7 @@ workflow, so workers use them on the right layers.
 | `skills/agent-kit-models.map.md` | The model map, the only place model IDs live |
 | `_kit/log-spawn.sh`, `_kit/memory.sh`, `_kit/trace-lint.sh` (+ `.cmd` launchers) | Orchestration-log writer, memory store CLI, and consumer-trace lint |
 | `_kit/kit-guard.sh` (+ `.cmd`) | Optional guard that stops agents from editing kit-owned files, with Claude Code and Cursor hook configs |
-| `_kit/hook-log.sh` (+ `.cmd`) | Optional stop and subagent-stop telemetry for Claude Code and Cursor, logged to `_memory/work/hooks/events.jsonl` |
+| `_kit/hook-log.sh` (+ `.cmd`) | Optional stop, subagent-stop and (Claude Code only) `StopFailure` telemetry for Claude Code and Cursor, logged to `_memory/work/hooks/events.jsonl` |
 | `_memory/` | Tracked memory records plus gitignored scratch space |
 | `ORCHESTRATION.md` | The architecture doc, filled in for your project |
 | `orchestration-kit.manifest.json` | File hashes and your embedded answers, for clean upgrades |
