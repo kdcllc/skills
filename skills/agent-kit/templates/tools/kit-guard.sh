@@ -8,7 +8,8 @@
 #   kit-guard.sh hook <claude|cursor> [--root DIR]
 #     Read hook JSON from stdin; deny edits to kit-owned paths (Claude Code PreToolUse / Cursor preToolUse).
 #
-# Root: --root DIR when given; else the parent of this script's directory (_kit/..), via cd && pwd -P.
+# Root: --root DIR when given; else the parent of this script's directory (_kit/..), via
+# `CDPATH= cd` and pwd -P (an exported CDPATH never changes the answer).
 # Manifest: <root>/orchestration-kit.manifest.json.
 #
 # Kit-owned paths are manifest `files` keys minus user-owned exclusions: the Claude Code settings file
@@ -133,7 +134,7 @@ sort_manifest_paths() {
 
 resolve_roots() { # sets ROOT_REAL ROOT_GIVEN
   ROOT_GIVEN="$1"
-  ROOT_REAL="$(cd "$ROOT_GIVEN" && pwd -P)"
+  ROOT_REAL="$(CDPATH= cd "$ROOT_GIVEN" && pwd -P)"
 }
 
 # --- JSON helpers (hook stdin) ---
@@ -268,7 +269,7 @@ normalize_to_root_rel() { # <path> <json> → stdout relpath or empty if outside
 
   # Prefer canonical file path when parent exists.
   if [ -d "$(dirname "$full")" ]; then
-    full="$(cd "$(dirname "$full")" 2>/dev/null && pwd -P)/$(basename "$full")"
+    full="$(CDPATH= cd "$(dirname "$full")" 2>/dev/null && pwd -P)/$(basename "$full")"
   fi
 
   case "$full" in
@@ -504,8 +505,8 @@ esac
 if [ "$root_explicit" -eq 1 ]; then
   [ -n "$root" ] || { usage; exit 2; }
 else
-  _self="$(cd "$(dirname "$0")" && pwd -P)"
-  root="$(cd "${_self}/.." && pwd -P)"
+  _self="$(CDPATH= cd "$(dirname "$0")" && pwd -P)"
+  root="$(CDPATH= cd "${_self}/.." && pwd -P)"
 fi
 
 resolve_roots "$root"

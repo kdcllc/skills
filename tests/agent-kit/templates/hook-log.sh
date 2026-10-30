@@ -4,22 +4,30 @@
 # Behavioral section — runs the CANONICAL tool (override with HOOK_LOG_BIN=<path> for mutation
 # testing) over fixture payloads built in this suite, in temp roots only (no network, no LLM,
 # no emit, no self-install):
-#   - the four valid payloads (Claude Code SubagentStop / Stop, Cursor subagentStop / stop) each
-#     give one line with the exact expected bytes (HOOK_LOG_NOW fixed), the SHA-256 key has a
-#     known answer, and the other awk flavors on this machine agree
+#   - the five valid payloads (Claude Code SubagentStop / Stop / StopFailure, Cursor subagentStop /
+#     stop) each give one line with the exact expected bytes (HOOK_LOG_NOW fixed), the SHA-256 key
+#     has a known answer, and the other awk flavors on this machine agree
 #   - the output contract: `hook cursor` prints exactly `{}` plus a newline and `hook claude`
 #     prints nothing, with exit 0, on logged, skipped, failed and malformed paths alike
-#   - skip rules 1-5 (AGENT_KIT_HOOK_LOG=0, empty / brace-less stdin, a Cursor caller on the
-#     claude path, a foreign hook_event_name, an unwritable log dir) write nothing; every skip
-#     case has a logging control so no probe is vacuous
-#   - metadata only: a unique marker in each never-logged field never reaches the log
+#   - skip rules 1-5 (AGENT_KIT_HOOK_LOG=0, empty / brace-less stdin or a first non-whitespace
+#     character other than a left brace, a Cursor caller on the claude path, a foreign
+#     hook_event_name, an unwritable log dir) write nothing; every skip case has a logging
+#     control so no probe is vacuous
+#   - metadata only: a unique marker in each never-logged field (error_details included) never
+#     reaches the log
 #   - top-level keys only: an escaped key inside a string and a key inside a nested object or
 #     array are never read; value types (numbers, strings, modified_files arrays) are checked
+#   - StopFailure: status "error" and the `error` field (snake_case strings only, null for every
+#     other event and every other value)
 #   - idempotency by payload hash (also against events.1.jsonl), rotation at a byte cap, the
 #     mkdir lock (fresh, stale), a duplicate that never rotates, the cksum fallback, and a PATH
 #     limited to the documented tools
-#   - `summary` output (exact bytes), its empty case, usage errors, and that it only reads
-#   - static guards on the tool file (portability, never-steers strings, no names, no templates tokens)
+#   - `summary` output (exact bytes, the error column, the zero-claude hint), its empty case,
+#     a root holding a backslash, usage errors, and that it only reads
+#   - an exported CDPATH never changes a resolved root (hook-log and kit-guard)
+#   - mutation proofs: each probe above passes on the tool and fails on a mutated copy
+#   - static guards on the tool file (portability, never-steers strings, no names, no templates tokens,
+#     header columns)
 # Output follows the trace-lint suite: PASS:/FAIL: lines, a summary, RESULT.
 # Exit 0 when no FAIL; 1 otherwise.
 set -u
@@ -33,6 +41,7 @@ REPO_ROOT="$(cd "$HERE/../../.." && pwd)"
 cd "$REPO_ROOT" || exit 1
 
 HOOK="${HOOK_LOG_BIN:-$REPO_ROOT/skills/agent-kit/templates/tools/hook-log.sh}"
+KG_HOOK="${KIT_GUARD_BIN:-$REPO_ROOT/skills/agent-kit/templates/tools/kit-guard.sh}"
 
 FIXTURE_TMPDIR="$(mktemp -d "${TMPDIR:-/tmp}/hooklog.XXXXXX")" || exit 1
 export TMPDIR="$FIXTURE_TMPDIR"
@@ -152,16 +161,19 @@ expect_skip() {
 # --- fixture payloads ---------------------------------------------------------------------------
 
 P_CLAUDE_SUB='{"session_id":"sess-1","prompt_id":"prm-1","transcript_path":"/t/a.jsonl","cwd":"/work","permission_mode":"default","hook_event_name":"SubagentStop","stop_hook_active":false,"agent_id":"ag-1","agent_type":"implementer","agent_transcript_path":"/t/ag.jsonl","last_assistant_message":"done","background_tasks":[],"session_crons":[]}'
-W_CLAUDE_SUB='{"ts":"2026-10-29T12:00:00Z","harness":"claude","event":"SubagentStop","session":"sess-1","generation":"prm-1","agent_id":"ag-1","agent_type":"implementer","status":null,"duration_ms":null,"message_count":null,"tool_call_count":null,"loop_count":null,"model":null,"modified_files":null,"key":"@KEY@"}'
+W_CLAUDE_SUB='{"ts":"2026-10-29T12:00:00Z","harness":"claude","event":"SubagentStop","session":"sess-1","generation":"prm-1","agent_id":"ag-1","agent_type":"implementer","status":null,"error":null,"duration_ms":null,"message_count":null,"tool_call_count":null,"loop_count":null,"model":null,"modified_files":null,"key":"@KEY@"}'
 
 P_CLAUDE_STOP='{"session_id":"sess-2","prompt_id":"prm-2","transcript_path":"/t/b.jsonl","cwd":"/work","permission_mode":"default","hook_event_name":"Stop","stop_hook_active":false}'
-W_CLAUDE_STOP='{"ts":"2026-10-29T12:00:00Z","harness":"claude","event":"Stop","session":"sess-2","generation":"prm-2","agent_id":null,"agent_type":null,"status":null,"duration_ms":null,"message_count":null,"tool_call_count":null,"loop_count":null,"model":null,"modified_files":null,"key":"@KEY@"}'
+W_CLAUDE_STOP='{"ts":"2026-10-29T12:00:00Z","harness":"claude","event":"Stop","session":"sess-2","generation":"prm-2","agent_id":null,"agent_type":null,"status":null,"error":null,"duration_ms":null,"message_count":null,"tool_call_count":null,"loop_count":null,"model":null,"modified_files":null,"key":"@KEY@"}'
+
+P_CLAUDE_SF='{"session_id":"sess-3","prompt_id":"prm-3","transcript_path":"/t/e.jsonl","cwd":"/work","permission_mode":"default","hook_event_name":"StopFailure","error":"rate_limit","error_details":"429 secret-detail","last_assistant_message":"API Error: secret-msg"}'
+W_CLAUDE_SF='{"ts":"2026-10-29T12:00:00Z","harness":"claude","event":"StopFailure","session":"sess-3","generation":"prm-3","agent_id":null,"agent_type":null,"status":"error","error":"rate_limit","duration_ms":null,"message_count":null,"tool_call_count":null,"loop_count":null,"model":null,"modified_files":null,"key":"@KEY@"}'
 
 P_CURSOR_SUB='{"conversation_id":"conv-1","generation_id":"gen-1","model":"test-model","hook_event_name":"subagentStop","cursor_version":"1.0.0","workspace_roots":["/w"],"user_email":"u@example.com","transcript_path":"/t/c.jsonl","subagent_type":"explore","status":"completed","task":"do the thing","description":"desc","summary":"sum","duration_ms":1234,"message_count":5,"tool_call_count":7,"loop_count":0,"modified_files":["a.txt","b.txt"],"agent_transcript_path":"/t/ca.jsonl"}'
-W_CURSOR_SUB='{"ts":"2026-10-29T12:00:00Z","harness":"cursor","event":"subagentStop","session":"conv-1","generation":"gen-1","agent_id":null,"agent_type":"explore","status":"completed","duration_ms":1234,"message_count":5,"tool_call_count":7,"loop_count":0,"model":"test-model","modified_files":2,"key":"@KEY@"}'
+W_CURSOR_SUB='{"ts":"2026-10-29T12:00:00Z","harness":"cursor","event":"subagentStop","session":"conv-1","generation":"gen-1","agent_id":null,"agent_type":"explore","status":"completed","error":null,"duration_ms":1234,"message_count":5,"tool_call_count":7,"loop_count":0,"model":"test-model","modified_files":2,"key":"@KEY@"}'
 
 P_CURSOR_STOP='{"conversation_id":"conv-2","generation_id":"gen-2","model":"test-model","hook_event_name":"stop","cursor_version":"1.0.0","workspace_roots":["/w"],"user_email":"u@example.com","transcript_path":"/t/d.jsonl","status":"aborted","loop_count":1}'
-W_CURSOR_STOP='{"ts":"2026-10-29T12:00:00Z","harness":"cursor","event":"stop","session":"conv-2","generation":"gen-2","agent_id":null,"agent_type":null,"status":"aborted","duration_ms":null,"message_count":null,"tool_call_count":null,"loop_count":1,"model":"test-model","modified_files":null,"key":"@KEY@"}'
+W_CURSOR_STOP='{"ts":"2026-10-29T12:00:00Z","harness":"cursor","event":"stop","session":"conv-2","generation":"gen-2","agent_id":null,"agent_type":null,"status":"aborted","error":null,"duration_ms":null,"message_count":null,"tool_call_count":null,"loop_count":1,"model":"test-model","modified_files":null,"key":"@KEY@"}'
 
 cursor_stop() { # <conv> <gen> → a distinct, valid cursor stop payload
   printf '{"conversation_id":"%s","generation_id":"%s","model":"test-model","hook_event_name":"stop","cursor_version":"1.0.0","workspace_roots":["/w"],"user_email":"u@example.com","transcript_path":"/t/d.jsonl","status":"aborted","loop_count":1}' "$1" "$2"
@@ -174,6 +186,7 @@ cursor_with() { # <json-fragment> → a cursor subagentStop payload ending in th
 # --- 1. valid payloads: exact bytes, output contract ----------------------------------------------
 expect_logged 'valid: Claude Code SubagentStop → one exact line' claude "$P_CLAUDE_SUB" "$W_CLAUDE_SUB"
 expect_logged 'valid: Claude Code Stop → one exact line' claude "$P_CLAUDE_STOP" "$W_CLAUDE_STOP"
+expect_logged 'valid: Claude Code StopFailure → status "error", the error enum, no free text' claude "$P_CLAUDE_SF" "$W_CLAUDE_SF"
 expect_logged 'valid: Cursor subagentStop → one exact line' cursor "$P_CURSOR_SUB" "$W_CURSOR_SUB"
 expect_logged 'valid: Cursor stop → one exact line' cursor "$P_CURSOR_STOP" "$W_CURSOR_STOP"
 
@@ -198,7 +211,7 @@ fi
 
 # known answer for the key: SHA-256 of {"hook_event_name":"stop"} starts with 313c615162dda827
 expect_logged 'key: known SHA-256 prefix of the raw bytes' cursor '{"hook_event_name":"stop"}' \
-  '{"ts":"2026-10-29T12:00:00Z","harness":"cursor","event":"stop","session":null,"generation":null,"agent_id":null,"agent_type":null,"status":null,"duration_ms":null,"message_count":null,"tool_call_count":null,"loop_count":null,"model":null,"modified_files":null,"key":"313c615162dda827"}'
+  '{"ts":"2026-10-29T12:00:00Z","harness":"cursor","event":"stop","session":null,"generation":null,"agent_id":null,"agent_type":null,"status":null,"error":null,"duration_ms":null,"message_count":null,"tool_call_count":null,"loop_count":null,"model":null,"modified_files":null,"key":"313c615162dda827"}'
 
 # trailing newline is part of the raw bytes: the same JSON plus "\n" has a different key
 new_root
@@ -233,7 +246,7 @@ for flavor in gawk mawk nawk original-awk; do
   mkdir -p "$shim"
   ln -sf "$fp" "$shim/awk"
   ok=1
-  for pair in "claude|$P_CLAUDE_SUB|$W_CLAUDE_SUB" "cursor|$P_CURSOR_SUB|$W_CURSOR_SUB"; do
+  for pair in "claude|$P_CLAUDE_SUB|$W_CLAUDE_SUB" "claude|$P_CLAUDE_SF|$W_CLAUDE_SF" "cursor|$P_CURSOR_SUB|$W_CURSOR_SUB"; do
     h="${pair%%|*}"
     rest="${pair#*|}"
     p="${rest%%|*}"
@@ -244,9 +257,9 @@ for flavor in gawk mawk nawk original-awk; do
     contract_ok "$h" && file_is "$(logf "$ROOT")" "${tpl/@KEY@/$(exp_key "$p")}" || ok=0
   done
   if [ "$ok" -eq 1 ]; then
-    report PASS "awk flavor $flavor: same bytes for a claude and a cursor payload"
+    report PASS "awk flavor $flavor: same bytes for a claude, a claude StopFailure and a cursor payload"
   else
-    report FAIL "awk flavor $flavor: same bytes for a claude and a cursor payload"
+    report FAIL "awk flavor $flavor: same bytes for a claude, a claude StopFailure and a cursor payload"
   fi
 done
 
@@ -254,7 +267,7 @@ done
 pretty="$(printf '{\r\n  "conversation_id": "conv-2",\r\n  "generation_id": "gen-2",\r\n  "model": "test-model",\r\n  "hook_event_name": "stop",\r\n  "workspace_roots": [\r\n    "/w"\r\n  ],\r\n  "status": "aborted",\r\n  "loop_count": 1\r\n}\r\n')"
 new_root
 run_hook cursor "$ROOT" "$pretty"
-want='{"ts":"2026-10-29T12:00:00Z","harness":"cursor","event":"stop","session":"conv-2","generation":"gen-2","agent_id":null,"agent_type":null,"status":"aborted","duration_ms":null,"message_count":null,"tool_call_count":null,"loop_count":1,"model":"test-model","modified_files":null,"key":"'"$(exp_key "$pretty")"'"}'
+want='{"ts":"2026-10-29T12:00:00Z","harness":"cursor","event":"stop","session":"conv-2","generation":"gen-2","agent_id":null,"agent_type":null,"status":"aborted","error":null,"duration_ms":null,"message_count":null,"tool_call_count":null,"loop_count":1,"model":"test-model","modified_files":null,"key":"'"$(exp_key "$pretty")"'"}'
 if contract_ok cursor && file_is "$(logf "$ROOT")" "$want"; then
   report PASS 'valid: pretty-printed multi-line CRLF payload → same fields'
 else
@@ -266,7 +279,7 @@ big="$(awk 'BEGIN { for (i = 0; i < 100000; i++) printf "a\\\"\\n" }')"
 bigp='{"conversation_id":"big","generation_id":"g","hook_event_name":"subagentStop","task":"'"$big"'","subagent_type":"explore","status":"completed"}'
 new_root
 run_hook cursor "$ROOT" "$bigp"
-if contract_ok cursor && [ "$(fld "$(logf "$ROOT")" status duration_ms)" = '"completed"' ] \
+if contract_ok cursor && [ "$(fld "$(logf "$ROOT")" status error)" = '"completed"' ] \
    && [ "$(fld "$(logf "$ROOT")" agent_type status)" = '"explore"' ]; then
   report PASS 'large: a 500 KB task string full of escapes does not hide later keys'
 else
@@ -316,6 +329,19 @@ for h in claude cursor; do
   expect_skip "skip 2: braces in the wrong order ($h)" "$h" '}{'
   expect_skip "skip 2: both braces but no top-level object ($h)" "$h" '[{}]'
 done
+# a payload whose first non-whitespace character is not { is never read, a top-level array included
+expect_skip 'skip 2: a top-level array holding a valid claude payload is not logged as its inner object' claude "[$P_CLAUDE_STOP]"
+expect_skip 'skip 2: a top-level array holding a valid cursor payload is not logged as its inner object' cursor "[$P_CURSOR_STOP]"
+expect_skip 'skip 2: a whitespace-led top-level array is not logged (claude)' claude "
+  [ $P_CLAUDE_STOP ]
+"
+expect_skip 'skip 2: text before the left brace is not logged (claude)' claude "x$P_CLAUDE_STOP"
+expect_skip 'skip 2: text before the left brace is not logged (cursor)' cursor "x$P_CURSOR_STOP"
+expect_skip 'skip 2: a string value before the object is not logged (claude)' claude "\"s\" $P_CLAUDE_STOP"
+expect_logged 'skip 2 control: leading spaces, tabs, CR and newlines before the left brace still log (claude)' claude \
+  "$(printf ' \t\r\n  \n')$P_CLAUDE_STOP" "$W_CLAUDE_STOP"
+expect_logged 'skip 2 control: leading whitespace before the left brace still logs (cursor)' cursor \
+  "  $P_CURSOR_STOP" "$W_CURSOR_STOP"
 
 # rule 3: a Cursor caller on the claude path (control: cursor logs with the same env / payload)
 new_root
@@ -351,6 +377,12 @@ expect_skip 'skip 4: claude hook with SessionStart' claude \
   "${P_CLAUDE_STOP/\"Stop\"/\"SessionStart\"}"
 expect_skip 'skip 4: cursor hook with a claude event name (Stop)' cursor \
   "${P_CURSOR_STOP/\"stop\"/\"Stop\"}"
+expect_skip 'skip 4: cursor hook with the claude StopFailure event name' cursor \
+  "${P_CURSOR_STOP/\"stop\"/\"StopFailure\"}"
+expect_skip 'skip 4: claude hook with a lowercase stopFailure' claude \
+  "${P_CLAUDE_SF/\"StopFailure\"/\"stopFailure\"}"
+expect_skip 'skip 4: claude hook with a longer StopFailureX' claude \
+  "${P_CLAUDE_SF/\"StopFailure\"/\"StopFailureX\"}"
 expect_skip 'skip 4: cursor hook with preToolUse' cursor \
   "${P_CURSOR_STOP/\"stop\"/\"preToolUse\"}"
 expect_skip 'skip 4: cursor hook with a null event name' cursor \
@@ -419,7 +451,7 @@ else
 fi
 
 # --- 3. never-logged markers ---------------------------------------------------------------------
-NEVER='task description summary last_assistant_message transcript_path agent_transcript_path cwd workspace_roots user_email permission_mode background_tasks session_crons'
+NEVER='task description summary last_assistant_message error_details transcript_path agent_transcript_path cwd workspace_roots user_email permission_mode background_tasks session_crons'
 marker_value() { # <field> → a JSON value holding a unique marker for that field
   case "$1" in
     workspace_roots) printf '["HLMARK_%s_9c41"]' "$1" ;;
@@ -435,16 +467,24 @@ marker_fields() {
 }
 mp_cursor='{"conversation_id":"conv-m","generation_id":"gen-m","model":"test-model","hook_event_name":"subagentStop","cursor_version":"1.0.0","subagent_type":"explore","status":"completed"'"$(marker_fields)"'}'
 mp_claude='{"session_id":"sess-m","prompt_id":"prm-m","hook_event_name":"SubagentStop","agent_id":"ag-m","agent_type":"implementer"'"$(marker_fields)"'}'
-for h in cursor claude; do
-  if [ "$h" = cursor ]; then p="$mp_cursor"; else p="$mp_claude"; fi
+mp_claude_sf='{"session_id":"sess-m","prompt_id":"prm-m","hook_event_name":"StopFailure","error":"server_error"'"$(marker_fields)"'}'
+for h in cursor claude claude-sf; do
+  case "$h" in
+    cursor) p="$mp_cursor"; hh=cursor ;;
+    claude) p="$mp_claude"; hh=claude ;;
+    *) p="$mp_claude_sf"; hh=claude ;;
+  esac
   new_root
-  run_hook "$h" "$ROOT" "$p"
+  run_hook "$hh" "$ROOT" "$p"
   lf="$(logf "$ROOT")"
-  if ! contract_ok "$h" || [ "$(nlines "$lf")" != 1 ]; then
+  if ! contract_ok "$hh" || [ "$(nlines "$lf")" != 1 ]; then
     report FAIL "never logged ($h): the marker payload is logged at all" "rc=$RC lines=$(nlines "$lf")"
     continue
   fi
   report PASS "never logged ($h): the marker payload itself is logged (probe is not vacuous)"
+  if [ "$h" = claude-sf ] && ! grep -qF '"status":"error","error":"server_error"' "$lf"; then
+    report FAIL "never logged ($h): the StopFailure line carries its status and error" "log=[$(cat "$lf")]"
+  fi
   for f in $NEVER; do
     mk="HLMARK_${f}_9c41"
     if ! printf '%s' "$p" | grep -qF "$mk"; then
@@ -462,28 +502,28 @@ done
 new_root
 run_hook cursor "$ROOT" '{"conversation_id":"c","generation_id":"g","hook_event_name":"subagentStop","task":"say \"status\":\"error\" and \"model\":\"evil\"","status":"completed","model":"real-model"}'
 lf="$(logf "$ROOT")"
-if [ "$(fld "$lf" status duration_ms)" = '"completed"' ] && [ "$(fld "$lf" model modified_files)" = '"real-model"' ]; then
+if [ "$(fld "$lf" status error)" = '"completed"' ] && [ "$(fld "$lf" model modified_files)" = '"real-model"' ]; then
   report PASS 'decoy: an escaped "status" / "model" inside a task string is never read'
 else
-  report FAIL 'decoy: an escaped key inside a string' "status=$(fld "$lf" status duration_ms) model=$(fld "$lf" model modified_files)"
+  report FAIL 'decoy: an escaped key inside a string' "status=$(fld "$lf" status error) model=$(fld "$lf" model modified_files)"
 fi
 new_root
 run_hook cursor "$ROOT" '{"conversation_id":"c","generation_id":"g","hook_event_name":"subagentStop","task":"say \"status\":\"error\"","description":"{\"status\":\"error\"}"}'
 lf="$(logf "$ROOT")"
-if [ "$(fld "$lf" status duration_ms)" = null ]; then
+if [ "$(fld "$lf" status error)" = null ]; then
   report PASS 'decoy: an escaped "status" with no real status stays null'
 else
-  report FAIL 'decoy: an escaped "status" with no real status stays null' "status=$(fld "$lf" status duration_ms)"
+  report FAIL 'decoy: an escaped "status" with no real status stays null' "status=$(fld "$lf" status error)"
 fi
 
 # nested decoy: background_tasks entries before the real top-level keys
 new_root
 run_hook claude "$ROOT" '{"session_id":"s","prompt_id":"p","hook_event_name":"SubagentStop","background_tasks":[{"agent_id":"x","status":"error"}],"agent_id":"real","agent_type":"implementer"}'
 lf="$(logf "$ROOT")"
-if contract_ok claude && [ "$(fld "$lf" agent_id agent_type)" = '"real"' ] && [ "$(fld "$lf" status duration_ms)" = null ]; then
+if contract_ok claude && [ "$(fld "$lf" agent_id agent_type)" = '"real"' ] && [ "$(fld "$lf" status error)" = null ]; then
   report PASS 'nested decoy: background_tasks agent_id/status never win; claude status stays null'
 else
-  report FAIL 'nested decoy: background_tasks' "agent_id=$(fld "$lf" agent_id agent_type) status=$(fld "$lf" status duration_ms)"
+  report FAIL 'nested decoy: background_tasks' "agent_id=$(fld "$lf" agent_id agent_type) status=$(fld "$lf" status error)"
 fi
 new_root
 run_hook claude "$ROOT" '{"session_id":"s","hook_event_name":"Stop","background_tasks":[{"agent_id":"x","status":"error"}],"session_crons":[{"agent_id":"y"}]}'
@@ -496,11 +536,11 @@ fi
 new_root
 run_hook cursor "$ROOT" '{"conversation_id":"c","hook_event_name":"subagentStop","workspace_roots":[{"status":"error","model":"nested"}],"extra":{"status":"error","loop_count":9},"status":"completed","model":"real-model","loop_count":2}'
 lf="$(logf "$ROOT")"
-if [ "$(fld "$lf" status duration_ms)" = '"completed"' ] && [ "$(fld "$lf" model modified_files)" = '"real-model"' ] \
+if [ "$(fld "$lf" status error)" = '"completed"' ] && [ "$(fld "$lf" model modified_files)" = '"real-model"' ] \
    && [ "$(fld "$lf" loop_count model)" = 2 ]; then
   report PASS 'nested decoy: cursor status / model / loop_count inside nested objects are never read'
 else
-  report FAIL 'nested decoy: cursor nested keys' "status=$(fld "$lf" status duration_ms) model=$(fld "$lf" model modified_files) loop=$(fld "$lf" loop_count model)"
+  report FAIL 'nested decoy: cursor nested keys' "status=$(fld "$lf" status error) model=$(fld "$lf" model modified_files) loop=$(fld "$lf" loop_count model)"
 fi
 
 # --- 5. value types --------------------------------------------------------------------------------
@@ -527,7 +567,7 @@ type_case 'duration_ms null → null' '"duration_ms":null' duration_ms message_c
 type_case 'duration_ms nested object → null' '"duration_ms":{"a":1}' duration_ms message_count null
 type_case 'message_count / tool_call_count / loop_count numbers' '"message_count":5,"tool_call_count":7,"loop_count":3' tool_call_count loop_count 7
 type_case 'loop_count 3 → 3' '"message_count":5,"tool_call_count":7,"loop_count":3' loop_count model 3
-type_case 'status number → null' '"status":5' status duration_ms null
+type_case 'status number → null' '"status":5' status error null
 type_case 'modified_files [] → 0' '"modified_files":[]' modified_files key 0
 type_case 'modified_files one element → 1' '"modified_files":["a.txt"]' modified_files key 1
 type_case 'modified_files three elements → 3' '"modified_files":["a.txt","b.txt","c.txt"]' modified_files key 3
@@ -544,7 +584,87 @@ type_case 'model with \" and \u00e9 copied byte for byte' '"model":"a\"b\u00e9c"
 type_case 'model with an escaped backslash before the closing quote' '"model":"a\\","status":"completed"' model modified_files '"a\\"'
 type_case 'raw UTF-8 bytes in a string are copied byte for byte' "\"model\":\"caf$(printf '\303\251')\"" model modified_files "\"caf$(printf '\303\251')\""
 type_case 'agent_type from subagent_type with an escape' '"subagent_type":"x\ty"' agent_type status '"x\ty"'
-type_case 'duplicate top-level key: the first occurrence wins' '"status":"completed","status":"error"' status duration_ms '"completed"'
+type_case 'duplicate top-level key: the first occurrence wins' '"status":"completed","status":"error"' status error '"completed"'
+
+# --- 5b. Claude Code StopFailure: status "error" and the error field --------------------------------
+# sf_case <name> <fragment> <want-error-token>: a StopFailure payload with <fragment> (leading comma)
+# logs status "error" and the wanted error token.
+sf_case() {
+  local name="$1" frag="$2" want="$3" got st
+  new_root
+  run_hook claude "$ROOT" '{"session_id":"s","hook_event_name":"StopFailure"'"$frag"'}'
+  got="$(fld "$(logf "$ROOT")" error duration_ms)"
+  st="$(fld "$(logf "$ROOT")" status error)"
+  if contract_ok claude && [ "$(nlines "$(logf "$ROOT")")" = 1 ] && [ "$got" = "$want" ] && [ "$st" = '"error"' ]; then
+    report PASS "StopFailure: $name"
+  else
+    report FAIL "StopFailure: $name" "got error=[$got] status=[$st] want error=[$want] rc=$RC log=[$(cat "$(logf "$ROOT")" 2>/dev/null)]"
+  fi
+}
+for v in rate_limit overloaded authentication_failed oauth_org_not_allowed account_on_hold billing_error \
+         invalid_request model_not_found server_error max_output_tokens cloud_credential_error unknown; do
+  sf_case "the documented error $v is logged as given" ",\"error\":\"$v\"" "\"$v\""
+done
+sf_case 'a snake_case value outside the documented list is logged as given' ',"error":"brand_new_kind"' '"brand_new_kind"'
+sf_case 'free text with spaces → null' ',"error":"rate limit exceeded"' null
+sf_case 'free text with a colon and digits → null' ',"error":"429: secret-detail"' null
+sf_case 'a hyphenated value → null' ',"error":"rate-limit"' null
+sf_case 'an upper-case value → null' ',"error":"RATE_LIMIT"' null
+sf_case 'a camelCase value → null' ',"error":"rateLimit"' null
+sf_case 'an empty string → null' ',"error":""' null
+sf_case 'a unicode escape inside the value → null' ',"error":"rate\u005flimit"' null
+sf_case 'an escaped quote inside the value → null' ',"error":"a\"b"' null
+sf_case 'a path-like value → null' ',"error":"/etc/passwd"' null
+sf_case 'a number → null' ',"error":5' null
+sf_case 'true → null' ',"error":true' null
+sf_case 'null → null' ',"error":null' null
+sf_case 'an object → null' ',"error":{"x":"rate_limit"}' null
+sf_case 'an array → null' ',"error":["rate_limit"]' null
+sf_case 'no error key → null' '' null
+sf_case 'error_details never stands in for error' ',"error_details":"rate_limit"' null
+sf_case 'the first duplicate error wins' ',"error":"overloaded","error":"rate_limit"' '"overloaded"'
+sf_case 'a nested error before the real one is never read' ',"background_tasks":[{"error":"overloaded"}],"error":"billing_error"' '"billing_error"'
+sf_case 'a nested error alone is never read' ',"background_tasks":[{"error":"overloaded"}]' null
+sf_case 'an escaped error key inside a string is never read' ',"last_assistant_message":"{\"error\":\"overloaded\"}"' null
+sf_case 'a status in the payload never overrides the literal "error"' ',"status":"completed","error":"unknown"' '"unknown"'
+
+# the error field is null for every event but StopFailure (claude and cursor alike)
+ev_err_case() { # <name> <harness> <payload-with-error-key>
+  local name="$1" h="$2" p="$3" lf
+  new_root
+  run_hook "$h" "$ROOT" "$p"
+  lf="$(logf "$ROOT")"
+  if contract_ok "$h" && [ "$(nlines "$lf")" = 1 ] && [ "$(fld "$lf" error duration_ms)" = null ] && ! grep -qF 'rate_limit' "$lf"; then
+    report PASS "error field: $name"
+  else
+    report FAIL "error field: $name" "log=[$(cat "$lf" 2>/dev/null)]"
+  fi
+}
+ev_err_case 'a Claude Code Stop with an error key logs error null' claude "${P_CLAUDE_STOP%\}},\"error\":\"rate_limit\"}"
+ev_err_case 'a Claude Code SubagentStop with an error key logs error null' claude "${P_CLAUDE_SUB%\}},\"error\":\"rate_limit\"}"
+ev_err_case 'a Cursor stop with an error key logs error null' cursor "${P_CURSOR_STOP%\}},\"error\":\"rate_limit\"}"
+ev_err_case 'a Cursor subagentStop with an error key logs error null' cursor "${P_CURSOR_SUB%\}},\"error\":\"rate_limit\"}"
+new_root
+run_hook claude "$ROOT" "${P_CLAUDE_SF%\}},\"status\":\"completed\",\"model\":\"m\",\"duration_ms\":5}"
+if contract_ok claude && [ "$(fld "$(logf "$ROOT")" status error)" = '"error"' ] && [ "$(fld "$(logf "$ROOT")" duration_ms message_count)" = null ] \
+   && [ "$(fld "$(logf "$ROOT")" model modified_files)" = null ]; then
+  report PASS 'StopFailure: the Cursor-only fields (status, duration_ms, model) of a claude payload stay unread'
+else
+  report FAIL 'StopFailure: the Cursor-only fields stay unread' "log=[$(cat "$(logf "$ROOT")" 2>/dev/null)]"
+fi
+
+# the acceptance smoke: StopFailure through the hook, no Cursor caller → status error, error enum, no free text
+d="$(mktemp -d "$FIXTURE_TMPDIR/sfsmoke.XXXXXX")"
+assert_fixture_root "$d" || exit 1
+printf '%s' '{"session_id":"s1","hook_event_name":"StopFailure","error":"rate_limit","error_details":"429 secret-detail","last_assistant_message":"API Error: secret-msg"}' \
+  | env -u CURSOR_PROJECT_DIR "$BASH" "$HOOK" hook claude --root "$d" >"$FX/out.bin" 2>/dev/null
+sfl="$(cat "$d/$LOGREL/events.jsonl" 2>/dev/null)"
+if [ ! -s "$FX/out.bin" ] && case "$sfl" in *'"status":"error","error":"rate_limit"'*) true ;; *) false ;; esac \
+   && ! printf '%s' "$sfl" | grep -qE 'secret-detail|secret-msg'; then
+  report PASS 'smoke: a StopFailure payload logs "status":"error","error":"rate_limit" and neither free-text field'
+else
+  report FAIL 'smoke: a StopFailure payload' "line=[$sfl] out=[$(cat "$FX/out.bin")]"
+fi
 
 # --- 6. idempotency --------------------------------------------------------------------------------
 new_root
@@ -752,7 +872,7 @@ else
   out="$(env PATH="$TOOLBIN" "$BASH" "$HOOK" summary --root "$ROOT" 2>&1)"
   rc=$?
   if [ "$rc" -eq 0 ] && printf '%s\n' "$out" | grep -q '^hook-log: 2 events (' && printf '%s\n' "$out" | grep -q '^errors and aborts$' \
-     && [ "$(printf '%s\n' "$out" | grep -c '^  2026-10-29T12:00:00Z cursor stop - aborted$')" = 2 ]; then
+     && [ "$(printf '%s\n' "$out" | grep -c '^  2026-10-29T12:00:00Z cursor stop - aborted -$')" = 2 ]; then
     report PASS 'limited PATH: summary works with only the documented tools'
   else
     report FAIL 'limited PATH: summary' "rc=$rc out=[$out]"
@@ -772,6 +892,9 @@ snapshot() { # <root> → file list and checksums
   (cd "$1" && find . | sort && find . -type f | sort | while IFS= read -r f; do cksum "$f"; done)
 }
 
+HINT='hint: no claude events — if Claude Code is in use, check that .claude/settings.json has the hook-log Stop hooks (merge the emit warning snippet)'
+
+# These hand-written lines are pre-change lines: they have no "error" key, and the errors list shows `-`.
 new_root
 mkdir -p "$ROOT/$LOGREL"
 cat > "$(log1f "$ROOT")" <<'EOF'
@@ -800,9 +923,9 @@ by model
   1 -
   2 test-model
 errors and aborts
-  2026-10-29T10:05:00Z cursor subagentStop implementer error"
+  2026-10-29T10:05:00Z cursor subagentStop implementer error -"
 if [ "$RC" -eq 0 ] && [ -z "$ERR" ] && [ "$OUT" = "$want" ]; then
-  report PASS 'summary: exact output over events.1.jsonl + events.jsonl (three events, one error)'
+  report PASS 'summary: exact output over events.1.jsonl + events.jsonl (three pre-change lines, one error, no hint)'
 else
   report FAIL 'summary: exact output' "rc=$RC err=[$ERR] out=[$OUT]"
 fi
@@ -835,10 +958,11 @@ by status
 by model
   3 m\\\"x
 errors and aborts
-  2026-10-29T11:00:00Z cursor stop - aborted
-  2026-10-29T11:05:00Z cursor subagentStop explore error"
+  2026-10-29T11:00:00Z cursor stop - aborted -
+  2026-10-29T11:05:00Z cursor subagentStop explore error -
+$HINT"
 if [ "$RC" -eq 0 ] && [ "$OUT" = "$want" ]; then
-  report PASS 'summary: aborted and error runs are both listed in log order'
+  report PASS 'summary: aborted and error runs are both listed in log order (cursor only → the claude hint closes the report)'
 else
   report FAIL 'summary: aborted and error runs are both listed' "rc=$RC out=[$OUT]"
 fi
@@ -852,15 +976,100 @@ if [ "$RC" -eq 0 ] && printf '%s\n' "$OUT" | tail -n 2 | head -n 1 | grep -qx 'e
 else
   report FAIL 'summary: no error run → none' "out=[$OUT]"
 fi
+if ! printf '%s\n' "$OUT" | grep -qF 'hint:'; then
+  report PASS 'summary hint control: a log with a claude event prints no hint'
+else
+  report FAIL 'summary hint control: a log with a claude event prints no hint' "out=[$OUT]"
+fi
 
 new_root
 snap_before="$(snapshot "$ROOT")"
 sum_run "$ROOT"
 real="$(cd "$ROOT" && pwd -P)"
-if [ "$RC" -eq 0 ] && [ "$OUT" = "hook-log: 0 events ($real/$LOGREL/events.jsonl)" ] && [ "$(snapshot "$ROOT")" = "$snap_before" ]; then
-  report PASS 'summary: an empty root prints "hook-log: 0 events (<path>)", exit 0, creates nothing'
+if [ "$RC" -eq 0 ] && [ "$OUT" = "hook-log: 0 events ($real/$LOGREL/events.jsonl)
+$HINT" ] && [ "$(snapshot "$ROOT")" = "$snap_before" ]; then
+  report PASS 'summary: an empty root prints "hook-log: 0 events (<path>)" and the claude hint, exit 0, creates nothing'
 else
   report FAIL 'summary: an empty root' "rc=$RC out=[$OUT]"
+fi
+
+# an empty events.jsonl (present, zero bytes) is the same empty case
+new_root
+mkdir -p "$ROOT/$LOGREL"
+: > "$(logf "$ROOT")"
+sum_run "$ROOT"
+real="$(cd "$ROOT" && pwd -P)"
+if [ "$RC" -eq 0 ] && [ "$OUT" = "hook-log: 0 events ($real/$LOGREL/events.jsonl)
+$HINT" ]; then
+  report PASS 'summary hint: an empty events.jsonl prints the claude hint'
+else
+  report FAIL 'summary hint: an empty events.jsonl prints the claude hint' "rc=$RC out=[$OUT]"
+fi
+
+# the hint appears once, after the sections, only when no line has harness claude
+new_root
+run_hook cursor "$ROOT" "$P_CURSOR_SUB"
+sum_run "$ROOT"
+if [ "$RC" -eq 0 ] && [ "$(printf '%s\n' "$OUT" | tail -n 1)" = "$HINT" ] && [ "$(printf '%s\n' "$OUT" | grep -cF 'hint:')" = 1 ] \
+   && printf '%s\n' "$OUT" | tail -n 2 | head -n 1 | grep -qx '  none'; then
+  report PASS 'summary hint: cursor-only log → one hint line after the last section'
+else
+  report FAIL 'summary hint: cursor-only log → one hint line after the last section' "out=[$OUT]"
+fi
+run_hook claude "$ROOT" "$P_CLAUDE_STOP"
+sum_run "$ROOT"
+if [ "$RC" -eq 0 ] && ! printf '%s\n' "$OUT" | grep -qF 'hint:'; then
+  report PASS 'summary hint: one claude event added → the hint disappears'
+else
+  report FAIL 'summary hint: one claude event added → the hint disappears' "out=[$OUT]"
+fi
+
+# a Claude Code StopFailure through the hook, then the summary: the error value is listed
+SF_RL='{"session_id":"sf-1","prompt_id":"pf-1","hook_event_name":"StopFailure","error":"rate_limit","error_details":"429","last_assistant_message":"API Error"}'
+SF_UN='{"session_id":"sf-2","prompt_id":"pf-2","hook_event_name":"StopFailure","error":"unknown"}'
+new_root
+run_hook claude "$ROOT" "$SF_RL"
+run_hook claude "$ROOT" "$SF_UN"
+run_hook cursor "$ROOT" "$P_CURSOR_STOP"
+sum_run "$ROOT"
+real="$(cd "$ROOT" && pwd -P)"
+want="hook-log: 3 events ($real/$LOGREL/events.jsonl)
+by event
+  2 StopFailure
+  1 stop
+by harness/agent_type
+  2 claude/-
+  1 cursor/-
+by status
+  1 aborted
+  2 error
+by model
+  2 -
+  1 test-model
+errors and aborts
+  2026-10-29T12:00:00Z claude StopFailure - error rate_limit
+  2026-10-29T12:00:00Z claude StopFailure - error unknown
+  2026-10-29T12:00:00Z cursor stop - aborted -"
+if [ "$RC" -eq 0 ] && [ -z "$ERR" ] && [ "$OUT" = "$want" ]; then
+  report PASS 'summary: StopFailure lines list their error value; a cursor abort and an old line list -'
+else
+  report FAIL 'summary: StopFailure lines list their error value' "rc=$RC err=[$ERR] out=[$OUT]"
+fi
+
+# a root path holding a backslash prints verbatim in the header (awk -v would turn \t into a tab)
+BSROOT="$FIXTURE_TMPDIR/bs"'\t'"root"
+mkdir -p "$BSROOT/$LOGREL" && assert_fixture_root "$BSROOT" || exit 1
+printf '%s\n' '{"ts":"2026-10-29T12:00:00Z","harness":"claude","event":"Stop","session":"s","generation":"p","agent_id":null,"agent_type":null,"status":null,"error":null,"duration_ms":null,"message_count":null,"tool_call_count":null,"loop_count":null,"model":null,"modified_files":null,"key":"k8"}' > "$(logf "$BSROOT")"
+sum_run "$BSROOT"
+real="$(cd "$BSROOT" && pwd -P)"
+case "$real" in
+  *'\t'*) ;;
+  *) report FAIL 'summary: backslash root fixture' "pwd -P lost the backslash: [$real]" ;;
+esac
+if [ "$RC" -eq 0 ] && [ "$(printf '%s\n' "$OUT" | head -n 1)" = "hook-log: 1 events ($real/$LOGREL/events.jsonl)" ]; then
+  report PASS 'summary: a root containing a backslash (\t) prints verbatim in the header'
+else
+  report FAIL 'summary: a root containing a backslash prints verbatim' "rc=$RC out=[$(printf '%s\n' "$OUT" | head -n 1)] want=[$real]"
 fi
 
 # the log written by the hook feeds the summary end to end
@@ -871,7 +1080,7 @@ run_hook claude "$ROOT" "$P_CLAUDE_SUB"
 sum_run "$ROOT"
 if [ "$RC" -eq 0 ] && printf '%s\n' "$OUT" | grep -q '^hook-log: 3 events (' \
    && printf '%s\n' "$OUT" | grep -qx '  1 aborted' && printf '%s\n' "$OUT" | grep -qx '  1 claude/implementer' \
-   && printf '%s\n' "$OUT" | grep -qx '  2026-10-29T12:00:00Z cursor stop - aborted'; then
+   && printf '%s\n' "$OUT" | grep -qx '  2026-10-29T12:00:00Z cursor stop - aborted -'; then
   report PASS 'summary: reads what the hook wrote (3 events, the aborted stop listed)'
 else
   report FAIL 'summary: reads what the hook wrote' "out=[$OUT]"
@@ -947,6 +1156,140 @@ else
   report FAIL 'smoke: one cursor stop' "out=[$smoke]"
 fi
 
+# --- 11b. probes with mutation proofs ------------------------------------------------------------------------
+# Each probe returns 0 when the behavior holds for the tool in $HOOK (or the kit-guard tool in $KG_HOOK). mutant_check
+# runs the probe on the real tool (a passing case) and on a copy changed by one sed script (a failing case): a probe that
+# still passes on the mutant would prove nothing.
+probe_stopfailure() { # the exact StopFailure line: status "error", the error enum, the key
+  new_root
+  run_hook claude "$ROOT" "$P_CLAUDE_SF"
+  contract_ok claude && file_is "$(logf "$ROOT")" "${W_CLAUDE_SF/@KEY@/$(exp_key "$P_CLAUDE_SF")}"
+}
+probe_error_free_text() { # free text never becomes the error value
+  new_root
+  run_hook claude "$ROOT" '{"session_id":"s","hook_event_name":"StopFailure","error":"429: secret-detail"}'
+  contract_ok claude && [ "$(fld "$(logf "$ROOT")" error duration_ms)" = null ]
+}
+probe_error_other_event() { # the error field is null outside StopFailure
+  new_root
+  run_hook claude "$ROOT" "${P_CLAUDE_STOP%\}},\"error\":\"rate_limit\"}"
+  contract_ok claude && [ "$(fld "$(logf "$ROOT")" error duration_ms)" = null ] && ! grep -qF rate_limit "$(logf "$ROOT")"
+}
+probe_array() { # a top-level array is skipped, not logged as its inner object
+  new_root
+  run_hook claude "$ROOT" "[$P_CLAUDE_STOP]"
+  contract_ok claude && [ ! -e "$ROOT/_memory" ]
+}
+probe_hint() { # an empty log prints the hint as its last line
+  new_root
+  sum_run "$ROOT"
+  [ "$RC" -eq 0 ] && [ "$(printf '%s\n' "$OUT" | tail -n 1)" = "$HINT" ]
+}
+probe_error_col() { # the errors list ends with the error value
+  new_root
+  run_hook claude "$ROOT" "$P_CLAUDE_SF"
+  sum_run "$ROOT"
+  printf '%s\n' "$OUT" | grep -qxF '  2026-10-29T12:00:00Z claude StopFailure - error rate_limit'
+}
+probe_bs_path() { # a root holding a backslash prints verbatim in the header
+  local r="$FIXTURE_TMPDIR/bsp"'\t'"root" real
+  mkdir -p "$r/$LOGREL"
+  assert_fixture_root "$r" || exit 1
+  printf '%s\n' '{"ts":"2026-10-29T12:00:00Z","harness":"claude","event":"Stop","key":"k9"}' > "$(logf "$r")"
+  real="$(cd "$r" && pwd -P)"
+  sum_run "$r"
+  [ "$RC" -eq 0 ] && [ "$(printf '%s\n' "$OUT" | head -n 1)" = "hook-log: 1 events ($real/$LOGREL/events.jsonl)" ]
+}
+probe_cdpath_hook_default_root() { # _kit/hook-log.sh run by a relative path, CDPATH=. exported
+  new_root
+  mkdir -p "$ROOT/_kit"
+  cp "$HOOK" "$ROOT/_kit/hook-log.sh"
+  printf '%s' "$P_CURSOR_STOP" | (cd "$ROOT" && env CDPATH=. "$BASH" _kit/hook-log.sh hook cursor >"$FX/out.bin" 2>"$FX/err.txt")
+  RC=$?
+  ERR="$(cat "$FX/err.txt")"
+  contract_ok cursor && [ "$(nlines "$(logf "$ROOT")")" = 1 ]
+}
+probe_cdpath_hook_root_rel() { # --root <relative name>, CDPATH=. exported
+  new_root
+  printf '%s' "$P_CURSOR_STOP" | (cd "$FIXTURE_TMPDIR" && env CDPATH=. "$BASH" "$HOOK" hook cursor --root "${ROOT##*/}" >"$FX/out.bin" 2>"$FX/err.txt")
+  RC=$?
+  ERR="$(cat "$FX/err.txt")"
+  contract_ok cursor && [ "$(nlines "$(logf "$ROOT")")" = 1 ]
+}
+probe_cdpath_summary_default_root() { # summary by a relative script path, CDPATH=. exported
+  local real
+  new_root
+  mkdir -p "$ROOT/_kit"
+  cp "$HOOK" "$ROOT/_kit/hook-log.sh"
+  run_hook cursor "$ROOT" "$P_CURSOR_STOP"
+  OUT="$(cd "$ROOT" && env CDPATH=. "$BASH" _kit/hook-log.sh summary 2>&1)"
+  real="$(cd "$ROOT" && pwd -P)"
+  [ "$(printf '%s\n' "$OUT" | head -n 1)" = "hook-log: 1 events ($real/$LOGREL/events.jsonl)" ]
+}
+probe_cdpath_summary_root_rel() { # summary --root <relative name>, CDPATH=. exported
+  local real
+  new_root
+  run_hook cursor "$ROOT" "$P_CURSOR_STOP"
+  OUT="$(cd "$FIXTURE_TMPDIR" && env CDPATH=. "$BASH" "$HOOK" summary --root "${ROOT##*/}" 2>&1)"
+  real="$(cd "$ROOT" && pwd -P)"
+  [ "$(printf '%s\n' "$OUT" | head -n 1)" = "hook-log: 1 events ($real/$LOGREL/events.jsonl)" ]
+}
+probe_cdpath_kit_guard() { # kit-guard: check by a relative script path; hook with a relative --root name; CDPATH=. exported
+  local out rc h json
+  new_root
+  mkdir -p "$ROOT/_kit" "$ROOT/docs"
+  cp "$KG_HOOK" "$ROOT/_kit/kit-guard.sh"
+  printf '# a\n' > "$ROOT/docs/a.md"
+  h="$(sha_hex < "$ROOT/docs/a.md")"
+  printf '{\n  "files": {\n    "docs/a.md": "%s"\n  }\n}\n' "$h" > "$ROOT/orchestration-kit.manifest.json"
+  out="$(cd "$ROOT" && env CDPATH=. "$BASH" _kit/kit-guard.sh check 2>&1)"
+  rc=$?
+  [ "$rc" -eq 0 ] && [ "$out" = 'kit-guard: ok (1 kit files)' ] || return 1
+  json="{\"file_path\":\"docs/a.md\",\"cwd\":\"$ROOT\"}"
+  printf '%s' "$json" | (cd "$FIXTURE_TMPDIR" && env -u CURSOR_PROJECT_DIR CDPATH=. "$BASH" "$ROOT/_kit/kit-guard.sh" hook claude --root "${ROOT##*/}" >/dev/null 2>"$FX/err.txt")
+  rc=$?
+  [ "$rc" -eq 2 ] && grep -qF 'kit-guard: docs/a.md' "$FX/err.txt"
+}
+
+mutant_check() { # <id> <var: HOOK|KG_HOOK> <label> <probe> <sed script>
+  local id="$1" var="$2" label="$3" probe="$4" script="$5" real mut r_real=0 r_mut=0
+  eval "real=\$$var"
+  mut="$FX/mut-$id.sh"
+  if ! sed -e "$script" "$real" > "$mut" 2>/dev/null || cmp -s "$real" "$mut"; then
+    report FAIL "mutation: $label" "the sed script did not change the tool (id $id)"
+    return 0
+  fi
+  "$probe" >/dev/null 2>&1 || r_real=1
+  eval "$var=\$mut"
+  "$probe" >/dev/null 2>&1 || r_mut=1
+  eval "$var=\$real"
+  if [ "$r_real" -eq 0 ]; then report PASS "probe: $label"; else report FAIL "probe: $label" "fails on the real tool"; fi
+  if [ "$r_mut" -eq 1 ]; then report PASS "mutation: $label → the mutant fails the probe"; else report FAIL "mutation: $label" "the mutant still passes the probe"; fi
+}
+
+CDP_SED='s|CDPATH= cd|cd|g'
+mutant_check sf-event HOOK 'StopFailure is an accepted claude event' probe_stopfailure \
+  's/ || ev == "\\"StopFailure\\""//'
+mutant_check sf-status HOOK 'StopFailure sets status "error"' probe_stopfailure \
+  's|val[[]"status"[]] = |val["xstatus"] = |'
+mutant_check err-regex HOOK 'the error value must be snake_case (free text → null)' probe_error_free_text \
+  's|[[]a-z_[]]+"[$]/|.+"$/|'
+mutant_check err-other HOOK 'the error field is null outside StopFailure' probe_error_other_event \
+  's|else delete val[[]"error"[]]|else delete val["errorx"]|'
+mutant_check array HOOK 'a top-level array payload is skipped' probe_array \
+  's|if (c != "{") { done = 1; break }|if (c != "{") { i++; continue }|'
+mutant_check hint HOOK 'summary prints the zero-claude hint' probe_hint \
+  's|if (nclaude == 0) {|if (nclaude == 99) {|'
+mutant_check errcol HOOK 'the errors list ends with the error value' probe_error_col \
+  's| " " st " " er$| " " st|'
+mutant_check environ HOOK 'summary passes the log path through ENVIRON (backslash root)' probe_bs_path \
+  's|^  path = ENVIRON.*$|  path = path|;s|HOOK_LOG_EVENTS_PATH="[$]f" awk|awk -v path="$f"|'
+mutant_check cdp-default HOOK 'hook: CDPATH=. never changes the default root' probe_cdpath_hook_default_root "$CDP_SED"
+mutant_check cdp-hook-root HOOK 'hook: CDPATH=. never changes a relative --root' probe_cdpath_hook_root_rel "$CDP_SED"
+mutant_check cdp-sum-default HOOK 'summary: CDPATH=. never changes the default root' probe_cdpath_summary_default_root "$CDP_SED"
+mutant_check cdp-sum-root HOOK 'summary: CDPATH=. never changes a relative --root' probe_cdpath_summary_root_rel "$CDP_SED"
+mutant_check cdp-kit-guard KG_HOOK 'kit-guard: CDPATH=. never changes the script root or a relative --root' probe_cdpath_kit_guard "$CDP_SED"
+
 # --- 12. static guards on the tool file -------------------------------------------------------------------
 if [ -x "$HOOK" ]; then
   report PASS 'static: the tool file is executable'
@@ -982,6 +1325,14 @@ static_absent 'no sibling-project names' -nEi '\bar[g]us\b|\bbe[a]m\b'
 static_absent 'no forbidden review wording' -nEi 'jud[g]'
 static_absent 'no model IDs' -nEi 'cla[u]de-[0-9a-z]|gp[t]-[0-9]|compos[e]r-[0-9]|gemi[n]i-[0-9]|so[n]net|o[p]us|ha[i]ku'
 static_absent 'no BOOTSTRAP marker' -nF 'BOOTSTRAP:'
+static_absent 'the summary path never goes through awk -v path= (a backslash would be an escape)' -nF '-v path='
+static_absent 'no comment line is wider than 100 columns' -nE '^#.{100,}$'
+bare_cd="$(grep -nE '(^|[^[:alnum:]_=])cd[[:space:]]' "$HOOK" | grep -vE '^[0-9]+:[[:space:]]*#' | grep -vF 'CDPATH= cd' || true)"
+if [ -z "$bare_cd" ]; then
+  report PASS 'static: every cd that computes a path runs as CDPATH= cd'
+else
+  report FAIL 'static: every cd that computes a path runs as CDPATH= cd' "found: $bare_cd"
+fi
 if grep -q '^set -u$' "$HOOK" && grep -q '^export LC_ALL=C$' "$HOOK"; then
   report PASS 'static: set -u and export LC_ALL=C'
 else

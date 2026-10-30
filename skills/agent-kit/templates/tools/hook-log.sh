@@ -3,34 +3,40 @@
 # Emitted single-copy to `_kit/hook-log.sh` (Windows: `_kit/hook-log.cmd` via bash-launcher.cmd).
 #
 #   hook-log.sh hook <claude|cursor> [--root DIR]
-#     Read one stop-hook payload from stdin (Claude Code Stop / SubagentStop, Cursor stop / subagentStop)
-#     and append one JSON line of metadata to <root>/_memory/work/hooks/events.jsonl.
+#     Read one stop-hook payload from stdin (Claude Code Stop / SubagentStop / StopFailure, Cursor
+#     stop / subagentStop) and append one JSON line of metadata to
+#     <root>/_memory/work/hooks/events.jsonl.
 #
 #   hook-log.sh summary [--root DIR]
-#     Read events.1.jsonl then events.jsonl (missing files are fine) and print the event count, counts by
-#     event, by harness/agent_type, by status and by model (one `  <count> <value>` line each, sorted by
-#     value, null shown as `-`), and an `errors and aborts` section listing `ts harness event agent_type
-#     status` for every line whose status is error or aborted (or `  none`). Never writes.
+#     Read events.1.jsonl then events.jsonl (missing files are fine) and print the event count,
+#     counts by event, by harness/agent_type, by status and by model (one `  <count> <value>` line
+#     each, sorted by value, null shown as `-`), and an `errors and aborts` section listing
+#     `ts harness event agent_type status error` for every line whose status is error or aborted
+#     (or `  none`; `error` is `-` when it is null or the line predates the field). When no line has
+#     harness claude, a last `hint:` line says to check the Claude Code Stop hooks. Never writes.
 #
 #   hook-log.sh --help
 #     Print this usage and exit 0.
 #
-# Root: --root DIR when given; else the parent of this script's directory (_kit/..), via cd && pwd -P.
-# Log: <root>/_memory/work/hooks/events.jsonl (gitignored with the rest of _memory/work/). Past the size cap
-# the file is moved once to events.1.jsonl under a mkdir lock (hooks/.rotate.lock); an older events.1.jsonl is
-# replaced, and a lock older than 10 minutes is treated as stale.
+# Root: --root DIR when given; else the parent of this script's directory (_kit/..), via
+# `CDPATH= cd` and pwd -P (an exported CDPATH never changes the answer).
+# Log: <root>/_memory/work/hooks/events.jsonl (gitignored with the rest of _memory/work/). Past the
+# size cap the file is moved once to events.1.jsonl under a mkdir lock (hooks/.rotate.lock); an
+# older events.1.jsonl is replaced, and a lock older than 10 minutes is treated as stale.
 #
-# Never steers: hook mode only observes. `hook cursor` prints exactly `{}` plus a newline on every path
-# (logged, skipped, failed or malformed input) and `hook claude` prints nothing; both exit 0. The tool never
-# emits a follow-up message, a block decision, a continue flag, a permission verdict or added context, so it
-# cannot start or extend an agent loop. Errors are swallowed (fail open).
+# Never steers: hook mode only observes. `hook cursor` prints exactly `{}` plus a newline on every
+# path (logged, skipped, failed or malformed input) and `hook claude` prints nothing; both exit 0.
+# The tool never emits a follow-up message, a block decision, a continue flag, a permission verdict
+# or added context, so it cannot start or extend an agent loop. Errors are swallowed (fail open).
 #
-# Skipped without writing: AGENT_KIT_HOOK_LOG=0; empty stdin or stdin without both a left and a right brace;
-# `hook claude` with a Cursor caller (CURSOR_PROJECT_DIR set, or the payload contains "cursor_version");
-# a hook_event_name outside Stop / SubagentStop (claude) or stop / subagentStop (cursor); a payload whose
-# key is already in events.jsonl or events.1.jsonl; any write failure.
+# Skipped without writing: AGENT_KIT_HOOK_LOG=0; empty stdin, stdin without a right brace, or stdin
+# whose first non-whitespace character is not a left brace (a top-level array is never read);
+# `hook claude` with a Cursor caller (CURSOR_PROJECT_DIR set, or the payload contains
+# "cursor_version"); a hook_event_name outside Stop / SubagentStop / StopFailure (claude) or
+# stop / subagentStop (cursor); a payload whose key is already in events.jsonl or events.1.jsonl;
+# any write failure.
 #
-# Line fields, in this order (a field the payload lacks, or whose value has the wrong type, is null):
+# Line fields, in this order (a field the payload lacks, or of the wrong type, is null):
 #   ts            UTC YYYY-MM-DDTHH:MM:SSZ
 #   harness       claude | cursor
 #   event         hook_event_name
@@ -38,20 +44,25 @@
 #   generation    claude prompt_id | cursor generation_id
 #   agent_id      claude agent_id
 #   agent_type    claude agent_type | cursor subagent_type
-#   status        cursor status
+#   status        cursor status | the literal "error" for a claude StopFailure
+#   error         claude StopFailure `error` (rate_limit, overloaded, ...): a string that matches
+#                 ^[a-z_]+$, else null; null for every other event
 #   duration_ms, message_count, tool_call_count, loop_count   cursor numbers (digits only)
 #   model         cursor model
 #   modified_files   element count of the cursor modified_files array
 #   key           first 16 hex of the SHA-256 of the raw stdin bytes (sha256sum or shasum -a 256);
 #                 `c` + the cksum CRC when neither exists
-# Only top-level keys are read. A key inside a string value or inside a nested object or array is never read.
-# Never logged: task, description, summary, last_assistant_message, transcript paths, cwd, workspace_roots,
-# user_email, permission_mode, background_tasks and session_crons — metadata only, no text or paths.
+# Only top-level keys are read. A key inside a string value or inside a nested object or array is
+# never read.
+# Never logged: task, description, summary, last_assistant_message, error_details, transcript paths,
+# cwd, workspace_roots, user_email, permission_mode, background_tasks and session_crons — metadata
+# only, no text or paths.
 #
-# Environment: AGENT_KIT_HOOK_LOG (0 = off; anything else = on) · AGENT_KIT_HOOK_LOG_MAX_BYTES (rotation cap,
-# default 5242880; non-numeric = default) · HOOK_LOG_NOW (fixed ts, for tests).
+# Environment: AGENT_KIT_HOOK_LOG (0 = off; anything else = on) · AGENT_KIT_HOOK_LOG_MAX_BYTES
+# (rotation cap, default 5242880; non-numeric = default) · HOOK_LOG_NOW (fixed ts, for tests).
 #
-# Exit codes: 0 ok (hook always exits 0 once its arguments parse, even on an unreadable root) · 2 usage error (any mode) or unreadable root (summary).
+# Exit codes: 0 ok (hook always exits 0 once its arguments parse, even on an unreadable root) ·
+# 2 usage error (any mode) or unreadable root (summary).
 #
 # Bash 3.2+, LC_ALL=C. No runtime JSON dependency; writes only under <root>/_memory/work/hooks/.
 set -u
@@ -69,10 +80,11 @@ die() { # <code> <message>
 DEFAULT_MAX_BYTES=5242880
 LOG_SUBDIR='_memory/work/hooks'
 
-# --- field extraction (stdin: raw payload; prints the finished log line, or nothing to skip) -------------
-# A one-pass tokenizer over the top-level object only: strings are scanned with their escapes neutralized,
-# nested objects and arrays are skipped (except the element count of modified_files), and each wanted key is
-# taken once, from depth 1. -v harness / ts / key come from the shell.
+# --- field extraction (stdin: raw payload; prints the finished log line, or nothing to skip) -----
+# A one-pass tokenizer over the top-level object only: strings are scanned with their escapes
+# neutralized, nested objects and arrays are skipped (except the element count of modified_files),
+# and each wanted key is taken once, from depth 1. A payload whose first non-whitespace character
+# is not a left brace is skipped. -v harness / ts / key come from the shell.
 EXTRACT_AWK='
 function elem() {
   if (inarr && arr_expect) { arr_count++; arr_expect = 0 }
@@ -86,6 +98,8 @@ function take(k, tok, tk,    s) {
     if (tk == "S") val[s] = tok
   } else if (kind[k] == "N") {
     if (tk == "L" && tok ~ /^[0-9]+$/) val[s] = tok
+  } else if (kind[k] == "E") {
+    if (tk == "S" && tok ~ /^"[a-z_]+"$/) val[s] = tok
   }
 }
 function start_nested(c,    s) {
@@ -114,6 +128,7 @@ BEGIN {
     slot["prompt_id"] = "generation"; kind["prompt_id"] = "S"
     slot["agent_id"] = "agent_id"; kind["agent_id"] = "S"
     slot["agent_type"] = "agent_type"; kind["agent_type"] = "S"
+    slot["error"] = "error"; kind["error"] = "E"
   } else {
     slot["conversation_id"] = "session"; kind["conversation_id"] = "S"
     slot["generation_id"] = "generation"; kind["generation_id"] = "S"
@@ -138,7 +153,8 @@ BEGIN {
     c = substr(m, i, 1)
     if (c == " " || c == "\t" || c == "\r") { i++; continue }
     if (depth == 0) {
-      if (c == "{") { depth = 1; state = "key" }
+      if (c != "{") { done = 1; break }
+      depth = 1; state = "key"
       i++
       continue
     }
@@ -194,20 +210,23 @@ BEGIN {
 }
 END {
   ev = ("event" in val) ? val["event"] : ""
-  if (harness == "claude") ok = (ev == "\"Stop\"" || ev == "\"SubagentStop\"")
+  if (harness == "claude") ok = (ev == "\"Stop\"" || ev == "\"SubagentStop\"" || ev == "\"StopFailure\"")
   else ok = (ev == "\"stop\"" || ev == "\"subagentStop\"")
   if (!ok) exit 0
+  if (ev == "\"StopFailure\"") val["status"] = "\"error\""
+  else delete val["error"]
   printf "{\"ts\":\"%s\",\"harness\":\"%s\",\"event\":%s", ts, harness, ev
   emit("session"); emit("generation"); emit("agent_id"); emit("agent_type"); emit("status")
-  emit("duration_ms"); emit("message_count"); emit("tool_call_count"); emit("loop_count")
+  emit("error"); emit("duration_ms"); emit("message_count"); emit("tool_call_count"); emit("loop_count")
   emit("model"); emit("modified_files")
   printf ",\"key\":\"%s\"}\n", key
 }
 '
 
-# --- summary (stdin: events text; prints `<section>\t<value>\t<count|text>` records for sort) ---------------
-# Values come from our own fixed-format lines: a quote that ends a string is never preceded by a backslash
-# pair that hides it, and an escaped quote inside a value never forms `"name":`, so a first match is safe.
+# --- summary (stdin: events text; prints `<section>\t<value>\t<count|text>` records for sort) -----
+# Values come from our own fixed-format lines: a quote that ends a string is never preceded by a
+# backslash pair that hides it, and an escaped quote inside a value never forms `"name":`, so a
+# first match is safe.
 SUMMARY_AWK='
 function field(l, name,    p, v, j, n, c) {
   p = index(l, "\"" name "\":")
@@ -230,7 +249,7 @@ function field(l, name,    p, v, j, n, c) {
   if (v == "" || v == "null") return "-"
   return v
 }
-BEGIN { total = 0; nerr = 0 }
+BEGIN { total = 0; nerr = 0; nclaude = 0 }
 {
   line = $0
   sub(/\r$/, "", line)
@@ -240,14 +259,16 @@ BEGIN { total = 0; nerr = 0 }
   h = field(line, "harness")
   at = field(line, "agent_type")
   st = field(line, "status")
+  er = field(line, "error")
   md = field(line, "model")
   c1[ev]++
   c2[h "/" at]++
   c3[st]++
   c4[md]++
+  if (h == "claude") nclaude++
   if (st == "error" || st == "aborted") {
     nerr++
-    errs[nerr] = field(line, "ts") " " h " " ev " " at " " st
+    errs[nerr] = field(line, "ts") " " h " " ev " " at " " st " " er
   }
 }
 END {
@@ -257,25 +278,29 @@ END {
   for (k in c3) printf "3\t%s\t%d\n", k, c3[k]
   for (k in c4) printf "4\t%s\t%d\n", k, c4[k]
   for (k = 1; k <= nerr; k++) printf "5\t%06d\t%s\n", k, errs[k]
+  printf "6\t\t%d\n", nclaude
 }
 '
 
-# Formats the sorted records into the report (-v path=<events path>).
+# Formats the sorted records into the report. The events path arrives in the environment
+# (HOOK_LOG_EVENTS_PATH): awk -v would turn a backslash in the path into an escape sequence.
 SUMMARY_FORMAT_AWK='
 BEGIN {
   FS = "\t"
+  path = ENVIRON["HOOK_LOG_EVENTS_PATH"]
   title[1] = "by event"
   title[2] = "by harness/agent_type"
   title[3] = "by status"
   title[4] = "by model"
   title[5] = "errors and aborts"
-  last = 0; total = 0
+  last = 0; total = 0; nclaude = 0
 }
 $1 == 0 {
   total = $3 + 0
   printf "hook-log: %d events (%s)\n", total, path
   next
 }
+$1 == 6 { nclaude = $3 + 0; next }
 total == 0 { next }
 {
   while (last < $1 - 1) { last++; print title[last]; if (last == 5) print "  none" }
@@ -284,12 +309,16 @@ total == 0 { next }
   else printf "  %d %s\n", $3, $2
 }
 END {
-  if (total == 0) exit 0
-  while (last < 5) { last++; print title[last]; if (last == 5) print "  none" }
+  if (total > 0) {
+    while (last < 5) { last++; print title[last]; if (last == 5) print "  none" }
+  }
+  if (nclaude == 0) {
+    print "hint: no claude events — if Claude Code is in use, check that .claude/settings.json has the hook-log Stop hooks (merge the emit warning snippet)"
+  }
 }
 '
 
-# --- hook helpers -----------------------------------------------------------------------------------------
+# --- hook helpers ----------------------------------------------------------------------------
 
 now_ts() {
   local v="${HOOK_LOG_NOW:-}"
@@ -419,7 +448,7 @@ run_summary() { # <root>
   cat "$f1" "$f" 2>/dev/null \
     | awk "$SUMMARY_AWK" \
     | sort -t "$(printf '\t')" -k1,1n -k2,2 \
-    | awk -v path="$f" "$SUMMARY_FORMAT_AWK"
+    | HOOK_LOG_EVENTS_PATH="$f" awk "$SUMMARY_FORMAT_AWK"
 }
 
 default_root() { # parent of this script's directory
@@ -429,10 +458,10 @@ default_root() { # parent of this script's directory
     *) d='.' ;;
   esac
   [ -n "$d" ] || d='/'
-  (cd "$d/.." 2>/dev/null && pwd -P)
+  (CDPATH= cd "$d/.." 2>/dev/null && pwd -P)
 }
 
-# --- main ---------------------------------------------------------------------------------------------------
+# --- main ------------------------------------------------------------------------------------
 
 [ $# -ge 1 ] || { usage >&2; exit 2; }
 
@@ -487,7 +516,7 @@ if [ "$mode" = 'hook' ]; then
   HOOK_HARNESS="$harness"
   trap hook_exit EXIT
   if [ "$root_explicit" -eq 1 ]; then
-    rootdir="$(cd "$root" 2>/dev/null && pwd -P)"
+    rootdir="$(CDPATH= cd "$root" 2>/dev/null && pwd -P)"
   else
     rootdir="$(default_root)"
   fi
@@ -499,7 +528,7 @@ if [ "$mode" = 'hook' ]; then
 fi
 
 if [ "$root_explicit" -eq 1 ]; then
-  rootdir="$(cd "$root" 2>/dev/null && pwd -P)" || die 2 "cannot read root: $root"
+  rootdir="$(CDPATH= cd "$root" 2>/dev/null && pwd -P)" || die 2 "cannot read root: $root"
 else
   rootdir="$(default_root)"
 fi
