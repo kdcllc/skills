@@ -71,3 +71,15 @@ file exists without the hook, emit prints the merge snippet on stderr. Cursor al
 loads Claude Code hooks from `.claude/settings.json` when both harnesses are
 installed — dual-harness installs may run the guard twice. Same ORCHESTRATION.md /
 feature progress behavior as Claude Code.
+
+**Hook telemetry (`flags.hook_telemetry`):** emits `_kit/hook-log.sh` and
+`_kit/hook-log.cmd`. When `.cursor/hooks.json` is absent, emit writes `stop` and
+`subagentStop` hooks, each with command `bash _kit/hook-log.sh hook cursor` and
+`"loop_limit": 1`. With `flags.kit_guard` also on, the one created file holds both,
+`preToolUse` first. When the file already exists without the hooks, emit leaves it
+untouched and warns with the merge snippet
+(`warning: .cursor/hooks.json exists without the hook-telemetry hooks — left untouched; add to its "hooks" object: …`,
+see `bin/README.md`). Each stop appends one metadata line to
+`_memory/work/hooks/events.jsonl` (gitignored). Cursor also loads Claude Code hooks from
+`.claude/settings.json`, so on a dual install the Claude Code hook skips a Cursor caller
+and Cursor logs only through its native hook.

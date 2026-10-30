@@ -84,9 +84,18 @@ Agent edit hooks are enforced by the harness (✅ per vendor hook docs); path-fi
 
 All harnesses: hooks cover agent edit tools, not shell or human edits; `check` detects those. Manifest and hook config files are user-writable exclusions — CI `check` is the backstop.
 
+### Hook telemetry (`flags.hook_telemetry`) — verified 2026-10-29
+
+Telemetry only: the hooks observe stops and never steer. The hook configs are written only when the config file is absent; an existing file is left untouched and emit prints a merge snippet.
+
+- **Claude Code:** ✅ `Stop` + `SubagentStop` in `.claude/settings.json`, with a guarded command (`test -f … && bash … hook claude || true`), so it stays silent when `_kit/` is missing (fresh clone) (code.claude.com/docs/en/hooks).
+- **Cursor:** ✅ `stop` + `subagentStop` with `loop_limit: 1` in `.cursor/hooks.json` (cursor.com/docs/agent/hooks). Cursor also loads Claude Code hooks from `.claude/settings.json` ✅, so on a dual install the claude hook skips a Cursor caller and Cursor logs only through its native hook.
+- **Copilot:** 🔎 partial, no hook. Copilot may run repository `.claude/settings.json` hooks when its agent hooks are enabled (**documented**: docs.github.com/en/copilot/reference/hooks-configuration; numbered fact 8 under "Addendum 2026-10-27 — Cursor hook behavior"), and those runs then log under harness `claude`. Emit warns.
+- **Codex:** 🔎 partial, no hook. Emit warns.
+
 Windows note: per-harness CLI availability on Windows is unverified — the loop
 drivers assume the harness CLI runs natively where invoked. **Kit tools** (`bin/emit.*`,
-`_kit/memory.*`, `_kit/log-spawn.*`, `_kit/trace-lint.*`, `_kit/kit-guard.*` on `flags.kit_guard` installs, and `_loop/loop.cmd` on loop installs) require **Git for Windows** when invoked from cmd
+`_kit/memory.*`, `_kit/log-spawn.*`, `_kit/trace-lint.*`, `_kit/kit-guard.*` on `flags.kit_guard` installs, `_kit/hook-log.*` on `flags.hook_telemetry` installs, and `_loop/loop.cmd` on loop installs) require **Git for Windows** when invoked from cmd
 or PowerShell via the `.cmd` launchers; inside Git Bash, call the `.sh` scripts with
 `bash` directly ([windows-launcher.md](windows-launcher.md)). Loop-specific Windows caveats are in [windows-launcher.md § Loop on Windows: known limitations](windows-launcher.md#loop-on-windows-known-limitations).
 

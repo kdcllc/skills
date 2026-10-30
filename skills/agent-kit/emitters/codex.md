@@ -47,3 +47,7 @@ pointer is unchanged. Emit warns:
 `warning: flags.kit_guard is partial on codex: no edit-blocking hook; run emit.sh --check in CI (_kit/ is gitignored)`.
 `emit.sh --check` / `_kit/kit-guard.sh check` and ORCHESTRATION.md read-only rules
 still apply.
+
+**Hook telemetry (`flags.hook_telemetry`) — partial:** `_kit/hook-log.sh` and
+`_kit/hook-log.cmd` are emitted, but no telemetry hook is — emit warns
+`warning: flags.hook_telemetry is partial on codex: no telemetry hook`.

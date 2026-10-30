@@ -279,11 +279,16 @@ Ask (multiple-choice where possible) only what you could not infer:
    are absent (else emit prints a merge snippet), and read-only rule text in ORCHESTRATION.md
    and the agents; Orchestration Progress moves to `_memory/work/goals/[goal]/progress.md`.
    Copilot and Codex get the check and rule text only. Record `flags.kit_guard`.
-9. **Delivery forge (Phase 7)** — present the detected forge and the chosen remote.
+9. **Log subagent and session stops?** (default no.) `flags.hook_telemetry: true` emits
+   `_kit/hook-log.sh`, Claude Code / Cursor stop hooks when `.claude/settings.json` /
+   `.cursor/hooks.json` are absent (else emit prints a merge snippet), and metadata-only
+   lines in `_memory/work/hooks/events.jsonl`. Copilot and Codex get none.
+   Record `flags.hook_telemetry`.
+10. **Delivery forge (Phase 7)** — present the detected forge and the chosen remote.
    Confirm or override with any of `github` / `azuredevops` / `gitlab` / `none`
    (plus `forgeHost` for self-hosted). The `ship-pr` skill is always emitted;
    `none` means the draft + hand-over branch.
-10. **Ground-truth doc** — the committed reference file for domain decisions.
+11. **Ground-truth doc** — the committed reference file for domain decisions.
 
 The live model check happens here — the script never fetches anything. See `emitters/`
 for each harness's live-check URL and silent-fallback / cost-tier warnings.
@@ -301,7 +306,8 @@ Write `orchestration-kit.answers.json` at the repo root (`schema: 1`). Id table:
   "primary": "claude-code",
   "flags": { "research": true, "loop": true, "loop_worktree": false,
              "greenfield": false, "lint": true, "typecheck": false,
-             "models_pinned": true, "opt_in": false, "kit_guard": true },
+             "models_pinned": true, "opt_in": false, "kit_guard": true,
+             "hook_telemetry": false },
   "forge": { "kind": "github", "host": "" },
   "tokens": { "PROJECT_NAME": "…", "STACK_SUMMARY": "…", "EXECUTION_LAYERS": "…" },
   "models": { "claude-code": { "frontier": "opus", "light": "sonnet", "fast": "haiku",
@@ -328,7 +334,8 @@ existing-agents finding to `bootstrap.existing-agents` (which project agent cove
 which role and which agent the orchestrator uses for kit work), or `""` when no project
 agents exist. In `flags`, `loop_worktree` is optional (absent ⇒ false).
 `opt_in` is optional (absent ⇒ false; non-boolean ⇒ exit 3). `kit_guard` is
-optional (absent ⇒ false; non-boolean ⇒ exit 3).
+optional (absent ⇒ false; non-boolean ⇒ exit 3). `hook_telemetry` is optional
+(absent ⇒ false; non-boolean ⇒ exit 3).
 In any table cell the kit writes, bootstrap rows included, escape a literal `|` as `\|`; never emit a bare `|` inside a cell.
 
 Do **not** put derived keys in `tokens` (marked "derived — do not set" below).
@@ -438,7 +445,9 @@ opt-in text count as unchanged; any other difference is blocked (exit 4) — rev
 then `--force` once. To add the guard, set `"kit_guard": true` the same way;
 existing `.claude/settings.json` / `.cursor/hooks.json` are never edited — copy
 the snippet from the emit warning; `bash $SETUP/bin/emit.sh --check` (or
-`_kit/kit-guard.sh check`) reports edited kit files at any time.
+`_kit/kit-guard.sh check`) reports edited kit files at any time. To add hook
+telemetry, set `"hook_telemetry": true` the same way; existing configs get a merge
+snippet from the emit warning.
 
 On every re-run, re-detect the forge from the current remotes. If detection agrees
 with the manifest, refresh silently. If it disagrees (remote migrated, e.g.

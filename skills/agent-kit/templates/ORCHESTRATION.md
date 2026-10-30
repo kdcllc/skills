@@ -818,6 +818,17 @@ Four subcommands (`--help` lists every flag):
 Exit codes: 0 ok · 2 usage error · 3 ledger integrity (duplicate SPAWN/OUTCOME/KEYS `[#NN]`,
 outcome without its SPAWN) · 4 missing goal directory or artifact file. Rejections and
 respawns are new entries with new NNs, never in-place edits.
+<!-- IF hook_telemetry -->
+
+With hook telemetry on, the Claude Code and Cursor stop hooks append one metadata line per
+subagent or agent stop to `_memory/work/hooks/events.jsonl` (gitignored), and
+`_kit/hook-log.sh summary` prints the counts and the error and aborted runs (Windows outside
+Git Bash: `_kit\hook-log.cmd`). It is telemetry only: never a gate, never cited in a verdict,
+and not a replacement for the orchestration log. On a fresh clone `_kit/` is missing until
+`emit.sh --upgrade` runs, so no events are logged. The Claude Code hook command is guarded
+(`test -f … || true`) and stays silent; the Cursor hook fails open, and Cursor records the
+missing-script failure in its hook log.
+<!-- ENDIF hook_telemetry -->
 
 ---
 
@@ -1145,6 +1156,9 @@ _kit/{trace-lint.sh,trace-lint.cmd}  # Single-copy tools: consumer-trace lint + 
 <!-- IF kit_guard -->
 _kit/{kit-guard.sh,kit-guard.cmd}  # Single-copy tools: kit-file guard (check / hook) + Windows launcher
 <!-- ENDIF kit_guard -->
+<!-- IF hook_telemetry -->
+_kit/{hook-log.sh,hook-log.cmd}  # Single-copy tools: stop/subagent-stop hook telemetry (hook / summary) + Windows launcher
+<!-- ENDIF hook_telemetry -->
 _memory/records/ · _memory/quarantine/  # Tracked memory records (immutable, one per file) — see _memory/README.md
 _memory/research/               # Tracked research briefs (<topic>.md) + README.md status index (orchestrator-owned)
 _memory/work/                   # Gitignored in-flight goal and research scratch (research: work/research/<topic>/) — see _memory/README.md
@@ -1195,6 +1209,9 @@ _kit/{trace-lint.sh,trace-lint.cmd}  # Single-copy tools: consumer-trace lint + 
 <!-- IF kit_guard -->
 _kit/{kit-guard.sh,kit-guard.cmd}  # Single-copy tools: kit-file guard (check / hook) + Windows launcher
 <!-- ENDIF kit_guard -->
+<!-- IF hook_telemetry -->
+_kit/{hook-log.sh,hook-log.cmd}  # Single-copy tools: stop/subagent-stop hook telemetry (hook / summary) + Windows launcher
+<!-- ENDIF hook_telemetry -->
 _memory/records/ · _memory/quarantine/  # Tracked memory records (immutable, one per file) — see _memory/README.md
 _memory/research/               # Tracked research briefs (<topic>.md) + README.md status index (orchestrator-owned)
 _memory/work/                   # Gitignored in-flight goal and research scratch (research: work/research/<topic>/) — see _memory/README.md
@@ -1246,6 +1263,9 @@ _kit/{trace-lint.sh,trace-lint.cmd}  # Single-copy tools: consumer-trace lint + 
 <!-- IF kit_guard -->
 _kit/{kit-guard.sh,kit-guard.cmd}  # Single-copy tools: kit-file guard (check / hook) + Windows launcher
 <!-- ENDIF kit_guard -->
+<!-- IF hook_telemetry -->
+_kit/{hook-log.sh,hook-log.cmd}  # Single-copy tools: stop/subagent-stop hook telemetry (hook / summary) + Windows launcher
+<!-- ENDIF hook_telemetry -->
 _memory/records/ · _memory/quarantine/  # Tracked memory records (immutable, one per file) — see _memory/README.md
 _memory/work/                   # Gitignored in-flight goal and research scratch — see _memory/README.md
 _memory/loop/                   # Tracked loop ledgers and archive (breaker-state.json, ledger.jsonl, attempts/ gitignored)
@@ -1291,6 +1311,9 @@ _kit/{trace-lint.sh,trace-lint.cmd}  # Single-copy tools: consumer-trace lint + 
 <!-- IF kit_guard -->
 _kit/{kit-guard.sh,kit-guard.cmd}  # Single-copy tools: kit-file guard (check / hook) + Windows launcher
 <!-- ENDIF kit_guard -->
+<!-- IF hook_telemetry -->
+_kit/{hook-log.sh,hook-log.cmd}  # Single-copy tools: stop/subagent-stop hook telemetry (hook / summary) + Windows launcher
+<!-- ENDIF hook_telemetry -->
 _memory/records/ · _memory/quarantine/  # Tracked memory records (immutable, one per file) — see _memory/README.md
 _memory/work/                   # Gitignored in-flight goal and research scratch — see _memory/README.md
 _memory/.index/ · _memory/raw/  # Derived index; capture output, ledgers and drafts (gitignored)

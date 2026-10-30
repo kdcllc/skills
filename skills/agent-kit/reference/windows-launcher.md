@@ -8,6 +8,7 @@ file as **raw bytes** (never through template reads that strip `\r`) to:
 - `_kit/log-spawn.cmd`
 - `_kit/trace-lint.cmd`
 - `_kit/kit-guard.cmd` (`flags.kit_guard` installs only)
+- `_kit/hook-log.cmd` (`flags.hook_telemetry` installs only)
 - `_loop/loop.cmd` (loop-enabled installs only)
 
 Each copy sits beside a same-named `.sh` and runs it through Git for Windows Bash.
