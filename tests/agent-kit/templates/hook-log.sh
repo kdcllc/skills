@@ -892,7 +892,7 @@ snapshot() { # <root> → file list and checksums
   (cd "$1" && find . | sort && find . -type f | sort | while IFS= read -r f; do cksum "$f"; done)
 }
 
-HINT='hint: no claude events — if Claude Code is in use, check that .claude/settings.json has the hook-log Stop hooks (merge the emit warning snippet)'
+HINT='hint: no claude events — if Claude Code is in use, check that the Claude Code project settings file has the hook-log Stop hooks (merge the emit warning snippet)'
 
 # These hand-written lines are pre-change lines: they have no "error" key, and the errors list shows `-`.
 new_root

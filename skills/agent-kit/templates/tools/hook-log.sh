@@ -313,7 +313,7 @@ END {
     while (last < 5) { last++; print title[last]; if (last == 5) print "  none" }
   }
   if (nclaude == 0) {
-    print "hint: no claude events — if Claude Code is in use, check that .claude/settings.json has the hook-log Stop hooks (merge the emit warning snippet)"
+    print "hint: no claude events — if Claude Code is in use, check that the Claude Code project settings file has the hook-log Stop hooks (merge the emit warning snippet)"
   }
 }
 '
