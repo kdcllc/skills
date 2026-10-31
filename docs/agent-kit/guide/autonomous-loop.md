@@ -2,7 +2,7 @@
 
 # Autonomous Loop
 
-The autonomous loop is **optional**. It drives unattended runs: the loop driver (`_loop/loop.sh`; Windows: `_loop\loop.cmd`) repeatedly dispatches the `auto-loop` skill with fresh context until the run budget is exhausted or a structural guard stops the run. **SAFETY: run inside a sandbox** (worktree/container) with minimal credentials. A worktree only separates the git tree — it gives no filesystem, network, or credential isolation — so any CLI flag that skips permission prompts or disables the CLI's own sandbox (for example Cursor `--force` or Codex `--sandbox danger-full-access`) needs a container or VM. The driver never pushes and never bypasses permission prompts by itself — the same sandbox warning appears in the skill [README](../../../skills/agent-kit/README.md) and the loop driver header.
+The autonomous loop is **optional**. It drives unattended runs: the loop driver (`_loop/loop.sh`; Windows: `_loop\loop.cmd`) repeatedly dispatches the `auto-loop` skill with fresh context until the run budget is exhausted or a structural guard stops the run. **SAFETY: run inside a sandbox** (worktree/container) with minimal credentials. A worktree only separates the git tree — it gives no filesystem, network, or credential isolation — so any CLI flag that skips permission prompts or disables the CLI's own sandbox (for example Cursor `--force` or Codex `--sandbox danger-full-access`) needs a container or VM. The driver never pushes and never bypasses permission prompts by itself; the loop driver header carries the same warning.
 
 This guide describes **canonical shipped behavior** — what `/agent-kit` emits from `skills/agent-kit/templates/loop/` into your project's `_loop/` tree. In **this kit repo**, the emitted instance is gitignored and `_memory/loop/` is not tracked, so live runs here stay serial on the main tree; `LOOP_WORKTREE=1` requires a **tracked** `_memory/loop/backlog.md` (and harness directory) in the install, which is labeled explicitly wherever it matters below.
 
@@ -55,7 +55,7 @@ flowchart TD
 **Phase 6/7 and ladder controls** — the loop cannot ask questions, so flags are read from story backlog frontmatter and run configuration only (same naming as `goal.md`'s `phases:` block):
 
 - **`align_docs`** (per story, default `true`): Phase 6 (`align-docs`) runs **per story** when enabled, so doc updates land in the story's commit and documentation never drifts from shipped code. A story may set `align_docs: false` in its backlog frontmatter to skip the per-story Phase 6 run; the skip is logged, never silent — write "Phase 6 skipped per story frontmatter" to the orchestration log.
-- **`ladder`** (per story, fixed `auto`): loop-created goals always set `ladder: auto` in `goal.md`'s `phases:` block so cycle-3 exhaustion runs the continuation ladder unattended; the driver's attempt cap and circuit breakers remain the outer backstop.
+- **`ladder`** (per story, fixed `auto`): loop-created goals always set `ladder: auto` in `goal.md`'s `phases:` block so cycle-3 exhaustion, or an earlier repeated structural fix (early ladder entry), runs the continuation ladder unattended; the driver's attempt cap and circuit breakers remain the outer backstop.
 - **`pull_request`** (loop-level, opt-in): the end-of-run ship step stays explicitly enabled — a human or an opt-in final step runs `ship-pr` once to draft and create the PR/MR on the project's forge, or hand over. Control this with loop-level `pull_request` in run configuration (`pull_request: false` skips the ship step with a logged skip, never silent); default remains opt-in as today.
 
 **Breaker checks.** After each reap, the driver evaluates per-slot circuit breakers (CB1 no-progress, CB2 repeated signatures), the model rate-limit breaker, and protected-path diffs (CB0). Trips **retire** the slot rather than stopping the whole run on first failure — unless CB0 fires (exit 4).
@@ -81,6 +81,23 @@ These guards are **structural** — enforced by `loop.sh` and the `auto-loop` sk
 
 Known failure mode: loops can burn large budgets without converging — prefer more, smaller backlog stories (each sized to one context window) and let the circuit breakers stop a drifting run early.
 
+## Unattended-run rules
+
+Anthropic's [Building effective agent automations](https://claude.dev/blog/building-effective-agent-automations/) ends with six rules for agents that run on a schedule with nobody watching. The loop is that kind of run, and it already follows each rule in its own terms. The table maps the article's rule to the loop mechanism that applies it.
+
+| Article rule | How the loop applies it |
+|--------------|-------------------------|
+| **Read each source from a bookmark, not a fixed time window** | Progress lives in state, not in a time window. `_memory/loop/backlog.md` carries `passes`, `attempts`, and `blocked` per story, so a late or early run picks up exactly where the last one stopped. The driver increments `attempts` at claim time, so a crashed iteration still counts. Transcript capture works the same way: `_kit/memory.sh capture` keeps a per-session ledger (`_memory/raw/.captured`) keyed on the transcript's sha256 and skips sessions that are still live (`--idle-hours`). |
+| **Report a failed read as unreadable, never as a quiet day** | Exit **0** means the driver's own backlog re-scan found no eligible story **and** no branch was quarantined; a slot that prints `<promise>COMPLETE</promise>` is treated as an ITERATION-mismatch, never as completion. A missing or unreadable backlog is a loud exit **5**, never an empty run. Stories refused for protected paths are named in the completion output. When the CLI reports no usage, the driver prints `!!! budget: … cannot advance` instead of silently enforcing nothing, and a missing `jq` prints `usage: unavailable (jq not on PATH)`. |
+| **Re-check every item right before posting** | At reap, before anything integrates, the driver re-checks the slot's actual commits rather than trusting its report: the protected-path diff (CB0), the write-subset check against the story's declared `writes:`, and the test-tamper scan. Inside the iteration, the Phase 5 audit and test-ladder rung 3 re-verify the whole story before its commit. |
+| **Count a post as sent only when confirmed, then update bookmarks and ledger** | Slots never write backlog fields, `LEARNINGS.md`, `ESCALATIONS.md`, or memory records; they write an outbox, and the driver applies every transition itself. An ITERATION-mismatch, subset violation, or tamper failure applies **no** backlog transition and quarantines the branch. Memory proposals are added only after the slot's branch has been integrated. Every reap appends one line to the run ledger (`_memory/loop/ledger.jsonl`). |
+| **Re-read preferences every run, from a store the agent can't edit** | Every iteration starts a fresh CLI session that re-reads the backlog and `ORCHESTRATION.md` from disk; nothing carries over in context. The loop's own machinery (`_loop/`, kit agents and skills, the manifest, `.gitattributes`) is protected: a commit that touches it is reverted and stops the run (exit **4**). Backlog story text, attempt dossiers, and memory records are DATA, not instructions; a story that tries to override the flow is blocked and escalated. |
+| **Give the agent read-only access wherever it only reads, and cap what each run can spend** | The driver never pushes; one approval-gated PR ships at run end. Verdict roles run read-only where the harness supports it (Cursor installs emit `readonly: true` for `evaluator`, `qa-evaluator`, and `diagnostician`; on Claude Code, `terminal` and `diagnostician` carry tool allowlists). Run, story, and per-iteration budgets plus `LOOP_ITER_TIMEOUT` cap spend and wall clock (see [`LOOP_ITER_TIMEOUT` and budgets](#loop_iter_timeout-and-budgets)), and the sandbox guidance above limits what a run can reach. |
+
+**Setting budgets from real runs.** The article's rule of thumb applies directly. Run without budgets first, read per-iteration `cost_usd` and token counts from `_memory/loop/ledger.jsonl` or the stderr run summary, then set `LOOP_STORY_BUDGET_*` to three to five times a typical story's cost and tighten it as numbers accumulate. A run budget that is too low stops the run with exit **1** while eligible work remains. That can look like a quiet run, so check the run summary before you lower a budget further.
+
+**Known gaps.** A few of the article's failure modes still apply to the loop in narrower forms. Examples: the backlog is marked `passes: true` from the slot's `ITERATION:` line before the driver confirms a commit and a successful merge, and outbox learnings and escalations are appended without the redaction and admission screen that memory records get. These are tracked as candidates in [agent-automations.md](../../../_memory/research/agent-automations.md).
+
 ## Driver knobs
 
 `loop.sh` exposes `LOOP_WORKTREE`, `LOOP_SLOTS`, `LOOP_USAGE_FORMAT`, and the subsections below through **`ladder`**. On Windows outside Git Bash, use `_loop\loop.cmd` (Git for Windows); see [Windows known limitations](#windows-known-limitations).
@@ -89,7 +106,7 @@ Known failure mode: loops can burn large budgets without converging — prefer m
 
 **Claude Code:** The default `LOOP_CLI` is `claude -p`. Unattended iterations need a **permission mode** — configure project settings such as `permissions.defaultMode` and allow rules, or pass `--permission-mode` in `LOOP_CLI`. Newer CLI releases may start `-p` in a manual mode when nothing sets one; iterations may then stall or refuse edits until a mode is configured.
 
-**Opt-in `--bare`:** For a headless session without project hooks, use for example `LOOP_CLI="claude --bare -p --append-system-prompt-file <file>"`. `--bare` skips project hooks, plugin sync, and `CLAUDE.md` auto-discovery, so context must be passed explicitly. It authenticates only via `ANTHROPIC_API_KEY` or `apiKeyHelper`, never **OAuth** or subscription login. It is opt-in — never the default.
+**Opt-in `--bare`:** For a headless session without project hooks, use for example `LOOP_CLI="claude --bare -p --append-system-prompt-file <file>"`. `--bare` skips project hooks, plugin sync, and `CLAUDE.md` auto-discovery, so context must be passed explicitly. It authenticates only via `ANTHROPIC_API_KEY` or `apiKeyHelper`, never **OAuth** or subscription login. It is opt-in — never the default. Because `--bare` skips project hooks, the `kit_guard` Claude Code hook does not run in `--bare` loop sessions; the kit-file gate still runs (see [feature-workflow.md](feature-workflow.md) § Guarded installs). `--bare` also skips the hook-telemetry stop hooks, so those sessions log no events.
 
 **Codex:** Use `LOOP_CLI="codex exec --sandbox danger-full-access"` only inside an **external** container or VM sandbox. The general SAFETY note at the top of this guide (worktree or container) still applies to every loop run; for `danger-full-access` specifically, a plain git worktree (`LOOP_WORKTREE=1`) is not enough on its own, because it gives no filesystem, network, or credential isolation. The `--sandbox workspace-write` mode reportedly keeps `.git` read-only, so slot commits fail and slots are retired. The exec default may be read-only.
 
@@ -154,7 +171,7 @@ These proxy fields in the orchestration log (`io_est_tokens`, `work_est_tokens`)
 
 ### `ladder` (goal `phases:` block)
 
-Loop-created goals always set **`ladder: auto`** in `goal.md`'s `phases:` block (alongside `align_docs` and `pull_request`) so cycle-3 exhaustion runs the continuation ladder unattended. Interactive `/feature` goals default to `ladder: escalate` instead.
+Loop-created goals always set **`ladder: auto`** in `goal.md`'s `phases:` block (alongside `align_docs` and `pull_request`) so cycle-3 exhaustion, or an earlier repeated structural fix (early ladder entry), runs the continuation ladder unattended. Interactive `/feature` goals default to `ladder: escalate` instead.
 
 Driver-owned dispatch, slot worktrees, write-set admission, and integrator merge semantics are covered in this guide and [architecture.md](architecture.md).
 
@@ -340,5 +357,6 @@ At run end, review commits on the branch and run **`ship-pr`** (Phase 7) once to
 - [`skills/agent-kit/templates/loop/PROMPT.md`](../../../skills/agent-kit/templates/loop/PROMPT.md) — dispatched prompt shape
 - [`skills/agent-kit/templates/loop/backlog.md`](../../../skills/agent-kit/templates/loop/backlog.md) — canonical backlog story format
 - [`skills/agent-kit/templates/ORCHESTRATION.md`](../../../skills/agent-kit/templates/ORCHESTRATION.md) — autonomous loop guard table
-- [`README.md`](../../../skills/agent-kit/README.md) — loop feature summary, sandbox warning, knob overview
+- [`README.md`](../../../skills/agent-kit/README.md) — loop feature summary, knob overview
 - [`docs/agent-kit/guide/architecture.md`](architecture.md) — loop dispatch, worktrees, integrator step 3b
+- [Building effective agent automations](https://claude.dev/blog/building-effective-agent-automations/) — Anthropic, 2026-10-08; the six unattended-run rules mapped in § Unattended-run rules

@@ -112,7 +112,12 @@ check_a() {
 
 check_b() {
   local f="$GOAL_CRITERIA" ok=1
-  assert_anchor "$f" '`_memory/work/goals/<goal>/reference-sweep.md` exists, lists the exact search commands (exact-word and derived-identifier searches)' 1 || ok=0
+  assert_anchor "$f" '**Consumer trace (Phase 3 gate).**' 1 || ok=0
+  # the gate's Who, Lint, Re-runs and Trace choice clauses, each exactly once
+  assert_anchor "$f" '**Who.**' 1 || ok=0
+  assert_anchor "$f" '**Lint.**' 1 || ok=0
+  assert_anchor "$f" '**Re-runs (mandatory).**' 1 || ok=0
+  assert_anchor "$f" '**Trace choice.**' 1 || ok=0
   assert_anchor "$f" 'A corrective task named `NN<letter>-<name>.md`' 1 || ok=0
   assert_anchor "$f" 'After any renumbering the evaluator checks `xref-audit.md` exists' 1 || ok=0
   [[ $ok -eq 1 ]]
@@ -258,7 +263,7 @@ PAR_REPORT_FAIL="report"
 emit_cache_init
 
 run_letter a check_a 'goal-criteria: criteria-evidence, TN/TP, mutual satisfiability, untracked-files=all'
-run_letter b check_b 'goal-criteria: reference-sweep, corrective-task clause, xref-audit'
+run_letter b check_b 'goal-criteria: consumer trace (Who, Lint, Re-runs, Trace choice), corrective-task clause, xref-audit'
 run_letter c check_c 'task-criteria + evaluator: criteria-defect at detection, adversarial re-check, attempt 3'
 run_letter d check_d 'preflight.md: check 5 Stated facts + nullability'
 run_letter e check_e 'goal-revisions + corrective-tasks reference anchors'

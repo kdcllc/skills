@@ -4,7 +4,7 @@
 # Forge-adapter taxonomy and remote-precedence chain, recursive absence of
 # `delete Phase 7` under skills/agent-kit/templates/, setup SKILL manifest forge/forgeHost
 # and Upgrading re-detect/reconcile, dual-instance ship-pr anchor parity, and VERSION /
-# README / manifest kitVersion consistency at dynamic VERSION with options.forge github.
+# Manifest kitVersion consistency at dynamic VERSION with options.forge github.
 # Tracked, self-install-independent — checks canonical templates, setup SKILL, instance
 # copies, and manifest directly (no network, no LLM).
 #
@@ -186,7 +186,7 @@ else
 fi
 
 # ===========================================================================
-# 6. Dynamic VERSION consistency (skills/agent-kit/SKILL.md metadata.version drives README + manifest).
+# 6. Dynamic VERSION consistency (skills/agent-kit/SKILL.md metadata.version drives nested copies + manifest).
 # ===========================================================================
 check6_ok=1
 check6_detail=""
@@ -212,10 +212,6 @@ for vf in "$VERSION_FILE" "$CLAUDE_VERSION" "$CURSOR_VERSION"; do
     break
   fi
 done
-if [[ $check6_ok -eq 1 ]] && ! grep -qF -- "Kit version: **$KIT_VERSION**" "$ROOT_README" 2>/dev/null; then
-  check6_ok=0
-  check6_detail="README Kit version line missing or wrong"
-fi
 if [[ $check6_ok -eq 1 ]] && [[ -f "$MANIFEST" ]]; then
   manifest_ver="$(grep -m1 '"kitVersion"' "$MANIFEST" 2>/dev/null | \
     sed -E 's/.*"kitVersion"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/')"
@@ -230,9 +226,9 @@ elif [[ $check6_ok -eq 1 ]]; then
   skip_report "check 6: orchestration-kit.manifest.json absent"
 fi
 if [[ $check6_ok -eq 1 ]]; then
-  report PASS "VERSION $KIT_VERSION at skills/agent-kit/SKILL.md metadata.version, nested VERSIONs, README Kit version, manifest kitVersion; options.forge github"
+  report PASS "VERSION $KIT_VERSION at skills/agent-kit/SKILL.md metadata.version, nested VERSIONs, manifest kitVersion; options.forge github"
 else
-  report FAIL "VERSION $KIT_VERSION at skills/agent-kit/SKILL.md metadata.version, nested VERSIONs, README Kit version, manifest kitVersion; options.forge github" \
+  report FAIL "VERSION $KIT_VERSION at skills/agent-kit/SKILL.md metadata.version, nested VERSIONs, manifest kitVersion; options.forge github" \
     "$check6_detail"
 fi
 

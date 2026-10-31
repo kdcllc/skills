@@ -87,6 +87,8 @@ bash scripts/validate-skills.sh && bash tests/agent-kit/run-all.sh
 Forbidden until rung 3: any bare full-suite invocation or pattern-less test run.
 A `-k <name>`-style selector is a rung 1/2 tool, not a substitute for rung 3.
 
+A rung-3 failure is classified by the orchestrator per ORCHESTRATION.md `### Quality Checks` (flaky, local-edits, pre-existing, introduced) before any fix.
+
 ## Failure handling
 
 ```

@@ -18,6 +18,9 @@ _memory/
   work/                  # GITIGNORED
     goals/<goal>/        # goal.md, NN-task.md, orchestration-log.md, spawns/, evidence/, memory-drafts/
     research/<topic>/    # prompt.md, report.md, recalled-memory.md, review.md, ingested
+<!-- IF hook_telemetry -->
+    hooks/               # events.jsonl (+ events.1.jsonl): stop/subagent-stop hook telemetry
+<!-- ENDIF hook_telemetry -->
   loop/                  # TRACKED
     backlog.md
     LEARNINGS.md

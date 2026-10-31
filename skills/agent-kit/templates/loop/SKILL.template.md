@@ -180,6 +180,11 @@ writes this counter — the driver already incremented it at claim time.
 
 ## 2. Run the orchestration flow for the story
 
+<!-- IF opt_in -->
+Read `{{IDE_DIR}}/skills/feature/SKILL.md` by path before Phase 2: this install is opt-in,
+so `feature` sets `disable-model-invocation: true` and never auto-loads.
+
+<!-- ENDIF opt_in -->
 Follow the `feature` skill's Phases 2–6 with three substitutions: **the story's
 acceptance criteria replace Phase 1 alignment** (there is no user to ask),
 **Phase 7 (`pull_request`) is deferred to the end of the whole run** — the loop
@@ -212,10 +217,11 @@ backlog frontmatter and run configuration only (same naming as `goal.md`'s `phas
   the PR/MR on the project's forge, or hand over. Control this with loop-level
   `pull_request` in run configuration (`pull_request: false` skips the ship step
   with a logged skip, never silent); default remains opt-in as today.
-- **`ladder`** (per story, fixed `auto`): loop-created goals always set
-  `ladder: auto` in `goal.md`'s `phases:` block so cycle-3 exhaustion runs the
-  continuation ladder unattended; the driver's attempt cap and circuit breakers remain
-  the outer backstop. Interactive `/feature` goals default to `escalate` instead.
+- **`ladder`** (per story, fixed `auto`): loop-created goals always set `ladder: auto`
+  in `goal.md`'s `phases:` block so cycle-3 exhaustion, or an earlier repeated structural
+  fix (early ladder entry), runs the continuation ladder unattended; the driver's attempt
+  cap and circuit breakers remain the outer backstop.
+  Interactive `/feature` goals default to `escalate` instead.
 
 ## 3. Gate, commit, record
 

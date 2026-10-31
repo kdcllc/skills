@@ -51,6 +51,15 @@ frontmatter() {
   awk 'NR==1 && $0=="---"{f=1; next} f && $0=="---"{exit} f{print}' "$1" 2>/dev/null
 }
 
+# Remove `<!-- IF opt_in -->` … `<!-- ENDIF opt_in -->` blocks (whole-line markers).
+strip_opt_in_if_blocks() {
+  awk '
+    /^<!-- IF opt_in -->$/ { skip=1; next }
+    /^<!-- ENDIF opt_in -->$/ { skip=0; next }
+    !skip { print }
+  '
+}
+
 # ===========================================================================
 # 1. Seven P0 skills carry `disable-model-invocation: true` in frontmatter.
 # ===========================================================================
@@ -85,15 +94,28 @@ else
 fi
 
 # ===========================================================================
-# 3. `feature` and `research` frontmatter never gain the flag.
+# 3. `feature` and `research` stay auto-invocable outside IF opt_in; flag only
+#    inside an opt_in block when present.
 # ===========================================================================
 for f in "$TEMPLATES/skills/feature/SKILL.template.md" "$TEMPLATES/skills/research/SKILL.template.md"; do
   rel="${f#"$REPO_ROOT"/}"
-  fm="$(frontmatter "$f")"
+  fm="$(frontmatter "$f" | strip_opt_in_if_blocks)"
   if [[ -f "$f" ]] && ! grep -q 'disable-model-invocation' <<<"$fm"; then
-    report PASS "$rel stays unflagged (auto-invocable)"
+    report PASS "$rel stays unflagged outside IF opt_in (auto-invocable)"
   else
-    report FAIL "$rel stays unflagged (auto-invocable)" "disable-model-invocation present in frontmatter"
+    report FAIL "$rel stays unflagged outside IF opt_in (auto-invocable)" "disable-model-invocation present in frontmatter after stripping IF opt_in blocks"
+  fi
+  if [[ -f "$f" ]] && grep -q 'disable-model-invocation: true' "$f"; then
+    if awk '
+      /^<!-- IF opt_in -->$/ { in_opt=1; next }
+      /^<!-- ENDIF opt_in -->$/ { in_opt=0; next }
+      /disable-model-invocation: true/ && !in_opt { exit 1 }
+      END { exit 0 }
+    ' "$f"; then
+      report PASS "$rel disable-model-invocation only inside IF opt_in"
+    else
+      report FAIL "$rel disable-model-invocation only inside IF opt_in" "flag line outside IF opt_in block"
+    fi
   fi
 done
 

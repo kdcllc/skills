@@ -17,6 +17,26 @@
 #   (f) every success call prints exactly one stdout line
 #   (g) header present; line count strictly increasing (append-only)
 #   (i)–(v) Footprint / --work-chars / pre-v0.26 fallback in a second fixture
+#   keys: KEYS / REPEAT lines from a report's `### Required fixes` items — the two-evaluation
+#         [structural] REPEAT, a repeated [line-patch] REPEAT, `none`, line stripping,
+#         justification-clause exclusion, `[-]` for absent tags, `audit` / `09a` task values,
+#         duplicate-KEYS / missing-SPAWN / missing-log exit 3, exit 2 / 4 in the frozen order,
+#         KEYS text never feeding running totals, an old-shape uncited item keying as
+#         `uncited <loc> :: <defect>`, and an unchanged spawn/outcome/note log literal plus an
+#         unchanged stdout / `note` usage-error (stderr text + exit code) literal
+#   model_check: a --model-reported text beginning with `unknown` → unverified (even when it
+#         names the requested family); later `unknown` and other results unchanged. Case (c)
+#         pairs bare `Unknown` with `Unknown gpt-4.1` (a different family): the bare word alone
+#         is `unverified` with or without the `unknown*` mapping, so only the pair can fail
+#         when the mapping is removed
+#   Footprint commas: `files_read: 9 (~85,000 chars)` → work_read_chars: 85000, `1,234` N and a
+#         `1,234,567` C parse, plain integers still parse, malformed groups (85,00 · ,850 ·
+#         1,2 · 8,5000 · 85,,000) stay n/a
+#   unclosed backtick: a first word that opens a backtick which never closes keys in the cited
+#         form (`<word> - :: <rest>`, exact key asserted), not as `uncited ...`
+#   mutation_caught: each of the above runs its check against the canonical script (must pass)
+#         and against a one-line mutant of it (must fail): digit-only Footprint regex, loose
+#         comma grouping, `unknown*` mapping removed, unclosed-backtick guard widened
 #   Structural checks align emitters/manifest/instance with _kit/log-spawn.sh + .cmd
 #   (retired log-spawn.ps1 twin must not appear).
 # Structural section — emitters, canonical + instance feature skills / ORCHESTRATION
@@ -348,6 +368,33 @@ log_spawn_mut_empty_root() {
   return 0
 }
 
+# mutation_caught <name> <sed-script> <check-fn> — runs <check-fn> (called as `<check-fn> bash <script>`;
+# returns 0 when the script behaves) against the canonical script, which must pass, and against a copy
+# of it that <sed-script> changes by exactly one line, which must fail. A sed that changes nothing, or
+# more than one line, or leaves a syntax error, is reported as a FAIL (an equivalent or broken mutant
+# proves nothing).
+mutation_caught() {
+  local name="$1" sedscript="$2" check="$3" mut changed rc_canon rc_mut
+  mut="$(mktemp "$FIXTURE_TMPDIR/mutant.XXXXXX")" || { report FAIL "mutation $name" "mktemp failed"; return; }
+  sed "$sedscript" "$CANON_SH" > "$mut"
+  changed="$(diff "$CANON_SH" "$mut" | grep -c '^<' || true)"
+  if [[ "$changed" -ne 1 ]]; then
+    report FAIL "mutation $name" "sed changed $changed canonical lines (want exactly 1)"
+    return
+  fi
+  if ! bash -n "$mut" 2>/dev/null; then
+    report FAIL "mutation $name" "mutant has a syntax error"
+    return
+  fi
+  "$check" bash "$CANON_SH"; rc_canon=$?
+  "$check" bash "$mut"; rc_mut=$?
+  if [[ "$rc_canon" -eq 0 && "$rc_mut" -ne 0 ]]; then
+    report PASS "mutation $name: canonical passes, mutant fails (check rc=$rc_mut)"
+  else
+    report FAIL "mutation $name" "canonical rc=$rc_canon (want 0), mutant rc=$rc_mut (want non-zero)"
+  fi
+}
+
 # ---------------------------------------------------------------------------
 # Behavioral — bash twin
 # ---------------------------------------------------------------------------
@@ -382,6 +429,65 @@ fi
 
 run_suite bash bash "$BIN"
 run_work_suite bash bash "$BIN"
+
+# ---------------------------------------------------------------------------
+# Footprint numbers with comma thousands separators (~85,000)
+# ---------------------------------------------------------------------------
+# footprint_work <footprint-line> <runner...> → prints the OUTCOME's work_read_chars value
+# (runs in the caller's command substitution, so its cd stays local)
+footprint_work() {
+  local line="$1" fx out; shift
+  fx="$(alloc_fx)"
+  mkdir -p "$fx/_memory/work/goals/demo/spawns"
+  printf 'ctx\n' > "$fx/_memory/work/goals/demo/spawns/11-context.md"
+  printf '%s\n' '### Footprint' "$line" 'commands_run: 1' > "$fx/_memory/work/goals/demo/spawns/11-report.md"
+  cd "$fx" || return 1
+  "$@" spawn --goal demo --agent implementer --phase P4 --model-requested m \
+       --context _memory/work/goals/demo/spawns/11-context.md >/dev/null 2>&1 || return 1
+  out="$("$@" outcome --goal demo --spawn 11 --report _memory/work/goals/demo/spawns/11-report.md \
+        --verdict PASS --model-reported X 2>/dev/null)" || return 1
+  printf '%s' "$out" | sed -n 's/.*work_read_chars: \([^ ]*\) ·.*/\1/p'
+}
+
+# footprint_comma_check <runner...> → 0 when comma-grouped numbers parse and plain integers still do
+footprint_comma_check() {
+  local pair line want got
+  FC_DETAIL=""
+  for pair in 'files_read: 9 (~85,000 chars)|85000' 'files_read: 1,234 (~1,234,567 chars)|1234567' \
+              'files_read: 3 (~12000 chars)|12000' 'files_read: 9 (~999 chars)|999'; do
+    line="${pair%|*}"; want="${pair##*|}"
+    got="$(footprint_work "$line" "$@")"
+    if [[ "$got" != "$want" ]]; then FC_DETAIL="'$line' → work_read_chars '$got' (want $want)"; return 1; fi
+  done
+  return 0
+}
+
+# footprint_malformed_check <runner...> → 0 when a malformed comma group leaves work_read_chars n/a
+footprint_malformed_check() {
+  local line got
+  FM_DETAIL=""
+  for line in 'files_read: 9 (~85,00 chars)' 'files_read: 9 (~,850 chars)' 'files_read: 9 (~1,2 chars)' \
+              'files_read: 9 (~8,5000 chars)' 'files_read: 9 (~85,,000 chars)' 'files_read: 9 (~85,000, chars)'; do
+    got="$(footprint_work "$line" "$@")"
+    if [[ "$got" != "n/a" ]]; then FM_DETAIL="'$line' → work_read_chars '$got' (want n/a)"; return 1; fi
+  done
+  return 0
+}
+
+if footprint_comma_check bash "$BIN"; then
+  report PASS "[bash] Footprint comma thousands: ~85,000 → 85000, 1,234 / ~1,234,567 → 1234567, plain integers unchanged"
+else
+  report FAIL "[bash] Footprint comma thousands" "$FC_DETAIL"
+fi
+if footprint_malformed_check bash "$BIN"; then
+  report PASS "[bash] malformed comma groups (85,00 · ,850 · 1,2 · 8,5000 · 85,,000 · 85,000,) → work_read_chars: n/a"
+else
+  report FAIL "[bash] malformed comma groups" "$FM_DETAIL"
+fi
+# the digit-only pattern of the earlier script: ~85,000 is n/a
+mutation_caught "Footprint regex back to digit-only" '/fp_re=/s/\[0-9\]\[0-9,\]\*/[0-9]+/g' footprint_comma_check
+# the strict group check removed: 85,00 is accepted as 8500
+mutation_caught "Footprint group validation removed" 's/if \[\[ "\$c" =~ \$num_re \]\]; then/if true; then/' footprint_malformed_check
 
 # ---------------------------------------------------------------------------
 # model_check — match / MISMATCH / unverified / openai family (log-spawn emitter)
@@ -494,6 +600,467 @@ run_model_reported_self_case() { # <label> <runner...>
 }
 
 run_model_reported_self_case bash bash "$BIN"
+
+# ---------------------------------------------------------------------------
+# model-reported starting with `unknown` → unverified before any family comparison
+# ---------------------------------------------------------------------------
+unknown_outcome() { # <reported-text> <runner...> → U_LOG / U_OUT / U_RC (spawn requests claude-sonnet-5-5-xhigh)
+  local txt="$1" fx; shift
+  fx="$(alloc_fx)"
+  mkdir -p "$fx/_memory/work/goals/demo/spawns"
+  head -c 20 /dev/zero | tr '\0' 'a' > "$fx/_memory/work/goals/demo/spawns/10-context.md"
+  head -c 10 /dev/zero | tr '\0' 'b' > "$fx/_memory/work/goals/demo/spawns/10-report.md"
+  U_LOG="$fx/_memory/work/goals/demo/orchestration-log.md"
+  cd "$fx" || return 1
+  "$@" spawn --goal demo --agent implementer --phase P4 --model-requested claude-sonnet-5-5-xhigh \
+       --context _memory/work/goals/demo/spawns/10-context.md >/dev/null 2>&1
+  U_OUT="$("$@" outcome --goal demo --spawn 10 --report _memory/work/goals/demo/spawns/10-report.md \
+        --verdict PASS --model-reported "$txt" 2>&1)"; U_RC=$?
+}
+
+# unknown_bare_check <runner...> → 0 ok · 1 bare `Unknown` wrong · 2 `Unknown gpt-4.1` wrong (sets UB_DETAIL).
+# model_family finds no family in the bare word, so bare `Unknown` is `unverified` with or without
+# the `unknown*` mapping and cannot fail alone. `Unknown gpt-4.1` against a claude request can: the
+# mapping makes it `unverified`; without it the gpt family is read and the result is MISMATCH.
+unknown_bare_check() {
+  UB_DETAIL=""
+  unknown_outcome "Unknown" "$@"
+  if ! { [[ $U_RC -eq 0 && "$U_OUT" == *'model reported: Unknown · model_check: unverified'* ]] \
+         && grep -qF -- 'model reported: Unknown · model_check: unverified' "$U_LOG"; }; then
+    UB_DETAIL="bare: rc=$U_RC out='$U_OUT'"; return 1
+  fi
+  unknown_outcome "Unknown gpt-4.1" "$@"
+  if ! { [[ $U_RC -eq 0 && "$U_OUT" == *'model reported: Unknown gpt-4.1 · model_check: unverified'* && "$U_OUT" != *MISMATCH* ]] \
+         && grep -qF -- 'model reported: Unknown gpt-4.1 · model_check: unverified' "$U_LOG"; }; then
+    UB_DETAIL="Unknown gpt-4.1: rc=$U_RC out='$U_OUT'"; return 2
+  fi
+  return 0
+}
+
+run_model_reported_unknown_case() { # <label> <runner...>
+  local label="$1" txt rc; shift
+
+  # (b) names the requested family but starts with `unknown` → unverified, not match
+  txt='unknown (not stated; requested claude-sonnet-5-5-xhigh)'
+  unknown_outcome "$txt" "$@"
+  if [[ $U_RC -eq 0 && "$U_OUT" == *'model_check: unverified'* && "$U_OUT" != *MISMATCH* ]] \
+     && grep -qF -- "model reported: $txt · model_check: unverified" "$U_LOG"; then
+    report PASS "[$label] model-reported 'unknown (not stated; requested claude-sonnet-5-5-xhigh)' vs requested claude-sonnet-5-5-xhigh → model_check: unverified"
+  else
+    report FAIL "[$label] model-reported unknown naming the requested family" "rc=$U_RC out='$U_OUT'"
+  fi
+
+  # (c) bare "Unknown" → unverified, plus `Unknown gpt-4.1` (another family) → unverified, no MISMATCH
+  unknown_bare_check "$@"; rc=$?
+  if [[ $rc -eq 0 ]]; then
+    report PASS "[$label] model-reported 'Unknown' → model_check: unverified; 'Unknown gpt-4.1' vs a claude request → unverified, no MISMATCH"
+  else
+    report FAIL "[$label] model-reported Unknown (check rc=$rc)" "$UB_DETAIL"
+  fi
+
+  # Case-insensitive and after leading whitespace, even when a family name follows.
+  unknown_outcome "  UNKNOWN claude-sonnet-5-5-xhigh" "$@"
+  if [[ $U_RC -eq 0 && "$U_OUT" == *'model_check: unverified'* && "$U_OUT" != *MISMATCH* ]]; then
+    report PASS "[$label] model-reported '  UNKNOWN claude-…' (leading whitespace, upper case) → model_check: unverified"
+  else
+    report FAIL "[$label] model-reported leading-whitespace UNKNOWN" "rc=$U_RC out='$U_OUT'"
+  fi
+
+  # Only a leading `unknown` counts: the word later in the text leaves the family match alone.
+  unknown_outcome "claude-sonnet-5-5-xhigh (unknown build)" "$@"
+  if [[ $U_RC -eq 0 && "$U_OUT" == *'model_check: match'* ]]; then
+    report PASS "[$label] model-reported 'claude-sonnet-5-5-xhigh (unknown build)' → model_check: match (only a leading 'unknown' is special)"
+  else
+    report FAIL "[$label] model-reported with a later 'unknown'" "rc=$U_RC out='$U_OUT'"
+  fi
+}
+
+run_model_reported_unknown_case bash bash "$BIN"
+
+# the `unknown*` → unverified mapping removed: check (c) must fail on the copy
+mutation_caught "unknown* → unverified mapping removed" '/case "\$lc_rep" in unknown\*)/d' unknown_bare_check
+
+# ---------------------------------------------------------------------------
+# keys — KEYS / REPEAT lines computed from a report's `### Required fixes` items
+# ---------------------------------------------------------------------------
+KEYS_G="_memory/work/goals/demo"
+
+make_keys_fixture() { # → fixture dir whose log already holds SPAWN headings [#01]..[#15]
+  local d i nn
+  d="$(alloc_fx)"
+  mkdir -p "$d/$KEYS_G/spawns"
+  for i in 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do
+    nn="$(printf '%02d' "$i")"
+    printf 'ctx %s\n' "$nn" > "$d/$KEYS_G/spawns/$nn-context.md"
+    bash "$BIN" spawn --root "$d" --goal demo --agent evaluator --phase P4 \
+      --model-requested m --context "$KEYS_G/spawns/$nn-context.md" >/dev/null 2>&1
+  done
+  printf '%s' "$d"
+}
+
+kreport() { # <fx> <name> <report lines…>
+  local fx="$1" name="$2"; shift 2
+  printf '%s\n' "$@" > "$fx/$KEYS_G/spawns/$name"
+}
+
+kkeys() { # <fx> <spawn> <task> <report-name> → K_OUT / K_RC / K_ERR
+  local fx="$1" sp="$2" tk="$3" rp="$4"
+  K_OUT="$(bash "$BIN" keys --root "$fx" --goal demo --spawn "$sp" --task "$tk" \
+    --report "$KEYS_G/spawns/$rp" 2>"$fx/k.err")"; K_RC=$?
+  K_ERR="$(cat "$fx/k.err")"
+}
+
+run_keys_cases() {
+  local fx log want wk wr codes nlog rc lines_a lines_b d
+  fx="$(make_keys_fixture)"
+  log="$fx/$KEYS_G/orchestration-log.md"
+  krepeats() { grep -c '^- REPEAT ' "$log" || true; }
+
+  # Two evaluations of one task: the structural AC2 item repeats → exactly one REPEAT.
+  kreport "$fx" r1.md '## Verdict' 'NEEDS FIXES' '' '### Required fixes (if NEEDS FIXES)' \
+    '- [ ] AC2 `src/a.sh:12-14`: missing guard — add the check [structural]' \
+    '- [ ] AC1 `b.sh:3`: wrong exit — replace `1` with `2` [line-patch]' \
+    '' '### Notes (non-blocking)' '- [ ] AC9 `z.sh`: a note, not a required fix — ignore [structural]'
+  kkeys "$fx" 01 01 r1.md
+  wk='- KEYS [#01] task 01: ac2 src/a.sh :: missing guard [structural] [-] | ac1 b.sh :: wrong exit [line-patch] [-]'
+  if [[ $K_RC -eq 0 && "$K_OUT" == "$wk" ]] && grep -qxF -- "$wk" "$log" && [[ "$(krepeats)" == 0 ]]; then
+    report PASS "keys: first evaluation → one KEYS line (stdout = that line), items only from ### Required fixes, no REPEAT"
+  else
+    report FAIL "keys: first evaluation" "rc=$K_RC out='$K_OUT' err='$K_ERR'"
+  fi
+  kreport "$fx" r2.md '### Required fixes (if NEEDS FIXES)' \
+    '- [ ] AC2 `src/a.sh:20`: missing guard — add the check, sharper wording [structural] [carried]' \
+    '- [ ] F6 `c.sh`: dangling reference — fix the link — missed earlier: the fix added it [line-patch] [new]'
+  kkeys "$fx" 02 01 r2.md
+  wk='- KEYS [#02] task 01: ac2 src/a.sh :: missing guard [structural] [carried] | f6 c.sh :: dangling reference [line-patch] [new]'
+  wr='- REPEAT [#02] task 01: ac2 src/a.sh :: missing guard [structural] [carried]'
+  if [[ $K_RC -eq 0 ]] && grep -qxF -- "$wk" "$log" && grep -qxF -- "$wr" "$log" && [[ "$(krepeats)" == 1 ]]; then
+    report PASS "keys: two-evaluation sequence → exactly one REPEAT, key 'ac2 src/a.sh :: missing guard' with [structural]"
+  else
+    report FAIL "keys: two-evaluation sequence" "rc=$K_RC repeats=$(krepeats) err='$K_ERR'"
+  fi
+
+  # Repeated [line-patch] item (task 02): REPEAT carries [line-patch]; task 01's earlier key is not compared.
+  kreport "$fx" r3.md '### Required fixes (if NEEDS FIXES)' \
+    '- [ ] AC1 `b.sh:3`: wrong exit — replace `1` with `2` [line-patch]'
+  kreport "$fx" r4.md '### Required fixes (if NEEDS FIXES)' \
+    '- [ ] AC1 `b.sh:5`: wrong exit — replace `1` with `2` [line-patch] [carried]'
+  kkeys "$fx" 03 02 r3.md; rc=$K_RC
+  kkeys "$fx" 04 02 r4.md
+  wr='- REPEAT [#04] task 02: ac1 b.sh :: wrong exit [line-patch] [carried]'
+  if [[ $rc -eq 0 && $K_RC -eq 0 ]] && grep -qxF -- "$wr" "$log" && [[ "$(krepeats)" == 2 ]]; then
+    report PASS "keys: repeated [line-patch] item → REPEAT carries [line-patch] (and only the same --task value is compared)"
+  else
+    report FAIL "keys: repeated line-patch" "rc=$rc/$K_RC repeats=$(krepeats) err='$K_ERR'"
+  fi
+
+  # none: heading present with no items, and no section at all.
+  kreport "$fx" r5.md '## Verdict' 'NEEDS FIXES' '' '### Required fixes (if NEEDS FIXES)' '' \
+    '### Notes (non-blocking)' '- [ ] AC1 `q.sh`: only under Notes — x [structural]'
+  kreport "$fx" r6.md '## Verdict' 'PASS'
+  kkeys "$fx" 05 03 r5.md; rc=$K_RC
+  kkeys "$fx" 06 03 r6.md
+  if [[ $rc -eq 0 && $K_RC -eq 0 ]] && grep -qxF -- '- KEYS [#05] task 03: none' "$log" \
+     && grep -qxF -- '- KEYS [#06] task 03: none' "$log" && [[ "$(krepeats)" == 2 ]]; then
+    report PASS "keys: no required-fix items (empty section or no section) → '- KEYS [#NN] task 03: none', no REPEAT"
+  else
+    report FAIL "keys: none" "rc=$rc/$K_RC"
+  fi
+
+  # Line-number / anchor stripping: a.sh:12, a.sh:3-5, a.sh#L7, a.sh#L7-L9 and bare a.sh key the same.
+  kreport "$fx" r7.md '### Required fixes (if NEEDS FIXES)' \
+    '- [ ] AC1 `a.sh:12`: same defect — fix [structural]' \
+    '- [ ] AC1 `a.sh:3-5`: same defect — fix [structural]' \
+    '- [ ] AC1 `a.sh#L7`: same defect — fix [structural]' \
+    '- [ ] AC1 `a.sh#L7-L9`: same defect — fix [structural]' \
+    '- [ ] AC1 `a.sh`: same defect — fix [structural]'
+  kkeys "$fx" 07 04 r7.md
+  if [[ $K_RC -eq 0 && "$(grep -oF 'ac1 a.sh :: same defect [structural] [-]' <<<"$K_OUT" | wc -l | tr -d ' ')" == 5 ]]; then
+    report PASS "keys: a.sh:12, a.sh:3-5, a.sh#L7, a.sh#L7-L9 and a.sh all key 'ac1 a.sh :: same defect'"
+  else
+    report FAIL "keys: line stripping" "rc=$K_RC out='$K_OUT'"
+  fi
+
+  # Justification clause / tags excluded; case + whitespace collapsed; '|' → '/'; no ' — ' and no-span forms.
+  kreport "$fx" r8.md '### Required fixes (if NEEDS FIXES)' \
+    '- [ ] AC3 `x.sh:1`: Mixed   CASE  defect — fix it — missed earlier: because [structural] [new]' \
+    '- [ ] AC4 `y.sh:2`: left | right  — fix — reverses cycle 2: - [ ] AC4 `y.sh:2`: other [structural] [new]' \
+    '- [ ] AC5 `z.sh:9`: no dash text [structural] [carried]' \
+    '- [ ] AC6 plain defect with no span [line-patch]'
+  kkeys "$fx" 08 05 r8.md
+  wk='- KEYS [#08] task 05: ac3 x.sh :: mixed case defect [structural] [new] | ac4 y.sh :: left / right [structural] [new] | ac5 z.sh :: no dash text [structural] [carried] | ac6 - :: plain defect with no span [line-patch] [-]'
+  if [[ $K_RC -eq 0 && "$K_OUT" == "$wk" ]] && [[ "$K_OUT" != *'missed earlier'* && "$K_OUT" != *'reverses cycle'* ]]; then
+    report PASS "keys: justification clause excluded; lower-cased, whitespace collapsed, '|' → '/'; no-dash and no-span items key whole text"
+  else
+    report FAIL "keys: justification / normalization" "rc=$K_RC out='$K_OUT'"
+  fi
+
+  # Missing tags print '-'; tags are read from the item's own line only (wrapped item under-fires safely).
+  kreport "$fx" r9.md '### Required fixes (if NEEDS FIXES)' \
+    '- [ ] AC1 `a.sh:1`: no tags — fix' \
+    '- [ ] AC2 `a.sh:1`: only kind — fix [structural]' \
+    '- [ ] AC3 `a.sh:1`: only provenance — fix [new]' \
+    '- [ ] AC4 `w.sh:4`: wrapped item — a fix that is long and' \
+    '  wraps onto a second line [structural]'
+  kkeys "$fx" 09 06 r9.md
+  wk='- KEYS [#09] task 06: ac1 a.sh :: no tags [-] [-] | ac2 a.sh :: only kind [structural] [-] | ac3 a.sh :: only provenance [-] [new] | ac4 w.sh :: wrapped item [-] [-]'
+  if [[ $K_RC -eq 0 && "$K_OUT" == "$wk" ]]; then
+    report PASS "keys: absent kind/provenance print [-]; a wrapped item keys its first line only"
+  else
+    report FAIL "keys: missing tags / wrapped item" "rc=$K_RC out='$K_OUT'"
+  fi
+
+  # --task audit and 09a; a 09 call never compares against 09a's line.
+  kreport "$fx" r10.md '### Required fixes (if NEEDS FIXES)' '- [ ] AC1 `a.sh:2`: audit defect — fix [structural]'
+  kkeys "$fx" 10 audit r10.md; codes="$K_RC "
+  kkeys "$fx" 11 audit r10.md; codes+="$K_RC "
+  kkeys "$fx" 12 09a r10.md; codes+="$K_RC "
+  kkeys "$fx" 13 09a r10.md; codes+="$K_RC "
+  kkeys "$fx" 14 09 r10.md; codes+="$K_RC"
+  if [[ "$codes" == "0 0 0 0 0" ]] \
+     && grep -qxF -- '- KEYS [#10] task audit: ac1 a.sh :: audit defect [structural] [-]' "$log" \
+     && grep -qxF -- '- REPEAT [#11] task audit: ac1 a.sh :: audit defect [structural] [-]' "$log" \
+     && grep -qxF -- '- KEYS [#12] task 09a: ac1 a.sh :: audit defect [structural] [-]' "$log" \
+     && grep -qxF -- '- REPEAT [#13] task 09a: ac1 a.sh :: audit defect [structural] [-]' "$log" \
+     && grep -qxF -- '- KEYS [#14] task 09: ac1 a.sh :: audit defect [structural] [-]' "$log" \
+     && ! grep -q '^- REPEAT \[#14\]' "$log" && [[ "$(krepeats)" == 4 ]]; then
+    report PASS "keys: --task audit and 09a accepted; REPEAT compares the same --task value only (09 ≠ 09a, audit ≠ NN)"
+  else
+    report FAIL "keys: audit / 09a task values" "codes='$codes' repeats=$(krepeats)"
+  fi
+
+  # Ledger integrity (exit 3): duplicate KEYS for the spawn number, missing SPAWN heading, missing log.
+  lines_a="$(wc -l < "$log" | tr -d ' ')"
+  kkeys "$fx" 01 01 r1.md; rc=$K_RC; d="$K_ERR"
+  kkeys "$fx" 99 01 r1.md
+  lines_b="$(wc -l < "$log" | tr -d ' ')"
+  if [[ $rc -eq 3 && $K_RC -eq 3 && "$lines_a" == "$lines_b" ]] \
+     && [[ "$d" == *'KEYS [#01] already present'* && "$K_ERR" == *'SPAWN [#99] not found'* ]]; then
+    report PASS "keys: duplicate KEYS for a spawn number → exit 3; missing SPAWN [#NN] heading → exit 3; nothing appended"
+  else
+    report FAIL "keys: integrity exit 3" "rc=$rc/$K_RC lines $lines_a->$lines_b d='$d' err='$K_ERR'"
+  fi
+  bash "$BIN" note --root "$fx" --goal demo --text 'see - KEYS [#15] discussion' >/dev/null 2>&1
+  kkeys "$fx" 15 07 r1.md
+  if [[ $K_RC -eq 0 ]] && grep -qxF -- '- KEYS [#15] task 07: ac2 src/a.sh :: missing guard [structural] [-] | ac1 b.sh :: wrong exit [line-patch] [-]' "$log"; then
+    report PASS "keys: duplicate check is anchored — free text mentioning '- KEYS [#15] ' does not block spawn 15"
+  else
+    report FAIL "keys: anchored duplicate check" "rc=$K_RC err='$K_ERR'"
+  fi
+  d="$(alloc_fx)"
+  mkdir -p "$d/$KEYS_G/spawns"
+  printf '%s\n' '### Required fixes' '- [ ] AC1 `a.sh`: x — y [structural]' > "$d/$KEYS_G/spawns/r.md"
+  bash "$BIN" keys --root "$d" --goal demo --spawn 01 --task 01 --report "$KEYS_G/spawns/r.md" >/dev/null 2>&1; rc=$?
+  if [[ $rc -eq 3 && ! -f "$d/$KEYS_G/orchestration-log.md" ]]; then
+    report PASS "keys: no orchestration log → exit 3, no log created"
+  else
+    report FAIL "keys: missing log" "rc=$rc"
+  fi
+
+  # Usage (2) and path (4) errors in the frozen order: flags → paths → integrity; nothing appended.
+  lines_a="$(wc -l < "$log" | tr -d ' ')"
+  codes=""
+  kc() { bash "$BIN" keys --root "$fx" "$@" >/dev/null 2>&1; codes+="$? "; }
+  R="$KEYS_G/spawns/r1.md"
+  kc --goal demo --spawn 03 --report "$R"
+  kc --goal demo --task 01 --report "$R"
+  kc --goal demo --spawn 03 --task 01
+  kc --goal demo --spawn 3 --task 01 --report "$R"
+  kc --goal demo --spawn ab --task 01 --report "$R"
+  kc --goal demo --spawn 03 --task 9 --report "$R"
+  kc --goal demo --spawn 03 --task 009 --report "$R"
+  kc --goal demo --spawn 03 --task AUDIT --report "$R"
+  kc --goal demo --spawn 03 --task 09A --report "$R"
+  kc --goal demo --spawn 03 --task 09ab --report "$R"
+  kc --goal demo --spawn 03 --task 01 --report "$R" --bogus x
+  kc --goal demo --spawn 03 --task 9 --report "$KEYS_G/spawns/missing.md"
+  kc --goal demo --spawn 03 --task 01 --report "$KEYS_G/spawns/missing.md"
+  kc --goal nope --spawn 03 --task 01 --report "$R"
+  kc --goal demo --spawn 99 --task 01 --report "$KEYS_G/spawns/missing.md"
+  codes="${codes% }"
+  lines_b="$(wc -l < "$log" | tr -d ' ')"
+  want="2 2 2 2 2 2 2 2 2 2 2 2 4 4 4"
+  if [[ "$codes" == "$want" && "$lines_a" == "$lines_b" ]]; then
+    report PASS "keys: exit 2 (missing flag, bad --spawn, bad --task, unknown flag; before paths) and exit 4 (missing report / goal; before integrity); nothing appended"
+  else
+    report FAIL "keys: exit 2 / 4" "got '$codes' want '$want' lines $lines_a->$lines_b"
+  fi
+}
+
+run_keys_cases
+
+# KEYS / REPEAT lines quote report text, so they must never feed outcome's running totals.
+keys_running_totals_case() {
+  local fx log out
+  fx="$(make_keys_fixture)"
+  log="$fx/$KEYS_G/orchestration-log.md"
+  printf 'rrrrrrrrr' > "$fx/$KEYS_G/spawns/01-report.md"   # 9 bytes: floor((7 + 9) / 4) = 4
+  printf 'rrrrrrrrr' > "$fx/$KEYS_G/spawns/03-report.md"
+  bash "$BIN" outcome --root "$fx" --goal demo --spawn 01 --report "$KEYS_G/spawns/01-report.md" \
+    --verdict PASS --model-reported X >/dev/null 2>&1
+  kreport "$fx" r.md '### Required fixes (if NEEDS FIXES)' \
+    '- [ ] AC1 `log.md`: quotes running io: 999 and running work: 888 — fix [structural]'
+  kkeys "$fx" 02 01 r.md
+  out="$(bash "$BIN" outcome --root "$fx" --goal demo --spawn 03 --report "$KEYS_G/spawns/03-report.md" \
+        --verdict PASS --model-reported X 2>/dev/null)"
+  if [[ $K_RC -eq 0 && "$out" == *'io_est_tokens: 4 · work_read_chars: n/a · work_est_tokens: n/a · running io: 8 · running work: 0' ]]; then
+    report PASS "keys: KEYS text quoting 'running io: 999' never feeds outcome's running totals (running io: 8)"
+  else
+    report FAIL "keys: running totals unaffected" "rc=$K_RC out='$out'"
+  fi
+}
+keys_running_totals_case
+
+# Old-shape uncited items (first word is a backtick span) key as `uncited <loc> :: <defect>`.
+keys_uncited_case() {
+  local fx log wk
+  fx="$(make_keys_fixture)"
+  log="$fx/$KEYS_G/orchestration-log.md"
+  kreport "$fx" r.md '### Required fixes (if NEEDS FIXES)' \
+    '- [ ] `src/a.sh:12`: missing guard — fix it [structural]' \
+    '- [ ] `b.sh#L7`: Wrong   exit — fix it [line-patch]' \
+    '- [ ] `c.sh:3-5` no colon form — fix it [structural]' \
+    '- [ ] `d.sh#L7-L9`: range anchor — fix it [structural]' \
+    '- [ ] AC2 `src/a.sh:12-14`: missing guard — add the check [structural]'
+  kkeys "$fx" 01 01 r.md
+  wk='- KEYS [#01] task 01: uncited src/a.sh :: missing guard [structural] [-] | uncited b.sh :: wrong exit [line-patch] [-] | uncited c.sh :: no colon form [structural] [-] | uncited d.sh :: range anchor [structural] [-] | ac2 src/a.sh :: missing guard [structural] [-]'
+  if [[ $K_RC -eq 0 && "$K_OUT" == "$wk" ]] && grep -qxF -- "$wk" "$log"; then
+    report PASS "keys: old-shape uncited items → 'uncited <loc> :: <defect>' with :N / #LN / :N-M / #LN-LM stripped; cited item keeps its citation"
+  else
+    report FAIL "keys: old-shape uncited items" "rc=$K_RC out='$K_OUT' want='$wk' err='$K_ERR'"
+  fi
+}
+keys_uncited_case
+
+# A first word that opens a backtick which never closes keeps the cited-form key (header note):
+# the first word is the citation, there is no span, so the key is `<word> - :: <rest>`. The widened
+# guard (any single backtick → `uncited`) would key it as `uncited - :: ...` instead.
+keys_unclosed_backtick_check() { # <runner...> → 0 when the item keys in the cited form (sets KU_DETAIL)
+  local fx out rc wk
+  KU_DETAIL=""
+  fx="$(alloc_fx)"
+  mkdir -p "$fx/$KEYS_G/spawns"
+  printf 'ctx\n' > "$fx/$KEYS_G/spawns/01-context.md"
+  printf '%s\n' '### Required fixes (if NEEDS FIXES)' \
+    '- [ ] `src/a.sh:12 missing guard — fix it [structural]' > "$fx/$KEYS_G/spawns/r.md"
+  "$@" spawn --root "$fx" --goal demo --agent evaluator --phase P4 --model-requested m \
+    --context "$KEYS_G/spawns/01-context.md" >/dev/null 2>&1 || { KU_DETAIL="spawn failed"; return 1; }
+  out="$("$@" keys --root "$fx" --goal demo --spawn 01 --task 01 --report "$KEYS_G/spawns/r.md" 2>&1)"; rc=$?
+  wk='- KEYS [#01] task 01: `src/a.sh:12 - :: missing guard [structural] [-]'
+  if [[ $rc -eq 0 && "$out" == "$wk" ]] && grep -qxF -- "$wk" "$fx/$KEYS_G/orchestration-log.md"; then
+    return 0
+  fi
+  KU_DETAIL="rc=$rc out='$out' want='$wk'"
+  return 1
+}
+if keys_unclosed_backtick_check bash "$BIN"; then
+  report PASS "keys: first word opening a never-closed backtick keeps the cited-form key '\`src/a.sh:12 - :: missing guard' (not 'uncited ...')"
+else
+  report FAIL "keys: unclosed-backtick fallback" "$KU_DETAIL"
+fi
+mutation_caught "unclosed-backtick guard widened to any single backtick" \
+  's/case "\$head" in \*"\$BT"\*"\$BT"\*) cit="uncited"/case "$head" in *"$BT"*) cit="uncited"/' \
+  keys_unclosed_backtick_check
+
+# spawn / outcome / note output is unchanged: the whole log matches a literal (timestamps normalized).
+unchanged_output_case() {
+  local fx log exp
+  fx="$(make_fixture)"
+  log="$fx/_memory/work/goals/demo/orchestration-log.md"
+  exp="$FIXTURE_TMPDIR/expected-log.md"
+  cat > "$exp" <<'EOF'
+# Orchestration Log — demo
+
+Append-only spawn ledger. Running io_est_tokens (orchestrator I/O proxy, chars/4) and work_est_tokens (subagent self-reported footprint /4): see latest entry.
+
+---
+
+### TS — SPAWN implementer (P4) [#01]
+- agent: implementer · model requested: light-model
+- why: —
+- writes claim: none
+- expected output: —
+- context: _memory/work/goals/demo/spawns/01-context.md · context_chars: 101
+- OUTCOME [#01]: PASS · model reported: X · model_check: unverified · report: _memory/work/goals/demo/spawns/01-report.md · report_chars: 40 · io_est_tokens: 35 · work_read_chars: n/a · work_est_tokens: n/a · running io: 35 · running work: 0
+
+### TS — Phase 4 complete
+EOF
+  ( cd "$fx" \
+    && bash "$BIN" spawn --goal demo --agent implementer --phase P4 --model-requested light-model \
+         --context _memory/work/goals/demo/spawns/01-context.md >/dev/null 2>&1 \
+    && bash "$BIN" outcome --goal demo --spawn 01 --report _memory/work/goals/demo/spawns/01-report.md \
+         --verdict PASS --model-reported X >/dev/null 2>&1 \
+    && bash "$BIN" note --goal demo --text "Phase 4 complete" >/dev/null 2>&1 )
+  if sed -E "$TS_RE" "$log" | cmp -s - "$exp"; then
+    report PASS "spawn / outcome / note log output byte-identical to the pre-keys literal"
+  else
+    report FAIL "spawn / outcome / note output changed" "$(sed -E "$TS_RE" "$log" | diff - "$exp" | head -n 6)"
+  fi
+}
+unchanged_output_case
+
+# Same inputs as unchanged_output_case, but compares what the commands PRINT: the stdout of
+# spawn / outcome / note, plus one usage error (note without --text: stderr text and exit
+# code), against a literal captured from the script before the model_check / uncited-key edits.
+unchanged_stdout_case() {
+  local fx exp got s o n err rc
+  fx="$(make_fixture)"
+  exp="$FIXTURE_TMPDIR/expected-stdout.txt"
+  got="$FIXTURE_TMPDIR/got-stdout.txt"
+  cat > "$exp" <<'EOF'
+### TS — SPAWN implementer (P4) [#01]
+- OUTCOME [#01]: PASS · model reported: X · model_check: unverified · report: _memory/work/goals/demo/spawns/01-report.md · report_chars: 40 · io_est_tokens: 35 · work_read_chars: n/a · work_est_tokens: n/a · running io: 35 · running work: 0
+### TS — Phase 4 complete
+exit: 2
+log-spawn: 'note' requires --text
+EOF
+  s="$(cd "$fx" && bash "$BIN" spawn --goal demo --agent implementer --phase P4 --model-requested light-model \
+         --context _memory/work/goals/demo/spawns/01-context.md 2>/dev/null)"
+  o="$(cd "$fx" && bash "$BIN" outcome --goal demo --spawn 01 --report _memory/work/goals/demo/spawns/01-report.md \
+         --verdict PASS --model-reported X 2>/dev/null)"
+  n="$(cd "$fx" && bash "$BIN" note --goal demo --text "Phase 4 complete" 2>/dev/null)"
+  err="$(cd "$fx" && bash "$BIN" note --goal demo 2>&1 >/dev/null)"; rc=$?
+  printf '%s\n%s\n%s\nexit: %s\n%s\n' "$s" "$o" "$n" "$rc" "$err" | sed -E "$TS_RE" > "$got"
+  if cmp -s "$got" "$exp"; then
+    report PASS "spawn / outcome / note stdout and the 'note' usage error (stderr text, exit 2) match the pre-edit literal"
+  else
+    report FAIL "spawn / outcome / note stdout or usage error changed" "$(diff "$got" "$exp" | head -n 6)"
+  fi
+}
+unchanged_stdout_case
+
+# --task belongs to keys alone: spawn / outcome / note keep rejecting it as an unknown flag.
+task_flag_rejected_case() {
+  local fx log codes errs lines_a lines_b err
+  fx="$(make_fixture)"
+  log="$fx/_memory/work/goals/demo/orchestration-log.md"
+  bash "$BIN" spawn --root "$fx" --goal demo --agent implementer --phase P4 --model-requested m \
+    --context _memory/work/goals/demo/spawns/01-context.md >/dev/null 2>&1
+  lines_a="$(wc -l < "$log" | tr -d ' ')"
+  codes=""; errs=""
+  err="$(bash "$BIN" note --root "$fx" --goal demo --text x --task 01 2>&1 >/dev/null)"; codes+="$? "; errs+="$err"$'\n'
+  err="$(bash "$BIN" spawn --root "$fx" --goal demo --agent e --phase p --model-requested m \
+    --context _memory/work/goals/demo/spawns/02-context.md --task 01 2>&1 >/dev/null)"; codes+="$? "; errs+="$err"$'\n'
+  err="$(bash "$BIN" outcome --root "$fx" --goal demo --spawn 01 \
+    --report _memory/work/goals/demo/spawns/01-report.md --verdict PASS --model-reported X --task 01 2>&1 >/dev/null)"; codes+="$? "; errs+="$err"$'\n'
+  err="$(bash "$BIN" note --root "$fx" --goal demo --text x --task 2>&1 >/dev/null)"; codes+="$?"; errs+="$err"
+  lines_b="$(wc -l < "$log" | tr -d ' ')"
+  if [[ "$codes" == "2 2 2 2" && "$lines_a" == "$lines_b" ]] \
+     && [[ "$errs" == *"unknown flag '--task' for 'note'"* && "$errs" == *"unknown flag '--task' for 'spawn'"* \
+           && "$errs" == *"unknown flag '--task' for 'outcome'"* ]]; then
+    report PASS "--task on note / spawn / outcome → exit 2, stderr names --task (unknown flag), nothing appended"
+  else
+    report FAIL "--task rejected outside keys" "codes='$codes' lines $lines_a->$lines_b errs='$errs'"
+  fi
+}
+task_flag_rejected_case
+
+if grep -qF 'log-spawn.sh keys' "$BIN" && grep -qF 'bad --task' "$BIN" \
+   && grep -qF 'KEYS \[#NN\] ' "$BIN"; then
+  report PASS "header documents keys (flags, KEYS/REPEAT lines, exit codes incl. duplicate KEYS)"
+else
+  report FAIL "header documents keys"
+fi
 
 # ---------------------------------------------------------------------------
 # Structural wiring

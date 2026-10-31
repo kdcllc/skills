@@ -1,6 +1,9 @@
 ---
 name: feature
-description: Orchestrate a feature for {{PROJECT_NAME}} end-to-end — evaluator-gated goal, task, audit, docs, and PR phases, all execution delegated to fresh-context subagents. Invoke for any non-trivial feature.
+description: Orchestrate a feature for {{PROJECT_NAME}} end-to-end — evaluator-gated goal, task, audit, docs, and PR phases, all execution delegated to fresh-context subagents. {{OPT_IN_FEATURE_SENTENCE}}
+<!-- IF opt_in -->
+disable-model-invocation: true
+<!-- ENDIF opt_in -->
 ---
 
 # Feature (Feature Orchestrator)
@@ -34,7 +37,12 @@ inline by the orchestrator (single-line output), never via `terminal`.
 
 Re-evaluations RESUME the same evaluator with a delta: Phase 4/5 list applied fixes and carry earlier required-fix lists; Phase 3 quotes newly written passages verbatim, attempt 3 fresh (`reference/goal-revisions.md`). Implementer resume and rotation per fix cycle: `reference/fix-cycles.md`.
 
+<!-- IF !kit_guard -->
 Update ORCHESTRATION.md Orchestration Progress after each step.
+<!-- ENDIF !kit_guard -->
+<!-- IF kit_guard -->
+Update `_memory/work/goals/[goal]/progress.md` (Orchestration Progress) after each step — ORCHESTRATION.md is kit-owned.
+<!-- ENDIF kit_guard -->
 
 ## Phase 1 — Alignment (no files)
 
@@ -107,9 +115,13 @@ Launch `evaluator` in audit mode with matching rule files: every task's requirem
 `terminal` with `{{FULL_TEST_COMMAND}}`. **ISSUES** → fix via executor + re-evaluate
 (rungs 1–2), re-audit (max 3); re-audits follow `reference/fix-cycles.md` § Provenance.
 
-**Quality Checks failure**: non-zero exit with truncated excerpt ⇒ **Read** the log path
-(failure section or last ≤80 lines), route to `implementer`, re-spawn `terminal`
-with a **narrower** command — never dump the full suite here.
+**Quality Checks failure**: **Read** the log path, re-spawn `terminal` narrower, classify per ORCHESTRATION.md § Quality Checks — never dump the full suite here.
+<!-- IF kit_guard -->
+
+**Kit-file gate**: run `_kit/kit-guard.sh check` inline after every spawn and in Quality
+Checks; exit 4 ⇒ restore tracked files from git, delete a modified `_kit/` file and re-run
+`emit.sh --upgrade`, log a note; never `--force`.
+<!-- ENDIF kit_guard -->
 
 If `qa: run`: after QC, spawn `evidence-collector` → `qa-evaluator` with index; re-runs re-collect.
 
@@ -118,7 +130,7 @@ via `_kit/memory.sh add`, `check` each path, log `ARCHIVED: …`; quarantine →
 driver-dispatched → `<outbox>/memory/` proposals only, no `ARCHIVED` note.
 
 Then read `goal.md`'s `phases:` block: `align_docs: false` skips Phase 6 (log "Phase 6
-skipped per goal.md"); `pull_request: false` skips Phase 7 likewise.
+skipped per goal.md"); `pull_request: false` skips Phase 7 likewise. Open `follow-ups.md` rows go in the PR body's `## Backlog (not fixed here)` (`ship-pr`), or the Phase 5 final report if Phase 7 is skipped.
 
 ## Phase 6 — Align docs (loop until doc audit APPROVED)
 

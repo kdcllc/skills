@@ -9,7 +9,7 @@
 #
 # Options:
 #   --no-install     Skip scripts/agent-kit/self-install.sh (use the current instance).
-#   -j N               Run up to N suites in parallel (default: CPU count capped at 8).
+#   -j N               Run up to N suites in parallel (default: CPU count capped at 16).
 #   --only SUBSTR      Run suites whose path contains SUBSTR (repeatable).
 #   --quick            Run a fast subset (see usage(): checks, docs-link-check, research-docs-check, …).
 #
@@ -18,6 +18,21 @@
 #   AGENT_KIT_CASE_JOBS   Parallel case blocks inside suites (default 4; exported to children).
 #   AGENT_KIT_EMIT_CACHE  Run-scoped emit cache directory (set automatically under the log dir).
 #   AGENT_KIT_DOCKER      1 = run the Docker bash:3.2 check in emit-portability.sh (default: skip).
+#   AGENT_KIT_SUITES      Whitespace-separated suite paths (relative to the repo root, or absolute)
+#                         that replace the default suite list. --only still filters them; --quick
+#                         keeps its fixed set. Used by tests/agent-kit/templates/run-all-rules.sh.
+#   AGENT_KIT_ALLOW_ALL_SKIP
+#                         1 = turn off the all-skipped rule below (one note line is printed).
+#
+# All-skipped rule: a suite that exits 0 but whose last summary line shows zero passes and at
+# least one skip is reported as "FAIL <suite> (<n>s) -- all checks skipped; log: <path>" and counts
+# as failed, because a suite that skipped every check proved nothing. Recognized summary lines:
+#   PASS: <p> ... SKIP: <s>               (most suites; spacing varies)
+#   <name> summary: ok=<p> FAIL=<f> SKIP=<s>
+#   SUMMARY: pass=<p> fail=<f> skip=<s>
+# A suite with no recognizable summary line is unaffected. A suite that skips everything on
+# purpose (for example a Windows-only suite on another host) prints a line starting with
+# "ALL-SKIP-OK: <reason>" and is exempt. Setting AGENT_KIT_ALLOW_ALL_SKIP=1 disables the rule.
 set -u
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -34,8 +49,8 @@ _cpu_jobs() {
   case "$n" in
     '' | *[!0-9]*) n=1 ;;
   esac
-  if [ "$n" -gt 8 ]; then
-    n=8
+  if [ "$n" -gt 16 ]; then
+    n=16
   fi
   if [ "$n" -lt 1 ]; then
     n=1
@@ -58,7 +73,7 @@ usage: $0 [--no-install] [-j N] [--only SUBSTR]... [--quick]
 
 Options:
   --no-install   Skip scripts/agent-kit/self-install.sh (use the current instance).
-  -j N           Run up to N suites in parallel (default: CPU count capped at 8).
+  -j N           Run up to N suites in parallel (default: CPU count capped at 16).
   --only SUBSTR  Run suites whose path contains SUBSTR (repeatable).
   --quick        Fast subset: checks.sh, docs-link-check.sh, research-docs-check.sh,
                  template-currency.sh, skill-slimming.sh, model-enforcement.sh,
@@ -69,6 +84,9 @@ Environment:
   AGENT_KIT_CASE_JOBS   Parallel case blocks inside suites (default 4).
   AGENT_KIT_EMIT_CACHE  Run-scoped emit cache dir (run-all sets under the log dir).
   AGENT_KIT_DOCKER      1 = run the Docker bash:3.2 check in emit-portability.sh (default: skip).
+  AGENT_KIT_SUITES      Whitespace-separated suite paths replacing the default suite list.
+  AGENT_KIT_ALLOW_ALL_SKIP
+                        1 = do not fail a suite whose checks all skipped (zero passes, >= 1 skip).
 EOF
   exit 2
 }
@@ -146,6 +164,53 @@ _validate_case_jobs() {
 }
 _validate_case_jobs
 
+if [ "${AGENT_KIT_ALLOW_ALL_SKIP:-}" = "1" ]; then
+  echo "agent-kit: note: AGENT_KIT_ALLOW_ALL_SKIP=1 -- suites whose checks all skipped are not failed"
+fi
+
+# Prints "<pass> <skip>" from the last summary line in a suite log (any of the three formats
+# in use, see the header), or nothing when the log has no recognizable summary line.
+_suite_last_counts() {
+  LC_ALL=C awk '
+    { sub(/\r$/, "") }
+    /^[ \t]*PASS:[ \t]*[0-9]+([^0-9].*)?SKIP:[ \t]*[0-9]+[ \t]*$/ {
+      t = $0; sub(/^[ \t]*PASS:[ \t]*/, "", t); match(t, /^[0-9]+/); p = substr(t, 1, RLENGTH)
+      t = $0; sub(/.*SKIP:[ \t]*/, "", t); sub(/[ \t]+$/, "", t); s = t; seen = 1; next
+    }
+    /summary: ok=[0-9]+[ \t]+FAIL=[0-9]+[ \t]+SKIP=[0-9]+[ \t]*$/ {
+      t = $0; sub(/.*summary: ok=/, "", t); match(t, /^[0-9]+/); p = substr(t, 1, RLENGTH)
+      t = $0; sub(/.*SKIP=/, "", t); sub(/[ \t]+$/, "", t); s = t; seen = 1; next
+    }
+    /^[ \t]*SUMMARY:[ \t]*pass=[0-9]+[ \t]+fail=[0-9]+[ \t]+skip=[0-9]+[ \t]*$/ {
+      t = $0; sub(/^[ \t]*SUMMARY:[ \t]*pass=/, "", t); match(t, /^[0-9]+/); p = substr(t, 1, RLENGTH)
+      t = $0; sub(/.*skip=/, "", t); sub(/[ \t]+$/, "", t); s = t; seen = 1; next
+    }
+    END { if (seen) print p, s }
+  ' "$1" 2>/dev/null
+}
+
+# Returns 0 when the suite log shows zero passes and at least one skip (and the suite did not
+# opt out with an ALL-SKIP-OK line, nor the run with AGENT_KIT_ALLOW_ALL_SKIP=1).
+_suite_all_skipped() {
+  local log="$1" counts ras_p ras_s
+  if [ "${AGENT_KIT_ALLOW_ALL_SKIP:-}" = "1" ]; then
+    return 1
+  fi
+  if grep -Eq '^[[:space:]]*ALL-SKIP-OK:' "$log" 2>/dev/null; then
+    return 1
+  fi
+  counts="$(_suite_last_counts "$log")"
+  if [ -z "$counts" ]; then
+    return 1
+  fi
+  ras_p="${counts%% *}"
+  ras_s="${counts#* }"
+  if [ "$ras_p" -eq 0 ] 2>/dev/null && [ "$ras_s" -ge 1 ] 2>/dev/null; then
+    return 0
+  fi
+  return 1
+}
+
 # Memory suite runs as memory.sh[bash] only (pwsh/parity legs retired).
 # MEMORY_SPLIT kept for log layout compatibility when comparing split logs.
 MEMORY_SPLIT=1
@@ -160,16 +225,22 @@ fi
 
 # Slowest suites first when scheduling parallel jobs (stable print order is separate).
 PRIORITY=(
-  tests/agent-kit/templates/memory.sh
   tests/agent-kit/loop-harness/run.sh
+  tests/agent-kit/templates/memory.sh
   tests/agent-kit/templates/emit-determinism.sh
   tests/agent-kit/templates/emit-portability.sh
   tests/agent-kit/templates/model-currency.sh
-  tests/agent-kit/templates/legacy-paths.sh
   tests/agent-kit/templates/memory-wiring.sh
+  tests/agent-kit/templates/loop-guards.sh
+  tests/agent-kit/templates/install-feedback.sh
+  tests/agent-kit/templates/memory-backfill.sh
   tests/agent-kit/templates/emit-migrate.sh
-  tests/agent-kit/templates/emit-golden.sh
+  tests/agent-kit/templates/loop-retry-breaker.sh
   tests/agent-kit/templates/windows-launcher.sh
+  tests/agent-kit/templates/legacy-paths.sh
+  tests/agent-kit/templates/opt-in.sh
+  tests/agent-kit/templates/kit-guard.sh
+  tests/agent-kit/templates/emit-golden.sh
   tests/agent-kit/templates/log-spawn.sh
 )
 
@@ -187,6 +258,16 @@ QUICK_SUITES=(
 
 _build_default_suites() {
   local out=()
+  if [ -n "${AGENT_KIT_SUITES:-}" ]; then
+    local given
+    set -f
+    for given in $AGENT_KIT_SUITES; do
+      out+=("$given")
+    done
+    set +f
+    printf '%s\n' "${out[@]}"
+    return 0
+  fi
   out+=(
     tests/agent-kit/checks.sh
     tests/agent-kit/docs-link-check.sh
@@ -475,7 +556,12 @@ for display in "${DISPLAY_ORDER[@]}"; do
     slow_list="${slow_list}"$'\n'"${sec} ${display}"
   fi
   if [ "$rc" = "0" ]; then
-    printf 'ok    %s (%ss)\n' "$display" "$sec"
+    if _suite_all_skipped "$log"; then
+      failed=$((failed + 1))
+      printf 'FAIL  %s (%ss) -- all checks skipped; log: %s\n' "$display" "$sec" "$log"
+    else
+      printf 'ok    %s (%ss)\n' "$display" "$sec"
+    fi
   else
     failed=$((failed + 1))
     printf 'FAIL  %s (%ss) -- log: %s\n' "$display" "$sec" "$log"

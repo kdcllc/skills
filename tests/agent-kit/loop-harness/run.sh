@@ -599,14 +599,15 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 107. skills/agent-kit/SKILL.md metadata.version semver; README Kit version + TypeScript/Python/1000+;
-#      instance VERSION copies and manifest kitVersion (SKIP when absent).
+# 107. skills/agent-kit/SKILL.md metadata.version semver; README carries no
+#      hard-coded X.Y.Z version + TypeScript/Python/1000+; instance VERSION copies
+#      and manifest kitVersion (SKIP when absent).
 # ---------------------------------------------------------------------------
 _107_version_exact=0
 [[ "$KIT_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] && _107_version_exact=1
 _107_readme_version=0; _107_readme_ts=0; _107_readme_py=0; _107_readme_1000=0
 _107_instance_ok=1; _107_manifest_ok=1
-grep -qF -- "Kit version: **$KIT_VERSION**" "$README_MD" && _107_readme_version=1
+grep -qE -- '[0-9]+\.[0-9]+\.[0-9]+' "$README_MD" || _107_readme_version=1
 grep -qF -- 'TypeScript' "$README_MD" && _107_readme_ts=1
 grep -qF -- 'Python' "$README_MD" && _107_readme_py=1
 grep -qF -- '1000+' "$README_MD" && _107_readme_1000=1
@@ -632,10 +633,10 @@ fi
 if [[ "$_107_version_exact" -eq 1 && "$_107_readme_version" -eq 1 && "$_107_readme_ts" -eq 1 \
       && "$_107_readme_py" -eq 1 && "$_107_readme_1000" -eq 1 \
       && "$_107_instance_ok" -eq 1 && "$_107_manifest_ok" -eq 1 ]]; then
-  report PASS "107: skills/agent-kit/SKILL.md metadata.version is $KIT_VERSION; README + instance/manifest pins + TypeScript + Python + 1000"
+  report PASS "107: skills/agent-kit/SKILL.md metadata.version is $KIT_VERSION; README unversioned + instance/manifest pins + TypeScript + Python + 1000"
 else
   report FAIL "107: VERSION==$KIT_VERSION + README/instance/manifest claims" \
-    "version=$_107_version_exact readme_version=$_107_readme_version ts=$_107_readme_ts py=$_107_readme_py 1000=$_107_readme_1000 instance=$_107_instance_ok manifest=$_107_manifest_ok"
+    "version=$_107_version_exact readme_unversioned=$_107_readme_version ts=$_107_readme_ts py=$_107_readme_py 1000=$_107_readme_1000 instance=$_107_instance_ok manifest=$_107_manifest_ok"
 fi
 
 # ---------------------------------------------------------------------------

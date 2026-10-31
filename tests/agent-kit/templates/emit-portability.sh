@@ -257,13 +257,14 @@ _emit_stdout_warnings() { # stdout
 }
 
 case_upgrade_loop_ps1_modified_retain() {
-  local root out rc baseline_warn warn_n
+  local root out rc baseline_warn warn_n baseline_out
   root="$(mktemp_root)"
   emit_cache_copy "$root" "$FIXTURE" || return 1
   _upgrade_loop_ps1_triple_setup "$root" || return 1
   rc=0
   out="$(run_emit "$root" --force --upgrade 2>&1)" || rc=$?
   [ "$rc" -eq 0 ] || return 1
+  baseline_out="$out"
   baseline_warn="$(_emit_stdout_warnings "$out")"
   [ -n "$baseline_warn" ] || baseline_warn=0
 
@@ -278,7 +279,117 @@ case_upgrade_loop_ps1_modified_retain() {
   [ ! -f "$root/_loop/breaker.ps1" ] || return 1
   [ ! -f "$root/_kit/memory.ps1" ] || return 1
   warn_n="$(_emit_stdout_warnings "$out")"
-  [ -n "$warn_n" ] && [ "$warn_n" -gt "$baseline_warn" ]
+  [ -n "$warn_n" ] && [ "$warn_n" -gt "$baseline_warn" ] || return 1
+  # The kept file prints its own warning line, and the count rises by exactly that one line.
+  [ "$warn_n" -eq $((baseline_warn + 1)) ] || return 1
+  printf '%s\n' "$out" | grep -qxF "$_KEPT_LOOP_PS1_LINE" || return 1
+  [ "$(printf '%s\n' "$out" | grep -cF 'warning: kept ')" -eq 1 ] || return 1
+  # Control: the unmodified run printed no `kept` line.
+  ! printf '%s\n' "$baseline_out" | grep -qF 'warning: kept '
+}
+
+_KEPT_LOOP_PS1_LINE='emit: warning: kept _loop/loop.ps1: kit-owned file from an earlier emit, modified locally, no longer emitted — delete it or keep it as your own'
+
+# A file the previous manifest records is gone and is not kit-owned: emit prints one warning line for it and
+# counts it. Control: the same file present is carried, with no such line.
+case_upgrade_recorded_file_missing_warns() {
+  local root out rc baseline_warn warn_n probe='docs/user-owned-note.md' line
+  line="emit: warning: $probe is recorded in the previous manifest but missing — nothing to prune"
+  root="$(mktemp_root)"
+  emit_cache_copy "$root" "$FIXTURE" || return 1
+  mkdir -p "$root/docs"
+  echo 'user note' > "$root/$probe"
+  manifest_add_file_entry "$root/orchestration-kit.manifest.json" "$probe" "$root/$probe" || return 1
+  rc=0
+  out="$(run_emit "$root" --force --upgrade 2>&1)" || rc=$?
+  [ "$rc" -eq 0 ] || return 1
+  [ -f "$root/$probe" ] || return 1
+  ! printf '%s\n' "$out" | grep -qF 'but missing' || return 1
+  baseline_warn="$(_emit_stdout_warnings "$out")"
+  [ -n "$baseline_warn" ] || baseline_warn=0
+
+  root="$(mktemp_root)"
+  emit_cache_copy "$root" "$FIXTURE" || return 1
+  mkdir -p "$root/docs"
+  echo 'user note' > "$root/$probe"
+  manifest_add_file_entry "$root/orchestration-kit.manifest.json" "$probe" "$root/$probe" || return 1
+  rm -f "$root/$probe"
+  rc=0
+  out="$(run_emit "$root" --force --upgrade 2>&1)" || rc=$?
+  [ "$rc" -eq 0 ] || return 1
+  printf '%s\n' "$out" | grep -qxF "$line" || return 1
+  warn_n="$(_emit_stdout_warnings "$out")"
+  [ -n "$warn_n" ] && [ "$warn_n" -eq $((baseline_warn + 1)) ]
+}
+
+# CDPATH hazard: with CDPATH set, `cd <relative-name>` may enter a decoy directory and prints the resolved path
+# to stdout, so `$(cd … && pwd)` yields two lines or the wrong directory. emit.sh resolves its script, kit and
+# root directories with `CDPATH= cd`. The probe exports CDPATH="<decoy>:." (the decoy holds same-named empty
+# directories), then runs emit with a relative --root and --kit, with a relative script path and the default kit,
+# and `--check` with a relative root. Each emit run must exit 0, print exactly one `emit: written …` stdout line
+# and write only under the intended root; the --check run must exit 0 with `kit-guard: ok …`. <kit-dir> defaults
+# to the repository kit.
+_cdpath_run() { # <work> <out> <err> emit-args… — run emit.sh from <work> with the hostile CDPATH
+  local w="$1" out="$2" err="$3"
+  shift 3
+  ( cd "$w" && CDPATH="$w/decoy:." "$BASH" "$@" ) >"$out" 2>"$err"
+}
+
+case_cdpath_relative_paths() { # [kit-dir]
+  local kitdir="${1:-$KIT}" w answers rc out err
+  answers="$REPO_ROOT/tests/agent-kit/fixtures/emit-golden/cases/harness-claude-code/answers.json"
+  [ -f "$answers" ] || return 1
+  w="$(mktemp_root)"
+  mkdir -p "$w/decoy/r" "$w/decoy/r2"
+  ln -s "$kitdir" "$w/kitlink" 2>/dev/null || cp -R "$kitdir" "$w/kitlink" || return 1
+  out="$w/out"
+  err="$w/err"
+
+  # Relative --root and --kit, absolute script path.
+  rc=0
+  _cdpath_run "$w" "$out" "$err" "$kitdir/bin/emit.sh" --root r --kit kitlink --answers "$answers" || rc=$?
+  [ "$rc" -eq 0 ] || return 1
+  [ "$(wc -l < "$out" | tr -d ' ')" -eq 1 ] && grep -q '^emit: written ' "$out" || return 1
+  [ -f "$w/r/orchestration-kit.manifest.json" ] || return 1
+  [ -z "$(ls -A "$w/decoy/r")" ] || return 1
+
+  # Relative script path and the default kit (derived from the script's directory).
+  rc=0
+  _cdpath_run "$w" "$out" "$err" kitlink/bin/emit.sh --root r2 --answers "$answers" || rc=$?
+  [ "$rc" -eq 0 ] || return 1
+  [ "$(wc -l < "$out" | tr -d ' ')" -eq 1 ] && grep -q '^emit: written ' "$out" || return 1
+  [ -f "$w/r2/orchestration-kit.manifest.json" ] || return 1
+  [ -z "$(ls -A "$w/decoy/r2")" ] || return 1
+
+  # --check with a relative root: checks the emitted tree, not the decoy directory of the same name.
+  rc=0
+  _cdpath_run "$w" "$out" "$err" kitlink/bin/emit.sh --check --root r || rc=$?
+  [ "$rc" -eq 0 ] || return 1
+  grep -q '^kit-guard: ok ' "$out" || return 1
+  [ -z "$(ls -A "$w/decoy/r")" ]
+}
+
+# Failing counterparts: the same probe on a copy of the kit whose emit.sh has ONE `CDPATH= cd` changed back to `cd`
+# must fail (exactly one line differs, the copy still parses and still holds the other `CDPATH=` assignments).
+# The kit-directory capture from `$SCRIPT_DIR/..` is not probed this way: that path is absolute, so CDPATH is never
+# consulted for it; the static check below covers it.
+case_cdpath_mutant_fails() { # <sed expression that reverts one site>
+  local d mk
+  d="$(mktemp_root)"
+  mk="$d/kit"
+  cp -R "$KIT" "$mk" || return 1
+  sed "$1" "$KIT/bin/emit.sh" > "$mk/bin/emit.sh" || return 1
+  [ "$(diff "$KIT/bin/emit.sh" "$mk/bin/emit.sh" | grep -c '^>')" -eq 1 ] || return 1
+  grep -q 'CDPATH= cd ' "$mk/bin/emit.sh" || return 1
+  bash -n "$mk/bin/emit.sh" || return 1
+  ! case_cdpath_relative_paths "$mk"
+}
+
+# Static pairing: every directory change in emit.sh that feeds a `$( … )` capture is `CDPATH= cd`.
+case_no_bare_cd_capture() {
+  [ -f "$KIT/bin/emit.sh" ] || return 1
+  grep -q 'CDPATH= cd ' "$KIT/bin/emit.sh" || return 1
+  ! grep -qE '\$\(cd ' "$KIT/bin/emit.sh"
 }
 
 emit_cache_init
@@ -340,6 +451,38 @@ if case_upgrade_loop_ps1_modified_retain; then
 else
   report FAIL "upgrade: modified loop.ps1 retained; warnings count"
 fi
+
+if case_upgrade_recorded_file_missing_warns; then
+  report PASS "upgrade: a recorded non-kit file that is missing prints one warning line and is counted"
+else
+  report FAIL "upgrade: a recorded non-kit file that is missing prints one warning line and is counted"
+fi
+
+# CDPATH: relative --root/--kit/script paths and --check behave the same with a hostile exported CDPATH.
+if case_cdpath_relative_paths; then
+  report PASS "CDPATH=<decoy>:. exported: relative --root, --kit, script path and --check resolve to the intended root"
+else
+  report FAIL "CDPATH=<decoy>:. exported: relative --root, --kit, script path and --check resolve to the intended root"
+fi
+
+if case_no_bare_cd_capture; then
+  report PASS "emit.sh: every directory capture uses CDPATH= cd (no bare \$(cd …) left)"
+else
+  report FAIL "emit.sh: every directory capture uses CDPATH= cd (no bare \$(cd …) left)"
+fi
+
+_cdpath_mutant_report() { # <name> <sed expression>
+  if case_cdpath_mutant_fails "$2"; then
+    report PASS "mutation-proof: emit.sh with the $1 reverted to a bare cd fails the CDPATH probe"
+  else
+    report FAIL "mutation-proof: emit.sh with the $1 reverted to a bare cd fails the CDPATH probe"
+  fi
+}
+
+_cdpath_mutant_report 'script-directory capture' 's/^SCRIPT_DIR="[$](CDPATH= cd /SCRIPT_DIR="$(cd /'
+_cdpath_mutant_report 'explicit --kit capture' 's/^  KIT="[$](CDPATH= cd "[$]KIT"/  KIT="$(cd "$KIT"/'
+_cdpath_mutant_report '--check root capture' 's/_check_root="[$](CDPATH= cd /_check_root="$(cd /'
+_cdpath_mutant_report 'root capture' 's/^  ROOT="[$](CDPATH= cd /  ROOT="$(cd /'
 
 # bash:3.2 docker run of emit-golden.sh
 case "${AGENT_KIT_DOCKER:-}" in

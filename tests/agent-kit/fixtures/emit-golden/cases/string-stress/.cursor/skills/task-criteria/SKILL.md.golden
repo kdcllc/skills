@@ -149,12 +149,83 @@ dimension, or command output verification.
 Example — **ambiguous**: AC 7 says "match existing patterns" without naming which module
 or convention file is the reference — two evaluators could disagree on PASS.
 
+## Floor
+
+Kit-wide floor — blocking findings in citation modes cite it as **`F<n>`**:
+
+- **F1** — acceptance criteria met;
+- **F2** — no regression in behavior the task touches;
+- **F3** — the task's checks pass, and changed behavior has a test that fails without the
+  change, where the test ladder applies;
+- **F4** — tests never weakened;
+- **F5** — no completion claim the evidence contradicts;
+- **F6** — the write fence is respected and nothing dangles (references, registrations and
+  links resolve);
+- **F7** — any bypass-class problem (`destructive`, `security`, `infra`) or a hang in
+  normal use.
+
+## Citations
+
+**Scope.** The citation rule applies **only** to Phase 4 task evaluations, ladder
+re-evaluations, and Phase 5 audits. Every other evaluator mode writes items with **no
+citation**, in today's shapes: Phase 3 goal evaluation, Phase 6 doc evaluations and the
+doc audit, and arbitration mode. Issues read `[file:line] — …`; fixes read
+`- [ ] [specific, actionable fix]` followed by the kind and provenance tags.
+
+In citation modes, every **`blocker`** or **`major`** finding cites exactly one of:
+
+- **`AC<n>`** — the task's acceptance criterion number (Phase 5 audits cite **`AC<n>`** as
+  **`<TT>/AC<n>`**);
+- **`SC<n>`** — a goal Success Criterion, by its label;
+- **`F<n>`** — a floor item (**`n`** from 1 to 7).
+
+An unmet `- [ ]` requirement that no `AC<n>` or `SC<n>` covers cites **`F5`**: the report's
+completion claim for it is contradicted by the evidence.
+
+A finding that cites nothing cannot block and goes under **`### Notes (non-blocking)`**
+tagged **`[backlog]`**. A verdict whose only findings are notes is **`PASS (with notes)`**.
+
+**Required-fix line.** Each item reads
+``- [ ] <citation> `<location>`: <defect> — <fix> [line-patch|structural] [carried|regression|new]``.
+The **location** is one code span: a path with an optional `:line`, or a command. A
+**line-patch** item reads
+``- [ ] <citation> `file:line`: <defect> — replace `<old>` with `<new>` [line-patch]``.
+A **`[new]`** item's justification clause stays directly before the kind tag.
+
+### Issue key
+
+One serialization: **`<citation> <location> :: <defect>`**, lower-cased with whitespace
+collapsed. To derive it from an item:
+
+1. drop the leading `- [ ] ` and take the text up to the first ` — `;
+2. the citation is the first word;
+3. the location is the text inside the first backtick span, with a trailing `:N`, `:N-M`,
+   `#LN` or `#LN-LM` removed;
+4. the defect is the text after that span's `: `.
+
+Worked example:
+``- [ ] AC2 `src/a.sh:12-14`: missing guard — add the check [structural] [carried]``
+gives the key **`ac2 src/a.sh :: missing guard`**. Tags and the justification clause sit
+after the first ` — `, so they never enter the key. An item with no ` — ` keys its whole
+text after the trailing kind and provenance tags are stripped. A `|` inside a key becomes
+`/`, so the `KEYS` line's ` | ` separator stays unambiguous.
+An uncited item whose first word is a backtick span (the older
+``- [ ] `file:line`: <defect> — fix`` shape) keys as `uncited <location> :: <defect>`, with
+the line suffix removed from the location.
+An item with no backtick span keys its location as `-`: `<citation> - :: <rest>`.
+Lower-casing is ASCII-only (`A`–`Z`).
+
+The orchestrator computes keys; keys never change a verdict. Only **`ladder: auto`** early
+entry routes on them (`reference/fix-cycles.md`).
+
 ## Severity: minor
 
 `minor` is wording, formatting, comment text, log phrasing, or non-normative prose that
 (a) no requirement or acceptance criterion names and (b) changes no behavior, exit code,
 or output. Anything named by a requirement or AC, anything that alters behavior, and
-anything on the auto-fail list is never `minor`.
+anything on the auto-fail list is never `minor`. In citation modes, an uncited finding of
+any severity cannot block; it is a **`[backlog]`** note under **`### Notes (non-blocking)`**
+(see **Citations**).
 
 ## Required-fix tags (`[line-patch]` / `[structural]`)
 
@@ -185,9 +256,29 @@ listed it. That text is a **justification clause** — ` — missed earlier: <re
 `[new]` item, or ` — reverses cycle N: <verbatim earlier item>` for a reversal — written
 at the end of the item, **directly before the kind tag** (example:
 `- [ ] <fix> — missed earlier: <reason> [structural] [new]`). **`[carried]`** and
-**`[regression]`** items carry no justification clause. Late findings are still allowed
-and earn no extra fix cycle. **Exemption:** a reversal item (below) carries
-`reverses cycle N: <verbatim earlier item>` instead of a `missed earlier:` reason.
+**`[regression]`** items carry no justification clause. **Exemption:** a reversal item
+(below) carries `reverses cycle N: <verbatim earlier item>` instead of a `missed earlier:`
+reason.
+
+**Late-finding rule** (Phase 4 re-evaluations after the first verdict — fix cycles 2–3 and
+ladder re-evaluations — and Phase 5 re-audits after the first audit; Phase 3 goal re-checks
+are out of scope). On every such re-evaluation, a **`[new]`** required fix stays blocking
+when any of these holds:
+
+- its location is in the package's **`## Changed since last evaluation`** list;
+- it cites **`F1`**, **`F3`**, **`F4`**, **`F7`**, or any **`AC<n>`**;
+- it is a reversal (` — reverses cycle N:`), which keeps its `criteria-defect` routing.
+
+A red rung-1 or rung-2 check always blocks through the **PASS** definition, because **PASS**
+requires every acceptance criterion verified. The late-finding rule never demotes a finding
+that cites **`AC<n>`**, **`F1`**, **`F3`**, or **`F4`**.
+
+Any other late finding goes under **`### Notes (non-blocking)`** as **`[backlog] [late]`**
+with its **` — missed earlier:`** clause. The orchestrator still logs `late finding:` per
+**`[new]`** item; late findings earn no extra fix cycle. The drift trigger
+(`reference/continuation-ladder.md` § Rung 5) counts the `[new]` items in the cycle 2–3
+verdicts.
+Demoted `[backlog] [late]` notes count toward this total.
 
 Signature and unanimity comparisons strip the **justification clause** from its start
 (` — missed earlier:` or ` — reverses cycle `) **through the end of the item**, removing
@@ -207,10 +298,12 @@ drift; they do not license it.
 ## Verdicts
 
 - **PASS**: every requirement and acceptance criterion verified, ladder rungs 1–2 green,
-  no auto-fails.
+  no auto-fails; no known unmet acceptance criterion, red rung-1/2 check, or weakened test.
 - **PASS (with notes)**: every requirement and acceptance criterion verified, rungs
-  1–2 green, no auto-fails; the only issues found are `minor` and are listed under
-  `### Notes (non-blocking)`. Counts as PASS for phase advancement.
-- **NEEDS FIXES**: exhaustive required-fixes list (task loops back at most 3 times).
-  Requires at least one `major` or `blocker`.
+  1–2 green, no auto-fails, no known weakened test; the only issues found are `minor`
+  and/or uncited findings, listed under `### Notes (non-blocking)` (`[backlog]` where
+  citation modes apply). Counts as PASS for phase advancement.
+- **NEEDS FIXES**: exhaustive required-fixes list (task loops back at most 3 times). In
+  citation modes, requires at least one cited **`major`** or **`blocker`** (`AC<n>`,
+  `<TT>/AC<n>`, `SC<n>`, or `F<n>`).
 - **REJECT**: approach wrong or auto-fail fired; escalation needed.

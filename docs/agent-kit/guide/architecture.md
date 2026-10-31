@@ -33,6 +33,20 @@ flowchart TD
 
 The orchestrator never substitutes implementation work: it prepares context packages, spawns subagents, logs outcomes, and advances phases only on evaluator **PASS** (or **APPROVED** for audits). See [agents-and-models.md](agents-and-models.md) for role boundaries.
 
+## Failure modes the architecture addresses
+
+A single agent that plans, executes, and reviews its own work in one context window degrades in three ways. Anthropic's Claude Code team names them in [A harness for every task: dynamic workflows in Claude Code](https://claude.dev/blog/a-harness-for-every-task-dynamic-workflows-in-claude-code/); the emitted `ORCHESTRATION.md` § Why This Architecture? carries the same table for installs.
+
+| Failure mode | What goes wrong | What the kit does about it |
+|--------------|-----------------|----------------------------|
+| **Agentic laziness** | The agent declares a multi-part job done after partial progress | No task or phase advances without an evaluator **PASS** (or **APPROVED**) against acceptance criteria written at planning time. The [`task-criteria`](../../../skills/agent-kit/templates/skills/task-criteria/SKILL.template.md) floor fails unmet criteria (**F1**) and any completion claim the evidence contradicts (**F5**). Fix cycles are capped at three, then the continuation ladder or an explicit escalation runs; work is never silently dropped. |
+| **Self-preferential bias** | The agent favors its own output when reviewing it | Verdicts come only from separate subagents ([`evaluator`](../../../skills/agent-kit/templates/agents/evaluator.md), `qa-evaluator`) with no stake in the outcome; scoring starts at 2/5 and must be earned with evidence. Fix cycle 2 rotates to a different model family, and rung-5 arbitration uses `{{MODEL_FRONTIER_ALT_FAMILY}}` (same-family on Claude Code, disclosed). |
+| **Goal drift** | Constraints and edge-case requirements fade across turns and compactions | `goal.md` and the task files hold the objective, constraints, and acceptance criteria on disk. Every spawn gets them in a fresh context package, and the Mandatory Re-Evaluate Invariants re-check every fix against them, not against the conversation. The orchestrator's own progress lives in files (the orchestration log, plus `progress.md` on guarded installs), and it recommends compaction or a fresh session past ~60% of its context window. |
+
+Fresh context per subagent also removes **context fatigue** (late tasks getting less attention), the fourth row of the emitted table.
+
+Two limits remain. The orchestrator is still one long-running session, so drift protection for it rests on its state living in files. And in [degraded mode](../../../skills/agent-kit/templates/skills/feature/reference/degraded-mode.md) Case 2 (no spawn tool), the orchestrator performs verdict roles itself; every such gate is disclosed to the user as **self-evaluated** (see [evaluation-system.md](evaluation-system.md) § Self-evaluated gates (degraded mode)).
+
 ## Package components
 
 Canonical source lives under `skills/agent-kit/`. **`SKILL.md`** is the `/agent-kit` workflow (detect harnesses, greenfield gate, inspect, interview, answers file, emit, report). **`templates/`** holds agents, skills, loop drivers, tools, memory layout, `ORCHESTRATION.md`, and `models.map.md`. **`emitters/`** are **caveats only** — translation rules live in **`bin/emit.sh`** (**`bin/emit.cmd`** is its Windows launcher). **`reference/`** holds the harness capability matrix, bootstrap ids, and Windows launcher notes.
@@ -91,11 +105,13 @@ sequenceDiagram
 | **5** | Post-emit verify failed |
 | **6** | Template syntax error |
 
+`emit.sh --check` exits 0 when every manifest-listed kit file matches, 2 on a usage error or a missing manifest, and 4 when a kit-owned file is missing or differs from the manifest.
+
 Sources: [`bin/README.md`](../../../skills/agent-kit/bin/README.md), [`SKILL.md`](../../../skills/agent-kit/SKILL.md) Steps 4–6. Windows: [`reference/windows-launcher.md`](../../../skills/agent-kit/reference/windows-launcher.md).
 
 ## Installed layout
 
-Each targeted harness gets a **native tree** (for example `.claude/`, `.cursor/`, `.github/`, or `.codex/` plus root `AGENTS.md` for Codex). **Single-copy** artifacts shared across harnesses live under **`_kit/`** (`log-spawn.sh`, `memory.sh`, and `.cmd` launchers), which emit adds to `.gitignore` on every install, and **`_loop/`** (loop drivers), which is emitted only on loop installs and is **not** added to `.gitignore` by emit ([getting-started.md](getting-started.md)). **`_memory/`** splits tracked immutable knowledge from gitignored scratch.
+Each targeted harness gets a **native tree** (for example `.claude/`, `.cursor/`, `.github/`, or `.codex/` plus root `AGENTS.md` for Codex). **Single-copy** artifacts shared across harnesses live under **`_kit/`** (`log-spawn.sh`, `memory.sh`, `trace-lint.sh`, `kit-guard.sh` when `flags.kit_guard` is set, `hook-log.sh` when `flags.hook_telemetry` is set, and `.cmd` launchers), which emit adds to `.gitignore` on every install, and **`_loop/`** (loop drivers), which is emitted only on loop installs and is **not** added to `.gitignore` by emit ([getting-started.md](getting-started.md)). **`_memory/`** splits tracked immutable knowledge from gitignored scratch.
 
 ```mermaid
 flowchart TD
@@ -107,7 +123,7 @@ flowchart TD
     end
 
     subgraph singleCopy ["Single-copy (_kit gitignored · _loop on loop installs)"]
-        Kit["_kit/\nlog-spawn · memory · launchers"]
+        Kit["_kit/\nlog-spawn · memory · trace-lint · kit-guard (kit_guard) · hook-log (hook_telemetry) · launchers"]
         Loop["_loop/\nloop.sh · loop.cmd"]
     end
 
@@ -118,7 +134,7 @@ flowchart TD
     end
 
     subgraph memIgnored ["_memory/ gitignored"]
-        Work["work/goals/ · work/research/"]
+        Work["work/goals/ · work/research/ · work/hooks/ (hook_telemetry)"]
         Derive[".index/ · raw/"]
         Brk["loop/breaker-state.json · loop/ledger.jsonl · loop/attempts/"]
     end
@@ -146,6 +162,7 @@ Write authority is **contract-driven**. Task files declare a YAML `writes:` fenc
 | **Loop driver / integrator** | Driver: `_memory/loop/backlog.md`, outbox, integration commits; integrator step **3b**: `_memory/records/` or `quarantine/` via `_kit/memory.* add` |
 | **`log-spawn.sh`** | Appends to `_memory/work/goals/<goal>/orchestration-log.md` only |
 | **`memory.sh`** | Creates files under `_memory/records/` or `_memory/quarantine/` via `add`; never edits existing record bodies; `prune --apply` deletes direct child folders of `_memory/work/goals/` and `_memory/work/research/` that pass the `prune` decision rules (record ids durable) |
+| **`hook-log.sh`** (`flags.hook_telemetry`) | Appends to `_memory/work/hooks/events.jsonl` only (rotates once to `events.1.jsonl`); `summary` never writes |
 
 ```mermaid
 flowchart TD
@@ -205,7 +222,7 @@ Spawn ledger format: [`templates/tools/log-spawn.sh`](../../../skills/agent-kit/
 
 ## Task verdict states
 
-Phase 4 tasks move through dispatch and evaluation until a terminal verdict. **NEEDS FIXES** triggers up to **three** implement→evaluate **fix cycles** with **model rotation**: cycle **1** re-runs on the normal **light** tier, cycle **2** pins a **different model family** at comparable tier (or a different same-family model labelled `same-family rotation (reduced diversity)` when none is reachable), cycle **3** pins **frontier** ([`models.map.md`](../../../skills/agent-kit/templates/models.map.md) · [`fix-cycles.md`](../../../skills/agent-kit/templates/skills/feature/reference/fix-cycles.md)). **Re-evaluations** tag each required fix with `[carried]`, `[regression]`, or `[new]` after its kind tag; a **reversal** classifies **`criteria-defect`**; **rung 5** arbitration also runs when the **drift trigger** fires (the cycle 2–3 verdicts in the orchestration log together carry ≥ 2 `[new]` items). A **line-patch-only** verdict (every required fix tagged `[line-patch]`) resumes the same executor (`implementer` / `test-writer`) in apply-verbatim mode on any cycle **without** rotation, still counts toward the cap, and is always re-evaluated; any `[structural]` fix uses the normal cycle with line patches applied verbatim. In **degraded mode**, fix-cycle rotation is **skipped** (logged once per skipped rotation) in both Case 1 (model argument rejected) and Case 2 (no spawn tool). **Bypass** failure classes (`destructive`, `security`, `infra`) escalate immediately on any cycle. **`criteria-defect`** is not a bypass class but stops fix cycles at detection on any cycle — with `ladder: auto`, rung 5 arbitration now; with `ladder: escalate`, escalate with arbitration offered as option 1 (winning over line-patch-only resume). After cycle-3 exhaustion, `goal.md`'s `phases.ladder` chooses **`escalate`** (offer continuation ladder to the human) or **`auto`** (run ladder rungs **5 → 4 → 6**, then human escalation if still stuck).
+Phase 4 tasks move through dispatch and evaluation until a terminal verdict. **NEEDS FIXES** triggers up to **three** implement→evaluate **fix cycles** with **model rotation**: cycle **1** re-runs on the normal **light** tier, cycle **2** pins a **different model family** at comparable tier (or a different same-family model labelled `same-family rotation (reduced diversity)` when none is reachable), cycle **3** pins **frontier** ([`models.map.md`](../../../skills/agent-kit/templates/models.map.md) · [`fix-cycles.md`](../../../skills/agent-kit/templates/skills/feature/reference/fix-cycles.md)). **Re-evaluations** tag each required fix with `[carried]`, `[regression]`, or `[new]` after its kind tag; a **reversal** classifies **`criteria-defect`**; **rung 5** arbitration also runs when the **drift trigger** fires (the cycle 2–3 verdicts in the orchestration log together carry ≥ 2 `[new]` items). Demoted `[backlog] [late]` notes count toward this total. A **line-patch-only** verdict (every required fix tagged `[line-patch]`) resumes the same executor (`implementer` / `test-writer`) in apply-verbatim mode on any cycle **without** rotation, still counts toward the cap, and is always re-evaluated; any `[structural]` fix uses the normal cycle with line patches applied verbatim. In **degraded mode**, fix-cycle rotation is **skipped** (logged once per skipped rotation) in both Case 1 (model argument rejected) and Case 2 (no spawn tool). **Bypass** failure classes (`destructive`, `security`, `infra`) escalate immediately on any cycle. **`criteria-defect`** is not a bypass class but stops fix cycles at detection on any cycle — with `ladder: auto`, rung 5 arbitration now; with `ladder: escalate`, escalate with arbitration offered as option 1 (winning over line-patch-only resume). After cycle-3 exhaustion, `goal.md`'s `phases.ladder` chooses **`escalate`** (offer continuation ladder to the human) or **`auto`** (run ladder rungs **5 → 4 → 6**, then human escalation if still stuck).
 
 ```mermaid
 stateDiagram-v2
@@ -229,11 +246,13 @@ stateDiagram-v2
     FixCycle --> Evaluating: re-evaluate
     FixCycle --> LadderChoice: cycle 3 exhausted
     state "Ladder auto" as LadderAuto
+    FixCycle --> LadderAuto: repeated structural key · early entry
     state "Ladder escalate" as LadderEsc
     LadderChoice --> LadderAuto: phases.ladder auto
     LadderChoice --> LadderEsc: phases.ladder escalate default
-    LadderAuto --> Rung5: arbitration
-    Rung5 --> Rung4: criteria-sound after cycle 3
+    LadderAuto --> Rung5: arbitration when its triggers fire
+    LadderAuto --> Rung4: diagnosis otherwise
+    Rung5 --> Rung4: criteria-sound
     Rung5 --> HumanEsc: criteria-defective, disagreement, or early criteria-sound
     Rung4 --> Evaluating: re-evaluate after ladder fix
     Rung4 --> Rung6: decomposition optional
@@ -242,6 +261,8 @@ stateDiagram-v2
     LadderEsc --> HumanEsc: user offered ladder
     HumanEsc --> [*]
 ```
+
+Early arbitration (`criteria-defect`) ends at the human on criteria-sound; early ladder entry (a repeated `[structural]` key) continues to rung 4 on criteria-sound.
 
 Verdict vocabulary and invariants: [`templates/ORCHESTRATION.md`](../../../skills/agent-kit/templates/ORCHESTRATION.md) § Feature Flow · [`evaluation-system.md`](evaluation-system.md). Ladder detail: [`continuation-ladder.md`](../../../skills/agent-kit/templates/skills/feature/reference/continuation-ladder.md).
 
@@ -418,7 +439,7 @@ Stop on first failing rung; after a fix, restart at rung 1 for that fix.
 - [`skills/agent-kit/templates/skills/feature/reference/memory-protocol.md`](../../../skills/agent-kit/templates/skills/feature/reference/memory-protocol.md) — prune, recall, fence, archive, brief status updates
 - [`skills/agent-kit/templates/skills/feature/reference/continuation-ladder.md`](../../../skills/agent-kit/templates/skills/feature/reference/continuation-ladder.md) — rungs 5, 4, 6 after fix-cycle exhaustion
 - [`skills/agent-kit/templates/skills/feature/reference/fix-cycles.md`](../../../skills/agent-kit/templates/skills/feature/reference/fix-cycles.md) — Phase 4 fix cycles: line-patch resume, bypass and criteria-defect routing, cycle-3 ladder, model rotation, provenance
-- [`skills/agent-kit/templates/tools/log-spawn.sh`](../../../skills/agent-kit/templates/tools/log-spawn.sh) — spawn/outcome/note ledger
+- [`skills/agent-kit/templates/tools/log-spawn.sh`](../../../skills/agent-kit/templates/tools/log-spawn.sh) — spawn/outcome/note/keys ledger
 - [`skills/agent-kit/templates/skills/research/SKILL.template.md`](../../../skills/agent-kit/templates/skills/research/SKILL.template.md) — research scratch vs brief promotion
 - [`skills/agent-kit/templates/skills/memory-capture/SKILL.template.md`](../../../skills/agent-kit/templates/skills/memory-capture/SKILL.template.md) — capture/distillation pipeline
 - [`skills/agent-kit/templates/loop/SKILL.template.md`](../../../skills/agent-kit/templates/loop/SKILL.template.md) — backlog fields, quarantine, integrator boundaries

@@ -57,6 +57,8 @@ _lw_is_windows() {
 
 if ! _lw_is_windows; then
   report SKIP "loop-windows suite" "not Windows Git Bash (uname=$(uname -s 2>/dev/null || echo unknown))"
+  # Skipping everything is intended here; this marker exempts the suite from run-all.sh's all-skipped rule.
+  echo "ALL-SKIP-OK: not Windows Git Bash (uname=$(uname -s 2>/dev/null || echo unknown)); the cases need a Windows host"
   finish_suite
   exit 0
 fi

@@ -1306,9 +1306,21 @@ EOF
     report SKIP "(t) instance mirror" "instance files absent"
     return
   fi
-  cmp -s "$inst/_kit/memory.sh" "$MEMORY_SH" && cmp -s "$inst/_memory/README.md" "$CANON_README" || {
-    report FAIL "(t) instance byte-identity"; return
+  # This repo's own install runs with the hook_telemetry flag off (self-answers.json omits it), so the
+  # emitted README equals the template with every hook_telemetry IF block removed, markers included.
+  local canon_off
+  mktemp_dir canon_off
+  awk '
+    $0 == "<!-- IF hook_telemetry -->" { skip = 1; next }
+    $0 == "<!-- ENDIF hook_telemetry -->" { skip = 0; next }
+    !skip { print }
+  ' "$CANON_README" > "$canon_off/README.md" || {
+    rm -rf "$canon_off"; report FAIL "(t) instance byte-identity"; return
   }
+  cmp -s "$inst/_kit/memory.sh" "$MEMORY_SH" && cmp -s "$inst/_memory/README.md" "$canon_off/README.md" || {
+    rm -rf "$canon_off"; report FAIL "(t) instance byte-identity"; return
+  }
+  rm -rf "$canon_off"
   if [[ -f "$inst/orchestration-kit.manifest.json" ]]; then
     for k in _kit/memory.sh _memory/README.md; do
       grep -qF "\"$k\"" "$inst/orchestration-kit.manifest.json" || { report FAIL "(t) manifest key $k"; return; }
