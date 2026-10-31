@@ -209,8 +209,8 @@ never steers them. Bash 3.2, `awk` and `LC_ALL=C`; no runtime JSON tool.
   as `-`), then an `errors and aborts` section listing
   `ts harness event agent_type status error` for every line whose status is `error` or
   `aborted` (or `  none`; `error` is `-` when it is null or the line predates the field). When no
-  line has harness `claude`, a last `hint:` line says to check that `.claude/settings.json` has
-  the Claude Code Stop hooks.
+  line has harness `claude`, a last `hint:` line says to check that the Claude Code project
+  settings file has the hook-log Stop hooks.
 - **`--help`** — usage on stdout, exit **0**.
 - **Exit codes** — **0** ok (hook mode always, once its arguments parse) · **2** usage error in any
   mode, or an unreadable root in `summary` (`hook-log: cannot read root: <dir>`).

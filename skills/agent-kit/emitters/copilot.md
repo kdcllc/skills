@@ -57,4 +57,5 @@ On an install that also targets Claude Code, Copilot may run the repository
 `.claude/settings.json` hooks when its agent hooks are enabled; those runs log under
 harness `claude` only when `$CLAUDE_PROJECT_DIR` is set under Copilot 🔎 (unconfirmed:
 `reference/harness-matrix.md`, 2026-10-27 addendum, fact 9). If it is unset, the guarded
-command's `test -f` fails and nothing is logged.
+command's `test -f` fails and nothing is logged. 🔎 That assumes Copilot runs the hook command in a POSIX
+shell (`test`, `&&`, `||`); its hook shell, notably on Windows, is unverified.

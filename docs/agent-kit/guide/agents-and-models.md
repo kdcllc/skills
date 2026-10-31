@@ -28,7 +28,7 @@ files_read: <N> (~<C> chars)
 commands_run: <N>
 ```
 
-`C` is the agent's estimate of total characters read (sum of file sizes opened; rounding to the nearest thousand is fine). `terminal` reports `files_read: 0` and `commands_run: 1` (or the count it ran). The block is never omitted — write `files_read: 0 (~0 chars)` when nothing was read.
+`C` is the agent's estimate of total characters read (sum of file sizes opened; rounding to the nearest thousand is fine). `N` and `C` may be plain digits or comma thousands groups such as `85,000`. `terminal` reports `files_read: 0` and `commands_run: 1` (or the count it ran). The block is never omitted — write `files_read: 0 (~0 chars)` when nothing was read.
 
 **Why it exists:** `_kit/log-spawn.* outcome` parses the `files_read: N (~C chars)` line and emits `work_read_chars: C · work_est_tokens: C/4` on the orchestration-log OUTCOME line (integer division), or `work_read_chars: n/a · work_est_tokens: n/a` when the line is absent or malformed. That **`work_est_tokens`** value is the subagent's self-reported working footprint — distinct from **`io_est_tokens`**, which measures only orchestrator↔subagent I/O chars/4. Neither is billed usage; the loop driver's `usage:` line (when `LOOP_USAGE_FORMAT` is active) and the loop driver's run ledger (`_memory/loop/ledger.jsonl`), which stores the same decoded counts, are the only real token counts. See [evaluation-system.md](evaluation-system.md) § Orchestration log.
 
@@ -375,7 +375,7 @@ Never copy model IDs from kit documentation without checking — IDs rotate freq
 - [`skills/agent-kit/templates/agents/qa-evaluator.md`](../../../skills/agent-kit/templates/agents/qa-evaluator.md) — QA evaluator role, index and artifact evidence, prohibitions
 - [`skills/agent-kit/templates/agents/evidence-collector.md`](../../../skills/agent-kit/templates/agents/evidence-collector.md) — evidence collector role, qa write fence, smoke/visual/index, no verdicts
 - [`skills/agent-kit/templates/skills/feature/SKILL.template.md`](../../../skills/agent-kit/templates/skills/feature/SKILL.template.md) — `qa:` gate, Phase 5 QA spawn order
-- [`skills/agent-kit/templates/skills/feature/reference/fix-cycles.md`](../../../skills/agent-kit/templates/skills/feature/reference/fix-cycles.md) — line-patch-only resume, fix-cycle model rotation, bypass and criteria-defect routing, provenance (re-evaluations and re-audits)
+- [`skills/agent-kit/templates/skills/feature/reference/fix-cycles.md`](../../../skills/agent-kit/templates/skills/feature/reference/fix-cycles.md) — line-patch-only resume, fix-cycle model rotation, bypass and criteria-defect routing, provenance (the tree snapshot at every evaluator spawn in Phases 4 and 5; the provenance tags on re-evaluations and re-audits)
 - [`skills/agent-kit/templates/skills/feature/reference/degraded-mode.md`](../../../skills/agent-kit/templates/skills/feature/reference/degraded-mode.md) — Case 1/2 fix-cycle rotation skip, Case 2 QA index by orchestrator
 - [`skills/agent-kit/templates/ORCHESTRATION.md`](../../../skills/agent-kit/templates/ORCHESTRATION.md) — QA Evaluation section (orchestrator never captures QA evidence itself; collector context package and `qa/**` fence)
 - [`skills/agent-kit/templates/skills/feature/reference/memory-protocol.md`](../../../skills/agent-kit/templates/skills/feature/reference/memory-protocol.md) — prior-knowledge fence recipients (excludes evidence-collector)

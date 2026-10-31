@@ -1,12 +1,12 @@
 # Bootstrap ids
 
 `<!-- BOOTSTRAP[id]: text -->` is replaced by `answers.bootstrap[id]` (multi-line allowed); `<!-- IF flag -->`…`<!-- ENDIF flag -->` (and `!flag`) keep or drop the span. See `SKILL.md` Step 4 and `docs/agent-kit/guide/contributing.md` (template grammar).
-An `""` answer deletes the comment silently; a missing key deletes it with a warning and is listed by `--check-answers`.
+An `""` answer deletes the comment silently; a missing key deletes it silently (no warning, not counted) and is listed by `--check-answers`.
 `kit-` prefixed ids are instructions-only: always deleted, never answered, never warned.
 
 | id | template path:line | class | what the LLM writes |
 |----|-------------------|-------|---------------------|
-| auto-fail-sins-evaluator | agents/evaluator.md:75 | a text | project-specific evaluator auto-fail sins (replacing the examples) |
+| auto-fail-sins-evaluator | agents/evaluator.md:95 | a text | project-specific evaluator auto-fail sins (replacing the examples) |
 | auto-fail-sins-qa | agents/qa-evaluator.md:48 | a text | project-specific QA behavioral auto-fail sins (replacing the examples) |
 | auto-fail-triggers | ORCHESTRATION.md:1465 (Subagent Behaviors) | a text | auto-fail cell text for the Subagent Behaviors table |
 | critical-reference-rows | ORCHESTRATION.md:1354 (Critical Reference Files) | a text | one table row per canonical reference routed into context packages |
@@ -19,7 +19,7 @@ An `""` answer deletes the comment silently; a missing key deletes it with a war
 | full-suite-commands | skills/test-ladder/SKILL.template.md:84 | a text | extra per-stack full-suite and cycle-end lint commands |
 | greenfield-practices | ORCHESTRATION.md:19 | a text | Engineering practices subsection (test-first + SOLID; stack-agnostic) |
 | kit-meta | ORCHESTRATION.md:3 | d always-deleted | (none — template meta instruction) |
-| layer-skill-map | skills/feature/SKILL.template.md:68 | a text | layer → skills and path-scoped rule files (Rule files to cite column) routing table |
+| layer-skill-map | skills/feature/SKILL.template.md:79 | a text | layer → skills and path-scoped rule files (Rule files to cite column) routing table |
 | loop-fallback | models.map.md:109 | a text | loop fallback-chain table and {{LOOP_MODEL_CHAIN}} resolution |
 | mock-boundary | agents/test-writer.md:22 | a text | the mock boundary and available fixtures/tools |
 | models-map-caveats | models.map.md:179 | a text | harness caveat bullets for the targeted install |
