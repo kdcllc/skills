@@ -6,6 +6,15 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 
 ## [Unreleased]
 
+### Added
+
+- **Regression proofs for guarding tests** — the test-ladder `## Regression proof` section, writer duties and `### Regression proofs` report sections, the task-criteria NEEDS FIXES cap, and the evaluator re-run.
+- **`reference/resume.md` and `templates/progress.md` in the feature skill** — checkpoint fields, the Phase 2 unfinished-goal offer, and a resume procedure that cross-checks the ledger and the repository and stops on any mismatch.
+
+### Changed
+
+- **Orchestration Progress location** — every install now keeps Orchestration Progress in `_memory/work/goals/[goal]/progress.md`; installs without the kit-file guard no longer write progress into `ORCHESTRATION.md`.
+
 ## [2.2.1] - 2026-11-02
 
 ### Fixed

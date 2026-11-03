@@ -37,12 +37,7 @@ inline by the orchestrator (single-line output), never via `terminal`.
 
 Re-evaluations RESUME the same evaluator with a delta: Phase 4/5 list applied fixes and carry earlier required-fix lists; Phase 3 quotes newly written passages verbatim, attempt 3 fresh (`reference/goal-revisions.md`). Implementer resume and rotation per fix cycle: `reference/fix-cycles.md`.
 
-<!-- IF !kit_guard -->
-Update ORCHESTRATION.md Orchestration Progress after each step.
-<!-- ENDIF !kit_guard -->
-<!-- IF kit_guard -->
-Update `_memory/work/goals/[goal]/progress.md` (Orchestration Progress) after each step — ORCHESTRATION.md is kit-owned.
-<!-- ENDIF kit_guard -->
+Rewrite `_memory/work/goals/[goal]/progress.md` from `templates/progress.md` after each phase, verdict and user decision; resume goals per `reference/resume.md`.
 
 ## Phase 1 — Alignment (no files)
 
@@ -55,6 +50,8 @@ Understanding" + **wait for explicit confirmation** before Phase 2. Record Phase
 
 **Prune** (once): before Recall and before the goal folder exists, run `_kit/memory.sh prune --apply` per `reference/memory-protocol.md` (Prune); it deletes finished `_memory/work/` folders whose records are committed and merged; any exit code or a missing tool never blocks.
 `note` the summary line once `_memory/work/goals/<goal>/` exists.
+
+**Unfinished goals:** offer per `reference/resume.md` (not in loop iterations).
 
 **Recall** (once): per `reference/memory-protocol.md`, search and record picked ids or
 `none` in `goal.md` `## Recalled memory`; never block on empty store; `note`
@@ -101,7 +98,7 @@ For each ready group (`reference/ready-groups.md`; `parallel: false` → one tas
 1. Launch `implementer` (`test-writer` for the test task) with a full context package.
 2. **Silent-success check**: empty/missing report ⇒ verify artifacts: present ⇒ done
    ("report lost, files verified"); absent ⇒ failed, respawn once. Never re-run when artifacts exist.
-3. Launch `evaluator` with task file, report, matching rule files, `{{IDE_DIR}}/skills/task-criteria/SKILL.md`; if read-only (evaluator.md `readonly` or refused shell), first spawn `terminal` per acceptance-criterion command, attach output.
+3. Launch `evaluator` with task file, report, matching rule files, `{{IDE_DIR}}/skills/task-criteria/SKILL.md`; if read-only (evaluator.md `readonly` or refused shell), first spawn `terminal` per acceptance-criterion command and one regression proof, attach output.
 4. **PASS** or **PASS (with notes)** → next task (notes via `--note`). **NEEDS FIXES** → fix cycle + re-evaluate (max 3). **REJECT** → escalate.
    Before any fix cycle, bypass escalation, `criteria-defect` route, or cycle-3 action, **Read `reference/fix-cycles.md`** and follow it (line-patch resume, bypass tags, ladder, rotation).
    Out-of-fence defect in a completed task's files → `reference/corrective-tasks.md`.

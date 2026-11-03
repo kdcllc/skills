@@ -54,8 +54,7 @@ writes a `PreToolUse` hook:
 `bash "$CLAUDE_PROJECT_DIR/_kit/kit-guard.sh" hook claude` (exit **2** blocks).
 When the file already exists without that hook, emit leaves it untouched and prints
 the merge snippet on stderr (see `bin/README.md`). ORCHESTRATION.md Repository safety
-item 4 and agent read-only rules apply; the feature skill tracks Orchestration
-Progress under `_memory/work/goals/[goal]/progress.md`.
+item 4 and agent read-only rules apply.
 
 **Hook telemetry (`flags.hook_telemetry`):** emits `_kit/hook-log.sh` and
 `_kit/hook-log.cmd`. When `.claude/settings.json` is absent, emit writes `Stop`,

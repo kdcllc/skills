@@ -39,6 +39,8 @@ after the final audit. The task's tests must exist, be meaningful (assert outcom
 regression), pass, and mock all external services. Run them yourself
 (`{{TARGETED_TEST_COMMAND}}`-style rung 1–2 run) — do not trust reported output.
 
+From the task's requirements (bug fixes and behavior changes), identify each **guarding test**; each needs a regression proof per test-ladder § Regression proof. A missing, vacuous, or unreproducible proof — including a guarding test reported as `none` — caps the verdict at NEEDS FIXES (blocking findings cite **F3**, the floor item "changed behavior has a test that fails without the change"). Re-run at least one proof per task in a scratch copy, or when you run read-only use orchestrator-supplied `terminal` output of that re-run. This check is part of dimension 4, so it runs in full under `eval_depth: light` too.
+
 ## 5. Scope Discipline
 
 Only the task's declared files changed. Unrequested refactoring or drive-by edits are

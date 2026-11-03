@@ -77,7 +77,7 @@ Agent edit hooks are enforced by the harness (✅ per vendor hook docs); path-fi
 
 | Harness | Edit hook | Check + rule text |
 |---|---|---|
-| Claude Code | ✅ `PreToolUse` in `.claude/settings.json`; exit **2** blocks (code.claude.com/docs/en/hooks) | ✅ ORCHESTRATION.md item 4; feature progress in `_memory/work/goals/[goal]/progress.md` |
+| Claude Code | ✅ `PreToolUse` in `.claude/settings.json`; exit **2** blocks (code.claude.com/docs/en/hooks) | ✅ ORCHESTRATION.md item 4 |
 | Cursor | ✅ `preToolUse` in `.cursor/hooks.json`; exit **2** denies (guard prints JSON `permission: deny`); an exit-**0** reply that is not valid JSON blocks, so guard allow paths print `{"permission":"allow"}`; matcher `Write|Delete` ✅ (cursor.com/docs/agent/hooks). Cursor loads Claude Code hooks from `.claude/settings.json` too ✅ — dual-harness may run the guard twice; reply format for third-party hooks 🔎 (`hook claude` detects Cursor caller JSON) | same |
 | Copilot (VS Code) | ⚠️ agent hooks Preview — not used by this kit | ✅ `emit.sh --check`; partial warning on emit |
 | OpenAI Codex | — no edit hook | ✅ `emit.sh --check`; partial warning on emit |

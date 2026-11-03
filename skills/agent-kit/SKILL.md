@@ -277,7 +277,7 @@ Ask (multiple-choice where possible) only what you could not infer:
    emits `_kit/kit-guard.sh` (`check` for CI and the post-spawn orchestration gate),
    Claude Code / Cursor edit-blocking hooks when `.claude/settings.json` / `.cursor/hooks.json`
    are absent (else emit prints a merge snippet), and read-only rule text in ORCHESTRATION.md
-   and the agents; Orchestration Progress moves to `_memory/work/goals/[goal]/progress.md`.
+   and the agents.
    Copilot and Codex get the check and rule text only. Record `flags.kit_guard`.
 9. **Log subagent and session stops?** (default no.) `flags.hook_telemetry: true` emits
    `_kit/hook-log.sh`, Claude Code (`Stop`, `SubagentStop`, `StopFailure`) and Cursor
