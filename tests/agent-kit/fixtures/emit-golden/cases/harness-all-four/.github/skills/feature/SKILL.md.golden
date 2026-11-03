@@ -88,7 +88,7 @@ For each ready group (`reference/ready-groups.md`; `parallel: false` → one tas
 1. Launch `implementer` (`test-writer` for the test task) with a full context package.
 2. **Silent-success check**: empty/missing report ⇒ verify artifacts: present ⇒ done
    ("report lost, files verified"); absent ⇒ failed, respawn once. Never re-run when artifacts exist.
-3. Launch `evaluator` with task file, report, matching rule files, `.github/skills/task-criteria/SKILL.md`; if read-only (evaluator.md `readonly` or refused shell), first spawn `terminal` per acceptance-criterion command and one regression proof, attach output.
+3. Launch `evaluator` with task file, report, matching rule files, `.github/skills/task-criteria/SKILL.md`; if read-only (evaluator.md `readonly` or refused shell), first spawn `terminal` per acceptance-criterion command and, when the task has guarding tests, one regression proof, attach output.
 4. **PASS** or **PASS (with notes)** → next task (notes via `--note`). **NEEDS FIXES** → fix cycle + re-evaluate (max 3). **REJECT** → escalate.
    Before any fix cycle, bypass escalation, `criteria-defect` route, or cycle-3 action, **Read `reference/fix-cycles.md`** and follow it (line-patch resume, bypass tags, ladder, rotation).
    Out-of-fence defect in a completed task's files → `reference/corrective-tasks.md`.

@@ -6,6 +6,10 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 
 ## [Unreleased]
 
+### Changed
+
+- **Guarding-test wording** — the test-writer agent now asks for a regression proof for every guarding test it adds or rewrites, matching the implementer and test-ladder; feature Phase 4 step 3 (and the guides that copy it) asks for the pre-evaluator regression proof only when the task has guarding tests.
+
 ## [2.3.0] - 2026-11-03
 
 ### Added

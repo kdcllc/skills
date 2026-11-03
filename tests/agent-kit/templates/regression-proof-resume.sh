@@ -149,6 +149,7 @@ check_a_test_ladder() {
 check_b_writers() {
   local ok=1
   assert_anchor "$TEST_WRITER" '- **Prove guarding tests bite.**' 1 || ok=0
+  assert_anchor "$TEST_WRITER" 'Every guarding test you add or rewrite needs a regression proof' 1 || ok=0
   assert_anchor "$IMPLEMENTER" '- **Prove guarding tests bite.**' 1 || ok=0
   grep -c '^### Regression proofs$' "$TEST_WRITER" | grep -qx 1 || ok=0
   grep -c '^### Regression proofs$' "$IMPLEMENTER" | grep -qx 1 || ok=0
@@ -180,7 +181,7 @@ check_e_feature_and_compaction() {
   [[ "$n" == 1 ]] || ok=0
   assert_anchor "$FEATURE_SKILL" 'Update ORCHESTRATION.md Orchestration Progress' 0 || ok=0
   [[ "$(awk '/^## Phase 2/{f=1} /^## Phase 3/{f=0} f' "$FEATURE_SKILL" | grep -c '^\*\*Unfinished goals:\*\* offer per `reference/resume.md`')" == 1 ]] || ok=0
-  [[ "$(awk '/^## Phase 4/{f=1} /^## Phase 5/{f=0} f' "$FEATURE_SKILL" | grep -c '^3\. .*per acceptance-criterion command and one regression proof, attach output')" == 1 ]] || ok=0
+  [[ "$(awk '/^## Phase 4/{f=1} /^## Phase 5/{f=0} f' "$FEATURE_SKILL" | grep -c '^3\. .*per acceptance-criterion command and, when the task has guarding tests, one regression proof, attach output')" == 1 ]] || ok=0
   assert_anchor "$ORCH_TEMPLATE" "resume per the feature skill's \`reference/resume.md\`, from \`progress.md\`" 1 || ok=0
   assert_anchor "$ORCH_TEMPLATE" 'past ~60% of its context window' 1 || ok=0
   assert_anchor "$ORCH_TEMPLATE" 'resume from `goal.md` and the orchestration log' 0 || ok=0

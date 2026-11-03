@@ -31,7 +31,7 @@
     ".codex/agents/qa-evaluator.toml": "e0e4d37c81f763b18f09b0440c01714f80ed7f82c8bf7104e406cccb4c720e96",
     ".codex/agents/terminal.md": "7cba02abd1113c8eb6d9b867fa1793c8b0d8e062fb2d524d4ce0e8b26a750c30",
     ".codex/agents/terminal.toml": "4092fe6c250c290e8ca3b43ef5998904f0965247e5aff3d837d486395d06241b",
-    ".codex/agents/test-writer.md": "ea00a292e79ee47b677e38fad91c48de804c9a5898ed49fb179b159678a94382",
+    ".codex/agents/test-writer.md": "d79c0e2b51dd48be60c7a60db9defbdab39744646363c90a723065f6d53298e1",
     ".codex/agents/test-writer.toml": "4092fe6c250c290e8ca3b43ef5998904f0965247e5aff3d837d486395d06241b",
     ".codex/config.toml": "9623edb8c9e8afa393d129047a4c795a8b55567b8c01f15320056da4b4541b1b",
     "ORCHESTRATION.md": "24c2ebd11e0ef40cff0250ce1b4ab448ec4cc48387768787ff27ea4af5ac969d",
