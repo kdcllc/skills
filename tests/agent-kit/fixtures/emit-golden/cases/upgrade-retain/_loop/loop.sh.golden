@@ -65,9 +65,9 @@
 # This script never pushes and never bypasses permission prompts by itself.
 #
 # Breaker: sources breaker.sh (functions: breaker_load, breaker_should_skip,
-# breaker_record, breaker_probe, breaker_current_model); state file:
-# _memory/loop/breaker-state.json. breaker_record receives the slot's
-# dispatched model.
+# breaker_record, breaker_probe, breaker_current_model, breaker_current_epoch);
+# state file: _memory/loop/breaker-state.json. breaker_record receives the slot's
+# dispatched model and probe epoch.
 #
 # Exit codes (driver-aggregated across slots, precedence 4>3>2>1>0 -- the most
 # severe cause is always the one reported):
@@ -1190,6 +1190,7 @@ slot_ts_start=()
 slot_start_epoch=()
 slot_attempt=()
 slot_model=()
+slot_epoch=()
 # Copy-aside for <outbox>/memory/*.md between outbox removal and integrator
 # step 3b (driver-owned temp under $TMPDIR; cleared at 3b end or EXIT trap).
 slot_memory_aside=()
@@ -1215,6 +1216,7 @@ for ((SLOT = 0; SLOT < EFFECTIVE_SLOTS; SLOT++)); do
   slot_start_epoch[SLOT]=""
   slot_attempt[SLOT]=""
   slot_model[SLOT]=""
+  slot_epoch[SLOT]=""
   slot_memory_aside[SLOT]=""
   slot_dossier_attempt[SLOT]=""
   slot_dossier_diffstat[SLOT]=""
@@ -2507,6 +2509,7 @@ _loop_fill_slot() {
   breaker_probe "$STATE_FILE" "$(date +%s)"
   model="$(breaker_current_model "$STATE_FILE")"
   slot_model[s]="$model"
+  slot_epoch[s]="$(breaker_current_epoch "$STATE_FILE")"
   # Plain string (not an array): kept consistent with $LOOP_CLI's own unquoted,
   # naive whitespace-splitting expansion below — and avoids the pre-4.4 bash bug
   # where an empty array referenced via "${arr[@]}" trips `set -u` as unbound.
@@ -2671,9 +2674,9 @@ _loop_reap_slot() {
     esac
   fi
   if (( _loop_reap_timeout == 1 )); then
-    breaker_record "$STATE_FILE" 0 "$(date +%s)" "${slot_model[s]:-}"
+    breaker_record "$STATE_FILE" 0 "$(date +%s)" "${slot_model[s]:-}" "${slot_epoch[s]:-}"
   else
-    breaker_record "$STATE_FILE" "$detected" "$(date +%s)" "${slot_model[s]:-}"
+    breaker_record "$STATE_FILE" "$detected" "$(date +%s)" "${slot_model[s]:-}" "${slot_epoch[s]:-}"
   fi
 
   printf '%s\n' "$output" | tail -n 25
