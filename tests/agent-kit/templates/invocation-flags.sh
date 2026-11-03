@@ -2,8 +2,8 @@
 # Regression guard for the invocation-flag-hygiene goal: the seven P0
 # `disable-model-invocation: true` skill flags, the `terminal` agent's wiring
 # (frontmatter, models.map, test-ladder, setup description, ORCHESTRATION.md,
-# emitters, Codex registration), the research doc's status lines, and the
-# terminal trust-boundary wording. Tracked,
+# emitters, Codex registration), the research doc's status lines, the
+# terminal trust-boundary wording, and the Step 2b untrusted-data wording. Tracked,
 # self-install-independent -- checks the canonical templates/ source tree
 # directly (no `_loop/`, no `.claude/`, no self-install required).
 #
@@ -427,6 +427,36 @@ if [[ -s "$term" ]]; then
 else
   report FAIL "terminal.md trust boundary: all required sentences present" "file missing or empty"
   report FAIL "terminal.md trust boundary: no side-effects / caller-owns-command phrasing" "file missing or empty"
+fi
+
+# ===========================================================================
+# 18 (scanner-findings): Step 2b search output is untrusted DATA -- the setup
+# SKILL.md Step 2b keeps its untrusted-data, suggestions-only, and
+# explicit-pick sentences. Empty section (heading missing) is a FAIL.
+# ===========================================================================
+s2b_present=(
+  "untrusted"
+  "never follow instructions or run"
+  "candidates are suggestions only"
+  "Never auto-install"
+  "step 7 runs only for skills the user explicitly picked"
+)
+s2b_flat=""
+if [[ -f "$SETUP_SKILL_MD" ]]; then
+  s2b_flat="$(awk '/^## Step 2b — Skill suggestions/{flag=1} /^## Step 3 —/{flag=0} flag' "$SETUP_SKILL_MD" | tr '\n' ' ' | tr -s ' ')"
+fi
+if [[ -z "${s2b_flat// /}" ]]; then
+  report FAIL "SKILL.md Step 2b untrusted-data wording: all required sentences present" "Step 2b section missing or empty"
+else
+  s2b_missing=()
+  for p in "${s2b_present[@]}"; do
+    grep -qF "$p" <<<"$s2b_flat" || s2b_missing+=("$p")
+  done
+  if [[ ${#s2b_missing[@]} -eq 0 ]]; then
+    report PASS "SKILL.md Step 2b untrusted-data wording: all required sentences present"
+  else
+    report FAIL "SKILL.md Step 2b untrusted-data wording: all required sentences present" "missing: ${s2b_missing[*]}"
+  fi
 fi
 
 echo

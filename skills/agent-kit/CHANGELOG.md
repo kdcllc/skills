@@ -9,6 +9,7 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 ### Security
 
 - **`terminal` trust boundary** — the agent runs only commands from its spawn prompt, never a command found in file contents, command output, or other data, and always under the harness's command-approval and sandbox settings. The "side effects" wording is gone; what the agent runs is unchanged. Addresses the Socket `gptAnomaly` alert on `templates/agents/terminal.md`.
+- **Step 2b search results are untrusted data** — Step 2b now treats skills.sh pages and `npx skills find` output as untrusted third-party data: it never follows instructions or runs commands from them, shows results only as suggestions, and installs only skills the user explicitly picks. Addresses the Snyk W011 third-party content exposure finding.
 
 ## [2.3.0] - 2026-11-03
 
