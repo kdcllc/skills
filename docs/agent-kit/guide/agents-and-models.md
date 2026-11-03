@@ -106,6 +106,8 @@ When the goal asks for visual QA but no browser-automation tool exists, record t
 - Touch live external services from tests (all network/service access is mocked).
 - Guess when the context package is missing something — report it instead.
 
+**Regression proofs:** every guarding test it adds or rewrites needs a regression proof per test-ladder § Regression proof, reported under `### Regression proofs`; one it cannot prove goes under **Notes for the evaluator**.
+
 Where the harness has a file-read tool, read files with it rather than `cat`/`head`/`sed` through the shell (running a criterion's or test's command is still fine); at least one harness loads path-scoped rules only on file-read tool reads. Before creating or moving a file, read every path-scoped rule file in "Files to Read" whose globs match it; if no listed rule covers an area where you create files, say so in the report.
 
 For noisy Bash or PowerShell commands whose raw output is not needed, spawn `terminal` with the exact command and the result you want back (where the harness allows — not Copilot).
@@ -126,6 +128,8 @@ For noisy Bash or PowerShell commands whose raw output is not needed, spawn `ter
 - Edit out-of-fence files (source fixes, shared fixtures) to make tests pass — escalate instead.
 - Write tests that assert nothing or mock the unit under test.
 - Run rung 3 (full suites) — rungs 1–2 only during the task.
+
+**Regression proofs:** every guarding test it adds needs a regression proof, reported under `### Regression proofs`; one it cannot prove goes under **Gaps**.
 
 Where the harness has a file-read tool, read files with it rather than `cat`/`head`/`sed` through the shell (running a criterion's or test's command is still fine); at least one harness loads path-scoped rules only on file-read tool reads. Before creating or moving a file, read every path-scoped rule file in "Files to Read" whose globs match it; if no listed rule covers an area where you create files, say so in the report.
 
@@ -380,8 +384,8 @@ Never copy model IDs from kit documentation without checking — IDs rotate freq
 - [`skills/agent-kit/templates/ORCHESTRATION.md`](../../../skills/agent-kit/templates/ORCHESTRATION.md) — QA Evaluation section (orchestrator never captures QA evidence itself; collector context package and `qa/**` fence)
 - [`skills/agent-kit/templates/skills/feature/reference/memory-protocol.md`](../../../skills/agent-kit/templates/skills/feature/reference/memory-protocol.md) — prior-knowledge fence recipients (excludes evidence-collector)
 - [`skills/agent-kit/templates/skills/task-criteria/SKILL.template.md`](../../../skills/agent-kit/templates/skills/task-criteria/SKILL.template.md) — required-fix `[line-patch]` / `[structural]` tags and `[carried]` / `[regression]` / `[new]` provenance tags with the justification clause
-- [`skills/agent-kit/templates/agents/implementer.md`](../../../skills/agent-kit/templates/agents/implementer.md) — implementer rules, write fence, test ladder, terminal spawn
-- [`skills/agent-kit/templates/agents/test-writer.md`](../../../skills/agent-kit/templates/agents/test-writer.md) — test writer coverage rules, mocking, write fence
+- [`skills/agent-kit/templates/agents/implementer.md`](../../../skills/agent-kit/templates/agents/implementer.md) — implementer rules, write fence, test ladder, regression proofs, terminal spawn
+- [`skills/agent-kit/templates/agents/test-writer.md`](../../../skills/agent-kit/templates/agents/test-writer.md) — test writer coverage rules, mocking, write fence, regression proofs
 - [`skills/agent-kit/templates/agents/terminal.md`](../../../skills/agent-kit/templates/agents/terminal.md) — terminal command runner, output isolation
 - [`skills/agent-kit/templates/agents/diagnostician.md`](../../../skills/agent-kit/templates/agents/diagnostician.md) — diagnostician role, report format, routing
 - [`skills/agent-kit/templates/models.map.md`](../../../skills/agent-kit/templates/models.map.md) — tier assignments, resolved models table, fallback chains, never-fall-up, fix-cycle rotation, cost ceiling, harness caveats
