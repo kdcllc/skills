@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Behavioral tests for loop dossier, breaker probe and epoch, claude-stream, tamper perf, emit (31 cases).
+# Behavioral tests for loop dossier, breaker probe and epoch, claude-stream, tamper perf, emit (32 cases).
 # Stub CLIs only; sandboxes under mktemp. Discovered by tests/agent-kit/run-all.sh.
 set -u
 
@@ -61,6 +61,10 @@ finish_suite() {
 _lrb_require_tools() {
   LRB_HAVE_JQ=0
   command -v jq >/dev/null 2>&1 && LRB_HAVE_JQ=1
+  LRB_HAVE_TIMEOUT=0
+  if command -v timeout >/dev/null 2>&1 || command -v gtimeout >/dev/null 2>&1; then
+    LRB_HAVE_TIMEOUT=1
+  fi
   LRB_REAL_GREP="$(command -v grep 2>/dev/null || true)"
   LRB_REAL_AWK="$(command -v awk 2>/dev/null || true)"
 }
@@ -205,6 +209,10 @@ case "$LRB_STUB_MODE" in
     eval "${LRB_STUB_BODY:-}" || { echo "stub body failed" >&2; exit 3; }
     echo "ITERATION: $(pick_story "$@") passed (attempt 1/3)"
     exit 1 ;;
+  sleep)
+    eval "${LRB_STUB_BODY:-}" || { echo "stub body failed" >&2; exit 3; }
+    sleep "${LRB_STUB_SLEEP:-30}" & printf '%s\n' "$!" >> "$LRB_STUB_PIDFILE"; wait "$!"
+    exit 130 ;;
   stream)
     eval "${LRB_STUB_BODY:-}" || { echo "stub body failed" >&2; exit 3; }
     case "${LRB_STREAM_KIND:-result}" in
@@ -1377,6 +1385,49 @@ case_29_leading_zero_ints() {
   report PASS "case 29: leading-zero ints"
 }
 
+case_30_timeout_branch_epoch() {
+  (( LRB_HAVE_TIMEOUT )) || { report SKIP "case 30: timeout branch epoch" "timeout/gtimeout"; return; }
+  local dir="$FIXTURE_TMPDIR/c30" argv="$FIXTURE_TMPDIR/c30-argv" sf now pa
+  local chain="claude-sonnet-5-5,claude-haiku-5-5"
+  _lrb_breaker_env
+
+  lrb_make_sandbox "$dir" ".claude" 1 1 1 || { report FAIL "case 30: timeout branch epoch" "(a) sandbox setup"; return; }
+  _lrb_write_stub "$dir/_loop/stub.sh" || { report FAIL "case 30: timeout branch epoch" "(a) stub"; return; }
+  sf="$dir/_memory/loop/breaker-state.json"
+  now=$(date +%s)
+  _breaker_write "$sf" CLOSED "$chain" 1 claude-haiku-5-5 600 0 0 1 0 $((now - 1)) 1800 0 0 "" 4
+  : > "$argv"
+  _lrb_run_loop "$dir" 1 LOOP_ITER_TIMEOUT=2 LOOP_MODEL_FLAG=--model LRB_STUB_ARGV="$argv" \
+    LOOP_USAGE_FORMAT=claude LRB_STUB_MODE=sleep LOOP_CLI="$dir/_loop/stub.sh"
+  grep -qF 'iteration exceeded LOOP_ITER_TIMEOUT=2s' "$lrb_err" \
+    || { report FAIL "case 30: timeout branch epoch" "(a) no timeout"; return; }
+  grep -qF -- '--model claude-sonnet-5-5' "$argv" || { report FAIL "case 30: timeout branch epoch" "(a) probe dispatch"; return; }
+  [[ "$(_lrb_breaker_get "$sf" state)" == "HALF-OPEN" && "$(_lrb_breaker_get "$sf" probing)" == "1" \
+     && "$(_lrb_breaker_get "$sf" currentModel)" == "claude-sonnet-5-5" && "$(_lrb_breaker_get "$sf" probeEpoch)" == "5" ]] \
+    || { report FAIL "case 30: timeout branch epoch" "(a) probe state"; return; }
+  [[ "$(_lrb_breaker_get "$sf" halfOpenSuccesses)" == "1" ]] \
+    || { report FAIL "case 30: timeout branch epoch" "(a) not recorded as success"; return; }
+  grep -qF 'ignoring' "$lrb_err" && { report FAIL "case 30: timeout branch epoch" "(a) ignored"; return; }
+
+  lrb_make_sandbox "$dir" ".claude" 1 1 1 || { report FAIL "case 30: timeout branch epoch" "(b) sandbox setup"; return; }
+  _lrb_write_stub "$dir/_loop/stub.sh" || { report FAIL "case 30: timeout branch epoch" "(b) stub"; return; }
+  now=$(date +%s)
+  pa=$((now - 1))
+  _breaker_write "$sf" CLOSED "$chain" 1 claude-haiku-5-5 600 0 0 1 0 "$pa" 1800 0 0 "" 4
+  _lrb_run_loop "$dir" 1 LOOP_ITER_TIMEOUT=2 LOOP_MODEL_FLAG=--model \
+    LOOP_USAGE_FORMAT=claude LRB_STUB_MODE=sleep LRB_STATE_FILE="$sf" LRB_PROBE_AFTER="$pa" \
+    LRB_STUB_BODY='. _loop/breaker.sh; _breaker_write "$LRB_STATE_FILE" HALF-OPEN "claude-sonnet-5-5,claude-haiku-5-5" 0 claude-sonnet-5-5 600 0 0 1 0 "$LRB_PROBE_AFTER" 1800 1 1 claude-haiku-5-5 6; cp "$LRB_STATE_FILE" "$LRB_STATE_FILE.snap"' \
+    LOOP_CLI="$dir/_loop/stub.sh"
+  grep -qF 'iteration exceeded LOOP_ITER_TIMEOUT=2s' "$lrb_err" \
+    || { report FAIL "case 30: timeout branch epoch" "(b) no timeout"; return; }
+  [[ -f "$sf.snap" && "$(_lrb_breaker_get "$sf.snap" probeEpoch)" == "6" ]] \
+    || { report FAIL "case 30: timeout branch epoch" "(b) stub rewrite"; return; }
+  cmp -s "$sf" "$sf.snap" || { report FAIL "case 30: timeout branch epoch" "(b) stale result changed state"; return; }
+  grep -qxF "breaker: ignoring stale result from model 'claude-sonnet-5-5' at epoch 5 (current epoch 6)" "$lrb_err" \
+    || { report FAIL "case 30: timeout branch epoch" "(b) stderr"; return; }
+  report PASS "case 30: timeout branch epoch"
+}
+
 case_1_dossier_write
 case_2_slot_verbatim
 case_2a_fence_safety
@@ -1408,6 +1459,7 @@ case_26_epoch_legacy_state
 case_27_epoch_no_model_pin
 case_28_epoch_transitions
 case_29_leading_zero_ints
+case_30_timeout_branch_epoch
 finish_suite
 exit $?
 
