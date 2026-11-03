@@ -25,7 +25,7 @@
     ".claude/agents/evidence-collector.md": "1e73d369a9fb92b7aa7f017b9f43c6d24b6151cfb5ad8526d752b3bcec55bf45",
     ".claude/agents/implementer.md": "fac05b07efea1a096bb86fcb15fbbece3d3add892a469e0c35fd52604bd017dd",
     ".claude/agents/qa-evaluator.md": "99f06ffaafb8f0fd1e896d0dc686b12f29bdd5a90d646a6f6e0cebb5ba28b1fd",
-    ".claude/agents/terminal.md": "a805874def6c1d896856d0d229ee7b7d667b4cc1b4733bdd66b69d5f28dad9e2",
+    ".claude/agents/terminal.md": "b83d36d813dbb3231dfd818cd45646bf6a598a1511c939ca0d4617d52a7a0596",
     ".claude/agents/test-writer.md": "de80d13773faf64af2ab742c48a210c1cefd03e20cc2e5b5d227b33f033eeb7f",
     ".claude/settings.json": "a3fb9ca4fc62ecb39c7d8e0b7b88d05fbfd8a3c046df8e344ff82e3f8c381ae4",
     ".claude/skills/agent-kit-models.map.md": "203fa190f6ce4b347d4b60a10b30e0d5166a77269c778a750347f5579503a820",

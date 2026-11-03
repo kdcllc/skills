@@ -25,7 +25,7 @@
     ".github/agents/feature.agent.md": "873612fed72a27ad1e2fdc0ae903fb3aa7ddfc968ba8ea982c6010ed48b0c305",
     ".github/agents/implementer.agent.md": "7540b25ca7b7efaa5a078a209c2d1545244ba0d6112c32f5c72c8a5ac9d7b7f6",
     ".github/agents/qa-evaluator.agent.md": "2ceeeefe3f9a2dc5313d974499d75932eb7450a78c8731c13c98017d8364abef",
-    ".github/agents/terminal.agent.md": "94820110b19fbe50e19a9e552f3a6a6e9d6e6444e06c1cc7f6d0e889cbf9aff2",
+    ".github/agents/terminal.agent.md": "8f91c6d0f29bd0cffd286f2818094bec32af8e05cb3f48bb423dbdb8580066f9",
     ".github/agents/test-writer.agent.md": "781e67a748aed98b2872f8769adf984f00d29f94901771ae0c1ff200511ad6a5",
     ".github/skills/align-docs/SKILL.md": "b6faaa8be9207b9f0ce9ceb4c76aa6a4eba2dc78c3b7924ad4233e5e469b4651",
     ".github/skills/auto-loop/SKILL.md": "9f362be2d702c30099194dbb442b8146e51b925fb7341950e793d4a02b862425",

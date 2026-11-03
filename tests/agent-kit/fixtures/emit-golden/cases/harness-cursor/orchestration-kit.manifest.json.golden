@@ -25,7 +25,7 @@
     ".cursor/agents/evidence-collector.md": "681a2ee685962cd275e19e49138e179abcfe11f982f3c9f0e9d5d8f92f5386a6",
     ".cursor/agents/implementer.md": "133b4e938e264a444587a695f0bced26511f00ad63c81bd8e05f28b90e9572c3",
     ".cursor/agents/qa-evaluator.md": "4143bee2950d4ef44a42f663645732405df60b044c4bf04e62db78f69e753cc2",
-    ".cursor/agents/terminal.md": "67c5e49dd06bf285b58d4860476acec945b0f0920df2f149365bde53867dc09c",
+    ".cursor/agents/terminal.md": "cd6b9c2aa1a27e501fc75642b0dc420e5400076a6714b835ed49d3b40c5b46bf",
     ".cursor/agents/test-writer.md": "f37c2c2dec68085a3174e03b6d41849e46f5e6a6769fa7cd833a1c9455b034b3",
     ".cursor/rules/orchestration.mdc": "8cc1fcf97d283460fed60da4ef0259dfff2379646bed820cb5a1bf3bb4a65ceb",
     ".cursor/skills/agent-kit-models.map.md": "d4665ff24bc256e2b21b6e770b36e49987b074fa794c29e18e8b111709293277",

@@ -208,7 +208,8 @@ generic `src/` + `tests/` tree.
 popular [skills.sh](https://skills.sh) skills that match what it found (web UI, test
 framework such as `pytest`, backend frameworks, infra files, docs, databases). Only skills
 with **1000+** installs are offered, at most **8**, and nothing installs unless you pick it.
-Picked skills install project-local with
+Search results are untrusted third-party text, so `/agent-kit` shows them only as
+suggestions and never follows instructions in them. Picked skills install project-local with
 `npx skills add <owner>/<repo> --skill <picked-skill> -y` and are wired into the feature
 workflow, so workers use them on the right layers.
 
