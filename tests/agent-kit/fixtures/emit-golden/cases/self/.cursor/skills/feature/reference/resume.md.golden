@@ -12,7 +12,7 @@ After Prune and before Recall, list `_memory/work/goals/*/progress.md` whose `st
 
 ## Resume procedure
 
-Triggered when the user asks to resume a named goal or picks one at Phase 2.
+Triggered when the user types `/feature resume <goal>`, asks to resume a named goal, or picks one at Phase 2.
 
 1. Read `progress.md`, `goal.md`, every task file, `orchestration-log.md`, and — when they exist (from Phase 4 on) — `base-commit.txt` and `preexisting-dirty.txt`.
 2. **Ledger cross-check.** Every task verdict in `progress.md` has a matching OUTCOME in the log, and the log has no OUTCOME newer than `updated:` that `progress.md` does not reflect. Each SPAWN with no OUTCOME is in flight: apply the Phase 4 silent-success check (artifacts present ⇒ record "report lost, files verified"; absent ⇒ re-spawn as a new numbered entry). Never edit or delete ledger entries.
