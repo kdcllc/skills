@@ -292,7 +292,7 @@ At the same moment the orchestrator saves `git rev-parse HEAD` to
 | `evidence-collector` | Evidence-only gatherer | Smoke + optional visual QA index (no verdicts) | light, effort medium |
 | `implementer` | Focused, checklist-driven | Implementation + fixes | light, effort medium |
 | `test-writer` | Coverage-obsessed | Test creation, all external services mocked | light, effort medium |
-| `terminal` | Compact command runner | Any Bash or PowerShell command — returns only the result the caller asked for | fast, effort low |
+| `terminal` | Compact command runner | Runs only the Bash or PowerShell command in its spawn prompt, under the harness's normal approval and sandbox settings — returns only the result the caller asked for | fast, effort low |
 | `diagnostician` | Analytical, diagnosis-only | Root-cause analysis after fix-cycle exhaustion — no code writes | frontier, effort xhigh |
 <!-- ENDIF models_pinned -->
 <!-- IF !models_pinned -->
@@ -303,7 +303,7 @@ At the same moment the orchestrator saves `git rev-parse HEAD` to
 | `evidence-collector` | Evidence-only gatherer | Smoke + optional visual QA index (no verdicts) |
 | `implementer` | Focused, checklist-driven | Implementation + fixes |
 | `test-writer` | Coverage-obsessed | Test creation, all external services mocked |
-| `terminal` | Compact command runner | Any Bash or PowerShell command — returns only the result the caller asked for |
+| `terminal` | Compact command runner | Runs only the Bash or PowerShell command in its spawn prompt, under the harness's normal approval and sandbox settings — returns only the result the caller asked for |
 | `diagnostician` | Analytical, diagnosis-only | Root-cause analysis after fix-cycle exhaustion — no code writes |
 <!-- ENDIF !models_pinned -->
 

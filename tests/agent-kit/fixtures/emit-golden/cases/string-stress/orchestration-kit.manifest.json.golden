@@ -21,7 +21,7 @@
     "_memory/loop/backlog.md"
   ],
   "files": {
-    ".claude/ORCHESTRATION.md": "ca3334dece3751a110e7297350c4f3448d9b11272d46023a5c442cf323657ff5",
+    ".claude/ORCHESTRATION.md": "714d504f4e7af1a53482f1e25f5a8ffcf93a3420778a5faa66621c0cf09b12db",
     ".claude/agents/diagnostician.md": "2c5242dfa5f718a7d3bc2db6c884509ff443c044131bfba6e09cf21a9504ea1a",
     ".claude/agents/evaluator.md": "c74888f7d4ef365cdcc1792056f212382c622ec64acfd34400c73396c91b7690",
     ".claude/agents/evidence-collector.md": "0c45879b085eb21f100d6baf0eb8fedc4810dc533001c91ccb3be17d38633d2c",
@@ -58,7 +58,7 @@
     ".claude/skills/ship-pr/SKILL.md": "eadf4d2a8454852ce3d755811d8caa0c2c0c101394552085dad4c0eebfe752b0",
     ".claude/skills/task-criteria/SKILL.md": "7e2fc1512a90f99c5861caa6bd10fd6ac783aa5ac07026819c34dad0372528a4",
     ".claude/skills/test-ladder/SKILL.md": "21aae909377d44b1b2fcd2ed160f4457de35b6f94aa9bb190802538112beca03",
-    ".cursor/ORCHESTRATION.md": "1dbdd54072b1e2fa72be3da1e0defcc846464db282a28929871e117fccd340fd",
+    ".cursor/ORCHESTRATION.md": "28386a80718f189947876225600ce2d8b8f7166a0f1cc90201d4beccecf78d84",
     ".cursor/agents/diagnostician.md": "4cfb84236a1deafc9077e598ee3a73748aa05b35d96590d9ba03cc5985c91dab",
     ".cursor/agents/evaluator.md": "9205ac412bc434588f75e226751eb44f5f289039a04ce65a08a53873813e412a",
     ".cursor/agents/evidence-collector.md": "5719baf4a946749de8144984822a62200cbf63efa997b69ca20b0c063f6f049a",

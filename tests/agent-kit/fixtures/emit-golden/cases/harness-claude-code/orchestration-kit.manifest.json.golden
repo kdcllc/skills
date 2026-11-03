@@ -19,7 +19,7 @@
     "_memory/loop/backlog.md"
   ],
   "files": {
-    ".claude/ORCHESTRATION.md": "5c1f9a2dbd449fcd3f05a6fb926a17d3d4cdb2d0b715af8b7eeee49629f8cba8",
+    ".claude/ORCHESTRATION.md": "7ab636a607807755c8e751f9ffddcd853b7598c936009e57c5472d8cefa500ea",
     ".claude/agents/diagnostician.md": "cbcbaecf95fe98f3218e20b6b0fff3d949647710ede58a026d5106d973e97510",
     ".claude/agents/evaluator.md": "9452babf7c5050a62b7d6417339e4c45eade6de6e7918244cd9ffa8eb97a7fab",
     ".claude/agents/evidence-collector.md": "1e73d369a9fb92b7aa7f017b9f43c6d24b6151cfb5ad8526d752b3bcec55bf45",
