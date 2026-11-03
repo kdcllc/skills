@@ -30,7 +30,7 @@
     ".claude/settings.json": "a3fb9ca4fc62ecb39c7d8e0b7b88d05fbfd8a3c046df8e344ff82e3f8c381ae4",
     ".claude/skills/agent-kit-models.map.md": "203fa190f6ce4b347d4b60a10b30e0d5166a77269c778a750347f5579503a820",
     ".claude/skills/align-docs/SKILL.md": "9e6eeec9447e5ad3556f5fb66da13d73954b83535997a3e017ce20f75f9042bc",
-    ".claude/skills/auto-loop/SKILL.md": "65c165b08e1a2b29dbdd867ecb64d347b2e808f7c361a96b1f8e410531b5a910",
+    ".claude/skills/auto-loop/SKILL.md": "916399e26a9bdc3405d27e3ae86b9dc5f36f0374dd4abfb5ab842566deb6bbd1",
     ".claude/skills/feature/SKILL.md": "9c61226abace69b8ca8cbaf7ce2447ca7df7391d6d114bf0ac769a364a9d1707",
     ".claude/skills/feature/reference/continuation-ladder.md": "11df5fdec4a798ac98d95f90476bf8a7353a9f3ae43de1698be785c51dc77cb3",
     ".claude/skills/feature/reference/corrective-tasks.md": "c91dd483b9f09f5ab04c8abc7cfdee05c961393b8c426b39418c0251a319b673",
