@@ -290,7 +290,8 @@ assert_emit_resume_bundle() { # emit_root inst_label
 }
 
 check_k_emitted_install() {
-  local ans_on ans_off root_on root_off h inst had_skills=0
+  local ans_on ans_off root_on root_off h inst harnesses had_skills=0
+  local -a codex_only=()
   alloc_path ans-on
   answers_kg_mode "$EMIT_ALLOC_PATH" 1 1 true || return 1
   ans_on="$EMIT_ALLOC_PATH"
@@ -302,19 +303,24 @@ check_k_emitted_install() {
   alloc_root; root_off="$EMIT_ALLOC_PATH"
   emit_cache_copy "$root_off" "$ans_off" || return 1
 
+  harnesses="$(jq -r '.harnesses[]' "$ans_on")" || return 1
   while IFS= read -r h; do
     [[ -z "$h" ]] && continue
     inst="$(skill_root_for_harness "$h")" || return 1
     if [[ -z "$inst" ]]; then
-      report SKIP "(k) $h: resume/progress/test-ladder bundle" "Codex-only installs ship no kit skills tree"
+      codex_only+=("$h")
       continue
     fi
     had_skills=1
     assert_emit_resume_bundle "$root_on" "$inst" || return 1
     assert_emit_resume_bundle "$root_off" "$inst" || return 1
-  done < <(jq -r '.harnesses[]' "$ans_on")
+  done <<<"$harnesses"
 
+  # No skills-tree harness: run_letter prints the single SKIP for (k).
   [[ "$had_skills" -eq 1 ]] || return 2
+  for h in ${codex_only[@]+"${codex_only[@]}"}; do
+    report SKIP "(k) $h: resume/progress/test-ladder bundle" "Codex-only installs ship no kit skills tree"
+  done
   return 0
 }
 

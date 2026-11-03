@@ -14,6 +14,7 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 - **Resume routing** — the feature skill description now also routes a request to resume a goal: `Invoke for any non-trivial feature, or when the user asks to resume a goal.` (opt-in installs: `Opt-in — runs only when the user types /feature or asks to resume a goal.`). The goal checkpoint and resume sentence moves out of `### Resume policy` into its own `### Goal checkpoint and resume` subsection.
 - **Resume docs** — the feature skill's checkpoint sentence points at `reference/resume.md` § When progress.md is written instead of listing a narrower set of moments; `reference/resume.md` step 3 defines a goal commit (checked with `git diff-tree --no-commit-id --name-only -r <sha>`) and splits the merged-PR check into three sentences.
 - **Prune keeps unfinished goals** — `memory.sh prune` keeps a goal folder whose `progress.md` status is not `done` (`keep:progress:<status>`) even when its records are durable; goals without `progress.md` are unchanged.
+- **Stricter suite checks** — memory-prune cases 20/21 now assert the prune exit code; regression-proof-resume check (k) fails when the harness list cannot be read and prints one SKIP for Codex-only answers; loop-harness test 34 bounds each breaker.sh window by the function's closing brace instead of fixed line counts.
 
 ### Fixed
 
