@@ -44,9 +44,9 @@ record `none` in `recalled-memory.md` at Phase 1 when search fails).
 
 ## Prune
 
-**When.** Once at the start of feature Phase 2: Prune, then the unfinished-goal offer, then Recall
-(`reference/resume.md`), so the new goal's folder does not exist yet. The research workflow does
-not run prune.
+**When.** Once at the start of feature Phase 2:
+Prune, then the unfinished-goal offer (`reference/resume.md`), then Recall, so the new goal's
+folder does not exist yet. The research workflow does not run prune.
 
 **Who.** Orchestrator only, inline. Loop slots in `LOOP_WORKTREE=1` worktrees have no `_kit/`;
 skip prune there, like Recall.

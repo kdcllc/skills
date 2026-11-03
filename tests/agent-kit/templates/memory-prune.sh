@@ -754,7 +754,7 @@ pr_run "$R21c" --apply --only g-prog
 
 # case 22: protocol wording pin (Prune order)
 ok=1
-grep -qF 'Prune, then the unfinished-goal offer, then Recall' "$MEM_PROTO" || ok=0
+grep -qF 'Prune, then the unfinished-goal offer (`reference/resume.md`), then Recall' "$MEM_PROTO" || ok=0
 grep -qiF 'immediately before Recall' "$MEM_PROTO" && ok=0
 [[ "$ok" -eq 1 ]] && report PASS "case-22: memory-protocol Prune order wording" || report FAIL "case-22"
 

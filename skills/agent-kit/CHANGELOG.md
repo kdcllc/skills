@@ -21,6 +21,8 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 - **Breaker leading-zero integers** — An integer state field with a leading zero (for example `"preProbeIndex": 08`) is now invalid like any other unparseable value, so the breaker fails safe instead of raising a bash base error.
 - **Phase 2 order wording** — the memory protocol and guides now say Prune, then the unfinished-goal offer, then Recall, instead of "immediately before Recall".
 - **Orchestration pointers** — the ORCHESTRATION Workflow State Tracking section now says how Codex-only installs write and resume `progress.md`, the feature skill's `templates/progress.md` Phase 7 checklist ends with the Forge adapter pointer, and the `kit_guard` row in `reference/bootstrap-ids.md` names the File Locations trees.
+- **Prune docs** — the ORCHESTRATION, guide README and harness-matrix prune descriptions now say unfinished goals (`progress.md` status not `done`) are kept with `keep:progress:<status>`; the memory README says `progress.md` must be a regular file; the memory protocol's `reference/resume.md` pointer moves next to the unfinished-goal offer.
+- **Guide and progress template wording** — the feature-workflow recall label and `progress.md` row now match the resume reference, the evaluation-system Phase 5 line names the recorded regression proof, and the progress template has a blank line before its forge pointer.
 
 ### Security
 
