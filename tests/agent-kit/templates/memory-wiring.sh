@@ -10,6 +10,15 @@ export EMIT_DATE=2026-01-01
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$HERE/../../.." && pwd)"
 
+# Private TMPDIR: every temp file/dir this suite creates (and the memory-wiring.* leak counts)
+# live here, so concurrent runs sharing the outer TMPDIR cannot make the counts drift.
+# Created before any other temp path; removed last by the EXIT trap.
+MW_PRIVATE_TMP="$(mktemp -d "${TMPDIR:-/tmp}/mwtmp.XXXXXX")" || {
+  echo "memory-wiring: cannot create private TMPDIR under ${TMPDIR:-/tmp}" >&2
+  exit 1
+}
+export TMPDIR="$MW_PRIVATE_TMP"
+
 . "$HERE/../lib/parallel.sh"
 . "$HERE/../lib/emit-cache.sh"
 
@@ -52,6 +61,7 @@ _suite_cleanup() {
   [[ ${#CLEANUP[@]} -gt 0 ]] && rm -rf "${CLEANUP[@]}"
   par_cleanup
   emit_cache_cleanup
+  [[ -n "${MW_PRIVATE_TMP:-}" ]] && rm -rf "$MW_PRIVATE_TMP"
 }
 trap _suite_cleanup EXIT
 
