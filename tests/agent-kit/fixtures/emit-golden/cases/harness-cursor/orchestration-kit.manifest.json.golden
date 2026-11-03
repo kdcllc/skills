@@ -1,6 +1,6 @@
 {
   "kit": "agent-kit",
-  "kitVersion": "2.2.0",
+  "kitVersion": "2.2.1",
   "installedAt": "2026-09-03",
   "harnesses": [
     "cursor"
@@ -30,13 +30,13 @@
     ".cursor/rules/orchestration.mdc": "8cc1fcf97d283460fed60da4ef0259dfff2379646bed820cb5a1bf3bb4a65ceb",
     ".cursor/skills/agent-kit-models.map.md": "d4665ff24bc256e2b21b6e770b36e49987b074fa794c29e18e8b111709293277",
     ".cursor/skills/align-docs/SKILL.md": "659aa132dcd182256fb5f77ac5fac8d33998ede811c9eca9d50caeb3542ff35c",
-    ".cursor/skills/auto-loop/SKILL.md": "87d9e26099b6640d3df54dc7b6861a0f7f86ea20f8566671233e18035c4eb57c",
+    ".cursor/skills/auto-loop/SKILL.md": "36ba4d83f935cbc393aaf0b7a36f6d3ecfe64e5b3ee7c31c1f0e4a2c9fc22098",
     ".cursor/skills/feature/SKILL.md": "ddf01f8672a7fac6d1ea79d59747d24e2faaad8e5e651eea76947c116f90429d",
     ".cursor/skills/feature/reference/continuation-ladder.md": "cc1e495660b2c325b1ea03f9580f8ba406ecf8ea70455255b94fed2916c6e368",
     ".cursor/skills/feature/reference/corrective-tasks.md": "c91dd483b9f09f5ab04c8abc7cfdee05c961393b8c426b39418c0251a319b673",
     ".cursor/skills/feature/reference/degraded-mode.md": "a413a2c2f12014c95b80da496113f4f08fbdccc0bd459edd9dce0152aa856249",
     ".cursor/skills/feature/reference/fix-cycles.md": "7c5e93d0cb545cb45582bb8ddc140270588172f595b0152bf5642a8462f19feb",
-    ".cursor/skills/feature/reference/goal-revisions.md": "36ac3ad5a7b4b03616d39d5f4df3f48eb17c2eb794c8dc6a42c27ca53a5a231e",
+    ".cursor/skills/feature/reference/goal-revisions.md": "f2eb689d0b0a0582d7ba4b2a92a5b646ef7ea91103eb8d52800e6104d51f934f",
     ".cursor/skills/feature/reference/memory-capture.md": "9cef97d7a882f3510d97a8fb2e4b870a8db7708df2c7196fba068269ff24db0b",
     ".cursor/skills/feature/reference/memory-protocol.md": "97c1e27fe077606853621d427e18d9ab40aeb2132b4ed0e86c10b6df214421c6",
     ".cursor/skills/feature/reference/preflight.md": "70f23b64c17e42b141dc3753de3c60bede718439f72c65b7249ecc61bb1f5264",
@@ -61,9 +61,9 @@
     "_kit/trace-lint.cmd": "ae9541294a03f741311ff8bc0d5c6f9985d6947fb42f7aaeaf6613088e34bf7e",
     "_kit/trace-lint.sh": "59f4dab86dbf0f985402ce8c02ccb362dabf5fd575a39f0dfdebec46f34b6713",
     "_loop/PROMPT.md": "b1d5e2dde377179fa67edddd5a2d42981965bcc31f99762d9db298e39724a00c",
-    "_loop/breaker.sh": "c759672682f3c3e2dd62781560ff11a00aecb5b31a88ac2d4af03dbfd39c26e5",
+    "_loop/breaker.sh": "45728921738ccff3a39baad868a83fc3cdaf41e58c227248509b4b50d2cad76f",
     "_loop/loop.cmd": "ae9541294a03f741311ff8bc0d5c6f9985d6947fb42f7aaeaf6613088e34bf7e",
-    "_loop/loop.sh": "2c9a2d23a12172682076708d8750ea74045331b6dd678bc37127d869acb7a0a6",
+    "_loop/loop.sh": "392eea794f5742c1517637027b9920c93ef2a18561fd8c4150f53e66dc867580",
     "_memory/README.md": "e980b106da46dc95795775e7f5290af5116ffb69b1601c08f370ed5cf87c0921"
   },
   "answers": {

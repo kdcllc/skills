@@ -124,9 +124,11 @@ closes onto the current (already-fallen-back) model — no snap-back to the chai
 preferred entry, which is what just got rate-limited. **Upward probe:** after a
 rate-limit fallback in CLOSED, the breaker schedules a probe of chain[0] — first delay
 1800 s, doubling on each failed probe with an 1800 s floor and 14400 s (4 h) cap; a
-successful probe stays on chain[0]; a failed probe restores the pre-probe model.
-Deleting `_memory/loop/breaker-state.json` is optional — it still resets the breaker
-if you want a clean slate.
+successful probe stays on chain[0]; a failed probe restores the pre-probe model
+exactly, including the omit-the-pin empty model at chain end. While a probe runs,
+results from slots dispatched on another model are ignored, so they neither close nor
+fail the probe. Deleting `_memory/loop/breaker-state.json` is optional — it still
+resets the breaker if you want a clean slate.
 `totalFallbacks` counts CLOSED→OPEN trips only — a HALF-OPEN re-trip advances the
 chain without incrementing it (a diagnostics caveat, not a bug).
 

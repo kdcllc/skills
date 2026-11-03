@@ -66,7 +66,8 @@
 #
 # Breaker: sources breaker.sh (functions: breaker_load, breaker_should_skip,
 # breaker_record, breaker_probe, breaker_current_model); state file:
-# _memory/loop/breaker-state.json.
+# _memory/loop/breaker-state.json. breaker_record receives the slot's
+# dispatched model.
 #
 # Exit codes (driver-aggregated across slots, precedence 4>3>2>1>0 -- the most
 # severe cause is always the one reported):
@@ -2670,9 +2671,9 @@ _loop_reap_slot() {
     esac
   fi
   if (( _loop_reap_timeout == 1 )); then
-    breaker_record "$STATE_FILE" 0 "$(date +%s)"
+    breaker_record "$STATE_FILE" 0 "$(date +%s)" "${slot_model[s]:-}"
   else
-    breaker_record "$STATE_FILE" "$detected" "$(date +%s)"
+    breaker_record "$STATE_FILE" "$detected" "$(date +%s)" "${slot_model[s]:-}"
   fi
 
   printf '%s\n' "$output" | tail -n 25
