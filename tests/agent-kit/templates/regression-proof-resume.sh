@@ -172,6 +172,10 @@ check_c_gates() {
 }
 
 check_d_single_home() {
+  local f
+  for f in "$TEST_WRITER" "$IMPLEMENTER" "$EVALUATOR" "$TASK_CRITERIA"; do
+    [[ -f "$f" ]] || return 1
+  done
   ! grep -lE 'equivalent mutation|time zone' "$TEST_WRITER" "$IMPLEMENTER" "$EVALUATOR" "$TASK_CRITERIA" >/dev/null 2>&1
 }
 
@@ -257,16 +261,14 @@ check_j_bootstrap_ids() {
   [[ $ok -eq 1 ]]
 }
 
-emit_skill_roots_for_answers() { # answers.json → newline-separated inst dirs (.claude, …)
-  local ans="$1" h
-  while read -r h; do
-    case "$h" in
-      claude-code) printf '%s\n' .claude ;;
-      cursor)      printf '%s\n' .cursor ;;
-      copilot)     printf '%s\n' .github ;;
-      codex)       ;;
-    esac
-  done < <(jq -r '.harnesses[]' "$ans")
+skill_root_for_harness() { # harness id → inst dir (.claude, …); empty for codex; rc 1 if unknown
+  case "$1" in
+    claude-code) printf '%s\n' .claude ;;
+    cursor)      printf '%s\n' .cursor ;;
+    copilot)     printf '%s\n' .github ;;
+    codex)       ;;
+    *)           return 1 ;;
+  esac
 }
 
 assert_emit_resume_bundle() { # emit_root inst_label
@@ -274,13 +276,13 @@ assert_emit_resume_bundle() { # emit_root inst_label
   base="$emit_root/$inst/skills"
   [[ -f "$base/feature/reference/resume.md" ]] || return 1
   [[ -f "$base/feature/templates/progress.md" ]] || return 1
-  grep -qF '## Regression proof' "$base/test-ladder/SKILL.md" || return 1
+  grep -qxF '## Regression proof' "$base/test-ladder/SKILL.md" || return 1
   grep -qF "$FEATURE_PROGRESS_LINE" "$base/feature/SKILL.md" || return 1
   return 0
 }
 
 check_k_emitted_install() {
-  local ans_on ans_off root_on root_off inst had_skills=0
+  local ans_on ans_off root_on root_off h inst had_skills=0
   alloc_path ans-on
   answers_kg_mode "$EMIT_ALLOC_PATH" 1 1 true || return 1
   ans_on="$EMIT_ALLOC_PATH"
@@ -292,12 +294,17 @@ check_k_emitted_install() {
   alloc_root; root_off="$EMIT_ALLOC_PATH"
   emit_cache_copy "$root_off" "$ans_off" || return 1
 
-  while IFS= read -r inst; do
-    [[ -z "$inst" ]] && continue
+  while IFS= read -r h; do
+    [[ -z "$h" ]] && continue
+    inst="$(skill_root_for_harness "$h")" || return 1
+    if [[ -z "$inst" ]]; then
+      report SKIP "(k) $h: resume/progress/test-ladder bundle" "Codex-only installs ship no kit skills tree"
+      continue
+    fi
     had_skills=1
     assert_emit_resume_bundle "$root_on" "$inst" || return 1
     assert_emit_resume_bundle "$root_off" "$inst" || return 1
-  done < <(emit_skill_roots_for_answers "$ans_on")
+  done < <(jq -r '.harnesses[]' "$ans_on")
 
   [[ "$had_skills" -eq 1 ]] || return 2
   return 0
@@ -313,7 +320,7 @@ run_letter() {
     local rc=0
     "$fn" || rc=$?
     if [[ "$rc" -eq 2 ]]; then
-      report SKIP "($letter) $title" "Codex harness emits no skills tree"
+      report SKIP "($letter) $title" "no harness in the answers emits a kit skills tree"
       return
     fi
     if [[ "$rc" -eq 0 ]]; then
