@@ -28,7 +28,7 @@ BOOTSTRAP_IDS="$KIT/reference/bootstrap-ids.md"
 
 FIXTURE="$REPO_ROOT/tests/agent-kit/fixtures/self-answers.json"
 
-FEATURE_PROGRESS_LINE='Rewrite `_memory/work/goals/[goal]/progress.md` from `templates/progress.md` after each phase, verdict and user decision; resume goals per `reference/resume.md`.'
+FEATURE_PROGRESS_LINE='Rewrite `_memory/work/goals/[goal]/progress.md` from `templates/progress.md` at every moment listed in `reference/resume.md` § When progress.md is written; resume goals per `reference/resume.md`.'
 
 FIXTURE_TMPDIR="$(mktemp -d "${TMPDIR:-/tmp}/akrpr.XXXXXX")" || exit 1
 export TMPDIR="$FIXTURE_TMPDIR"
@@ -220,6 +220,8 @@ check_g_resume_reference() {
   [[ -n "$n" && "$n" -ge 8 ]] || ok=0
   n="$(awk '/^3\. \*\*Repository check\.\*\*/{f=1;next} /^4\. /{f=0} f' "$RESUME_REF" | grep -c 'HEAD at this write' || true)"
   [[ -n "$n" && "$n" -ge 1 ]] || ok=0
+  n="$(awk '/^3\. \*\*Repository check\.\*\*/{f=1;next} /^4\. /{f=0} f' "$RESUME_REF" | grep -c 'A goal commit is .*`git diff-tree --no-commit-id --name-only -r <sha>`' || true)"
+  [[ "$n" == 1 ]] || ok=0
   n="$(grep -c 'phase:' "$RESUME_REF" || true)"
   [[ -n "$n" && "$n" -ge 3 ]] || ok=0
   for p in 'git fetch' 'merged' 'squash' 'ancestor' 'Never edit or delete ledger' 'stops the resume' \

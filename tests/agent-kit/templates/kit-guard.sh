@@ -265,7 +265,7 @@ EOF
 
 # Assemble expected progress.md paths at runtime (forbidden-substring guard on old wording).
 _MEM_WORK_SEGMENT='work'
-FEATURE_PROGRESS_LINE="Rewrite \`_memory/${_MEM_WORK_SEGMENT}/goals/[goal]/progress.md\` from \`templates/progress.md\` after each phase, verdict and user decision; resume goals per \`reference/resume.md\`."
+FEATURE_PROGRESS_LINE="Rewrite \`_memory/${_MEM_WORK_SEGMENT}/goals/[goal]/progress.md\` from \`templates/progress.md\` at every moment listed in \`reference/resume.md\` § When progress.md is written; resume goals per \`reference/resume.md\`."
 ORCH_PROGRESS_NOTE="The orchestrator maintains this state throughout execution: the block lives in \`_memory/${_MEM_WORK_SEGMENT}/goals/[goal]/progress.md\`, written from the feature skill's \`templates/progress.md\` (which adds Next step, Git, Tasks, In flight, Waiting on user, Deviations and exclusions, and replaces the Phase 4 table below with its \`## Tasks\` table), never in this file; resume per the feature skill's \`reference/resume.md\`."
 
 WRITER_AGENTS=(implementer test-writer evidence-collector)

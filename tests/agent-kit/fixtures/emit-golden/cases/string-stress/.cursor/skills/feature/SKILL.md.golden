@@ -37,7 +37,7 @@ Re-evaluations RESUME the same evaluator with a delta: Phase 4/5 list applied fi
 
 ### Goal checkpoint and resume
 
-Rewrite `_memory/work/goals/[goal]/progress.md` from `templates/progress.md` after each phase, verdict and user decision; resume goals per `reference/resume.md`.
+Rewrite `_memory/work/goals/[goal]/progress.md` from `templates/progress.md` at every moment listed in `reference/resume.md` § When progress.md is written; resume goals per `reference/resume.md`.
 
 ## Phase 1 — Alignment (no files)
 
