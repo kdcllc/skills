@@ -28,7 +28,7 @@ BOOTSTRAP_IDS="$KIT/reference/bootstrap-ids.md"
 
 FIXTURE="$REPO_ROOT/tests/agent-kit/fixtures/self-answers.json"
 
-FEATURE_PROGRESS_LINE='Rewrite `_memory/work/goals/[goal]/progress.md` from `templates/progress.md` at every moment listed in `reference/resume.md` § When progress.md is written; resume goals per `reference/resume.md`.'
+FEATURE_PROGRESS_LINE='Rewrite `_memory/work/goals/[goal]/progress.md` from `templates/progress.md` per `reference/resume.md` § When progress.md is written; resume goals per that file.'
 
 FIXTURE_TMPDIR="$(mktemp -d "${TMPDIR:-/tmp}/akrpr.XXXXXX")" || exit 1
 export TMPDIR="$FIXTURE_TMPDIR"

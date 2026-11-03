@@ -36,7 +36,7 @@ Re-evaluations RESUME the same evaluator with a delta: Phase 4/5 list applied fi
 
 ### Goal checkpoint and resume
 
-Rewrite `_memory/work/goals/[goal]/progress.md` from `templates/progress.md` at every moment listed in `reference/resume.md` § When progress.md is written; resume goals per `reference/resume.md`.
+Rewrite `_memory/work/goals/[goal]/progress.md` from `templates/progress.md` per `reference/resume.md` § When progress.md is written; resume goals per that file.
 
 ## Phase 1 — Alignment (no files)
 
@@ -61,8 +61,8 @@ Create `_memory/work/goals/[goal-name]/` containing:
 - One `NN-task-name.md` per task from `templates/task.md`, in dependency order along
   skills/<name>/ (published skills; agent-kit: templates/ → bin/ + emitters/ → reference/harness-matrix.md) → scripts/checks/ + tests/ → docs/ + root README.md / skills.sh.json / marketplace manifests, then a final test task.
 
-Every task file carries the ownership contract (`writes`/`reads`/`depends_on`/`owner`/
-`rewrite_semantics` — see `templates/task.md`), `## Acceptance Criteria` (criterion +
+Every task file carries the ownership contract (see
+`templates/task.md`), `## Acceptance Criteria` (criterion +
 verification method each; Phase 3 validates once), disjoint `writes` for unordered pairs. `eval_depth`
 default `light`; set `full` with reason for contract/scaffold, tasks with interface consumers (mirror/doc/test excluded), tasks writing agents/criteria/drivers/shared infra. Contract-first: shared boundary → contract/scaffold FIRST, `depends_on` on every consumer.
 
