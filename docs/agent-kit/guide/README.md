@@ -72,7 +72,7 @@ Every document in this suite follows these rules.
 ### (b) Links
 
 - Cross-document links **inside the suite** are relative and file-level only — no `#anchor` fragments across files (same-file anchors are allowed).
-- **All link targets** are written as paths resolved from the **linking file's directory**. From `docs/agent-kit/guide/`, `../` reaches `docs/` and `../../` reaches the repo root (for example `../../skills/agent-kit/SKILL.md`). Never use GitHub-root-style paths without the `../` prefix.
+- **All link targets** are written as paths resolved from the **linking file's directory**. From `docs/agent-kit/guide/`, `../` reaches `docs/agent-kit/`, `../../` reaches `docs/`, and `../../../` reaches the repo root (for example [`../../../skills/agent-kit/SKILL.md`](../../../skills/agent-kit/SKILL.md)). Never use GitHub-root-style paths without the `../` prefix.
 - Targets **outside** the suite must resolve on disk at writing time.
 - Links to the ten frozen sibling filenames in the document map above are valid once they match this map. Whole-suite resolve-on-disk is verified only at the end by the suite checker (`tests/agent-kit/docs-link-check.sh`), never during a parallel sibling task's evaluation.
 

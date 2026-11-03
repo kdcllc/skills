@@ -208,6 +208,7 @@ check_f_progress_template() {
     <(awk '/^## Orchestration Progress: \[Goal Name\]$/{f=1;next} f&&/^```/{exit} f' "$ORCH_TEMPLATE" | grep -E '^(### Phase|- \[ \])') \
     <(awk '/^## Orchestration Progress: \[Goal Name\]$/{f=1;next} f' "$PROGRESS_TMPL" | grep -E '^(### Phase|- \[ \])') \
     >/dev/null || ok=0
+  [[ "$(grep -v '^[[:space:]]*$' "$PROGRESS_TMPL" | tail -n 1)" == 'See ORCHESTRATION.md § Forge adapter (Phase 7 delivery).' ]] || ok=0
   [[ $ok -eq 1 ]]
 }
 
@@ -238,6 +239,7 @@ check_h_orchestration() {
   section_phrases_ok "$note" 'progress.md' 'templates/progress.md' 'reference/resume.md' \
     'and replaces the Phase 4 table below with its `## Tasks` table' || ok=0
   [[ "$note" != *'<!-- IF kit_guard -->'* ]] || ok=0
+  [[ "$(grep -cF 'On Codex-only installs, which ship no kit skills tree, write `progress.md` with the fields this section lists, and resume from `progress.md`, `goal.md` and the orchestration log after checking the branch and HEAD against `progress.md`.' <<<"$note")" == 1 ]] || ok=0
   assert_anchor "$ORCH_TEMPLATE" 'memory-capture.md,resume.md,goal-revisions.md,corrective-tasks.md,fix-cycles.md}' 4 || ok=0
   assert_anchor "$ORCH_TEMPLATE" 'templates/{goal.md,task.md,progress.md}' 4 || ok=0
   assert_anchor "$ORCH_TEMPLATE" '_memory/work/goals/<goal>/progress.md  #' 4 || ok=0
@@ -263,6 +265,7 @@ check_j_bootstrap_ids() {
   grep '^| kit_guard |' "$BOOTSTRAP_IDS" | grep -qE 'Workflow State Tracking note|progress location' && ok=0
   grep '^| kit_guard |' "$BOOTSTRAP_IDS" | grep -qF 'Repository safety item 4' || ok=0
   grep '^| kit_guard |' "$BOOTSTRAP_IDS" | grep -qF 'Phase 5 kit-file gate' || ok=0
+  grep '^| kit_guard |' "$BOOTSTRAP_IDS" | grep -qF 'File Locations trees' || ok=0
   [[ $ok -eq 1 ]]
 }
 
