@@ -263,15 +263,10 @@ Checks; exit 4 ⇒ restore tracked files from git, delete a modified `_kit/` fil
 `emit.sh --upgrade`, log a note; never `--force`.
 EOF
 
-read -r -d '' FEATURE_PROGRESS_OFF <<'EOF' || true
-Update ORCHESTRATION.md Orchestration Progress after each step.
-EOF
-
-# Assemble expected progress.md paths at runtime (AC5 forbidden substring guard).
+# Assemble expected progress.md paths at runtime (forbidden-substring guard on old wording).
 _MEM_WORK_SEGMENT='work'
-FEATURE_PROGRESS_KG="Update \`_memory/${_MEM_WORK_SEGMENT}/goals/[goal]/progress.md\` (Orchestration Progress) after each step — ORCHESTRATION.md is kit-owned."
-ORCH_PROGRESS_NOTE="With the kit-file guard on, keep this block in \`_memory/${_MEM_WORK_SEGMENT}/goals/[goal]/progress.md\` —
-never in this file, which is kit-owned."
+FEATURE_PROGRESS_LINE="Rewrite \`_memory/${_MEM_WORK_SEGMENT}/goals/[goal]/progress.md\` from \`templates/progress.md\` after each phase, verdict and user decision; resume goals per \`reference/resume.md\`."
+ORCH_PROGRESS_NOTE="The orchestrator maintains this state throughout execution: the block lives in \`_memory/${_MEM_WORK_SEGMENT}/goals/[goal]/progress.md\`, written from the feature skill's \`templates/progress.md\` (which adds Next step, Git, Tasks, In flight, Waiting on user, Deviations and exclusions, and replaces the Phase 4 table below with its \`## Tasks\` table), never in this file; resume per the feature skill's \`reference/resume.md\`."
 
 WRITER_AGENTS=(implementer test-writer evidence-collector)
 
@@ -801,11 +796,12 @@ check_progress_location() {
   alloc_root; root_off="$ALLOC_PATH"
   emit_cache_copy "$root_off" "$ans_off" || return 1
 
-  content_has "$root_on/.claude/skills/feature/SKILL.md" "$FEATURE_PROGRESS_KG" || return 1
+  content_has "$root_on/.claude/skills/feature/SKILL.md" "$FEATURE_PROGRESS_LINE" || return 1
   grep -qF 'Update ORCHESTRATION.md Orchestration Progress' "$root_on/.claude/skills/feature/SKILL.md" && return 1
   section_has_block "$root_on/.claude/ORCHESTRATION.md" '### Workflow State Tracking' "$ORCH_PROGRESS_NOTE" || return 1
-  content_has "$root_off/.claude/skills/feature/SKILL.md" "$FEATURE_PROGRESS_OFF" || return 1
-  grep -qF 'progress.md' "$root_off/.claude/skills/feature/SKILL.md" && return 1
+  content_has "$root_off/.claude/skills/feature/SKILL.md" "$FEATURE_PROGRESS_LINE" || return 1
+  grep -qF 'Update ORCHESTRATION.md Orchestration Progress' "$root_off/.claude/skills/feature/SKILL.md" && return 1
+  section_has_block "$root_off/.claude/ORCHESTRATION.md" '### Workflow State Tracking' "$ORCH_PROGRESS_NOTE" || return 1
   return 0
 }
 
@@ -858,7 +854,7 @@ par_block run_check j check_validation 'non-boolean kit_guard exit 3; manifest o
 par_block run_check k check_rendered_text 'rendered gate text four research×loop×flag variants'
 par_block run_check l check_turning_off 're-emit kit_guard false prunes tools, hook warnings'
 par_block run_check m check_cursor_caller_claude 'hook claude Cursor-caller JSON and CURSOR_PROJECT_DIR'
-par_block run_check n check_progress_location 'feature progress.md vs ORCHESTRATION.md'
+par_block run_check n check_progress_location 'unconditional progress.md in feature skill and ORCHESTRATION note (guard on/off)'
 par_block run_check o check_evaluator_bootstrap 'evaluator kit-guard bullet after bootstrap text'
 par_finish
 

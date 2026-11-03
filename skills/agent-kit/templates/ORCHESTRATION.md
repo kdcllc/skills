@@ -74,7 +74,7 @@ context window, and suffers from:
 | **Agentic laziness** (optimism creep) | Desire to "finish" | Declares the job done after partial progress; cuts corners, skips edge cases | Nothing advances without an evaluator PASS against acceptance criteria written at planning time; the `task-criteria` floor fails any completion claim the evidence contradicts (F5) |
 | **Self-preferential bias** (self-review blindness, sunk cost) | Reviewing, or invested in, its own work | Misses obvious issues; reluctant to reject its own output | Evaluators are separate subagents with no stake in the outcome whose scores start low and must be earned; fix cycle 2 rotates to a different model family, and continuation-ladder arbitration uses a different-family frontier model when one is reachable |
 | **Goal drift** | Constraints fade across many turns and compactions | Late work no longer matches the original objective | `goal.md` and the task files hold the objective, constraints, and acceptance criteria on disk; every spawn receives them in its context package, and every fix is re-evaluated against them (Mandatory Re-Evaluate Invariants) |
-| **Context fatigue** | Long conversations exhaust attention | Late tasks get less quality | Fresh context per subagent; the orchestrator recommends compaction or a fresh session once its context window is about 60% full, then resumes from `goal.md` and the orchestration log |
+| **Context fatigue** | Long conversations exhaust attention | Late tasks get less quality | Fresh context per subagent; the orchestrator recommends compaction or a fresh session once its context window is about 60% full, then resumes from `goal.md`, `progress.md` and the orchestration log (feature `reference/resume.md`) |
 
 ### The Solution: Separation of Concerns
 
@@ -472,7 +472,7 @@ member reaches task-evaluation PASS or PASS (with notes).
 - Step 1: Launch implementer (or test-writer for the test task) — the context
   package includes the task file (including its Acceptance Criteria); record the pre-dispatch baseline first (Repository safety item 2)
 - Step 2: Receive completion report
-- Step 3: Launch evaluator
+- Step 3: Launch evaluator — guarding tests need a regression proof (test-ladder § Regression proof) and the evaluator re-runs at least one.
 - Step 4: Handle verdict — PASS or PASS (with notes) → next task (`PASS (with notes)`
   counts as PASS; copy notes into the orchestration log); NEEDS FIXES → fix cycle (model
   rotation) and re-evaluate, 3 max, then read `goal.md`'s `phases.ladder`: `auto` → the
@@ -501,7 +501,7 @@ out-of-fence defect in a completed task's files becomes a corrective task per
 `reference/corrective-tasks.md`. At each task or ready-group boundary, when the harness
 reports the main session past ~60% of its context window, recommend compaction or a fresh
 session to the user (e.g. Claude Code `/compact`; other harnesses: start a new chat and
-resume from `goal.md` and the orchestration log) — never compact automatically; log the
+resume per the feature skill's `reference/resume.md`, from `progress.md`, `goal.md` and the orchestration log) — never compact automatically; log the
 recommendation via `note`.
 
 **Phase 5 — Final audit (mandatory re-audit loop).** All tasks complete → final
@@ -1134,8 +1134,8 @@ installs have no kit skills tree (no protocol copy on disk).
 ├── skills/
 │   ├── feature/       # Feature coordination
 │   │   ├── SKILL.md
-│   │   ├── reference/{continuation-ladder.md,preflight.md,ready-groups.md,degraded-mode.md,memory-protocol.md,memory-capture.md,goal-revisions.md,corrective-tasks.md,fix-cycles.md}
-│   │   └── templates/{goal.md,task.md}
+│   │   ├── reference/{continuation-ladder.md,preflight.md,ready-groups.md,degraded-mode.md,memory-protocol.md,memory-capture.md,resume.md,goal-revisions.md,corrective-tasks.md,fix-cycles.md}
+│   │   └── templates/{goal.md,task.md,progress.md}
 │   │
 │   ├── memory-capture/SKILL.md       # Session transcript distillation
 │   │
@@ -1155,6 +1155,7 @@ installs have no kit skills tree (no protocol copy on disk).
 
 _memory/loop/backlog.md               # Story backlog for the autonomous loop (if enabled)
 _memory/work/goals/<goal>/orchestration-log.md  # Append-only spawn ledger per goal (written by _kit/log-spawn.*)
+_memory/work/goals/<goal>/progress.md  # Orchestration Progress checkpoint (feature templates/progress.md; resume per reference/resume.md)
 _memory/work/goals/<goal>/spawns/NN-context.md  # Context package sent to spawn #NN (verbatim)
 _memory/work/goals/<goal>/spawns/NN-report.md   # Report returned by spawn #NN (verbatim)
 _memory/loop/breaker-state.json       # Model circuit breaker state (runtime, gitignored)
@@ -1195,8 +1196,8 @@ _loop/{loop.sh,loop.cmd,breaker.sh,PROMPT.md}  # Headless loop driver (if enable
 ├── skills/
 │   ├── feature/       # Feature coordination
 │   │   ├── SKILL.md
-│   │   ├── reference/{continuation-ladder.md,preflight.md,ready-groups.md,degraded-mode.md,memory-protocol.md,memory-capture.md,goal-revisions.md,corrective-tasks.md,fix-cycles.md}
-│   │   └── templates/{goal.md,task.md}
+│   │   ├── reference/{continuation-ladder.md,preflight.md,ready-groups.md,degraded-mode.md,memory-protocol.md,memory-capture.md,resume.md,goal-revisions.md,corrective-tasks.md,fix-cycles.md}
+│   │   └── templates/{goal.md,task.md,progress.md}
 │   │
 │   ├── memory-capture/SKILL.md       # Session transcript distillation
 │   │
@@ -1214,6 +1215,7 @@ _loop/{loop.sh,loop.cmd,breaker.sh,PROMPT.md}  # Headless loop driver (if enable
 └── ORCHESTRATION.md   # This file
 
 _memory/work/goals/<goal>/orchestration-log.md  # Append-only spawn ledger per goal (written by _kit/log-spawn.*)
+_memory/work/goals/<goal>/progress.md  # Orchestration Progress checkpoint (feature templates/progress.md; resume per reference/resume.md)
 _memory/work/goals/<goal>/spawns/NN-context.md  # Context package sent to spawn #NN (verbatim)
 _memory/work/goals/<goal>/spawns/NN-report.md   # Report returned by spawn #NN (verbatim)
 _kit/{log-spawn.sh,log-spawn.cmd}  # Single-copy tools: orchestration-log writer + Windows launcher
@@ -1251,8 +1253,8 @@ _memory/.index/ · _memory/raw/  # Derived index; capture output, ledgers and dr
 ├── skills/
 │   ├── feature/       # Feature coordination
 │   │   ├── SKILL.md
-│   │   ├── reference/{continuation-ladder.md,preflight.md,ready-groups.md,degraded-mode.md,memory-protocol.md,memory-capture.md,goal-revisions.md,corrective-tasks.md,fix-cycles.md}
-│   │   └── templates/{goal.md,task.md}
+│   │   ├── reference/{continuation-ladder.md,preflight.md,ready-groups.md,degraded-mode.md,memory-protocol.md,memory-capture.md,resume.md,goal-revisions.md,corrective-tasks.md,fix-cycles.md}
+│   │   └── templates/{goal.md,task.md,progress.md}
 │   │
 │   ├── memory-capture/SKILL.md       # Session transcript distillation
 │   │
@@ -1268,6 +1270,7 @@ _memory/.index/ · _memory/raw/  # Derived index; capture output, ledgers and dr
 
 _memory/loop/backlog.md               # Story backlog for the autonomous loop (if enabled)
 _memory/work/goals/<goal>/orchestration-log.md  # Append-only spawn ledger per goal (written by _kit/log-spawn.*)
+_memory/work/goals/<goal>/progress.md  # Orchestration Progress checkpoint (feature templates/progress.md; resume per reference/resume.md)
 _memory/work/goals/<goal>/spawns/NN-context.md  # Context package sent to spawn #NN (verbatim)
 _memory/work/goals/<goal>/spawns/NN-report.md   # Report returned by spawn #NN (verbatim)
 _memory/loop/breaker-state.json       # Model circuit breaker state (runtime, gitignored)
@@ -1307,8 +1310,8 @@ _loop/{loop.sh,loop.cmd,breaker.sh,PROMPT.md}  # Headless loop driver (if enable
 ├── skills/
 │   ├── feature/       # Feature coordination
 │   │   ├── SKILL.md
-│   │   ├── reference/{continuation-ladder.md,preflight.md,ready-groups.md,degraded-mode.md,memory-protocol.md,memory-capture.md,goal-revisions.md,corrective-tasks.md,fix-cycles.md}
-│   │   └── templates/{goal.md,task.md}
+│   │   ├── reference/{continuation-ladder.md,preflight.md,ready-groups.md,degraded-mode.md,memory-protocol.md,memory-capture.md,resume.md,goal-revisions.md,corrective-tasks.md,fix-cycles.md}
+│   │   └── templates/{goal.md,task.md,progress.md}
 │   │
 │   ├── memory-capture/SKILL.md       # Session transcript distillation
 │   │
@@ -1322,6 +1325,7 @@ _loop/{loop.sh,loop.cmd,breaker.sh,PROMPT.md}  # Headless loop driver (if enable
 └── ORCHESTRATION.md   # This file
 
 _memory/work/goals/<goal>/orchestration-log.md  # Append-only spawn ledger per goal (written by _kit/log-spawn.*)
+_memory/work/goals/<goal>/progress.md  # Orchestration Progress checkpoint (feature templates/progress.md; resume per reference/resume.md)
 _memory/work/goals/<goal>/spawns/NN-context.md  # Context package sent to spawn #NN (verbatim)
 _memory/work/goals/<goal>/spawns/NN-report.md   # Report returned by spawn #NN (verbatim)
 _kit/{log-spawn.sh,log-spawn.cmd}  # Single-copy tools: orchestration-log writer + Windows launcher
@@ -1459,8 +1463,8 @@ evaluator subagents — they are not invoked directly.
 | `evaluator` | Score starts at 2/5 | Actively looks for code problems | {{EVALUATOR_AUTO_FAIL_TRIGGERS}} |
 | `qa-evaluator` | Score starts at 2/5 | User-perspective behavioral QA | {{QA_AUTO_FAIL_TRIGGERS}} |
 | `evidence-collector` | Evidence only | Runs surfaces, writes index under goal qa/ | n/a |
-| `implementer` | Must complete ALL | Checklist-driven execution | Skipping requirements |
-| `test-writer` | 100% coverage required | Outcome-verifying tests | Functions without tests, live external-service calls |
+| `implementer` | Must complete ALL | Checklist-driven execution | Skipping requirements, guarding tests without a regression proof |
+| `test-writer` | 100% coverage required | Outcome-verifying tests | Functions without tests, live external-service calls, guarding tests without a regression proof |
 
 <!-- BOOTSTRAP[auto-fail-triggers]: auto-fail triggers should name project-specific sins, e.g.
      "re-implemented core auth/transport, swallowed 401/403, ignored pagination,
@@ -1469,11 +1473,7 @@ evaluator subagents — they are not invoked directly.
 
 ### Workflow State Tracking
 
-The orchestrator maintains this state throughout execution:
-<!-- IF kit_guard -->
-With the kit-file guard on, keep this block in `_memory/work/goals/[goal]/progress.md` —
-never in this file, which is kit-owned.
-<!-- ENDIF kit_guard -->
+The orchestrator maintains this state throughout execution: the block lives in `_memory/work/goals/[goal]/progress.md`, written from the feature skill's `templates/progress.md` (which adds Next step, Git, Tasks, In flight, Waiting on user, Deviations and exclusions, and replaces the Phase 4 table below with its `## Tasks` table), never in this file; resume per the feature skill's `reference/resume.md`.
 
 ```markdown
 ## Orchestration Progress: [Goal Name]

@@ -69,8 +69,7 @@ writes `preToolUse` with `matcher` `Write|Delete` and command
 `bash _kit/kit-guard.sh hook cursor` (JSON `permission: deny` on block). When the
 file exists without the hook, emit prints the merge snippet on stderr. Cursor also
 loads Claude Code hooks from `.claude/settings.json` when both harnesses are
-installed — dual-harness installs may run the guard twice. Same ORCHESTRATION.md /
-feature progress behavior as Claude Code.
+installed — dual-harness installs may run the guard twice. Same ORCHESTRATION.md behavior as Claude Code.
 
 **Hook telemetry (`flags.hook_telemetry`):** emits `_kit/hook-log.sh` and
 `_kit/hook-log.cmd`. When `.cursor/hooks.json` is absent, emit writes `stop` and

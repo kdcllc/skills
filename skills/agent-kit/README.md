@@ -221,11 +221,11 @@ workflow, so workers use them on the right layers.
 | `agents/implementer`, `agents/test-writer` | Workers on the light tier |
 | `agents/evidence-collector` | QA evidence for the optional QA gate, light tier, no verdicts |
 | `agents/terminal` | Command runner on the fast tier |
-| `skills/feature` | The seven-phase workflow with goal/task templates, orchestration log, and memory protocol |
+| `skills/feature` | The seven-phase workflow with goal/task templates, orchestration log, memory protocol, and progress checkpoint plus `reference/resume.md` |
 | `skills/research` | Research → Plan workflow (optional) |
 | `skills/memory-capture` | Turns finished chat sessions into searchable session summaries |
 | `skills/{goal,task,qa}-criteria` | Evaluation checklists (goal evaluation includes devil's advocate) |
-| `skills/test-ladder` | New → impacted tests mid-cycle; full suites at cycle end |
+| `skills/test-ladder` | New → impacted tests mid-cycle; full suites at cycle end; regression proof for guarding tests |
 | `skills/align-docs` | Phase 6: evaluator-gated sync of all docs to shipped code |
 | `skills/ship-pr` | Phase 7: approval-gated delivery to GitHub, Azure DevOps, GitLab, or a hand-over |
 | `skills/auto-loop` + `_loop/` + `_memory/loop/backlog.md` | The autonomous loop (optional) |

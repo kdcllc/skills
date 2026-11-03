@@ -3,7 +3,7 @@ name: agent-kit
 description: "Install the orchestrator/worker/evaluator multi-agent system into the current project, compiled for its AI coding harness(es) — Claude Code, Cursor, GitHub Copilot (VS Code), and/or OpenAI Codex. Generates the seven subagents (evaluator, qa-evaluator, implementer, test-writer, evidence-collector, terminal, diagnostician) with tiered model pins — evidence-collector gathers optional-gate QA evidence — terminal is fast-tier (light when an install omits `fast`): it runs any Bash or PowerShell command and returns only the result the caller asked for — plus the orchestrator skills (feature, research, memory-capture), the criteria skills, an optional autonomous feature loop, and a project-specific ORCHESTRATION.md. On empty or near-empty (greenfield) directories it first asks whether to scaffold a project tree and creates nothing until the user confirms. After inspect, suggests skills.sh skills from inspection signals. Run once per project; re-run to upgrade or re-target."
 license: MIT
 metadata:
-  version: "2.2.1"
+  version: "2.3.0"
 ---
 
 # Setup (Orchestration Kit Compiler)
@@ -277,7 +277,7 @@ Ask (multiple-choice where possible) only what you could not infer:
    emits `_kit/kit-guard.sh` (`check` for CI and the post-spawn orchestration gate),
    Claude Code / Cursor edit-blocking hooks when `.claude/settings.json` / `.cursor/hooks.json`
    are absent (else emit prints a merge snippet), and read-only rule text in ORCHESTRATION.md
-   and the agents; Orchestration Progress moves to `_memory/work/goals/[goal]/progress.md`.
+   and the agents.
    Copilot and Codex get the check and rule text only. Record `flags.kit_guard`.
 9. **Log subagent and session stops?** (default no.) `flags.hook_telemetry: true` emits
    `_kit/hook-log.sh`, Claude Code (`Stop`, `SubagentStop`, `StopFailure`) and Cursor

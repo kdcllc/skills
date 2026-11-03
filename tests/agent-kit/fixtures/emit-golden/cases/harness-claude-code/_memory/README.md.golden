@@ -16,7 +16,7 @@ _memory/
     README.md            # status index of research briefs
     <topic>.md           # curated research brief
   work/                  # GITIGNORED
-    goals/<goal>/        # goal.md, NN-task.md, orchestration-log.md, spawns/, evidence/, memory-drafts/
+    goals/<goal>/        # goal.md, NN-task.md, progress.md, orchestration-log.md, spawns/, evidence/, memory-drafts/
     research/<topic>/    # prompt.md, report.md, recalled-memory.md, review.md, ingested
   loop/                  # TRACKED
     backlog.md
