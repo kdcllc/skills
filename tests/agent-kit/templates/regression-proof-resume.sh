@@ -191,6 +191,7 @@ check_f_progress_template() {
   local ok=1
   head -1 "$PROGRESS_TMPL" | grep -qxF '# Progress: [goal]' || ok=0
   [[ "$(grep -c '^updated: \|^status: active | waiting-on-user | blocked | done$' "$PROGRESS_TMPL")" == 2 ]] || ok=0
+  sed -n '4p' "$PROGRESS_TMPL" | grep -q '^phase: ' || ok=0
   diff -q <(grep -n '^## ' "$PROGRESS_TMPL" | cut -d: -f2-) <(printf '%s\n' \
     '## Next step' '## Git' '## Tasks' '## In flight' '## Waiting on user' \
     '## Deviations and exclusions' '## Orchestration Progress: [Goal Name]') >/dev/null || ok=0
@@ -203,10 +204,16 @@ check_f_progress_template() {
 }
 
 check_g_resume_reference() {
-  local ok=1 p
+  local ok=1 p n
   diff -q <(grep -n '^## ' "$RESUME_REF" | cut -d: -f2-) <(printf '%s\n' \
     '## When progress.md is written' '## Unfinished goals (Phase 2)' '## Resume procedure' \
     '## Missing checkpoint' '## Scope') >/dev/null || ok=0
+  n="$(awk '/^3\. \*\*Repository check\.\*\*/{f=1;next} /^4\. /{f=0} f' "$RESUME_REF" | grep -c '^   - ' || true)"
+  [[ -n "$n" && "$n" -ge 8 ]] || ok=0
+  n="$(awk '/^3\. \*\*Repository check\.\*\*/{f=1;next} /^4\. /{f=0} f' "$RESUME_REF" | grep -c 'HEAD at this write' || true)"
+  [[ -n "$n" && "$n" -ge 1 ]] || ok=0
+  n="$(grep -c 'phase:' "$RESUME_REF" || true)"
+  [[ -n "$n" && "$n" -ge 3 ]] || ok=0
   for p in 'git fetch' 'merged' 'squash' 'ancestor' 'Never edit or delete ledger' 'stops the resume' \
     'RESUMED:' 'silent-success' 'never resume automatically' 'driver-dispatched' 'auto-loop' \
     'before Phase 4' 'is-ancestor' 'not recorded until Phase 4'; do
@@ -218,7 +225,8 @@ check_g_resume_reference() {
 check_h_orchestration() {
   local ok=1 note
   note="$(orch_workflow_note)"
-  section_phrases_ok "$note" 'progress.md' 'templates/progress.md' 'reference/resume.md' || ok=0
+  section_phrases_ok "$note" 'progress.md' 'templates/progress.md' 'reference/resume.md' \
+    'and replaces the Phase 4 table below with its `## Tasks` table' || ok=0
   [[ "$note" != *'<!-- IF kit_guard -->'* ]] || ok=0
   assert_anchor "$ORCH_TEMPLATE" 'memory-capture.md,resume.md,goal-revisions.md,corrective-tasks.md,fix-cycles.md}' 4 || ok=0
   assert_anchor "$ORCH_TEMPLATE" 'templates/{goal.md,task.md,progress.md}' 4 || ok=0

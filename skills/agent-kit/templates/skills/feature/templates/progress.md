@@ -1,6 +1,7 @@
 # Progress: [goal]
 updated: [literal ISO timestamp from CURRENT_DATETIME — never guessed]
 status: active | waiting-on-user | blocked | done
+phase: [current phase — number and name, e.g. 4 — Execution]
 
 > The orchestrator rewrites this whole file from this template on every update. Do not leave placeholder lines such as `TBD` or `(pending)` in a written copy; write `none` for empty sections.
 

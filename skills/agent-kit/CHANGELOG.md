@@ -6,6 +6,8 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 
 ## [Unreleased]
 
+## [2.3.0] - 2026-11-03
+
 ### Added
 
 - **Regression proofs for guarding tests** — the test-ladder `## Regression proof` section, writer duties and `### Regression proofs` report sections, the task-criteria NEEDS FIXES cap, and the evaluator re-run.

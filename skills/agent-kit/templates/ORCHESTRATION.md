@@ -1473,7 +1473,7 @@ evaluator subagents — they are not invoked directly.
 
 ### Workflow State Tracking
 
-The orchestrator maintains this state throughout execution: the block lives in `_memory/work/goals/[goal]/progress.md`, written from the feature skill's `templates/progress.md` (which adds Next step, Git, Tasks, In flight, Waiting on user, Deviations and exclusions), never in this file; resume per the feature skill's `reference/resume.md`.
+The orchestrator maintains this state throughout execution: the block lives in `_memory/work/goals/[goal]/progress.md`, written from the feature skill's `templates/progress.md` (which adds Next step, Git, Tasks, In flight, Waiting on user, Deviations and exclusions, and replaces the Phase 4 table below with its `## Tasks` table), never in this file; resume per the feature skill's `reference/resume.md`.
 
 ```markdown
 ## Orchestration Progress: [Goal Name]

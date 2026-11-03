@@ -83,6 +83,8 @@ The orchestrator's prompt tells you which mode you are in:
   attempt 1 for goals with `trace: blind`; see **Consumer-trace mode** below. Emits no
   verdict — output is only the consumer trace.
 
+On **task evaluation**, re-run at least one recorded regression proof per task with guarding tests in a scratch copy (per test-ladder § Regression proof), or use orchestrator-supplied `terminal` output when read-only. A re-run that disagrees with the report (the test still passes under the edit, or fails for an unrelated reason) is ❌ Contradicted.
+
 ## Auto-fail triggers (instant REJECT or NEEDS FIXES, regardless of everything else)
 
 - Unresolved '{{...}}' template token, or a leftover bootstrap comment (an HTML
