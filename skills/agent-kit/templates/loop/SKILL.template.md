@@ -204,7 +204,9 @@ treat that as a blocking issue (step 4). When creating `goal.md` under
 values with `ladder: auto` (alongside `align_docs` and `pull_request`). If the derived
 goal's tasks need to write outside the story's declared `writes:` set, that is also
 a blocking issue (step 4) — escalate it; never silently widen scope past what was
-declared.
+declared. Such paths include tests that pin the exact text the story changes and files
+that pin line numbers in a changed file when the story adds or removes lines above a
+pinned line, so the backlog author should declare them.
 
 All invariants hold unchanged: implementer/test-writer execute, `evaluator` verifies every
 task and the final audit, fixes are always re-evaluated, 3 evaluation cycles max per task,
