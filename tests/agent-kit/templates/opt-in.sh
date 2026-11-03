@@ -93,7 +93,7 @@ parse_warnings_w() {
 AGENT_PREFIX='Orchestration-kit agent — spawn only from the /feature, /research or /align-docs workflow, never for ordinary work. '
 
 read -r -d '' OPT_IN_FEATURE <<'EOF' || true
-Opt-in — runs only when the user types /feature.
+Opt-in — runs only when the user types /feature or asks to resume a goal.
 EOF
 
 read -r -d '' OPT_IN_RESEARCH <<'EOF' || true
@@ -105,7 +105,7 @@ read -r -d '' OPT_IN_MEMORY <<'EOF' || true
 EOF
 
 read -r -d '' INVOKEFEATURE <<'EOF' || true
-Invoke for any non-trivial feature.
+Invoke for any non-trivial feature, or when the user asks to resume a goal.
 EOF
 
 read -r -d '' CODEX_OPT_IN_WARN <<'EOF' || true

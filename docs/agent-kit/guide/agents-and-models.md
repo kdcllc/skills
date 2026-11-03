@@ -129,7 +129,7 @@ For noisy Bash or PowerShell commands whose raw output is not needed, spawn `ter
 - Write tests that assert nothing or mock the unit under test.
 - Run rung 3 (full suites) — rungs 1–2 only during the task.
 
-**Regression proofs:** every guarding test it adds needs a regression proof, reported under `### Regression proofs`; one it cannot prove goes under **Gaps**.
+**Regression proofs:** every guarding test it adds or rewrites needs a regression proof, reported under `### Regression proofs`; one it cannot prove goes under **Gaps**.
 
 Where the harness has a file-read tool, read files with it rather than `cat`/`head`/`sed` through the shell (running a criterion's or test's command is still fine); at least one harness loads path-scoped rules only on file-read tool reads. Before creating or moving a file, read every path-scoped rule file in "Files to Read" whose globs match it; if no listed rule covers an area where you create files, say so in the report.
 

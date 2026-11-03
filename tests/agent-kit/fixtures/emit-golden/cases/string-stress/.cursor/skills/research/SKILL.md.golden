@@ -1,6 +1,7 @@
 ---
 name: research
-description: Research → Plan workflow for stress "quotes" café — emoji 🎭 topics needing external investigation — produces a research prompt, ingests the report, and yields an evaluated goal/task structure.
+description: Research → Plan workflow for stress "quotes" café — emoji 🎭 topics needing external investigation — produces a research prompt, ingests the report, and yields an evaluated goal/task structure. Opt-in — runs only when the user types /research.
+disable-model-invocation: true
 ---
 
 # Research (Deep Research → Plan Orchestrator)

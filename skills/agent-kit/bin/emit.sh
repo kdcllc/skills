@@ -1971,12 +1971,12 @@ load_global_tokens() {
   fi
   if flag_is opt_in; then
     map_set TOKENS OPT_IN_AGENT_PREFIX 'Orchestration-kit agent — spawn only from the /feature, /research or /align-docs workflow, never for ordinary work. '
-    map_set TOKENS OPT_IN_FEATURE_SENTENCE 'Opt-in — runs only when the user types /feature.'
+    map_set TOKENS OPT_IN_FEATURE_SENTENCE 'Opt-in — runs only when the user types /feature or asks to resume a goal.'
     map_set TOKENS OPT_IN_RESEARCH_SUFFIX ' Opt-in — runs only when the user types /research.'
     map_set TOKENS OPT_IN_MEMORY_CAPTURE_SUFFIX ' Opt-in — runs only when the user types /memory-capture.'
   else
     map_set TOKENS OPT_IN_AGENT_PREFIX ""
-    map_set TOKENS OPT_IN_FEATURE_SENTENCE 'Invoke for any non-trivial feature.'
+    map_set TOKENS OPT_IN_FEATURE_SENTENCE 'Invoke for any non-trivial feature, or when the user asks to resume a goal.'
     map_set TOKENS OPT_IN_RESEARCH_SUFFIX ""
     map_set TOKENS OPT_IN_MEMORY_CAPTURE_SUFFIX ""
   fi

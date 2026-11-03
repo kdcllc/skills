@@ -28,7 +28,7 @@ BOOTSTRAP_IDS="$KIT/reference/bootstrap-ids.md"
 
 FIXTURE="$REPO_ROOT/tests/agent-kit/fixtures/self-answers.json"
 
-FEATURE_PROGRESS_LINE='Rewrite `_memory/work/goals/[goal]/progress.md` from `templates/progress.md` after each phase, verdict and user decision; resume goals per `reference/resume.md`.'
+FEATURE_PROGRESS_LINE='Rewrite `_memory/work/goals/[goal]/progress.md` from `templates/progress.md` per `reference/resume.md` § When progress.md is written; resume goals per that file.'
 
 FIXTURE_TMPDIR="$(mktemp -d "${TMPDIR:-/tmp}/akrpr.XXXXXX")" || exit 1
 export TMPDIR="$FIXTURE_TMPDIR"
@@ -149,6 +149,7 @@ check_a_test_ladder() {
 check_b_writers() {
   local ok=1
   assert_anchor "$TEST_WRITER" '- **Prove guarding tests bite.**' 1 || ok=0
+  assert_anchor "$TEST_WRITER" 'Every guarding test you add or rewrite needs a regression proof' 1 || ok=0
   assert_anchor "$IMPLEMENTER" '- **Prove guarding tests bite.**' 1 || ok=0
   grep -c '^### Regression proofs$' "$TEST_WRITER" | grep -qx 1 || ok=0
   grep -c '^### Regression proofs$' "$IMPLEMENTER" | grep -qx 1 || ok=0
@@ -171,6 +172,10 @@ check_c_gates() {
 }
 
 check_d_single_home() {
+  local f
+  for f in "$TEST_WRITER" "$IMPLEMENTER" "$EVALUATOR" "$TASK_CRITERIA"; do
+    [[ -f "$f" ]] || return 1
+  done
   ! grep -lE 'equivalent mutation|time zone' "$TEST_WRITER" "$IMPLEMENTER" "$EVALUATOR" "$TASK_CRITERIA" >/dev/null 2>&1
 }
 
@@ -178,9 +183,12 @@ check_e_feature_and_compaction() {
   local ok=1 n
   n="$(awk '/<!-- IF /{d++} /<!-- ENDIF /{d--} d==0 && /_memory\/work\/goals\/\[goal\]\/progress\.md/ && /templates\/progress\.md/ && /reference\/resume\.md/{n++} END{print n+0}' "$FEATURE_SKILL")"
   [[ "$n" == 1 ]] || ok=0
+  [[ "$(awk '/^#/{if (p) {print; exit} if ($0 == "### Resume policy") p=1}' "$FEATURE_SKILL")" == '### Goal checkpoint and resume' ]] || ok=0
+  [[ "$(awk '/^### Resume policy$/{f=1;next} /^#/{f=0} f' "$FEATURE_SKILL" | grep -c 'progress\.md')" == 0 ]] || ok=0
+  [[ "$(awk '/^### Goal checkpoint and resume$/{f=1;next} /^#/{f=0} f' "$FEATURE_SKILL" | grep -c '_memory/work/goals/\[goal\]/progress\.md.*reference/resume\.md')" == 1 ]] || ok=0
   assert_anchor "$FEATURE_SKILL" 'Update ORCHESTRATION.md Orchestration Progress' 0 || ok=0
   [[ "$(awk '/^## Phase 2/{f=1} /^## Phase 3/{f=0} f' "$FEATURE_SKILL" | grep -c '^\*\*Unfinished goals:\*\* offer per `reference/resume.md`')" == 1 ]] || ok=0
-  [[ "$(awk '/^## Phase 4/{f=1} /^## Phase 5/{f=0} f' "$FEATURE_SKILL" | grep -c '^3\. .*per acceptance-criterion command and one regression proof, attach output')" == 1 ]] || ok=0
+  [[ "$(awk '/^## Phase 4/{f=1} /^## Phase 5/{f=0} f' "$FEATURE_SKILL" | grep -c '^3\. .*per acceptance-criterion command and, when the task has guarding tests, one regression proof, attach output')" == 1 ]] || ok=0
   assert_anchor "$ORCH_TEMPLATE" "resume per the feature skill's \`reference/resume.md\`, from \`progress.md\`" 1 || ok=0
   assert_anchor "$ORCH_TEMPLATE" 'past ~60% of its context window' 1 || ok=0
   assert_anchor "$ORCH_TEMPLATE" 'resume from `goal.md` and the orchestration log' 0 || ok=0
@@ -212,6 +220,8 @@ check_g_resume_reference() {
   [[ -n "$n" && "$n" -ge 8 ]] || ok=0
   n="$(awk '/^3\. \*\*Repository check\.\*\*/{f=1;next} /^4\. /{f=0} f' "$RESUME_REF" | grep -c 'HEAD at this write' || true)"
   [[ -n "$n" && "$n" -ge 1 ]] || ok=0
+  n="$(awk '/^3\. \*\*Repository check\.\*\*/{f=1;next} /^4\. /{f=0} f' "$RESUME_REF" | grep -c 'A goal commit is .*`git diff-tree --no-commit-id --name-only -r <sha>`' || true)"
+  [[ "$n" == 1 ]] || ok=0
   n="$(grep -c 'phase:' "$RESUME_REF" || true)"
   [[ -n "$n" && "$n" -ge 3 ]] || ok=0
   for p in 'git fetch' 'merged' 'squash' 'ancestor' 'Never edit or delete ledger' 'stops the resume' \
@@ -256,16 +266,14 @@ check_j_bootstrap_ids() {
   [[ $ok -eq 1 ]]
 }
 
-emit_skill_roots_for_answers() { # answers.json → newline-separated inst dirs (.claude, …)
-  local ans="$1" h
-  while read -r h; do
-    case "$h" in
-      claude-code) printf '%s\n' .claude ;;
-      cursor)      printf '%s\n' .cursor ;;
-      copilot)     printf '%s\n' .github ;;
-      codex)       ;;
-    esac
-  done < <(jq -r '.harnesses[]' "$ans")
+skill_root_for_harness() { # harness id → inst dir (.claude, …); empty for codex; rc 1 if unknown
+  case "$1" in
+    claude-code) printf '%s\n' .claude ;;
+    cursor)      printf '%s\n' .cursor ;;
+    copilot)     printf '%s\n' .github ;;
+    codex)       ;;
+    *)           return 1 ;;
+  esac
 }
 
 assert_emit_resume_bundle() { # emit_root inst_label
@@ -273,13 +281,13 @@ assert_emit_resume_bundle() { # emit_root inst_label
   base="$emit_root/$inst/skills"
   [[ -f "$base/feature/reference/resume.md" ]] || return 1
   [[ -f "$base/feature/templates/progress.md" ]] || return 1
-  grep -qF '## Regression proof' "$base/test-ladder/SKILL.md" || return 1
+  grep -qxF '## Regression proof' "$base/test-ladder/SKILL.md" || return 1
   grep -qF "$FEATURE_PROGRESS_LINE" "$base/feature/SKILL.md" || return 1
   return 0
 }
 
 check_k_emitted_install() {
-  local ans_on ans_off root_on root_off inst had_skills=0
+  local ans_on ans_off root_on root_off h inst had_skills=0
   alloc_path ans-on
   answers_kg_mode "$EMIT_ALLOC_PATH" 1 1 true || return 1
   ans_on="$EMIT_ALLOC_PATH"
@@ -291,12 +299,17 @@ check_k_emitted_install() {
   alloc_root; root_off="$EMIT_ALLOC_PATH"
   emit_cache_copy "$root_off" "$ans_off" || return 1
 
-  while IFS= read -r inst; do
-    [[ -z "$inst" ]] && continue
+  while IFS= read -r h; do
+    [[ -z "$h" ]] && continue
+    inst="$(skill_root_for_harness "$h")" || return 1
+    if [[ -z "$inst" ]]; then
+      report SKIP "(k) $h: resume/progress/test-ladder bundle" "Codex-only installs ship no kit skills tree"
+      continue
+    fi
     had_skills=1
     assert_emit_resume_bundle "$root_on" "$inst" || return 1
     assert_emit_resume_bundle "$root_off" "$inst" || return 1
-  done < <(emit_skill_roots_for_answers "$ans_on")
+  done < <(jq -r '.harnesses[]' "$ans_on")
 
   [[ "$had_skills" -eq 1 ]] || return 2
   return 0
@@ -312,7 +325,7 @@ run_letter() {
     local rc=0
     "$fn" || rc=$?
     if [[ "$rc" -eq 2 ]]; then
-      report SKIP "($letter) $title" "Codex harness emits no skills tree"
+      report SKIP "($letter) $title" "no harness in the answers emits a kit skills tree"
       return
     fi
     if [[ "$rc" -eq 0 ]]; then

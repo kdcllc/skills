@@ -372,7 +372,7 @@ rung-5 arbiter — the emitter warns if the IDs match without this flag).
 | `{{LOOP_MODEL_CHAIN}}` | derived — do not set. Comma-separated loop fallback chain, first = preferred (from the model map's "Loop fallback chain" row); empty ⇒ the breaker still tracks state but never passes a model flag |
 | `{{LOOP_WORKTREE_DEFAULT}}` | derived — do not set. `1` when `flags.loop_worktree` is true, else `0`; default for `LOOP_WORKTREE` in `_loop/*` when the env var is unset |
 | `{{OPT_IN_AGENT_PREFIX}}` | derived — do not set. When `flags.opt_in` is true, the orchestration-kit agent description prefix (`Orchestration-kit agent — spawn only from the /feature, /research or /align-docs workflow, never for ordinary work. `); empty when false |
-| `{{OPT_IN_FEATURE_SENTENCE}}` | derived — do not set. When `flags.opt_in` is true, `Opt-in — runs only when the user types /feature.`; when false, `Invoke for any non-trivial feature.` |
+| `{{OPT_IN_FEATURE_SENTENCE}}` | derived — do not set. When `flags.opt_in` is true, `Opt-in — runs only when the user types /feature or asks to resume a goal.`; when false, `Invoke for any non-trivial feature, or when the user asks to resume a goal.` |
 | `{{OPT_IN_RESEARCH_SUFFIX}}` | derived — do not set. When `flags.opt_in` is true, ` Opt-in — runs only when the user types /research.` appended to the research skill description; empty when false |
 | `{{OPT_IN_MEMORY_CAPTURE_SUFFIX}}` | derived — do not set. When `flags.opt_in` is true, ` Opt-in — runs only when the user types /memory-capture.` appended to the memory-capture skill description; empty when false |
 | `{{EXECUTION_LAYERS}}` | Dependency-ordered layer chain |

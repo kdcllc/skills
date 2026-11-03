@@ -1,6 +1,6 @@
 ---
 name: terminal
-description: Command runner for stress "quotes" café — emoji 🎭. Spawn with a Bash or PowerShell command and the result you need back (exit code, last N lines, a match, pass/fail, a path). Executes that command and returns only that result — never dumps the raw stream into the caller, never edits with Edit/Write tools.
+description: Orchestration-kit agent — spawn only from the /feature, /research or /align-docs workflow, never for ordinary work. Command runner for stress "quotes" café — emoji 🎭. Spawn with a Bash or PowerShell command and the result you need back (exit code, last N lines, a match, pass/fail, a path). Executes that command and returns only that result — never dumps the raw stream into the caller, never edits with Edit/Write tools.
 model: claude-haiku-5-5
 effort: low
 tools: Bash, Read

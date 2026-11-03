@@ -6,6 +6,12 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 
 ## [Unreleased]
 
+### Changed
+
+- **Guarding-test wording** — the test-writer agent now asks for a regression proof for every guarding test it adds or rewrites, matching the implementer and test-ladder; feature Phase 4 step 3 (and the guides that copy it) asks for the pre-evaluator regression proof only when the task has guarding tests.
+- **Resume routing** — the feature skill description now also routes a request to resume a goal: `Invoke for any non-trivial feature, or when the user asks to resume a goal.` (opt-in installs: `Opt-in — runs only when the user types /feature or asks to resume a goal.`). The goal checkpoint and resume sentence moves out of `### Resume policy` into its own `### Goal checkpoint and resume` subsection.
+- **Resume docs** — the feature skill's checkpoint sentence points at `reference/resume.md` § When progress.md is written instead of listing a narrower set of moments; `reference/resume.md` step 3 defines a goal commit (checked with `git diff-tree --no-commit-id --name-only -r <sha>`) and splits the merged-PR check into three sentences.
+
 ### Fixed
 
 - **Breaker stale results, all states** — The breaker state gains a `probeEpoch` key that advances on every chain advance, probe start and failed-probe restore. The bash driver records each slot's epoch at dispatch and passes it to `breaker_record`, which ignores results from an older epoch. A slot dispatched before a trip no longer counts toward HALF-OPEN recovery, a stale rate limit no longer re-trips after a probe closes or advances past a restored model, and two slots rate-limited on one model advance the chain once. State files without the key load as epoch 0, and callers that omit the epoch keep the 2.2.1 rule. The stale-result line prints `(no model pin)` for an empty model.
