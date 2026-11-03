@@ -9,10 +9,12 @@
 # chain[0] — first delay 1800 s, doubling on each failed probe with an 1800 s
 # floor and 14400 s cap; a successful probe stays on chain[0]; a failed probe
 # restores the pre-probe index and model (preProbeIndex, preProbeModel).
-# While probing, results from slots dispatched on another model are ignored.
+# Stale results: probeEpoch counts every change of the model slots dispatch on (a
+# chain advance, a probe start, a failed-probe restore). The driver captures it per
+# slot at dispatch; breaker_record ignores a result whose epoch is not the current one.
 #
 # State schema (flat JSON, one key per line — never nested, never minified/reflowed;
-# this script writes the following fourteen keys):
+# this script writes the following fifteen keys):
 #   {
 #   "state": "CLOSED"|"OPEN"|"HALF-OPEN",
 #   "chain": "<comma-separated model chain, first = preferred>",
@@ -31,7 +33,10 @@
 #   "preProbeIndex": <non-negative int, fallbackIndex when the probe started;
 #     meaningful only while probing == 1, else 0>,
 #   "preProbeModel": <string, currentModel when the probe started; may be ""
-#     (chain end); meaningful only while probing == 1, else "">
+#     (chain end); meaningful only while probing == 1, else "">,
+#   "probeEpoch": <non-negative int; +1 on every chain advance (any -> OPEN), probe
+#     start and failed-probe restore; unchanged on OPEN -> HALF-OPEN, HALF-OPEN ->
+#     CLOSED and a successful probe. Optional on read: absent (2.2.x files) = 0>
 #   }
 # NOTE: there is no `consecutiveFailures` key — it was a dead key in the original
 # design note and is intentionally dropped from this schema.
@@ -101,24 +106,27 @@ _breaker_valid_fields() {
     CLOSED|OPEN|HALF-OPEN) ;;
     *) return 1 ;;
   esac
-  idx="$(_breaker_get "$file" fallbackIndex)"; [[ "$idx" =~ ^[0-9]+$ ]] || return 1
-  cooldown="$(_breaker_get "$file" cooldownSeconds)"; [[ "$cooldown" =~ ^[0-9]+$ ]] || return 1
-  opened="$(_breaker_get "$file" openedAt)"; [[ "$opened" =~ ^-?[0-9]+$ ]] || return 1
-  half="$(_breaker_get "$file" halfOpenSuccesses)"; [[ "$half" =~ ^[0-9]+$ ]] || return 1
-  fb="$(_breaker_get "$file" totalFallbacks)"; [[ "$fb" =~ ^[0-9]+$ ]] || return 1
-  rec="$(_breaker_get "$file" totalRecoveries)"; [[ "$rec" =~ ^[0-9]+$ ]] || return 1
+  idx="$(_breaker_get "$file" fallbackIndex)"; [[ "$idx" =~ ^(0|[1-9][0-9]*)$ ]] || return 1
+  cooldown="$(_breaker_get "$file" cooldownSeconds)"; [[ "$cooldown" =~ ^(0|[1-9][0-9]*)$ ]] || return 1
+  opened="$(_breaker_get "$file" openedAt)"; [[ "$opened" =~ ^(0|-?[1-9][0-9]*)$ ]] || return 1
+  half="$(_breaker_get "$file" halfOpenSuccesses)"; [[ "$half" =~ ^(0|[1-9][0-9]*)$ ]] || return 1
+  fb="$(_breaker_get "$file" totalFallbacks)"; [[ "$fb" =~ ^(0|[1-9][0-9]*)$ ]] || return 1
+  rec="$(_breaker_get "$file" totalRecoveries)"; [[ "$rec" =~ ^(0|[1-9][0-9]*)$ ]] || return 1
   local opt
   if grep -q '"probeAfter":' "$file" 2>/dev/null; then
-    opt="$(_breaker_get "$file" probeAfter)"; [[ "$opt" =~ ^[0-9]+$ ]] || return 1
+    opt="$(_breaker_get "$file" probeAfter)"; [[ "$opt" =~ ^(0|[1-9][0-9]*)$ ]] || return 1
   fi
   if grep -q '"probeBackoff":' "$file" 2>/dev/null; then
-    opt="$(_breaker_get "$file" probeBackoff)"; [[ "$opt" =~ ^[0-9]+$ ]] || return 1
+    opt="$(_breaker_get "$file" probeBackoff)"; [[ "$opt" =~ ^(0|[1-9][0-9]*)$ ]] || return 1
   fi
   if grep -q '"probing":' "$file" 2>/dev/null; then
     opt="$(_breaker_get "$file" probing)"; [[ "$opt" == "0" || "$opt" == "1" ]] || return 1
   fi
   if grep -q '"preProbeIndex":' "$file" 2>/dev/null; then
-    opt="$(_breaker_get "$file" preProbeIndex)"; [[ "$opt" =~ ^[0-9]+$ ]] || return 1
+    opt="$(_breaker_get "$file" preProbeIndex)"; [[ "$opt" =~ ^(0|[1-9][0-9]*)$ ]] || return 1
+  fi
+  if grep -q '"probeEpoch":' "$file" 2>/dev/null; then
+    opt="$(_breaker_get "$file" probeEpoch)"; [[ "$opt" =~ ^(0|[1-9][0-9]*)$ ]] || return 1
   fi
   return 0
 }
@@ -150,7 +158,7 @@ _breaker_valid() {
 
 # _breaker_write <file> <state> <chain> <idx> <model> <cooldown> <openedAt> <half>
 #                <totalFallbacks> <totalRecoveries> [probeAfter] [probeBackoff]
-#                [probing] [preProbeIndex] [preProbeModel]
+#                [probing] [preProbeIndex] [preProbeModel] [probeEpoch]
 # The ONE place that serializes the schema — every transition below funnels through
 # this so the on-disk layout never drifts. Atomicity rationale: writes go to a
 # sibling temp file first, then `mv -f` onto the target — POSIX rename(2) on the
@@ -161,7 +169,7 @@ _breaker_write() {
   local file="$1" state="$2" chain="$3" idx="$4" model="$5" cooldown="$6" \
         opened="$7" half="$8" fb="$9" rec="${10}" \
         probe_after="${11:-0}" probe_backoff="${12:-0}" probing="${13:-0}" \
-        pre_probe="${14:-0}" pre_probe_model="${15-}"
+        pre_probe="${14:-0}" pre_probe_model="${15-}" probe_epoch="${16:-0}"
   local tmp="$file.tmp.$$"
   {
     printf '{\n'
@@ -178,7 +186,8 @@ _breaker_write() {
     printf '"probeBackoff": %s,\n' "$probe_backoff"
     printf '"probing": %s,\n' "$probing"
     printf '"preProbeIndex": %s,\n' "$pre_probe"
-    printf '"preProbeModel": "%s"\n' "$pre_probe_model"
+    printf '"preProbeModel": "%s",\n' "$pre_probe_model"
+    printf '"probeEpoch": %s\n' "$probe_epoch"
     printf '}\n'
   } > "$tmp"
   mv -f "$tmp" "$file"
@@ -233,6 +242,8 @@ _breaker_read_all() {
     _BRK_PRE_PROBE_MODEL="$(_breaker_derive_pre_probe_model "$_BRK_CHAIN" \
       "$_BRK_PRE_PROBE" "$_BRK_PROBING")"
   fi
+  _BRK_EPOCH="$(_breaker_get "$file" probeEpoch)"
+  [[ -n "$_BRK_EPOCH" ]] || _BRK_EPOCH=0
 }
 
 # _breaker_derive_pre_probe_model <chain> <pre-probe-index> <probing> -> prints
@@ -282,8 +293,12 @@ _breaker_advance_chain() {
 # omit-the-pin rule at breaker.sh:146-150 — never blindly chain[0], which would
 # re-pin the just-rate-limited model and undo half the harm the inversion
 # prevents); halfOpenSuccesses always resets to 0; totalFallbacks/totalRecoveries
-# preserved if they parse, else 0. Called only from breaker_load's still-invalid
-# branch below.
+# preserved if they parse, else 0. The probe keys follow the same rule:
+# probeAfter/probeBackoff/preProbeIndex/probeEpoch preserved if they parse, else 0;
+# probing preserved if 0 or 1, else 0; preProbeModel preserved if present, else
+# derived (chain[preProbeIndex] while probing, else ""). The epoch is carried, not
+# bumped: the fail-safe keeps currentModel whenever it parses, so in-flight slots
+# stay current. Called only from breaker_load's still-invalid branch below.
 _breaker_failsafe_open() {
   local file="$1" chain_arg="$2" now="$3"
   local chain idx model fb rec
@@ -296,7 +311,7 @@ _breaker_failsafe_open() {
   fi
 
   idx="$(_breaker_get "$file" fallbackIndex)"
-  [[ "$idx" =~ ^[0-9]+$ ]] || idx=0
+  [[ "$idx" =~ ^(0|[1-9][0-9]*)$ ]] || idx=0
 
   if grep -q '"currentModel":' "$file" 2>/dev/null; then
     model="$(_breaker_get "$file" currentModel)"
@@ -310,20 +325,22 @@ _breaker_failsafe_open() {
   fi
 
   fb="$(_breaker_get "$file" totalFallbacks)"
-  [[ "$fb" =~ ^[0-9]+$ ]] || fb=0
+  [[ "$fb" =~ ^(0|[1-9][0-9]*)$ ]] || fb=0
 
   rec="$(_breaker_get "$file" totalRecoveries)"
-  [[ "$rec" =~ ^[0-9]+$ ]] || rec=0
+  [[ "$rec" =~ ^(0|[1-9][0-9]*)$ ]] || rec=0
 
-  local probe_after probe_backoff probing pre_probe
+  local probe_after probe_backoff probing pre_probe probe_epoch
   probe_after="$(_breaker_get "$file" probeAfter)"
-  [[ "$probe_after" =~ ^[0-9]+$ ]] || probe_after=0
+  [[ "$probe_after" =~ ^(0|[1-9][0-9]*)$ ]] || probe_after=0
   probe_backoff="$(_breaker_get "$file" probeBackoff)"
-  [[ "$probe_backoff" =~ ^[0-9]+$ ]] || probe_backoff=0
+  [[ "$probe_backoff" =~ ^(0|[1-9][0-9]*)$ ]] || probe_backoff=0
   probing="$(_breaker_get "$file" probing)"
   [[ "$probing" == "0" || "$probing" == "1" ]] || probing=0
   pre_probe="$(_breaker_get "$file" preProbeIndex)"
-  [[ "$pre_probe" =~ ^[0-9]+$ ]] || pre_probe=0
+  [[ "$pre_probe" =~ ^(0|[1-9][0-9]*)$ ]] || pre_probe=0
+  probe_epoch="$(_breaker_get "$file" probeEpoch)"
+  [[ "$probe_epoch" =~ ^(0|[1-9][0-9]*)$ ]] || probe_epoch=0
   local pre_probe_model
   if grep -q '"preProbeModel":' "$file" 2>/dev/null; then
     pre_probe_model="$(_breaker_get "$file" preProbeModel)"
@@ -332,7 +349,8 @@ _breaker_failsafe_open() {
   fi
 
   _breaker_write "$file" OPEN "$chain" "$idx" "$model" 600 "$now" 0 "$fb" "$rec" \
-    "$probe_after" "$probe_backoff" "$probing" "$pre_probe" "$pre_probe_model"
+    "$probe_after" "$probe_backoff" "$probing" "$pre_probe" "$pre_probe_model" \
+    "$probe_epoch"
 }
 
 # --- pinned API --------------------------------------------------------------
@@ -383,6 +401,23 @@ breaker_current_model() {
   echo
 }
 
+# breaker_current_epoch <state-file> -> echoes probeEpoch (0 when the file or the
+# key is absent). The driver captures it per slot at dispatch, next to the model.
+breaker_current_epoch() {
+  local state_file="$1" epoch=""
+  [[ -f "$state_file" ]] && epoch="$(_breaker_get "$state_file" probeEpoch)"
+  echo "${epoch:-0}"
+}
+
+# _breaker_model_label <model> -> "model '<model>'", or "(no model pin)" when empty.
+_breaker_model_label() {
+  if [[ -n "$1" ]]; then
+    printf "model '%s'" "$1"
+  else
+    printf '(no model pin)'
+  fi
+}
+
 # breaker_should_skip <state-file> <now-epoch>
 # OPEN & cooldown not elapsed -> echo remaining seconds (clamped to
 #   [0, cooldownSeconds]).
@@ -415,29 +450,55 @@ breaker_should_skip() {
   _breaker_write "$state_file" "$_BRK_STATE" "$_BRK_CHAIN" "$_BRK_INDEX" \
     "$_BRK_MODEL" "$_BRK_COOLDOWN" "$_BRK_OPENED" "$_BRK_HALF" "$_BRK_FALLBACKS" \
     "$_BRK_RECOVERIES" "$_BRK_PROBE_AFTER" "$_BRK_PROBE_BACKOFF" "$_BRK_PROBING" \
-    "$_BRK_PRE_PROBE" "$_BRK_PRE_PROBE_MODEL"
+    "$_BRK_PRE_PROBE" "$_BRK_PRE_PROBE_MODEL" "$_BRK_EPOCH"
   echo 0
 }
 
 # breaker_record <state-file> <rate-limited:0|1> <now-epoch> [dispatched-model]
-# Transitions exactly per goal.md's exhaustive table:
+#                [dispatched-epoch]
+# Stale-result rule first: with a dispatched-epoch (a non-negative integer, the
+# slot's breaker_current_epoch at dispatch) that differs from probeEpoch, the
+# result is ignored — no state change, one stderr line naming the slot's epoch
+# and model. Without one (argument omitted or not an integer), the 2.2.1 rule
+# applies: with a dispatched-model while probing == 1, a result from any other
+# model is ignored the same way; with neither, every result counts.
+# Transitions exactly per goal.md's exhaustive table ("epoch++" = probeEpoch + 1):
 #   CLOSED   + 0 -> no-op.
-#   CLOSED   + 1 -> OPEN; advance chain; openedAt=now; totalFallbacks++.
+#   CLOSED   + 1 -> OPEN; advance chain; openedAt=now; totalFallbacks++; epoch++;
+#                   schedule a probe (probeBackoff 1800 if 0; probeAfter=now+backoff).
 #   HALF-OPEN+ 0 -> halfOpenSuccesses++; at exactly 2 -> CLOSED (reset
-#                   halfOpenSuccesses/openedAt; totalRecoveries++).
-#   HALF-OPEN+ 1 -> OPEN; advance chain; openedAt=now (reset).
+#                   halfOpenSuccesses/openedAt; totalRecoveries++); when probing,
+#                   the close also resets probing/probeAfter/probeBackoff/
+#                   preProbeIndex/preProbeModel (a successful probe; epoch kept).
+#   HALF-OPEN+ 1 -> probing: failed probe — OPEN; restore fallbackIndex/
+#                   currentModel from preProbeIndex/preProbeModel exactly (an
+#                   empty model stays empty); openedAt=now; probeBackoff doubled
+#                   (1800 s floor, 14400 s cap); probeAfter=now+backoff; probe
+#                   keys reset; epoch++.
+#                   not probing: OPEN; advance chain; openedAt=now (reset); epoch++.
 #   OPEN     +any -> defensive path (normally unreachable under mechanism B):
 #                   log a warning, then treat exactly as the HALF-OPEN input above.
+# breaker_should_skip (OPEN -> HALF-OPEN) never changes the epoch;
+# breaker_probe's probe start does (epoch++).
 breaker_record() {
-  local state_file="$1" rate_limited="$2" now="$3" dispatched_model=""
+  local state_file="$1" rate_limited="$2" now="$3" dispatched_model="" \
+        dispatched_epoch=""
   if (( $# >= 4 )); then
     dispatched_model="$4"
   fi
+  if (( $# >= 5 )) && [[ "$5" =~ ^(0|[1-9][0-9]*)$ ]]; then
+    dispatched_epoch="$5"
+  fi
   _breaker_read_all "$state_file"
 
-  if (( $# >= 4 )) && [[ "$_BRK_PROBING" == "1" ]] \
+  if [[ -n "$dispatched_epoch" ]]; then
+    if [[ "$dispatched_epoch" != "$_BRK_EPOCH" ]]; then
+      echo "breaker: ignoring stale result from $(_breaker_model_label "$dispatched_model") at epoch $dispatched_epoch (current epoch $_BRK_EPOCH)" >&2
+      return 0
+    fi
+  elif (( $# >= 4 )) && [[ "$_BRK_PROBING" == "1" ]] \
      && [[ "$dispatched_model" != "$_BRK_MODEL" ]]; then
-    echo "breaker: ignoring result from model '$dispatched_model' while probing '$_BRK_MODEL'" >&2
+    echo "breaker: ignoring result from $(_breaker_model_label "$dispatched_model") while probing '$_BRK_MODEL'" >&2
     return 0
   fi
 
@@ -453,13 +514,14 @@ breaker_record() {
         _BRK_STATE="OPEN"
         _BRK_OPENED="$now"
         _BRK_FALLBACKS=$(( _BRK_FALLBACKS + 1 ))
+        _BRK_EPOCH=$(( _BRK_EPOCH + 1 ))
         (( _BRK_PROBE_BACKOFF == 0 )) && _BRK_PROBE_BACKOFF=1800
         _BRK_PROBE_AFTER=$(( now + _BRK_PROBE_BACKOFF ))
         _breaker_write "$state_file" "$_BRK_STATE" "$_BRK_CHAIN" "$_BRK_INDEX" \
           "$_BRK_MODEL" "$_BRK_COOLDOWN" "$_BRK_OPENED" "$_BRK_HALF" \
           "$_BRK_FALLBACKS" "$_BRK_RECOVERIES" "$_BRK_PROBE_AFTER" \
           "$_BRK_PROBE_BACKOFF" "$_BRK_PROBING" "$_BRK_PRE_PROBE" \
-          "$_BRK_PRE_PROBE_MODEL"
+          "$_BRK_PRE_PROBE_MODEL" "$_BRK_EPOCH"
       fi
       # CLOSED + success -> no-op: nothing written.
       ;;
@@ -485,11 +547,12 @@ breaker_record() {
           _BRK_STATE="OPEN"
           _BRK_OPENED="$now"
         fi
+        _BRK_EPOCH=$(( _BRK_EPOCH + 1 ))
         _breaker_write "$state_file" "$_BRK_STATE" "$_BRK_CHAIN" "$_BRK_INDEX" \
           "$_BRK_MODEL" "$_BRK_COOLDOWN" "$_BRK_OPENED" "$_BRK_HALF" \
           "$_BRK_FALLBACKS" "$_BRK_RECOVERIES" "$_BRK_PROBE_AFTER" \
           "$_BRK_PROBE_BACKOFF" "$_BRK_PROBING" "$_BRK_PRE_PROBE" \
-          "$_BRK_PRE_PROBE_MODEL"
+          "$_BRK_PRE_PROBE_MODEL" "$_BRK_EPOCH"
       else
         _BRK_HALF=$(( _BRK_HALF + 1 ))
         if (( _BRK_HALF == 2 )); then
@@ -509,7 +572,7 @@ breaker_record() {
           "$_BRK_MODEL" "$_BRK_COOLDOWN" "$_BRK_OPENED" "$_BRK_HALF" \
           "$_BRK_FALLBACKS" "$_BRK_RECOVERIES" "$_BRK_PROBE_AFTER" \
           "$_BRK_PROBE_BACKOFF" "$_BRK_PROBING" "$_BRK_PRE_PROBE" \
-          "$_BRK_PRE_PROBE_MODEL"
+          "$_BRK_PRE_PROBE_MODEL" "$_BRK_EPOCH"
       fi
       ;;
   esac
@@ -538,7 +601,7 @@ breaker_probe() {
     _breaker_write "$state_file" "$_BRK_STATE" "$_BRK_CHAIN" "$_BRK_INDEX" \
       "$_BRK_MODEL" "$_BRK_COOLDOWN" "$_BRK_OPENED" "$_BRK_HALF" "$_BRK_FALLBACKS" \
       "$_BRK_RECOVERIES" "$_BRK_PROBE_AFTER" "$_BRK_PROBE_BACKOFF" "$_BRK_PROBING" \
-      "$_BRK_PRE_PROBE" "$_BRK_PRE_PROBE_MODEL"
+      "$_BRK_PRE_PROBE" "$_BRK_PRE_PROBE_MODEL" "$_BRK_EPOCH"
     return 0
   fi
 
@@ -561,9 +624,10 @@ breaker_probe() {
   _BRK_STATE="HALF-OPEN"
   _BRK_HALF=0
   _BRK_PROBING=1
+  _BRK_EPOCH=$(( _BRK_EPOCH + 1 ))
   _breaker_write "$state_file" "$_BRK_STATE" "$_BRK_CHAIN" "$_BRK_INDEX" \
     "$_BRK_MODEL" "$_BRK_COOLDOWN" "$_BRK_OPENED" "$_BRK_HALF" "$_BRK_FALLBACKS" \
     "$_BRK_RECOVERIES" "$_BRK_PROBE_AFTER" "$_BRK_PROBE_BACKOFF" "$_BRK_PROBING" \
-    "$_BRK_PRE_PROBE" "$_BRK_PRE_PROBE_MODEL"
+    "$_BRK_PRE_PROBE" "$_BRK_PRE_PROBE_MODEL" "$_BRK_EPOCH"
   echo "breaker: probing preferred model $_BRK_MODEL" >&2
 }

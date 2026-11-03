@@ -19,7 +19,7 @@
     "_memory/loop/backlog.md"
   ],
   "files": {
-    ".cursor/ORCHESTRATION.md": "731cb46c5e9d79af7709c6a967f3e9a7374f7c93cc89e86d3ab3d247d6c2cd09",
+    ".cursor/ORCHESTRATION.md": "944d831ba0cd21e3ad0e7d84321535366e81269529ffdddf2e24cfc3ff7f06fc",
     ".cursor/agents/diagnostician.md": "b928d0d486f8f451901617f54c59eb1ab18ddc2462b2e346932df0a77a34c4de",
     ".cursor/agents/evaluator.md": "e1ef222b682fd1ceb0ccf30addcefe32278213fbf22eeefbf47b06478ede8b04",
     ".cursor/agents/evidence-collector.md": "681a2ee685962cd275e19e49138e179abcfe11f982f3c9f0e9d5d8f92f5386a6",
@@ -63,9 +63,9 @@
     "_kit/trace-lint.cmd": "ae9541294a03f741311ff8bc0d5c6f9985d6947fb42f7aaeaf6613088e34bf7e",
     "_kit/trace-lint.sh": "59f4dab86dbf0f985402ce8c02ccb362dabf5fd575a39f0dfdebec46f34b6713",
     "_loop/PROMPT.md": "b1d5e2dde377179fa67edddd5a2d42981965bcc31f99762d9db298e39724a00c",
-    "_loop/breaker.sh": "45728921738ccff3a39baad868a83fc3cdaf41e58c227248509b4b50d2cad76f",
+    "_loop/breaker.sh": "5b9f6a78d6f532c16cfc9a6ca45d10d8c078dead66544b05aeb0d615f6340df1",
     "_loop/loop.cmd": "ae9541294a03f741311ff8bc0d5c6f9985d6947fb42f7aaeaf6613088e34bf7e",
-    "_loop/loop.sh": "392eea794f5742c1517637027b9920c93ef2a18561fd8c4150f53e66dc867580",
+    "_loop/loop.sh": "62234d4d480733f9cef986e6a051780a0c640ad993c1363ecee2fd66c6c42d04",
     "_memory/README.md": "e6fb7270daca103671517cc80a4581fc7b427e2ce682f6367f225c9486a08fff"
   },
   "answers": {

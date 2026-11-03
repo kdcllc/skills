@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Behavioral tests for loop dossier, breaker probe, claude-stream, tamper perf, emit (23 cases).
+# Behavioral tests for loop dossier, breaker probe and epoch, claude-stream, tamper perf, emit (32 cases).
 # Stub CLIs only; sandboxes under mktemp. Discovered by tests/agent-kit/run-all.sh.
 set -u
 
@@ -61,6 +61,10 @@ finish_suite() {
 _lrb_require_tools() {
   LRB_HAVE_JQ=0
   command -v jq >/dev/null 2>&1 && LRB_HAVE_JQ=1
+  LRB_HAVE_TIMEOUT=0
+  if command -v timeout >/dev/null 2>&1 || command -v gtimeout >/dev/null 2>&1; then
+    LRB_HAVE_TIMEOUT=1
+  fi
   LRB_REAL_GREP="$(command -v grep 2>/dev/null || true)"
   LRB_REAL_AWK="$(command -v awk 2>/dev/null || true)"
 }
@@ -205,6 +209,10 @@ case "$LRB_STUB_MODE" in
     eval "${LRB_STUB_BODY:-}" || { echo "stub body failed" >&2; exit 3; }
     echo "ITERATION: $(pick_story "$@") passed (attempt 1/3)"
     exit 1 ;;
+  sleep)
+    eval "${LRB_STUB_BODY:-}" || { echo "stub body failed" >&2; exit 3; }
+    sleep "${LRB_STUB_SLEEP:-30}" & printf '%s\n' "$!" >> "$LRB_STUB_PIDFILE"; wait "$!"
+    exit 130 ;;
   stream)
     eval "${LRB_STUB_BODY:-}" || { echo "stub body failed" >&2; exit 3; }
     case "${LRB_STREAM_KIND:-result}" in
@@ -980,6 +988,8 @@ case_17_probe_stale_filter() {
 
   rm -f "$sf"
   _breaker_write "$sf" HALF-OPEN "$CHAIN3" 1 modelB 600 "$t0" 0 1 0 0 0 0 0 ""
+  [[ "$(_lrb_breaker_get "$sf" probing)" == "0" ]] \
+    || { report FAIL "case 17: probe stale filter" "(e) probing"; return; }
   breaker_record "$sf" 0 $((t0 + 2000)) modelC
   [[ "$(_lrb_breaker_get "$sf" halfOpenSuccesses)" == "1" ]] \
     || { report FAIL "case 17: probe stale filter" "(e) halfOpen"; return; }
@@ -987,29 +997,36 @@ case_17_probe_stale_filter() {
 }
 
 case_18_restore_empty_model() {
-  local sf="$FIXTURE_TMPDIR/c18.json" t0=7100000 chain="modelA,modelB"
+  local sf="$FIXTURE_TMPDIR/c18.json" err="$FIXTURE_TMPDIR/c18.err" t0=7100000 chain="modelA,modelB"
   _lrb_breaker_env
   rm -f "$sf"
+  : > "$err"
   breaker_load "$sf" "$chain" "$t0" >/dev/null
-  breaker_record "$sf" 1 "$t0"
+  breaker_record "$sf" 1 "$t0" 2>>"$err"
   breaker_should_skip "$sf" $((t0 + 600)) >/dev/null
-  breaker_record "$sf" 1 $((t0 + 601))
-  breaker_should_skip "$sf" $((t0 + 1200)) >/dev/null
-  breaker_record "$sf" 0 $((t0 + 1201))
-  breaker_record "$sf" 0 $((t0 + 1202))
+  breaker_record "$sf" 1 $((t0 + 601)) 2>>"$err"
+  breaker_should_skip "$sf" $((t0 + 1201)) >/dev/null
+  breaker_record "$sf" 0 $((t0 + 1202)) 2>>"$err"
+  breaker_record "$sf" 0 $((t0 + 1203)) 2>>"$err"
+  grep -qF 'called while OPEN' "$err" && { report FAIL "case 18: restore empty model" "defensive path"; return; }
   [[ "$(_lrb_breaker_get "$sf" state)" == "CLOSED" ]] \
     || { report FAIL "case 18: restore empty model" "pre closed"; return; }
   [[ "$(_lrb_breaker_get "$sf" fallbackIndex)" == "1" ]] \
     || { report FAIL "case 18: restore empty model" "pre idx"; return; }
   [[ "$(_lrb_breaker_get "$sf" currentModel)" == "" ]] \
     || { report FAIL "case 18: restore empty model" "pre empty model"; return; }
-  breaker_probe "$sf" $((t0 + 1203)) >/dev/null
-  breaker_probe "$sf" $((t0 + 1203 + 1800)) >/dev/null
+  [[ "$(_lrb_breaker_get "$sf" probeAfter)" == "$((t0 + 1800))" ]] \
+    || { report FAIL "case 18: restore empty model" "pre probeAfter"; return; }
+  cp "$sf" "$sf.snap"
+  breaker_probe "$sf" $((t0 + 1800)) 2>/dev/null
+  cmp -s "$sf" "$sf.snap" && { report FAIL "case 18: restore empty model" "first probe no-op"; return; }
+  [[ "$(_lrb_breaker_get "$sf" state)" == "HALF-OPEN" && "$(_lrb_breaker_get "$sf" probing)" == "1" ]] \
+    || { report FAIL "case 18: restore empty model" "probe started"; return; }
   [[ "$(_lrb_breaker_get "$sf" preProbeModel)" == "" ]] \
     || { report FAIL "case 18: restore empty model" "preProbe empty"; return; }
   [[ "$(_lrb_breaker_get "$sf" currentModel)" == "modelA" ]] \
     || { report FAIL "case 18: restore empty model" "probe modelA"; return; }
-  breaker_record "$sf" 1 $((t0 + 1203 + 1900))
+  breaker_record "$sf" 1 $((t0 + 1900))
   [[ "$(_lrb_breaker_get "$sf" fallbackIndex)" == "1" ]] \
     || { report FAIL "case 18: restore empty model" "restore idx"; return; }
   [[ "$(_lrb_breaker_get "$sf" currentModel)" == "" ]] \
@@ -1017,15 +1034,19 @@ case_18_restore_empty_model() {
   report PASS "case 18: restore empty model"
 }
 
-case_19_schema_14_keys() {
-  local sf="$FIXTURE_TMPDIR/c19.json" t0=7200000 keys last
+case_19_schema_15_keys() {
+  local sf="$FIXTURE_TMPDIR/c19.json" t0=7200000 keys last last_ln
   _lrb_breaker_env
   rm -f "$sf"
   _breaker_write "$sf" CLOSED "$CHAIN3" 1 modelB 600 0 0 1 0 0 0 0 0 ""
   keys="$(grep -cE '^"[^"]+":' "$sf")"
-  [[ "$keys" == "14" ]] || { report FAIL "case 19: schema 14 keys" "(a) count=$keys"; return; }
+  [[ "$keys" == "15" ]] || { report FAIL "case 19: schema 15 keys" "(a) count=$keys"; return; }
+  grep -qxF '"preProbeModel": "",' "$sf" || { report FAIL "case 19: schema 15 keys" "(a) preProbeModel line"; return; }
   last="$(grep -E '^"[^"]+":' "$sf" | tail -1)"
-  [[ "$last" == '"preProbeModel": ""' ]] || { report FAIL "case 19: schema 14 keys" "(a) last key"; return; }
+  [[ "$last" == '"probeEpoch": 0' ]] || { report FAIL "case 19: schema 15 keys" "(a) last key"; return; }
+  last_ln="$(grep -nE '^"[^"]+":' "$sf" | tail -1 | cut -d: -f1)"
+  [[ "$(sed -n "$((last_ln + 1))p" "$sf")" == "}" && "$(wc -l < "$sf" | tr -d '[:space:]')" == "$((last_ln + 1))" ]] \
+    || { report FAIL "case 19: schema 15 keys" "(a) } after last key"; return; }
 
   rm -f "$sf"
   breaker_load "$sf" "$CHAIN3" "$t0" >/dev/null
@@ -1035,12 +1056,12 @@ case_19_schema_14_keys() {
   breaker_record "$sf" 0 $((t0 + 602))
   breaker_probe "$sf" $((t0 + 1800)) >/dev/null
   [[ "$(_lrb_breaker_get "$sf" preProbeModel)" == "modelB" ]] \
-    || { report FAIL "case 19: schema 14 keys" "(b) preProbeModel"; return; }
+    || { report FAIL "case 19: schema 15 keys" "(b) preProbeModel"; return; }
 
   breaker_record "$sf" 0 $((t0 + 1900)) modelA
   breaker_record "$sf" 0 $((t0 + 1901)) modelA
   [[ "$(_lrb_breaker_get "$sf" preProbeModel)" == "" ]] \
-    || { report FAIL "case 19: schema 14 keys" "(c) reset success"; return; }
+    || { report FAIL "case 19: schema 15 keys" "(c) reset success"; return; }
 
   rm -f "$sf"
   breaker_load "$sf" "$CHAIN3" "$t0" >/dev/null
@@ -1051,10 +1072,10 @@ case_19_schema_14_keys() {
   breaker_probe "$sf" $((t0 + 1800)) >/dev/null
   breaker_record "$sf" 1 $((t0 + 1900)) modelA
   [[ "$(_lrb_breaker_get "$sf" preProbeModel)" == "" ]] \
-    || { report FAIL "case 19: schema 14 keys" "(d) reset fail preProbe"; return; }
+    || { report FAIL "case 19: schema 15 keys" "(d) reset fail preProbe"; return; }
   [[ "$(_lrb_breaker_get "$sf" currentModel)" == "modelB" ]] \
-    || { report FAIL "case 19: schema 14 keys" "(d) restore modelB"; return; }
-  report PASS "case 19: schema 14 keys"
+    || { report FAIL "case 19: schema 15 keys" "(d) restore modelB"; return; }
+  report PASS "case 19: schema 15 keys"
 }
 
 case_20_legacy_13_key() {
@@ -1087,28 +1108,33 @@ case_20_legacy_13_key() {
   [[ "$(_lrb_breaker_get "$sf" preProbeModel)" == "" ]] \
     || { report FAIL "case 20: legacy 13 key" "(b) preProbe empty"; return; }
 
-  rm -f "$sf"
-  {
-    printf '{\n"state": "BOGUS",\n"chain": "%s",\n"fallbackIndex": 2,\n"currentModel": "modelC",\n' "$CHAIN3"
-    printf '"cooldownSeconds": 600,\n"openedAt": %s,\n"halfOpenSuccesses": 0,\n' "$t0"
-    printf '"totalFallbacks": 1,\n"totalRecoveries": 0,\n"probeAfter": 999,\n"probeBackoff": 8888,\n'
-    printf '"probing": 1,\n"preProbeIndex": 2\n}\n'
-  } > "$sf"
+  _lrb_c20_seed "$sf.c" 1 "$t0"
+  _lrb_c20_seed "$sf.d" 0 "$t0"
+  diff <(grep -vF '"probing":' "$sf.c") <(grep -vF '"probing":' "$sf.d") >/dev/null \
+    && ! cmp -s "$sf.c" "$sf.d" \
+    || { report FAIL "case 20: legacy 13 key" "(c)/(d) seeds differ beyond probing"; return; }
+
+  cp "$sf.c" "$sf"
   breaker_load "$sf" "$CHAIN3" "$t1" 2>"$err"
   [[ "$(_lrb_breaker_get "$sf" preProbeModel)" == "modelC" ]] \
     || { report FAIL "case 20: legacy 13 key" "(c) derived modelC"; return; }
 
-  rm -f "$sf"
-  {
-    printf '{\n"state": "CLOSED",\n"chain": "%s",\n"fallbackIndex": 2,\n"currentModel": "modelC",\n' "$CHAIN3"
-    printf '"cooldownSeconds": 600,\n"openedAt": 0,\n"halfOpenSuccesses": 0,\n'
-    printf '"totalFallbacks": 2,\n"totalRecoveries": 0,\n"probeAfter": 0,\n"probeBackoff": 0,\n'
-    printf '"probing": 0,\n"preProbeIndex": 2\n}\n'
-  } > "$sf"
-  breaker_record "$sf" 1 "$t1"
+  cp "$sf.d" "$sf"
+  breaker_load "$sf" "$CHAIN3" "$t1" 2>"$err"
   grep -qF '"preProbeModel": ""' "$sf" \
     || { report FAIL "case 20: legacy 13 key" "(d) preProbe line"; return; }
   report PASS "case 20: legacy 13 key"
+}
+
+# _lrb_c20_seed <file> <probing> <openedAt> -> invalid (state BOGUS) legacy 13-key
+# file, so breaker_load fails safe and derives preProbeModel from preProbeIndex.
+_lrb_c20_seed() {
+  {
+    printf '{\n"state": "BOGUS",\n"chain": "%s",\n"fallbackIndex": 2,\n"currentModel": "modelC",\n' "$CHAIN3"
+    printf '"cooldownSeconds": 600,\n"openedAt": %s,\n"halfOpenSuccesses": 0,\n' "$3"
+    printf '"totalFallbacks": 1,\n"totalRecoveries": 0,\n"probeAfter": 999,\n"probeBackoff": 8888,\n'
+    printf '"probing": %s,\n"preProbeIndex": 2\n}\n' "$2"
+  } > "$1"
 }
 
 case_21_driver_stale_probe() {
@@ -1125,18 +1151,301 @@ case_21_driver_stale_probe() {
   : > "$argv"
   _lrb_run_loop "$dir" 1 LOOP_MODEL_FLAG=--model LRB_STUB_ARGV="$argv" LOOP_USAGE_FORMAT=claude \
     LRB_STUB_MODE=pass LRB_STATE_FILE="$sf" LRB_PROBE_AFTER="$pa" LRB_PROBE_BACKOFF="$pb" \
-    LRB_STUB_BODY='. _loop/breaker.sh; _breaker_write "$LRB_STATE_FILE" HALF-OPEN "claude-sonnet-5-5,claude-haiku-5-5" 0 claude-sonnet-5-5 600 0 0 1 0 "$LRB_PROBE_AFTER" "$LRB_PROBE_BACKOFF" 1 1 claude-haiku-5-5' \
+    LRB_STUB_BODY='. _loop/breaker.sh; _breaker_write "$LRB_STATE_FILE" HALF-OPEN "claude-sonnet-5-5,claude-haiku-5-5" 0 claude-sonnet-5-5 600 0 0 1 0 "$LRB_PROBE_AFTER" "$LRB_PROBE_BACKOFF" 1 1 claude-haiku-5-5 1; cp "$LRB_STATE_FILE" "$LRB_STATE_FILE.snap"' \
     LOOP_CLI="$dir/_loop/stub.sh"
   grep -qF 'claude-haiku-5-5' "$argv" || { report FAIL "case 21: driver stale probe" "argv dispatch"; return; }
+  [[ -f "$sf.snap" && "$(jq -r .state "$sf.snap")" == "HALF-OPEN" && "$(jq -r .probeEpoch "$sf.snap")" == "1" ]] \
+    || { report FAIL "case 21: driver stale probe" "stub rewrite"; return; }
+  cmp -s "$sf" "$sf.snap" || { report FAIL "case 21: driver stale probe" "state changed after rewrite"; return; }
   [[ "$(jq -r .halfOpenSuccesses "$sf")" == "0" ]] \
     || { report FAIL "case 21: driver stale probe" "halfOpenSuccesses"; return; }
   [[ "$(jq -r .probing "$sf")" == "1" ]] \
     || { report FAIL "case 21: driver stale probe" "probing"; return; }
   [[ "$(jq -r .probeBackoff "$sf")" == "$pb" ]] \
     || { report FAIL "case 21: driver stale probe" "probeBackoff"; return; }
-  grep -qF "breaker: ignoring result from model 'claude-haiku-5-5'" "$lrb_err" \
+  grep -qxF "breaker: ignoring stale result from model 'claude-haiku-5-5' at epoch 0 (current epoch 1)" "$lrb_err" \
     || { report FAIL "case 21: driver stale probe" "stderr filter"; return; }
   report PASS "case 21: driver stale probe"
+}
+
+# _lrb_slot <state-file> -> LRB_M / LRB_E = the model and epoch a slot dispatched
+# now would carry (the driver's capture at dispatch).
+_lrb_slot() {
+  LRB_M="$(breaker_current_model "$1")"
+  LRB_E="$(breaker_current_epoch "$1")"
+}
+
+# _lrb_closed_at_b <state-file> <t0> -> CLOSED on modelB (index 1), epoch 1,
+# probe due at t0+1800, reached through real transitions.
+_lrb_closed_at_b() {
+  local sf="$1" t0="$2"
+  rm -f "$sf"
+  breaker_load "$sf" "$CHAIN3" "$t0" >/dev/null
+  breaker_record "$sf" 1 "$t0" modelA 0
+  breaker_should_skip "$sf" $((t0 + 600)) >/dev/null
+  breaker_record "$sf" 0 $((t0 + 601)) modelB 1
+  breaker_record "$sf" 0 $((t0 + 602)) modelB 1
+}
+
+case_22_epoch_halfopen_recovery() {
+  local sf="$FIXTURE_TMPDIR/c22.json" err="$FIXTURE_TMPDIR/c22.err" t0=7400000 m_old e_old
+  _lrb_breaker_env
+  rm -f "$sf"
+  breaker_load "$sf" "$CHAIN3" "$t0" >/dev/null
+  _lrb_slot "$sf"; m_old="$LRB_M"; e_old="$LRB_E"
+  breaker_record "$sf" 1 "$t0" modelA 0
+  breaker_should_skip "$sf" $((t0 + 600)) >/dev/null
+  [[ "$(_lrb_breaker_get "$sf" state)" == "HALF-OPEN" && "$(_lrb_breaker_get "$sf" probing)" == "0" ]] \
+    || { report FAIL "case 22: epoch half-open recovery" "pre half-open"; return; }
+  [[ "$m_old" == "modelA" && "$e_old" == "0" && "$(breaker_current_epoch "$sf")" == "1" ]] \
+    || { report FAIL "case 22: epoch half-open recovery" "pre epochs old=$e_old"; return; }
+  cp "$sf" "$sf.snap"
+  breaker_record "$sf" 0 $((t0 + 601)) "$m_old" "$e_old" 2>"$err"
+  cmp -s "$sf" "$sf.snap" || { report FAIL "case 22: epoch half-open recovery" "stale success counted"; return; }
+  grep -qxF "breaker: ignoring stale result from model 'modelA' at epoch 0 (current epoch 1)" "$err" \
+    || { report FAIL "case 22: epoch half-open recovery" "stderr"; return; }
+  _lrb_slot "$sf"
+  breaker_record "$sf" 0 $((t0 + 602)) "$LRB_M" "$LRB_E"
+  breaker_record "$sf" 0 $((t0 + 603)) "$LRB_M" "$LRB_E"
+  [[ "$(_lrb_breaker_get "$sf" state)" == "CLOSED" && "$(_lrb_breaker_get "$sf" currentModel)" == "modelB" ]] \
+    || { report FAIL "case 22: epoch half-open recovery" "current slots close"; return; }
+  [[ "$(breaker_current_epoch "$sf")" == "1" ]] || { report FAIL "case 22: epoch half-open recovery" "close kept epoch"; return; }
+  report PASS "case 22: epoch half-open recovery"
+}
+
+case_23_epoch_stale_after_probe_close() {
+  local sf="$FIXTURE_TMPDIR/c23.json" err="$FIXTURE_TMPDIR/c23.err" t0=7500000 m_old e_old
+  _lrb_breaker_env
+  _lrb_closed_at_b "$sf" "$t0"
+  _lrb_slot "$sf"; m_old="$LRB_M"; e_old="$LRB_E"
+  breaker_probe "$sf" $((t0 + 1800)) 2>/dev/null
+  _lrb_slot "$sf"
+  [[ "$LRB_M" == "modelA" && "$LRB_E" == "2" && "$m_old" == "modelB" && "$e_old" == "1" ]] \
+    || { report FAIL "case 23: epoch stale after probe close" "probe epoch=$LRB_E"; return; }
+  breaker_record "$sf" 0 $((t0 + 1900)) "$LRB_M" "$LRB_E"
+  breaker_record "$sf" 0 $((t0 + 1901)) "$LRB_M" "$LRB_E"
+  [[ "$(_lrb_breaker_get "$sf" state)" == "CLOSED" && "$(_lrb_breaker_get "$sf" fallbackIndex)" == "0" \
+     && "$(_lrb_breaker_get "$sf" probing)" == "0" && "$(breaker_current_epoch "$sf")" == "2" ]] \
+    || { report FAIL "case 23: epoch stale after probe close" "probe closed"; return; }
+  cp "$sf" "$sf.snap"
+  breaker_record "$sf" 1 $((t0 + 1902)) "$m_old" "$e_old" 2>"$err"
+  cmp -s "$sf" "$sf.snap" || { report FAIL "case 23: epoch stale after probe close" "stale rate limit tripped"; return; }
+  grep -qxF "breaker: ignoring stale result from model 'modelB' at epoch 1 (current epoch 2)" "$err" \
+    || { report FAIL "case 23: epoch stale after probe close" "stderr"; return; }
+  report PASS "case 23: epoch stale after probe close"
+}
+
+case_24_epoch_late_after_failed_probe() {
+  local sf="$FIXTURE_TMPDIR/c24.json" err="$FIXTURE_TMPDIR/c24.err" t0=7600000 m_p e_p
+  _lrb_breaker_env
+  _lrb_closed_at_b "$sf" "$t0"
+  breaker_probe "$sf" $((t0 + 1800)) 2>/dev/null
+  _lrb_slot "$sf"; m_p="$LRB_M"; e_p="$LRB_E"
+  breaker_record "$sf" 1 $((t0 + 1900)) "$m_p" "$e_p"
+  [[ "$(_lrb_breaker_get "$sf" state)" == "OPEN" && "$(_lrb_breaker_get "$sf" probing)" == "0" \
+     && "$(_lrb_breaker_get "$sf" currentModel)" == "modelB" && "$(breaker_current_epoch "$sf")" == "3" ]] \
+    || { report FAIL "case 24: epoch late after failed probe" "restore"; return; }
+  cp "$sf" "$sf.snap"
+  breaker_record "$sf" 1 $((t0 + 1901)) "$m_p" "$e_p" 2>"$err"
+  cmp -s "$sf" "$sf.snap" || { report FAIL "case 24: epoch late after failed probe" "advanced past restore"; return; }
+  grep -qxF "breaker: ignoring stale result from model 'modelA' at epoch 2 (current epoch 3)" "$err" \
+    || { report FAIL "case 24: epoch late after failed probe" "stderr"; return; }
+  report PASS "case 24: epoch late after failed probe"
+}
+
+case_25_epoch_double_advance() {
+  local sf="$FIXTURE_TMPDIR/c25.json" err="$FIXTURE_TMPDIR/c25.err" t0=7700000 m1 e1 m2 e2
+  _lrb_breaker_env
+  rm -f "$sf"
+  breaker_load "$sf" "$CHAIN3" "$t0" >/dev/null
+  _lrb_slot "$sf"; m1="$LRB_M"; e1="$LRB_E"
+  _lrb_slot "$sf"; m2="$LRB_M"; e2="$LRB_E"
+  breaker_record "$sf" 1 "$t0" "$m1" "$e1"
+  cp "$sf" "$sf.snap"
+  breaker_record "$sf" 1 $((t0 + 5)) "$m2" "$e2" 2>"$err"
+  cmp -s "$sf" "$sf.snap" || { report FAIL "case 25: epoch double advance" "second advance"; return; }
+  [[ "$(_lrb_breaker_get "$sf" fallbackIndex)" == "1" && "$(_lrb_breaker_get "$sf" totalFallbacks)" == "1" ]] \
+    || { report FAIL "case 25: epoch double advance" "idx/fallbacks"; return; }
+  grep -qxF "breaker: ignoring stale result from model 'modelA' at epoch 0 (current epoch 1)" "$err" \
+    || { report FAIL "case 25: epoch double advance" "stderr"; return; }
+  report PASS "case 25: epoch double advance"
+}
+
+case_26_epoch_legacy_state() {
+  local sf="$FIXTURE_TMPDIR/c26.json" err="$FIXTURE_TMPDIR/c26.err" t0=7800000
+  _lrb_breaker_env
+  rm -f "$sf"
+  {
+    printf '{\n"state": "HALF-OPEN",\n"chain": "%s",\n"fallbackIndex": 0,\n"currentModel": "modelA",\n' "$CHAIN3"
+    printf '"cooldownSeconds": 600,\n"openedAt": %s,\n"halfOpenSuccesses": 0,\n' "$t0"
+    printf '"totalFallbacks": 1,\n"totalRecoveries": 0,\n"probeAfter": %s,\n"probeBackoff": 1800,\n' "$((t0 + 1800))"
+    printf '"probing": 1,\n"preProbeIndex": 1,\n"preProbeModel": "modelB"\n}\n'
+  } > "$sf"
+  grep -qF probeEpoch "$sf" && { report FAIL "case 26: epoch legacy state" "seed has probeEpoch"; return; }
+  cp "$sf" "$sf.snap"
+  breaker_load "$sf" "$CHAIN3" $((t0 + 10)) 2>"$err"
+  [[ ! -s "$err" ]] || { report FAIL "case 26: epoch legacy state" "warning: $(head -1 "$err")"; return; }
+  cmp -s "$sf" "$sf.snap" || { report FAIL "case 26: epoch legacy state" "file rewritten"; return; }
+  [[ "$(breaker_current_epoch "$sf")" == "0" ]] || { report FAIL "case 26: epoch legacy state" "epoch"; return; }
+  breaker_record "$sf" 0 $((t0 + 11)) modelA 0 2>"$err"
+  [[ ! -s "$err" && "$(_lrb_breaker_get "$sf" halfOpenSuccesses)" == "1" && "$(_lrb_breaker_get "$sf" state)" == "HALF-OPEN" ]] \
+    || { report FAIL "case 26: epoch legacy state" "epoch 0 result counts"; return; }
+  grep -qxF '"probeEpoch": 0' "$sf" || { report FAIL "case 26: epoch legacy state" "key written"; return; }
+  report PASS "case 26: epoch legacy state"
+}
+
+case_27_epoch_no_model_pin() {
+  local sf="$FIXTURE_TMPDIR/c27.json" err="$FIXTURE_TMPDIR/c27.err" t0=7900000
+  _lrb_breaker_env
+  rm -f "$sf"
+  _breaker_write "$sf" CLOSED "modelA,modelB" 1 "" 600 0 0 2 0 0 0 0 0 "" 3
+  cp "$sf" "$sf.snap"
+  breaker_record "$sf" 1 "$t0" "" 2 2>"$err"
+  cmp -s "$sf" "$sf.snap" || { report FAIL "case 27: epoch no model pin" "file changed"; return; }
+  grep -qxF "breaker: ignoring stale result from (no model pin) at epoch 2 (current epoch 3)" "$err" \
+    || { report FAIL "case 27: epoch no model pin" "stderr: $(head -1 "$err")"; return; }
+  grep -qF "''" "$err" && { report FAIL "case 27: epoch no model pin" "empty quotes"; return; }
+  report PASS "case 27: epoch no model pin"
+}
+
+case_28_epoch_transitions() {
+  local sf="$FIXTURE_TMPDIR/c28.json" err="$FIXTURE_TMPDIR/c28.err" t0=8000000 step
+  _lrb_breaker_env
+  _lrb_ep() { [[ "$(breaker_current_epoch "$sf")" == "$1" ]] || { report FAIL "case 28: epoch transitions" "$step: epoch $(breaker_current_epoch "$sf") != $1"; return 1; }; }
+  rm -f "$sf"
+  step="seed"; breaker_load "$sf" "$CHAIN3" "$t0" >/dev/null; _lrb_ep 0 || return
+  step="CLOSED+0"; breaker_record "$sf" 0 "$t0"; _lrb_ep 0 || return
+  step="CLOSED+1"; breaker_record "$sf" 1 "$t0"; _lrb_ep 1 || return
+  step="OPEN->HALF-OPEN"; breaker_should_skip "$sf" $((t0 + 600)) >/dev/null; _lrb_ep 1 || return
+  step="HALF-OPEN+1"; breaker_record "$sf" 1 $((t0 + 601)); _lrb_ep 2 || return
+  [[ "$(_lrb_breaker_get "$sf" currentModel)" == "modelC" ]] || { report FAIL "case 28: epoch transitions" "advance modelC"; return; }
+  step="OPEN defensive"; breaker_record "$sf" 1 $((t0 + 602)) 2>/dev/null; _lrb_ep 3 || return
+  breaker_should_skip "$sf" $((t0 + 1202)) >/dev/null
+  step="HALF-OPEN->CLOSED"; breaker_record "$sf" 0 $((t0 + 1203)); breaker_record "$sf" 0 $((t0 + 1204)); _lrb_ep 3 || return
+  step="probe not due"; breaker_probe "$sf" $((t0 + 1000)) 2>/dev/null; _lrb_ep 3 || return
+  step="probe start"; breaker_probe "$sf" $((t0 + 1800)) 2>/dev/null; _lrb_ep 4 || return
+  step="probe fail"; breaker_record "$sf" 1 $((t0 + 1900)); _lrb_ep 5 || return
+  breaker_should_skip "$sf" $((t0 + 2500)) >/dev/null
+  breaker_record "$sf" 0 $((t0 + 2501)); breaker_record "$sf" 0 $((t0 + 2502))
+  step="probe start 2"; breaker_probe "$sf" $((t0 + 1900 + 3600)) 2>/dev/null; _lrb_ep 6 || return
+  step="probe success"; breaker_record "$sf" 0 $((t0 + 5600)); breaker_record "$sf" 0 $((t0 + 5601)); _lrb_ep 6 || return
+  [[ "$(_lrb_breaker_get "$sf" fallbackIndex)" == "0" && "$(_lrb_breaker_get "$sf" probing)" == "0" ]] \
+    || { report FAIL "case 28: epoch transitions" "probe closed on chain[0]"; return; }
+
+  rm -f "$sf"
+  _breaker_write "$sf" OPEN "$CHAIN3" 1 modelB 600 "$t0" 0 1 0 0 0 0 0 "" 7
+  sed -i 's/^"state": "OPEN",$/"state": "BOGUS",/' "$sf"
+  breaker_load "$sf" "$CHAIN3" $((t0 + 1)) 2>"$err"
+  grep -qF 'failing SAFE' "$err" && [[ "$(breaker_current_epoch "$sf")" == "7" ]] \
+    || { report FAIL "case 28: epoch transitions" "failsafe carries epoch"; return; }
+  rm -f "$sf"
+  _breaker_write "$sf" CLOSED "$CHAIN3" 0 modelA 600 0 0 0 0 0 0 0 0 "" x
+  breaker_load "$sf" "$CHAIN3" $((t0 + 1)) 2>"$err"
+  grep -qF 'failing SAFE' "$err" && [[ "$(breaker_current_epoch "$sf")" == "0" ]] \
+    || { report FAIL "case 28: epoch transitions" "invalid epoch fails safe"; return; }
+
+  rm -f "$sf"
+  _breaker_write "$sf" HALF-OPEN "$CHAIN3" 1 modelB 600 "$t0" 0 1 0 0 0 0 0 "" 4
+  breaker_record "$sf" 0 $((t0 + 2)) 2>"$err"
+  breaker_record "$sf" 0 $((t0 + 3)) modelC "" 2>>"$err"
+  [[ ! -s "$err" && "$(_lrb_breaker_get "$sf" state)" == "CLOSED" ]] \
+    || { report FAIL "case 28: epoch transitions" "omitted epoch keeps 2.2.1 rule"; return; }
+  report PASS "case 28: epoch transitions"
+}
+
+# _lrb_c29_seed <file> <field> <value> -> legacy 13-key HALF-OPEN probe state
+# (no preProbeModel, so loading derives it from preProbeIndex) with one field set.
+_lrb_c29_seed() {
+  local f="$1" field="$2" value="$3" idx=0 pre=1
+  [[ "$field" == fallbackIndex ]] && idx="$value"
+  [[ "$field" == preProbeIndex ]] && pre="$value"
+  {
+    printf '{\n"state": "HALF-OPEN",\n"chain": "%s",\n"fallbackIndex": %s,\n"currentModel": "modelA",\n' "$CHAIN3" "$idx"
+    printf '"cooldownSeconds": 600,\n"openedAt": 8100000,\n"halfOpenSuccesses": 0,\n'
+    printf '"totalFallbacks": 1,\n"totalRecoveries": 0,\n"probeAfter": 0,\n"probeBackoff": 1800,\n'
+    printf '"probing": 1,\n"preProbeIndex": %s\n}\n' "$pre"
+  } > "$f"
+}
+
+# _lrb_c29_run <file> <stderr> -> load, then record a rate limit (the failed-probe
+# restore reads preProbeIndex and fallbackIndex arithmetically).
+_lrb_c29_run() {
+  breaker_load "$1" "$CHAIN3" 8100100 2>"$2"
+  cp "$1" "$1.loaded"
+  breaker_record "$1" 1 8100101 2>>"$2"
+}
+
+case_29_leading_zero_ints() {
+  local d="$FIXTURE_TMPDIR/c29" field bad ctl e1 e2 v
+  _lrb_breaker_env
+  mkdir -p "$d"
+  for field in preProbeIndex:08 fallbackIndex:01 preProbeIndex:007; do
+    bad="$d/${field%%:*}-bad.json"; ctl="$d/${field%%:*}-ctl.json"
+    _lrb_c29_seed "$bad" "${field%%:*}" "${field#*:}"
+    _lrb_c29_seed "$ctl" "${field%%:*}" x
+    _lrb_c29_run "$bad" "$d/bad.err"
+    _lrb_c29_run "$ctl" "$d/ctl.err"
+    grep -qiE 'value too great|base|arithmetic|syntax error|invalid number' "$d/bad.err" \
+      && { report FAIL "case 29: leading-zero ints" "$field bash error: $(head -1 "$d/bad.err")"; return; }
+    cmp -s "$bad.loaded" "$ctl.loaded" && cmp -s "$bad" "$ctl" \
+      || { report FAIL "case 29: leading-zero ints" "$field outcome differs from non-numeric"; return; }
+    e1="$(sed "s#$bad#<f>#" "$d/bad.err")"; e2="$(sed "s#$ctl#<f>#" "$d/ctl.err")"
+    [[ "$e1" == "$e2" ]] || { report FAIL "case 29: leading-zero ints" "$field stderr differs from non-numeric"; return; }
+  done
+  for v in 0 10; do
+    for field in preProbeIndex fallbackIndex; do
+      ctl="$d/$field-$v.json"
+      _lrb_c29_seed "$ctl" "$field" "$v"
+      cp "$ctl" "$ctl.snap"
+      breaker_load "$ctl" "$CHAIN3" 8100100 2>"$d/ok.err"
+      [[ ! -s "$d/ok.err" ]] && cmp -s "$ctl" "$ctl.snap" \
+        || { report FAIL "case 29: leading-zero ints" "$field=$v not valid"; return; }
+    done
+  done
+  report PASS "case 29: leading-zero ints"
+}
+
+case_30_timeout_branch_epoch() {
+  (( LRB_HAVE_TIMEOUT )) || { report SKIP "case 30: timeout branch epoch" "timeout/gtimeout"; return; }
+  local dir="$FIXTURE_TMPDIR/c30" argv="$FIXTURE_TMPDIR/c30-argv" sf now pa
+  local chain="claude-sonnet-5-5,claude-haiku-5-5"
+  _lrb_breaker_env
+
+  lrb_make_sandbox "$dir" ".claude" 1 1 1 || { report FAIL "case 30: timeout branch epoch" "(a) sandbox setup"; return; }
+  _lrb_write_stub "$dir/_loop/stub.sh" || { report FAIL "case 30: timeout branch epoch" "(a) stub"; return; }
+  sf="$dir/_memory/loop/breaker-state.json"
+  now=$(date +%s)
+  _breaker_write "$sf" CLOSED "$chain" 1 claude-haiku-5-5 600 0 0 1 0 $((now - 1)) 1800 0 0 "" 4
+  : > "$argv"
+  _lrb_run_loop "$dir" 1 LOOP_ITER_TIMEOUT=2 LOOP_MODEL_FLAG=--model LRB_STUB_ARGV="$argv" \
+    LOOP_USAGE_FORMAT=claude LRB_STUB_MODE=sleep LOOP_CLI="$dir/_loop/stub.sh"
+  grep -qF 'iteration exceeded LOOP_ITER_TIMEOUT=2s' "$lrb_err" \
+    || { report FAIL "case 30: timeout branch epoch" "(a) no timeout"; return; }
+  grep -qF -- '--model claude-sonnet-5-5' "$argv" || { report FAIL "case 30: timeout branch epoch" "(a) probe dispatch"; return; }
+  [[ "$(_lrb_breaker_get "$sf" state)" == "HALF-OPEN" && "$(_lrb_breaker_get "$sf" probing)" == "1" \
+     && "$(_lrb_breaker_get "$sf" currentModel)" == "claude-sonnet-5-5" && "$(_lrb_breaker_get "$sf" probeEpoch)" == "5" ]] \
+    || { report FAIL "case 30: timeout branch epoch" "(a) probe state"; return; }
+  [[ "$(_lrb_breaker_get "$sf" halfOpenSuccesses)" == "1" ]] \
+    || { report FAIL "case 30: timeout branch epoch" "(a) not recorded as success"; return; }
+  grep -qF 'ignoring' "$lrb_err" && { report FAIL "case 30: timeout branch epoch" "(a) ignored"; return; }
+
+  lrb_make_sandbox "$dir" ".claude" 1 1 1 || { report FAIL "case 30: timeout branch epoch" "(b) sandbox setup"; return; }
+  _lrb_write_stub "$dir/_loop/stub.sh" || { report FAIL "case 30: timeout branch epoch" "(b) stub"; return; }
+  now=$(date +%s)
+  pa=$((now - 1))
+  _breaker_write "$sf" CLOSED "$chain" 1 claude-haiku-5-5 600 0 0 1 0 "$pa" 1800 0 0 "" 4
+  _lrb_run_loop "$dir" 1 LOOP_ITER_TIMEOUT=2 LOOP_MODEL_FLAG=--model \
+    LOOP_USAGE_FORMAT=claude LRB_STUB_MODE=sleep LRB_STATE_FILE="$sf" LRB_PROBE_AFTER="$pa" \
+    LRB_STUB_BODY='. _loop/breaker.sh; _breaker_write "$LRB_STATE_FILE" HALF-OPEN "claude-sonnet-5-5,claude-haiku-5-5" 0 claude-sonnet-5-5 600 0 0 1 0 "$LRB_PROBE_AFTER" 1800 1 1 claude-haiku-5-5 6; cp "$LRB_STATE_FILE" "$LRB_STATE_FILE.snap"' \
+    LOOP_CLI="$dir/_loop/stub.sh"
+  grep -qF 'iteration exceeded LOOP_ITER_TIMEOUT=2s' "$lrb_err" \
+    || { report FAIL "case 30: timeout branch epoch" "(b) no timeout"; return; }
+  [[ -f "$sf.snap" && "$(_lrb_breaker_get "$sf.snap" probeEpoch)" == "6" ]] \
+    || { report FAIL "case 30: timeout branch epoch" "(b) stub rewrite"; return; }
+  cmp -s "$sf" "$sf.snap" || { report FAIL "case 30: timeout branch epoch" "(b) stale result changed state"; return; }
+  grep -qxF "breaker: ignoring stale result from model 'claude-sonnet-5-5' at epoch 5 (current epoch 6)" "$lrb_err" \
+    || { report FAIL "case 30: timeout branch epoch" "(b) stderr"; return; }
+  report PASS "case 30: timeout branch epoch"
 }
 
 case_1_dossier_write
@@ -1159,9 +1468,18 @@ case_15_ledger_escaping
 case_16_emit_templates
 case_17_probe_stale_filter
 case_18_restore_empty_model
-case_19_schema_14_keys
+case_19_schema_15_keys
 case_20_legacy_13_key
 case_21_driver_stale_probe
+case_22_epoch_halfopen_recovery
+case_23_epoch_stale_after_probe_close
+case_24_epoch_late_after_failed_probe
+case_25_epoch_double_advance
+case_26_epoch_legacy_state
+case_27_epoch_no_model_pin
+case_28_epoch_transitions
+case_29_leading_zero_ints
+case_30_timeout_branch_epoch
 finish_suite
 exit $?
 
