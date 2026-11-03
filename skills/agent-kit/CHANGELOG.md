@@ -6,6 +6,21 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 
 ## [Unreleased]
 
+## [2.2.1] - 2026-11-02
+
+### Fixed
+
+- **Breaker stale probe results** — While a probe runs, results from slots not dispatched on the probed model no longer close or fail the probe or reset its backoff; `breaker_record` takes an optional dispatched-model argument that the bash driver passes.
+- **Pre-probe model restore** — A failed probe restores the exact pre-probe model, including the omit-the-pin empty model at chain end, through the new `preProbeModel` state key.
+- **Cross-reference audit Phase 6** — The feature skill's cross-reference audit (step 5 in `reference/goal-revisions.md`) no longer rejects `changes` rows whose evidence is exactly `Phase 6`.
+
+### Upgrade notes
+
+- Re-emit with `--upgrade` refreshes `_loop/breaker.sh`, `_loop/loop.sh`, the loop skill, and the feature reference `goal-revisions.md`.
+- The breaker state file gains a 14th key, `preProbeModel`; 2.2.0 state files without it load unchanged.
+- A probe already in flight at upgrade restores by index, as in 2.2.0.
+- Downgrade is safe: 2.2.0 reads a 14-key state file unchanged (an unknown key is ignored and the trailing comma on `preProbeIndex` still parses) and drops `preProbeModel` on rewrite.
+
 ## [2.2.0] - 2026-10-28
 
 ### Added

@@ -1,6 +1,6 @@
 {
   "kit": "agent-kit",
-  "kitVersion": "2.2.0",
+  "kitVersion": "2.2.1",
   "installedAt": "2026-09-03",
   "harnesses": [
     "codex"
@@ -42,9 +42,9 @@
     "_kit/trace-lint.cmd": "ae9541294a03f741311ff8bc0d5c6f9985d6947fb42f7aaeaf6613088e34bf7e",
     "_kit/trace-lint.sh": "59f4dab86dbf0f985402ce8c02ccb362dabf5fd575a39f0dfdebec46f34b6713",
     "_loop/PROMPT.md": "b1d5e2dde377179fa67edddd5a2d42981965bcc31f99762d9db298e39724a00c",
-    "_loop/breaker.sh": "c759672682f3c3e2dd62781560ff11a00aecb5b31a88ac2d4af03dbfd39c26e5",
+    "_loop/breaker.sh": "45728921738ccff3a39baad868a83fc3cdaf41e58c227248509b4b50d2cad76f",
     "_loop/loop.cmd": "ae9541294a03f741311ff8bc0d5c6f9985d6947fb42f7aaeaf6613088e34bf7e",
-    "_loop/loop.sh": "5f423bc49efd241b5621d574578315c8f4076208b84f3786e839cce532e30940",
+    "_loop/loop.sh": "3633a188e5062e9c12c38b36b88654b5039b8132757348eef3dbd7c7c0a5241e",
     "_memory/README.md": "e980b106da46dc95795775e7f5290af5116ffb69b1601c08f370ed5cf87c0921"
   },
   "answers": {

@@ -8,10 +8,11 @@
 # Upward probe: after a rate-limit fallback (CLOSED), schedule a probe of
 # chain[0] — first delay 1800 s, doubling on each failed probe with an 1800 s
 # floor and 14400 s cap; a successful probe stays on chain[0]; a failed probe
-# restores the pre-probe model (preProbeIndex).
+# restores the pre-probe index and model (preProbeIndex, preProbeModel).
+# While probing, results from slots dispatched on another model are ignored.
 #
 # State schema (flat JSON, one key per line — never nested, never minified/reflowed;
-# this script writes the following thirteen keys):
+# this script writes the following fourteen keys):
 #   {
 #   "state": "CLOSED"|"OPEN"|"HALF-OPEN",
 #   "chain": "<comma-separated model chain, first = preferred>",
@@ -28,7 +29,9 @@
 #   "probeBackoff": <seconds, 0 = not degraded / reset>,
 #   "probing": <0|1, 1 while a probe of the preferred model is in HALF-OPEN>,
 #   "preProbeIndex": <non-negative int, fallbackIndex when the probe started;
-#     meaningful only while probing == 1, else 0>
+#     meaningful only while probing == 1, else 0>,
+#   "preProbeModel": <string, currentModel when the probe started; may be ""
+#     (chain end); meaningful only while probing == 1, else "">
 #   }
 # NOTE: there is no `consecutiveFailures` key — it was a dead key in the original
 # design note and is intentionally dropped from this schema.
@@ -147,7 +150,7 @@ _breaker_valid() {
 
 # _breaker_write <file> <state> <chain> <idx> <model> <cooldown> <openedAt> <half>
 #                <totalFallbacks> <totalRecoveries> [probeAfter] [probeBackoff]
-#                [probing] [preProbeIndex]
+#                [probing] [preProbeIndex] [preProbeModel]
 # The ONE place that serializes the schema — every transition below funnels through
 # this so the on-disk layout never drifts. Atomicity rationale: writes go to a
 # sibling temp file first, then `mv -f` onto the target — POSIX rename(2) on the
@@ -158,7 +161,7 @@ _breaker_write() {
   local file="$1" state="$2" chain="$3" idx="$4" model="$5" cooldown="$6" \
         opened="$7" half="$8" fb="$9" rec="${10}" \
         probe_after="${11:-0}" probe_backoff="${12:-0}" probing="${13:-0}" \
-        pre_probe="${14:-0}"
+        pre_probe="${14:-0}" pre_probe_model="${15-}"
   local tmp="$file.tmp.$$"
   {
     printf '{\n'
@@ -174,7 +177,8 @@ _breaker_write() {
     printf '"probeAfter": %s,\n' "$probe_after"
     printf '"probeBackoff": %s,\n' "$probe_backoff"
     printf '"probing": %s,\n' "$probing"
-    printf '"preProbeIndex": %s\n' "$pre_probe"
+    printf '"preProbeIndex": %s,\n' "$pre_probe"
+    printf '"preProbeModel": "%s"\n' "$pre_probe_model"
     printf '}\n'
   } > "$tmp"
   mv -f "$tmp" "$file"
@@ -222,6 +226,32 @@ _breaker_read_all() {
     _BRK_PRE_PROBE="$(_breaker_get "$file" preProbeIndex)"
   else
     _BRK_PRE_PROBE=0
+  fi
+  if grep -q '"preProbeModel":' "$file" 2>/dev/null; then
+    _BRK_PRE_PROBE_MODEL="$(_breaker_get "$file" preProbeModel)"
+  else
+    _BRK_PRE_PROBE_MODEL="$(_breaker_derive_pre_probe_model "$_BRK_CHAIN" \
+      "$_BRK_PRE_PROBE" "$_BRK_PROBING")"
+  fi
+}
+
+# _breaker_derive_pre_probe_model <chain> <pre-probe-index> <probing> -> prints
+# chain[pre-probe-index] when probing == 1 and the index is in range, else "".
+_breaker_derive_pre_probe_model() {
+  local chain="$1" pre_idx="$2" probing="$3"
+  if [[ "$probing" != "1" ]]; then
+    printf '%s' ""
+    return 0
+  fi
+  local -a chain_entries=()
+  if [[ -n "$chain" ]]; then
+    IFS=',' read -r -a chain_entries <<< "$chain"
+  fi
+  local chain_n=${#chain_entries[@]}
+  if (( pre_idx < chain_n )); then
+    printf '%s' "${chain_entries[$pre_idx]}"
+  else
+    printf '%s' ""
   fi
 }
 
@@ -294,9 +324,15 @@ _breaker_failsafe_open() {
   [[ "$probing" == "0" || "$probing" == "1" ]] || probing=0
   pre_probe="$(_breaker_get "$file" preProbeIndex)"
   [[ "$pre_probe" =~ ^[0-9]+$ ]] || pre_probe=0
+  local pre_probe_model
+  if grep -q '"preProbeModel":' "$file" 2>/dev/null; then
+    pre_probe_model="$(_breaker_get "$file" preProbeModel)"
+  else
+    pre_probe_model="$(_breaker_derive_pre_probe_model "$chain" "$pre_probe" "$probing")"
+  fi
 
   _breaker_write "$file" OPEN "$chain" "$idx" "$model" 600 "$now" 0 "$fb" "$rec" \
-    "$probe_after" "$probe_backoff" "$probing" "$pre_probe"
+    "$probe_after" "$probe_backoff" "$probing" "$pre_probe" "$pre_probe_model"
 }
 
 # --- pinned API --------------------------------------------------------------
@@ -379,11 +415,11 @@ breaker_should_skip() {
   _breaker_write "$state_file" "$_BRK_STATE" "$_BRK_CHAIN" "$_BRK_INDEX" \
     "$_BRK_MODEL" "$_BRK_COOLDOWN" "$_BRK_OPENED" "$_BRK_HALF" "$_BRK_FALLBACKS" \
     "$_BRK_RECOVERIES" "$_BRK_PROBE_AFTER" "$_BRK_PROBE_BACKOFF" "$_BRK_PROBING" \
-    "$_BRK_PRE_PROBE"
+    "$_BRK_PRE_PROBE" "$_BRK_PRE_PROBE_MODEL"
   echo 0
 }
 
-# breaker_record <state-file> <rate-limited:0|1> <now-epoch>
+# breaker_record <state-file> <rate-limited:0|1> <now-epoch> [dispatched-model]
 # Transitions exactly per goal.md's exhaustive table:
 #   CLOSED   + 0 -> no-op.
 #   CLOSED   + 1 -> OPEN; advance chain; openedAt=now; totalFallbacks++.
@@ -393,8 +429,17 @@ breaker_should_skip() {
 #   OPEN     +any -> defensive path (normally unreachable under mechanism B):
 #                   log a warning, then treat exactly as the HALF-OPEN input above.
 breaker_record() {
-  local state_file="$1" rate_limited="$2" now="$3"
+  local state_file="$1" rate_limited="$2" now="$3" dispatched_model=""
+  if (( $# >= 4 )); then
+    dispatched_model="$4"
+  fi
   _breaker_read_all "$state_file"
+
+  if (( $# >= 4 )) && [[ "$_BRK_PROBING" == "1" ]] \
+     && [[ "$dispatched_model" != "$_BRK_MODEL" ]]; then
+    echo "breaker: ignoring result from model '$dispatched_model' while probing '$_BRK_MODEL'" >&2
+    return 0
+  fi
 
   if [[ "$_BRK_STATE" == "OPEN" ]]; then
     echo "breaker: breaker_record called while OPEN (defensive path — mechanism B should make this unreachable); treating as HALF-OPEN input" >&2
@@ -413,7 +458,8 @@ breaker_record() {
         _breaker_write "$state_file" "$_BRK_STATE" "$_BRK_CHAIN" "$_BRK_INDEX" \
           "$_BRK_MODEL" "$_BRK_COOLDOWN" "$_BRK_OPENED" "$_BRK_HALF" \
           "$_BRK_FALLBACKS" "$_BRK_RECOVERIES" "$_BRK_PROBE_AFTER" \
-          "$_BRK_PROBE_BACKOFF" "$_BRK_PROBING" "$_BRK_PRE_PROBE"
+          "$_BRK_PROBE_BACKOFF" "$_BRK_PROBING" "$_BRK_PRE_PROBE" \
+          "$_BRK_PRE_PROBE_MODEL"
       fi
       # CLOSED + success -> no-op: nothing written.
       ;;
@@ -421,15 +467,7 @@ breaker_record() {
       if [[ "$rate_limited" == "1" ]]; then
         if [[ "$_BRK_PROBING" == "1" ]]; then
           _BRK_INDEX="$_BRK_PRE_PROBE"
-          local -a entries=()
-          if [[ -n "$_BRK_CHAIN" ]]; then
-            IFS=',' read -r -a entries <<< "$_BRK_CHAIN"
-          fi
-          if (( _BRK_INDEX < ${#entries[@]} )); then
-            _BRK_MODEL="${entries[$_BRK_INDEX]}"
-          else
-            _BRK_MODEL=""
-          fi
+          _BRK_MODEL="$_BRK_PRE_PROBE_MODEL"
           _BRK_STATE="OPEN"
           _BRK_OPENED="$now"
           _BRK_HALF=0
@@ -441,6 +479,7 @@ breaker_record() {
           _BRK_PROBE_AFTER=$(( now + backoff ))
           _BRK_PROBING=0
           _BRK_PRE_PROBE=0
+          _BRK_PRE_PROBE_MODEL=""
         else
           _breaker_advance_chain
           _BRK_STATE="OPEN"
@@ -449,7 +488,8 @@ breaker_record() {
         _breaker_write "$state_file" "$_BRK_STATE" "$_BRK_CHAIN" "$_BRK_INDEX" \
           "$_BRK_MODEL" "$_BRK_COOLDOWN" "$_BRK_OPENED" "$_BRK_HALF" \
           "$_BRK_FALLBACKS" "$_BRK_RECOVERIES" "$_BRK_PROBE_AFTER" \
-          "$_BRK_PROBE_BACKOFF" "$_BRK_PROBING" "$_BRK_PRE_PROBE"
+          "$_BRK_PROBE_BACKOFF" "$_BRK_PROBING" "$_BRK_PRE_PROBE" \
+          "$_BRK_PRE_PROBE_MODEL"
       else
         _BRK_HALF=$(( _BRK_HALF + 1 ))
         if (( _BRK_HALF == 2 )); then
@@ -462,12 +502,14 @@ breaker_record() {
             _BRK_PROBE_AFTER=0
             _BRK_PROBE_BACKOFF=0
             _BRK_PRE_PROBE=0
+            _BRK_PRE_PROBE_MODEL=""
           fi
         fi
         _breaker_write "$state_file" "$_BRK_STATE" "$_BRK_CHAIN" "$_BRK_INDEX" \
           "$_BRK_MODEL" "$_BRK_COOLDOWN" "$_BRK_OPENED" "$_BRK_HALF" \
           "$_BRK_FALLBACKS" "$_BRK_RECOVERIES" "$_BRK_PROBE_AFTER" \
-          "$_BRK_PROBE_BACKOFF" "$_BRK_PROBING" "$_BRK_PRE_PROBE"
+          "$_BRK_PROBE_BACKOFF" "$_BRK_PROBING" "$_BRK_PRE_PROBE" \
+          "$_BRK_PRE_PROBE_MODEL"
       fi
       ;;
   esac
@@ -496,7 +538,7 @@ breaker_probe() {
     _breaker_write "$state_file" "$_BRK_STATE" "$_BRK_CHAIN" "$_BRK_INDEX" \
       "$_BRK_MODEL" "$_BRK_COOLDOWN" "$_BRK_OPENED" "$_BRK_HALF" "$_BRK_FALLBACKS" \
       "$_BRK_RECOVERIES" "$_BRK_PROBE_AFTER" "$_BRK_PROBE_BACKOFF" "$_BRK_PROBING" \
-      "$_BRK_PRE_PROBE"
+      "$_BRK_PRE_PROBE" "$_BRK_PRE_PROBE_MODEL"
     return 0
   fi
 
@@ -509,6 +551,7 @@ breaker_probe() {
     IFS=',' read -r -a entries <<< "$_BRK_CHAIN"
   fi
   _BRK_PRE_PROBE="$_BRK_INDEX"
+  _BRK_PRE_PROBE_MODEL="$_BRK_MODEL"
   _BRK_INDEX=0
   if (( ${#entries[@]} > 0 )); then
     _BRK_MODEL="${entries[0]}"
@@ -521,6 +564,6 @@ breaker_probe() {
   _breaker_write "$state_file" "$_BRK_STATE" "$_BRK_CHAIN" "$_BRK_INDEX" \
     "$_BRK_MODEL" "$_BRK_COOLDOWN" "$_BRK_OPENED" "$_BRK_HALF" "$_BRK_FALLBACKS" \
     "$_BRK_RECOVERIES" "$_BRK_PROBE_AFTER" "$_BRK_PROBE_BACKOFF" "$_BRK_PROBING" \
-    "$_BRK_PRE_PROBE"
+    "$_BRK_PRE_PROBE" "$_BRK_PRE_PROBE_MODEL"
   echo "breaker: probing preferred model $_BRK_MODEL" >&2
 }

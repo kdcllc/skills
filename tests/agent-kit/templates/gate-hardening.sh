@@ -126,7 +126,7 @@ EVALSYS_CITATIONS_PHRASE='§ **Citations** applies **only** to Phase 4 task eval
 WORKFLOW_KEYS_PHRASE='appends a `KEYS` line and a `REPEAT` line for each repeated key, each carrying kind and provenance tags'
 F6_AUDIT_SENTENCE="A failure of either is a blocking finding citing **\`F6\`** against the goal's \`## Consumers\`."
 PREFLIGHT_TRANSITION='**Transition:** a goal planned before this rule (no `## Consumers` section, with a `reference-sweep.md`) is checked against that artifact until its next material amendment.'
-REVISIONS_STEP5='5. Confirm every `changes` row in `goal.md` `## Consumers` names a task that still exists after the renumbering.'
+REVISIONS_STEP5='5. Confirm every `changes` row in `goal.md` `## Consumers` whose evidence names `task NN` names a task that still exists after the renumbering; a row whose evidence is exactly `Phase 6` names no task and is skipped here (it stays valid only when the goal'\''s `phases:` block sets `align_docs: true`).'
 REVISIONS_AMEND='A surface the Phase 5 audit finds changed but not listed in `## Consumers` is an amendment: add the search, its hits and the row with evidence, re-run `_kit/trace-lint.sh`, then a targeted evaluation.'
 TRACE_GATE_START='^[*][*]Consumer trace [(]Phase 3 gate[)][.][*][*]'
 TRACE_GATE_END='^[*][*]Corrective tasks'
@@ -1150,7 +1150,9 @@ mutation_proof 'preflight: check 2 Searches and Consumers sentence altered' "$PR
 mutation_proof 'goal-revisions: renumbering step 5 removed' "$GOAL_REVISIONS_REF" check_goal_revisions \
   m_del_lines 'names a task that still exists after the renumbering'
 mutation_proof 'goal-revisions: step 5 reverted to the old sweep wording' "$GOAL_REVISIONS_REF" check_goal_revisions \
-  m_sub 'Confirm every `changes` row in `goal.md` `## Consumers` names a task' 'Confirm renamed symbols from `reference-sweep.md` match across tasks'
+  m_sub 'Confirm every `changes` row in `goal.md` `## Consumers` whose evidence names `task NN` names a task' 'Confirm renamed symbols from `reference-sweep.md` match across tasks'
+mutation_proof 'goal-revisions: step 5 Phase 6 exemption removed' "$GOAL_REVISIONS_REF" check_goal_revisions \
+  m_sub '; a row whose evidence is exactly `Phase 6` names no task and is skipped here (it stays valid only when the goal'\''s `phases:` block sets `align_docs: true`).' ''
 mutation_proof 'goal-revisions: unlisted-surface amendment sentence removed' "$GOAL_REVISIONS_REF" check_goal_revisions \
   m_del_lines 'A surface the Phase 5 audit finds changed but not listed'
 mutation_proof 'goal-revisions: amendment no longer re-runs the lint' "$GOAL_REVISIONS_REF" check_goal_revisions \
