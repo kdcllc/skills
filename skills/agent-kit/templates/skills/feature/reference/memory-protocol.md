@@ -44,8 +44,9 @@ record `none` in `recalled-memory.md` at Phase 1 when search fails).
 
 ## Prune
 
-**When.** Once at the start of feature Phase 2, immediately before Recall, so the new goal's
-folder does not exist yet. The research workflow does not run prune.
+**When.** Once at the start of feature Phase 2: Prune, then the unfinished-goal offer, then Recall
+(`reference/resume.md`), so the new goal's folder does not exist yet. The research workflow does
+not run prune.
 
 **Who.** Orchestrator only, inline. Loop slots in `LOOP_WORKTREE=1` worktrees have no `_kit/`;
 skip prune there, like Recall.
@@ -57,7 +58,8 @@ committed in `HEAD` and, when the repo has a remote default branch (`origin/HEAD
 `origin/main`, else `origin/master`), present there too; a research folder only when every id
 on line 2 of `ingested` is. Uncommitted or unmerged records keep the folder, so a goal
 awaiting review, commit, its PR, or PR feedback survives (the PR step reads every goal
-folder delivered on its branch).
+folder delivered on its branch). A goal folder whose `progress.md` status is not `done` is kept
+(`keep:progress:<status>`) even when its records are durable, so the offer can still list it.
 
 **Failure handling.** Non-zero exit, missing tool (exit 127), or `failed` lines never block
 Phase 2; record them in the note.

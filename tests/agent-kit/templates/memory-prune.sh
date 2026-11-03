@@ -681,4 +681,81 @@ prune_ln="$(awk -v s="$p2_ln" 'NR>s && /prune --apply/{print NR; exit}' "$FEATUR
 [[ "$(grep -c '^### prune$' "$MEM_README_TPL")" -eq 1 ]] || ok=0
 [[ "$ok" -eq 1 ]] && report PASS "case-17: feature/protocol/ORCHESTRATION/README wiring" || report FAIL "case-17"
 
+# --- cases 18-22: progress.md status gate (goal kept unless status is done) ---
+PG_ID="20261101T120000Z-99999999"
+mk_progress_fixture() { # root [progress-printf-format [arg]] — goal g-prog with durable archive id
+  local R="$1"
+  git_init_fixture "$R"
+  write_record "$R" "$PG_ID" fact t "" 'body'
+  add_record_commit "$R" "$PG_ID"
+  mkdir -p "$R/_memory/work/goals/g-prog"
+  printf '# log\n\n### 2026-01-01T10:00-04:00 — ARCHIVED: %s\n' "$PG_ID" \
+    > "$R/_memory/work/goals/g-prog/orchestration-log.md"
+  if [[ $# -ge 2 ]]; then
+    # shellcheck disable=SC2059
+    printf "$2" "${3:-}" > "$R/_memory/work/goals/g-prog/progress.md"
+  fi
+}
+
+# case 18: precondition (no progress.md) then keep at in-progress
+mktemp_dir R18a
+mk_progress_fixture "$R18a"
+pr_run "$R18a" --plan --only g-prog
+grep -qxF 'memory: prune goal g-prog would-delete' <<<"$PR_OUT" \
+  && [[ "$PR_RC" -eq 0 ]] \
+  && report PASS "case-18a: no progress.md -> would-delete (precondition)" || report FAIL "case-18a"
+
+mktemp_dir R18b
+mk_progress_fixture "$R18b" '# Progress\n\nstatus: in-progress\n'
+pr_run "$R18b" --plan --only g-prog
+grep -qxF 'memory: prune goal g-prog keep:progress:in-progress' <<<"$PR_OUT" \
+  && [[ "$PR_RC" -eq 0 ]] \
+  && report PASS "case-18b: --plan keep:progress:in-progress" || report FAIL "case-18b"
+pr_run "$R18b" --apply --only g-prog
+grep -qxF 'memory: prune goal g-prog keep:progress:in-progress' <<<"$PR_OUT" \
+  && grep -qxF 'memory: prune 0 deleted, 1 kept, 0 failed' <<<"$PR_OUT" \
+  && [[ "$PR_RC" -eq 0 ]] \
+  && [[ -d "$R18b/_memory/work/goals/g-prog" ]] \
+  && report PASS "case-18c: --apply keeps in-progress goal folder" || report FAIL "case-18c"
+
+# case 19: status: done -> pruned
+mktemp_dir R19
+mk_progress_fixture "$R19" '# Progress\n\nstatus: done\n'
+pr_run "$R19" --apply --only g-prog
+grep -qxF 'memory: prune goal g-prog deleted' <<<"$PR_OUT" \
+  && [[ "$PR_RC" -eq 0 ]] \
+  && [[ ! -e "$R19/_memory/work/goals/g-prog" ]] \
+  && report PASS "case-19: status: done -> deleted" || report FAIL "case-19"
+
+# case 20: CRLF after done is still done
+mktemp_dir R20
+mk_progress_fixture "$R20" '# Progress\r\n\r\nstatus: done\r\n'
+pr_run "$R20" --plan --only g-prog
+grep -qxF 'memory: prune goal g-prog would-delete' <<<"$PR_OUT" \
+  && report PASS "case-20: status: done + CRLF -> would-delete" || report FAIL "case-20"
+
+# case 21: unknown / unparsable status -> keep:progress:unknown
+ok=1
+mktemp_dir R21a
+mk_progress_fixture "$R21a" '# Progress\n\nno status here\n'
+pr_run "$R21a" --plan --only g-prog
+grep -qxF 'memory: prune goal g-prog keep:progress:unknown' <<<"$PR_OUT" || ok=0
+mktemp_dir R21b
+mk_progress_fixture "$R21b" '# Progress\n\nstatus:\n'
+pr_run "$R21b" --plan --only g-prog
+grep -qxF 'memory: prune goal g-prog keep:progress:unknown' <<<"$PR_OUT" || ok=0
+mktemp_dir R21c
+mk_progress_fixture "$R21c" '# Progress\n\nstatus: a/b\n'
+pr_run "$R21c" --plan --only g-prog
+grep -qxF 'memory: prune goal g-prog keep:progress:unknown' <<<"$PR_OUT" || ok=0
+pr_run "$R21c" --apply --only g-prog
+[[ -d "$R21c/_memory/work/goals/g-prog" ]] || ok=0
+[[ "$ok" -eq 1 ]] && report PASS "case-21: missing/empty/invalid status -> keep:progress:unknown" || report FAIL "case-21"
+
+# case 22: protocol wording pin (Prune order)
+ok=1
+grep -qF 'Prune, then the unfinished-goal offer, then Recall' "$MEM_PROTO" || ok=0
+grep -qiF 'immediately before Recall' "$MEM_PROTO" && ok=0
+[[ "$ok" -eq 1 ]] && report PASS "case-22: memory-protocol Prune order wording" || report FAIL "case-22"
+
 finish

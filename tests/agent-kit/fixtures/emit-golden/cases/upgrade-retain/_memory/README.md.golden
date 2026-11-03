@@ -664,14 +664,18 @@ file is not in it → `keep:unmerged:<id>`; the first failing id decides; all du
 
 **Goal decision**, first match wins: (1) git gate fails → `keep:no-git`; (2) the candidate,
 `_memory/work/goals/`, or `_memory/work/` is a symbolic link → `keep:symlink`; (3)
-`git ls-files` lists any tracked file under the candidate → `keep:tracked`; (4) no
-`orchestration-log.md` → `keep:no-log`; (5) the log has at least one **archive line** — a
+`git ls-files` lists any tracked file under the candidate → `keep:tracked`; (4)
+`progress.md` exists with a `status:` other than `done` → `keep:progress:<status>` (the
+status is the first whitespace-delimited token after the first `^status:` line, trailing CR
+stripped; no `status:` line, an empty value, or a token outside `[A-Za-z0-9._-]` gives
+`keep:progress:unknown`; `done` or no `progress.md` falls through); (5) no
+`orchestration-log.md` → `keep:no-log`; (6) the log has at least one **archive line** — a
 line matching `^### [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}[+-][0-9]{2}:[0-9]{2} — `
 (em dash U+2014) that contains `ARCHIVED:` anywhere (body lines that are not `### `
 headings never count) — then only the **last** such line counts and its ids are extracted
 (**Id extraction and per-id verdict** above) from the text after the **last** `ARCHIVED:` on
 that line, so free-form notes and "Archive correction" lines parse; no ids → `keep:no-ids`;
-otherwise the per-id verdict; (6) no archive line → **source fallback**: the record and
+otherwise the per-id verdict; (7) no archive line → **source fallback**: the record and
 quarantine files in the working tree whose `source:` equals exactly `goal <g> (goal.md)`
 (the legacy top-level goal-path and `_memory/work/goals/…` labels do not count); none →
 `keep:not-archived`; otherwise the per-id verdict over their ids in `LC_ALL=C` path order.
@@ -698,7 +702,9 @@ folder still exists afterwards (or removal fails) the line is
 
 **Workflow and limits.** The feature skill runs `prune --apply` once at the start of Phase 2,
 before recall and before the new goal folder exists, so a goal whose records are still
-uncommitted or not yet merged is always kept. Pruned goals no longer give `memory-capture`
+uncommitted or not yet merged is always kept. Unfinished goals (`progress.md` status other
+than `done`) are kept until `status: done`; goal folders without `progress.md` follow the
+archive rules alone. Pruned goals no longer give `memory-capture`
 their orchestration-log timestamps, so sessions captured afterwards get tags without
 goal-folder hints. Repos with no `origin` remote-tracking default branch fall back to `HEAD`
 alone, so there a goal already committed on a branch that carries several goals can be pruned
