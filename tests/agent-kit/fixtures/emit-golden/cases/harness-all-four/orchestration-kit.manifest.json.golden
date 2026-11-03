@@ -154,7 +154,7 @@
     "_kit/trace-lint.cmd": "ae9541294a03f741311ff8bc0d5c6f9985d6947fb42f7aaeaf6613088e34bf7e",
     "_kit/trace-lint.sh": "59f4dab86dbf0f985402ce8c02ccb362dabf5fd575a39f0dfdebec46f34b6713",
     "_loop/PROMPT.md": "b1d5e2dde377179fa67edddd5a2d42981965bcc31f99762d9db298e39724a00c",
-    "_loop/breaker.sh": "90de7defa4d18123bf33e85877cc17cb0574fba2819ad7500d934c5c9eadb780",
+    "_loop/breaker.sh": "5b9f6a78d6f532c16cfc9a6ca45d10d8c078dead66544b05aeb0d615f6340df1",
     "_loop/loop.cmd": "ae9541294a03f741311ff8bc0d5c6f9985d6947fb42f7aaeaf6613088e34bf7e",
     "_loop/loop.sh": "ac4dd7f7aa6cdc7749412d7736d3c8687f9f748929dca3f939fa13a0704e6276",
     "_memory/README.md": "e6fb7270daca103671517cc80a4581fc7b427e2ce682f6367f225c9486a08fff"

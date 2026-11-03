@@ -9,6 +9,7 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 ### Fixed
 
 - **Breaker stale results, all states** — The breaker state gains a `probeEpoch` key that advances on every chain advance, probe start and failed-probe restore. The bash driver records each slot's epoch at dispatch and passes it to `breaker_record`, which ignores results from an older epoch. A slot dispatched before a trip no longer counts toward HALF-OPEN recovery, a stale rate limit no longer re-trips after a probe closes or advances past a restored model, and two slots rate-limited on one model advance the chain once. State files without the key load as epoch 0, and callers that omit the epoch keep the 2.2.1 rule. The stale-result line prints `(no model pin)` for an empty model.
+- **Breaker leading-zero integers** — An integer state field with a leading zero (for example `"preProbeIndex": 08`) is now invalid like any other unparseable value, so the breaker fails safe instead of raising a bash base error.
 
 ## [2.3.0] - 2026-11-03
 

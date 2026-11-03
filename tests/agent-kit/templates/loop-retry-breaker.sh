@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Behavioral tests for loop dossier, breaker probe and epoch, claude-stream, tamper perf, emit (30 cases).
+# Behavioral tests for loop dossier, breaker probe and epoch, claude-stream, tamper perf, emit (31 cases).
 # Stub CLIs only; sandboxes under mktemp. Discovered by tests/agent-kit/run-all.sh.
 set -u
 
@@ -1325,6 +1325,58 @@ case_28_epoch_transitions() {
   report PASS "case 28: epoch transitions"
 }
 
+# _lrb_c29_seed <file> <field> <value> -> legacy 13-key HALF-OPEN probe state
+# (no preProbeModel, so loading derives it from preProbeIndex) with one field set.
+_lrb_c29_seed() {
+  local f="$1" field="$2" value="$3" idx=0 pre=1
+  [[ "$field" == fallbackIndex ]] && idx="$value"
+  [[ "$field" == preProbeIndex ]] && pre="$value"
+  {
+    printf '{\n"state": "HALF-OPEN",\n"chain": "%s",\n"fallbackIndex": %s,\n"currentModel": "modelA",\n' "$CHAIN3" "$idx"
+    printf '"cooldownSeconds": 600,\n"openedAt": 8100000,\n"halfOpenSuccesses": 0,\n'
+    printf '"totalFallbacks": 1,\n"totalRecoveries": 0,\n"probeAfter": 0,\n"probeBackoff": 1800,\n'
+    printf '"probing": 1,\n"preProbeIndex": %s\n}\n' "$pre"
+  } > "$f"
+}
+
+# _lrb_c29_run <file> <stderr> -> load, then record a rate limit (the failed-probe
+# restore reads preProbeIndex and fallbackIndex arithmetically).
+_lrb_c29_run() {
+  breaker_load "$1" "$CHAIN3" 8100100 2>"$2"
+  cp "$1" "$1.loaded"
+  breaker_record "$1" 1 8100101 2>>"$2"
+}
+
+case_29_leading_zero_ints() {
+  local d="$FIXTURE_TMPDIR/c29" field bad ctl e1 e2 v
+  _lrb_breaker_env
+  mkdir -p "$d"
+  for field in preProbeIndex:08 fallbackIndex:01 preProbeIndex:007; do
+    bad="$d/${field%%:*}-bad.json"; ctl="$d/${field%%:*}-ctl.json"
+    _lrb_c29_seed "$bad" "${field%%:*}" "${field#*:}"
+    _lrb_c29_seed "$ctl" "${field%%:*}" x
+    _lrb_c29_run "$bad" "$d/bad.err"
+    _lrb_c29_run "$ctl" "$d/ctl.err"
+    grep -qiE 'value too great|base|arithmetic|syntax error|invalid number' "$d/bad.err" \
+      && { report FAIL "case 29: leading-zero ints" "$field bash error: $(head -1 "$d/bad.err")"; return; }
+    cmp -s "$bad.loaded" "$ctl.loaded" && cmp -s "$bad" "$ctl" \
+      || { report FAIL "case 29: leading-zero ints" "$field outcome differs from non-numeric"; return; }
+    e1="$(sed "s#$bad#<f>#" "$d/bad.err")"; e2="$(sed "s#$ctl#<f>#" "$d/ctl.err")"
+    [[ "$e1" == "$e2" ]] || { report FAIL "case 29: leading-zero ints" "$field stderr differs from non-numeric"; return; }
+  done
+  for v in 0 10; do
+    for field in preProbeIndex fallbackIndex; do
+      ctl="$d/$field-$v.json"
+      _lrb_c29_seed "$ctl" "$field" "$v"
+      cp "$ctl" "$ctl.snap"
+      breaker_load "$ctl" "$CHAIN3" 8100100 2>"$d/ok.err"
+      [[ ! -s "$d/ok.err" ]] && cmp -s "$ctl" "$ctl.snap" \
+        || { report FAIL "case 29: leading-zero ints" "$field=$v not valid"; return; }
+    done
+  done
+  report PASS "case 29: leading-zero ints"
+}
+
 case_1_dossier_write
 case_2_slot_verbatim
 case_2a_fence_safety
@@ -1355,6 +1407,7 @@ case_25_epoch_double_advance
 case_26_epoch_legacy_state
 case_27_epoch_no_model_pin
 case_28_epoch_transitions
+case_29_leading_zero_ints
 finish_suite
 exit $?
 

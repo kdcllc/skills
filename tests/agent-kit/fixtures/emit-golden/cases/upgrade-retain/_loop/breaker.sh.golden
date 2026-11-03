@@ -106,27 +106,27 @@ _breaker_valid_fields() {
     CLOSED|OPEN|HALF-OPEN) ;;
     *) return 1 ;;
   esac
-  idx="$(_breaker_get "$file" fallbackIndex)"; [[ "$idx" =~ ^[0-9]+$ ]] || return 1
-  cooldown="$(_breaker_get "$file" cooldownSeconds)"; [[ "$cooldown" =~ ^[0-9]+$ ]] || return 1
-  opened="$(_breaker_get "$file" openedAt)"; [[ "$opened" =~ ^-?[0-9]+$ ]] || return 1
-  half="$(_breaker_get "$file" halfOpenSuccesses)"; [[ "$half" =~ ^[0-9]+$ ]] || return 1
-  fb="$(_breaker_get "$file" totalFallbacks)"; [[ "$fb" =~ ^[0-9]+$ ]] || return 1
-  rec="$(_breaker_get "$file" totalRecoveries)"; [[ "$rec" =~ ^[0-9]+$ ]] || return 1
+  idx="$(_breaker_get "$file" fallbackIndex)"; [[ "$idx" =~ ^(0|[1-9][0-9]*)$ ]] || return 1
+  cooldown="$(_breaker_get "$file" cooldownSeconds)"; [[ "$cooldown" =~ ^(0|[1-9][0-9]*)$ ]] || return 1
+  opened="$(_breaker_get "$file" openedAt)"; [[ "$opened" =~ ^(0|-?[1-9][0-9]*)$ ]] || return 1
+  half="$(_breaker_get "$file" halfOpenSuccesses)"; [[ "$half" =~ ^(0|[1-9][0-9]*)$ ]] || return 1
+  fb="$(_breaker_get "$file" totalFallbacks)"; [[ "$fb" =~ ^(0|[1-9][0-9]*)$ ]] || return 1
+  rec="$(_breaker_get "$file" totalRecoveries)"; [[ "$rec" =~ ^(0|[1-9][0-9]*)$ ]] || return 1
   local opt
   if grep -q '"probeAfter":' "$file" 2>/dev/null; then
-    opt="$(_breaker_get "$file" probeAfter)"; [[ "$opt" =~ ^[0-9]+$ ]] || return 1
+    opt="$(_breaker_get "$file" probeAfter)"; [[ "$opt" =~ ^(0|[1-9][0-9]*)$ ]] || return 1
   fi
   if grep -q '"probeBackoff":' "$file" 2>/dev/null; then
-    opt="$(_breaker_get "$file" probeBackoff)"; [[ "$opt" =~ ^[0-9]+$ ]] || return 1
+    opt="$(_breaker_get "$file" probeBackoff)"; [[ "$opt" =~ ^(0|[1-9][0-9]*)$ ]] || return 1
   fi
   if grep -q '"probing":' "$file" 2>/dev/null; then
     opt="$(_breaker_get "$file" probing)"; [[ "$opt" == "0" || "$opt" == "1" ]] || return 1
   fi
   if grep -q '"preProbeIndex":' "$file" 2>/dev/null; then
-    opt="$(_breaker_get "$file" preProbeIndex)"; [[ "$opt" =~ ^[0-9]+$ ]] || return 1
+    opt="$(_breaker_get "$file" preProbeIndex)"; [[ "$opt" =~ ^(0|[1-9][0-9]*)$ ]] || return 1
   fi
   if grep -q '"probeEpoch":' "$file" 2>/dev/null; then
-    opt="$(_breaker_get "$file" probeEpoch)"; [[ "$opt" =~ ^[0-9]+$ ]] || return 1
+    opt="$(_breaker_get "$file" probeEpoch)"; [[ "$opt" =~ ^(0|[1-9][0-9]*)$ ]] || return 1
   fi
   return 0
 }
@@ -311,7 +311,7 @@ _breaker_failsafe_open() {
   fi
 
   idx="$(_breaker_get "$file" fallbackIndex)"
-  [[ "$idx" =~ ^[0-9]+$ ]] || idx=0
+  [[ "$idx" =~ ^(0|[1-9][0-9]*)$ ]] || idx=0
 
   if grep -q '"currentModel":' "$file" 2>/dev/null; then
     model="$(_breaker_get "$file" currentModel)"
@@ -325,22 +325,22 @@ _breaker_failsafe_open() {
   fi
 
   fb="$(_breaker_get "$file" totalFallbacks)"
-  [[ "$fb" =~ ^[0-9]+$ ]] || fb=0
+  [[ "$fb" =~ ^(0|[1-9][0-9]*)$ ]] || fb=0
 
   rec="$(_breaker_get "$file" totalRecoveries)"
-  [[ "$rec" =~ ^[0-9]+$ ]] || rec=0
+  [[ "$rec" =~ ^(0|[1-9][0-9]*)$ ]] || rec=0
 
   local probe_after probe_backoff probing pre_probe probe_epoch
   probe_after="$(_breaker_get "$file" probeAfter)"
-  [[ "$probe_after" =~ ^[0-9]+$ ]] || probe_after=0
+  [[ "$probe_after" =~ ^(0|[1-9][0-9]*)$ ]] || probe_after=0
   probe_backoff="$(_breaker_get "$file" probeBackoff)"
-  [[ "$probe_backoff" =~ ^[0-9]+$ ]] || probe_backoff=0
+  [[ "$probe_backoff" =~ ^(0|[1-9][0-9]*)$ ]] || probe_backoff=0
   probing="$(_breaker_get "$file" probing)"
   [[ "$probing" == "0" || "$probing" == "1" ]] || probing=0
   pre_probe="$(_breaker_get "$file" preProbeIndex)"
-  [[ "$pre_probe" =~ ^[0-9]+$ ]] || pre_probe=0
+  [[ "$pre_probe" =~ ^(0|[1-9][0-9]*)$ ]] || pre_probe=0
   probe_epoch="$(_breaker_get "$file" probeEpoch)"
-  [[ "$probe_epoch" =~ ^[0-9]+$ ]] || probe_epoch=0
+  [[ "$probe_epoch" =~ ^(0|[1-9][0-9]*)$ ]] || probe_epoch=0
   local pre_probe_model
   if grep -q '"preProbeModel":' "$file" 2>/dev/null; then
     pre_probe_model="$(_breaker_get "$file" preProbeModel)"
@@ -486,7 +486,7 @@ breaker_record() {
   if (( $# >= 4 )); then
     dispatched_model="$4"
   fi
-  if (( $# >= 5 )) && [[ "$5" =~ ^[0-9]+$ ]]; then
+  if (( $# >= 5 )) && [[ "$5" =~ ^(0|[1-9][0-9]*)$ ]]; then
     dispatched_epoch="$5"
   fi
   _breaker_read_all "$state_file"
