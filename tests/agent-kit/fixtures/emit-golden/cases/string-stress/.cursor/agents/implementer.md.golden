@@ -1,6 +1,6 @@
 ---
 name: implementer
-description: Focused, checklist-driven implementer for stress "quotes" café — emoji 🎭 tasks. Launch with a complete context package (task definition, requirements, files to read, constraints). Executes exactly one task or one fix cycle per invocation.
+description: Orchestration-kit agent — spawn only from the /feature, /research or /align-docs workflow, never for ordinary work. Focused, checklist-driven implementer for stress "quotes" café — emoji 🎭 tasks. Launch with a complete context package (task definition, requirements, files to read, constraints). Executes exactly one task or one fix cycle per invocation.
 model: composer-2.5-fast
 ---
 

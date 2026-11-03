@@ -1,6 +1,7 @@
 ---
 name: memory-capture
-description: Turn captured chat transcripts into session-summary memory records for stress "quotes" café — emoji 🎭 — run after work sessions or periodically when idle sessions appear under _memory/raw/. Orchestrator coordinates capture, scope confirmation, distillation, evaluation, add, and check; never batch multiple sessions in one increment.
+description: Turn captured chat transcripts into session-summary memory records for stress "quotes" café — emoji 🎭 — run after work sessions or periodically when idle sessions appear under _memory/raw/. Orchestrator coordinates capture, scope confirmation, distillation, evaluation, add, and check; never batch multiple sessions in one increment. Opt-in — runs only when the user types /memory-capture.
+disable-model-invocation: true
 ---
 
 # Memory Capture (Session Distillation Orchestrator)

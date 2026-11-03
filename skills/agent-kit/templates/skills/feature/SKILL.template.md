@@ -37,6 +37,8 @@ inline by the orchestrator (single-line output), never via `terminal`.
 
 Re-evaluations RESUME the same evaluator with a delta: Phase 4/5 list applied fixes and carry earlier required-fix lists; Phase 3 quotes newly written passages verbatim, attempt 3 fresh (`reference/goal-revisions.md`). Implementer resume and rotation per fix cycle: `reference/fix-cycles.md`.
 
+### Goal checkpoint and resume
+
 Rewrite `_memory/work/goals/[goal]/progress.md` from `templates/progress.md` after each phase, verdict and user decision; resume goals per `reference/resume.md`.
 
 ## Phase 1 — Alignment (no files)

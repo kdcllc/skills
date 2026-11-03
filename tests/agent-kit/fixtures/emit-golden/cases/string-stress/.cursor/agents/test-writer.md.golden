@@ -1,6 +1,6 @@
 ---
 name: test-writer
-description: Coverage-obsessed test writer for stress "quotes" café — emoji 🎭. Launch for the dedicated test task of a goal, with the list of implemented modules/functions. Writes outcome-verifying tests with all external services mocked.
+description: Orchestration-kit agent — spawn only from the /feature, /research or /align-docs workflow, never for ordinary work. Coverage-obsessed test writer for stress "quotes" café — emoji 🎭. Launch for the dedicated test task of a goal, with the list of implemented modules/functions. Writes outcome-verifying tests with all external services mocked.
 model: composer-2.5-fast
 ---
 

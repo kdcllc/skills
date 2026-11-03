@@ -1,6 +1,6 @@
 ---
 name: evidence-collector
-description: Behavioral QA evidence gatherer for stress "quotes" café — emoji 🎭. Launch when a goal runs the optional QA gate, with the changed user-facing surfaces and the goal's visual-QA choice. Exercises surfaces, captures smoke and optional visual artifacts, and writes an index under the goal's qa folder — never issues verdicts.
+description: Orchestration-kit agent — spawn only from the /feature, /research or /align-docs workflow, never for ordinary work. Behavioral QA evidence gatherer for stress "quotes" café — emoji 🎭. Launch when a goal runs the optional QA gate, with the changed user-facing surfaces and the goal's visual-QA choice. Exercises surfaces, captures smoke and optional visual artifacts, and writes an index under the goal's qa folder — never issues verdicts.
 model: claude-sonnet-5-5
 effort: medium
 ---

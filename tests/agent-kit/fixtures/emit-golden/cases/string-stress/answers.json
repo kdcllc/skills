@@ -12,7 +12,8 @@
     "greenfield": true,
     "lint": true,
     "typecheck": true,
-    "models_pinned": true
+    "models_pinned": true,
+    "opt_in": true
   },
   "forge": {
     "kind": "github",

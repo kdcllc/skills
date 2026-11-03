@@ -183,6 +183,9 @@ check_e_feature_and_compaction() {
   local ok=1 n
   n="$(awk '/<!-- IF /{d++} /<!-- ENDIF /{d--} d==0 && /_memory\/work\/goals\/\[goal\]\/progress\.md/ && /templates\/progress\.md/ && /reference\/resume\.md/{n++} END{print n+0}' "$FEATURE_SKILL")"
   [[ "$n" == 1 ]] || ok=0
+  [[ "$(awk '/^#/{if (p) {print; exit} if ($0 == "### Resume policy") p=1}' "$FEATURE_SKILL")" == '### Goal checkpoint and resume' ]] || ok=0
+  [[ "$(awk '/^### Resume policy$/{f=1;next} /^#/{f=0} f' "$FEATURE_SKILL" | grep -c 'progress\.md')" == 0 ]] || ok=0
+  [[ "$(awk '/^### Goal checkpoint and resume$/{f=1;next} /^#/{f=0} f' "$FEATURE_SKILL" | grep -c '_memory/work/goals/\[goal\]/progress\.md.*reference/resume\.md')" == 1 ]] || ok=0
   assert_anchor "$FEATURE_SKILL" 'Update ORCHESTRATION.md Orchestration Progress' 0 || ok=0
   [[ "$(awk '/^## Phase 2/{f=1} /^## Phase 3/{f=0} f' "$FEATURE_SKILL" | grep -c '^\*\*Unfinished goals:\*\* offer per `reference/resume.md`')" == 1 ]] || ok=0
   [[ "$(awk '/^## Phase 4/{f=1} /^## Phase 5/{f=0} f' "$FEATURE_SKILL" | grep -c '^3\. .*per acceptance-criterion command and, when the task has guarding tests, one regression proof, attach output')" == 1 ]] || ok=0
