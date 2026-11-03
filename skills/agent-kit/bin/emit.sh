@@ -1657,7 +1657,7 @@ description = "${prefix}Coverage-obsessed test writer, external services mocked.
 config_file = "agents/test-writer.toml"
 
 [agents.terminal]
-description = "${prefix}Command runner — any Bash or PowerShell command; returns only the result the caller asked for. Read .codex/agents/terminal.md first."
+description = "${prefix}Command runner — runs the Bash or PowerShell command in its spawn prompt; returns only the result the caller asked for. Read .codex/agents/terminal.md first."
 config_file = "agents/terminal.toml"
 
 [agents.diagnostician]

@@ -26,7 +26,7 @@ to `implementer`/`test-writer`; verification to `evaluator`. Read
 
 ### Terminal spawn rule
 
-Spawn `terminal` for **any Bash or PowerShell command** whose raw output should not
+Spawn `terminal` for **Bash or PowerShell commands** whose raw output should not
 land here — pass the exact command, shell (`bash` or `pwsh`), and the result needed;
 it returns **only** that result. Never run `{{FULL_TEST_COMMAND}}` yourself — spawn
 `terminal` for rung 3. Rungs 1–2 stay with `implementer`/`test-writer` when output is
