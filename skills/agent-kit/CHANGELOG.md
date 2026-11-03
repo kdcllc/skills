@@ -6,6 +6,10 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 
 ## [Unreleased]
 
+### Fixed
+
+- **Orchestration pointers** — the ORCHESTRATION Workflow State Tracking section now says how Codex-only installs write and resume `progress.md`, the feature skill's `templates/progress.md` Phase 7 checklist ends with the Forge adapter pointer, and the `kit_guard` row in `reference/bootstrap-ids.md` names the File Locations trees.
+
 ## [2.3.0] - 2026-11-03
 
 ### Added
