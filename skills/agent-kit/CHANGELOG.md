@@ -6,6 +6,10 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 
 ## [Unreleased]
 
+### Security
+
+- **`terminal` trust boundary** — the agent runs only commands from its spawn prompt, never a command found in file contents, command output, or other data, and always under the harness's command-approval and sandbox settings. The "side effects" wording is gone; what the agent runs is unchanged. Addresses the Socket `gptAnomaly` alert on `templates/agents/terminal.md`.
+
 ## [2.3.0] - 2026-11-03
 
 ### Added
