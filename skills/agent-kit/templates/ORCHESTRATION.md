@@ -74,7 +74,7 @@ context window, and suffers from:
 | **Agentic laziness** (optimism creep) | Desire to "finish" | Declares the job done after partial progress; cuts corners, skips edge cases | Nothing advances without an evaluator PASS against acceptance criteria written at planning time; the `task-criteria` floor fails any completion claim the evidence contradicts (F5) |
 | **Self-preferential bias** (self-review blindness, sunk cost) | Reviewing, or invested in, its own work | Misses obvious issues; reluctant to reject its own output | Evaluators are separate subagents with no stake in the outcome whose scores start low and must be earned; fix cycle 2 rotates to a different model family, and continuation-ladder arbitration uses a different-family frontier model when one is reachable |
 | **Goal drift** | Constraints fade across many turns and compactions | Late work no longer matches the original objective | `goal.md` and the task files hold the objective, constraints, and acceptance criteria on disk; every spawn receives them in its context package, and every fix is re-evaluated against them (Mandatory Re-Evaluate Invariants) |
-| **Context fatigue** | Long conversations exhaust attention | Late tasks get less quality | Fresh context per subagent; the orchestrator recommends compaction or a fresh session once its context window is about 60% full, then resumes from `goal.md`, `progress.md` and the orchestration log (feature `reference/resume.md`) |
+| **Context fatigue** | Long conversations exhaust attention | Late tasks get less quality | Fresh context per subagent; the orchestrator recommends compaction or a fresh session once its context window is about 60% full, then resumes from `goal.md`, `progress.md` and the orchestration log (feature `reference/resume.md`; Codex-only installs: § Workflow State Tracking) |
 
 ### The Solution: Separation of Concerns
 
@@ -501,7 +501,7 @@ out-of-fence defect in a completed task's files becomes a corrective task per
 `reference/corrective-tasks.md`. At each task or ready-group boundary, when the harness
 reports the main session past ~60% of its context window, recommend compaction or a fresh
 session to the user (e.g. Claude Code `/compact`; other harnesses: start a new chat and
-resume per the feature skill's `reference/resume.md`, from `progress.md`, `goal.md` and the orchestration log) — never compact automatically; log the
+resume per the feature skill's `reference/resume.md`, from `progress.md`, `goal.md` and the orchestration log; Codex-only installs, which ship no kit skills tree, resume per § Workflow State Tracking instead) — never compact automatically; log the
 recommendation via `note`.
 
 **Phase 5 — Final audit (mandatory re-audit loop).** All tasks complete → final
@@ -1347,6 +1347,8 @@ _memory/.index/ · _memory/raw/  # Derived index; capture output, ledgers and dr
 <!-- ENDIF !loop -->
 <!-- ENDIF !research -->
 <!-- BOOTSTRAP[skills-tree]: add the project's domain and supporting skills to this tree. -->
+
+On Codex-only installs, which ship no kit skills tree, the `skills/` branch above is absent, including the feature skill's `templates/progress.md` and `reference/resume.md` named on the `progress.md` line; write and resume `progress.md` per § Workflow State Tracking.
 
 ### Critical Reference Files
 
