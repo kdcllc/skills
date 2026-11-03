@@ -3186,7 +3186,7 @@ prune_goal_source_id_paths() { # <store> <goal> <out-file> — LC_ALL=C sorted a
 prune_goal_decide() { # <root> <store> <goal> <git_ok> <base_ref> → stdout keep:… or would-delete
   local root="$1" store="$2" g="$3" git_ok="$4" base_ref="$5"
   local work_dir="$root/_memory/work" goals_dir="$work_dir/goals" cand="$goals_dir/$g"
-  local log="$cand/orchestration-log.md" line last_arch="" id_file ids id f src_list
+  local log="$cand/orchestration-log.md" line last_arch="" id_file ids id f src_list pstatus
   if [ "$git_ok" -eq 0 ]; then
     printf 'keep:no-git'
     return 0
@@ -3198,6 +3198,21 @@ prune_goal_decide() { # <root> <store> <goal> <git_ok> <base_ref> → stdout kee
   if prune_candidate_tracked "$root" "_memory/work/goals/$g"; then
     printf 'keep:tracked'
     return 0
+  fi
+  if [ -f "$cand/progress.md" ]; then
+    pstatus="$(LC_ALL=C grep -m1 '^status:' "$cand/progress.md" 2>/dev/null || true)"
+    pstatus="${pstatus#status:}"
+    pstatus="${pstatus%$'\r'}"
+    pstatus="${pstatus#"${pstatus%%[![:space:]]*}"}"
+    pstatus="${pstatus%%[[:space:]]*}"
+    if [ "$pstatus" != "done" ]; then
+      if [ -n "$pstatus" ] && printf '%s\n' "$pstatus" | LC_ALL=C grep -Eq '^[A-Za-z0-9._-]+$' 2>/dev/null; then
+        printf 'keep:progress:%s' "$pstatus"
+      else
+        printf 'keep:progress:unknown'
+      fi
+      return 0
+    fi
   fi
   if [ ! -f "$log" ]; then
     printf 'keep:no-log'

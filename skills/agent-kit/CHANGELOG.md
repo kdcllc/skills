@@ -6,6 +6,14 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 
 ## [Unreleased]
 
+### Changed
+
+- **Prune keeps unfinished goals** — `memory.sh prune` keeps a goal folder whose `progress.md` status is not `done` (`keep:progress:<status>`) even when its records are durable; goals without `progress.md` are unchanged.
+
+### Fixed
+
+- **Phase 2 order wording** — the memory protocol and guides now say Prune, then the unfinished-goal offer, then Recall, instead of "immediately before Recall".
+
 ## [2.3.0] - 2026-11-03
 
 ### Added
