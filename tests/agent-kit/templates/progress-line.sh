@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Guards feature-template progress-line wiring and loop-driver stderr progress behavior.
 # Also guards loop-driver `attempts` handling: story selection, the invalid-value warning, and the done counter.
+# Also guards loop-driver `priority` handling: ordering parity, the invalid-value warning, ties, and no evaluation of the value.
 # Driver cases need timeout or gtimeout and SKIP with that reason when neither is on PATH.
 set -u
 
@@ -366,10 +367,10 @@ case_k() {
 # run_att <name> <attempts> <passes> <blocked> -> sets ATT_DIR, ATT_RC.
 # STORY-101 (priority 1) carries the value under test; STORY-102 (priority 2) is pending.
 run_att() {
-  local name="$1" value="$2" passes="$3" blocked="$4" dir
+  local name="$1" value="$2" passes="$3" blocked="$4" prio="${5:-1}" dir
   ATT_DIR="" ATT_RC=""
   dir="$(make_sandbox "$name")" || return 1
-  { printf '# backlog\n'; story STORY-101 1 "$value" "$passes" "$blocked" src/STORY-101.txt
+  { printf '# backlog\n'; story STORY-101 "$prio" "$value" "$passes" "$blocked" src/STORY-101.txt
     story STORY-102 2 0 false false src/STORY-102.txt; } > "$dir/_memory/loop/backlog.md"
   cat > "$dir/_loop/rec-stub.sh" <<'STUB'
 #!/usr/bin/env bash
@@ -433,17 +434,23 @@ case_l() {
 }
 
 case_m() {
-  need_timeout "m: done and blocked stories skip the attempts warning" || return 0
-  local label="m: invalid attempts on done/blocked story" mode passes blocked n
-  for mode in passes blocked; do
-    passes=false blocked=false
-    [[ "$mode" == passes ]] && passes=true || blocked=true
-    run_att "m-$mode" x "$passes" "$blocked" || { fail_case "$label" "sandbox setup ($mode)"; return; }
-    n="$(grep -c 'has an invalid attempts value' "$ATT_DIR/stderr" || :)"
-    [[ "$n" == 0 ]] || { fail_case "$label" "$mode run printed $n attempts warning lines"; return; }
-    ! grep -qx 'STORY-101' "$ATT_DIR/record" || { fail_case "$label" "$mode run dispatched STORY-101"; return; }
-    grep -qx 'STORY-102' "$ATT_DIR/record" || { fail_case "$label" "$mode run did not dispatch STORY-102"; return; }
-    [[ "$ATT_RC" -eq 0 ]] || { fail_case "$label" "$mode run exit $ATT_RC"; return; }
+  need_timeout "m: done and blocked stories skip the attempts/priority warning" || return 0
+  local label="m: invalid attempts/priority on done/blocked story" field mode passes blocked n
+  for field in attempts priority; do
+    for mode in passes blocked; do
+      passes=false blocked=false
+      [[ "$mode" == passes ]] && passes=true || blocked=true
+      if [[ "$field" == attempts ]]; then
+        run_att "m-$mode" x "$passes" "$blocked" || { fail_case "$label" "sandbox setup ($mode)"; return; }
+      else
+        run_att "m-$mode-prio" 0 "$passes" "$blocked" x || { fail_case "$label" "sandbox setup ($field $mode)"; return; }
+      fi
+      n="$(grep -c "has an invalid $field value" "$ATT_DIR/stderr" || :)"
+      [[ "$n" == 0 ]] || { fail_case "$label" "$field $mode run printed $n warning lines"; return; }
+      ! grep -qx 'STORY-101' "$ATT_DIR/record" || { fail_case "$label" "$field $mode run dispatched STORY-101"; return; }
+      grep -qx 'STORY-102' "$ATT_DIR/record" || { fail_case "$label" "$field $mode run did not dispatch STORY-102"; return; }
+      [[ "$ATT_RC" -eq 0 ]] || { fail_case "$label" "$field $mode run exit $ATT_RC"; return; }
+    done
   done
   report PASS "$label print no warning and run STORY-102"
 }
@@ -476,12 +483,143 @@ case_o() {
   report PASS "$label (passes: true with attempts -1 is done)"
 }
 
+# --- priority handling (ordering parity, invalid-value warning, injection) ---
+
+# run_prio <name> <layout mix|last|alone> <priority> <iterations> -> sets PRIO_DIR, PRIO_RC.
+# mix: STORY-101 (value under test) first, 102 priority 5, 103 priority 1.
+# last: 102 priority 5, 103 priority 1, then 101 (value under test) last in the file.
+# alone: STORY-101 only.
+run_prio() {
+  local name="$1" layout="$2" value="$3" iters="$4" dir
+  PRIO_DIR="" PRIO_RC=""
+  dir="$(make_sandbox "$name")" || return 1
+  {
+    printf '# backlog\n'
+    case "$layout" in
+      mix) story STORY-101 "$value" 0 false false src/STORY-101.txt
+           story STORY-102 5 0 false false src/STORY-102.txt
+           story STORY-103 1 0 false false src/STORY-103.txt ;;
+      last) story STORY-102 5 0 false false src/STORY-102.txt
+            story STORY-103 1 0 false false src/STORY-103.txt
+            story STORY-101 "$value" 0 false false src/STORY-101.txt ;;
+      *) story STORY-101 "$value" 0 false false src/STORY-101.txt ;;
+    esac
+  } > "$dir/_memory/loop/backlog.md"
+  cat > "$dir/_loop/rec-stub.sh" <<'STUB'
+#!/usr/bin/env bash
+set -u
+printf '%s\n' "$$" >> "$PL_PID_FILE"
+story="$(grep -oE 'STORY-[0-9]+' <<< "${@: -1}" | head -1)"
+printf '%s\n' "$story" >> "$PL_RECORD"
+mkdir -p src
+printf 'passed\n' > "src/$story.txt"
+git add "src/$story.txt" && git commit -qm "passed $story"
+printf 'ITERATION: %s passed (attempt 1/3)\n' "$story"
+STUB
+  chmod +x "$dir/_loop/rec-stub.sh"
+  git -C "$dir" add _memory/loop/backlog.md _loop/rec-stub.sh && git -C "$dir" commit -qm backlog || return 1
+  : > "$dir/record"
+  run_loop "$dir" "$iters" "$dir/stdout" "$dir/stderr" PL_RECORD="$dir/record" LOOP_CLI="$dir/_loop/rec-stub.sh"
+  PRIO_RC=$?
+  PRIO_DIR="$dir"
+}
+
+# prio_order -> dispatch order of the last run_prio, e.g. 101,103,102
+prio_order() { sed 's/^STORY-//' "$PRIO_DIR/record" | paste -sd, -; }
+
+# prio_no_crash <label> -> fails when the driver printed crash text
+prio_no_crash() {
+  if grep -qE 'unbound variable|value too great for base|syntax error' "$PRIO_DIR/stderr"; then
+    fail_case "$1" "driver crash text on stderr: $(grep -m1 -E 'unbound variable|value too great for base|syntax error' "$PRIO_DIR/stderr")"
+    return 1
+  fi
+}
+
+# prio_warn_count <value> -> exact-line count of the STORY-101 invalid-priority warning
+prio_warn_count() {
+  grep -cxF "!!! backlog: STORY-101 has an invalid priority value '$1' -- INELIGIBLE" "$PRIO_DIR/stderr" || :
+}
+
+case_p() {
+  need_timeout "p: priority ordering parity" || return 0
+  local values=(-1 0 00 01 2 5 +3 10 07)
+  local orders=(101,103,102 101,103,102 101,103,102 101,103,102 103,101,102 103,101,102 103,101,102 103,102,101 103,102,101)
+  local i v label order
+  for i in "${!values[@]}"; do
+    v="${values[$i]}"
+    label="p: priority '$v'"
+    run_prio "p$i" mix "$v" 3 || { fail_case "$label" "sandbox setup"; continue; }
+    prio_no_crash "$label" || continue
+    order="$(prio_order)"
+    [[ "$order" == "${orders[$i]}" ]] || { fail_case "$label" "dispatch order $order, expected ${orders[$i]}"; continue; }
+    [[ "$(grep -c 'has an invalid priority value' "$PRIO_DIR/stderr" || :)" == 0 ]] \
+      || { fail_case "$label" "valid priority printed an invalid-priority warning"; continue; }
+    [[ "$PRIO_RC" -eq 0 ]] || { fail_case "$label" "loop exit $PRIO_RC"; continue; }
+    report PASS "$label order=${orders[$i]} no warning"
+  done
+  label="p: tie with earlier story keeps file order"
+  run_prio p-tie last 01 3 || { fail_case "$label" "sandbox setup"; return; }
+  prio_no_crash "$label" || return
+  order="$(prio_order)"
+  [[ "$order" == 103,101,102 ]] || { fail_case "$label" "dispatch order $order, expected 103,101,102"; return; }
+  [[ "$(grep -c 'has an invalid priority value' "$PRIO_DIR/stderr" || :)" == 0 ]] \
+    || { fail_case "$label" "tie run printed an invalid-priority warning"; return; }
+  [[ "$PRIO_RC" -eq 0 ]] || { fail_case "$label" "loop exit $PRIO_RC"; return; }
+  report PASS "$label (priority 01 last in file: 103,101,102)"
+}
+
+case_q() {
+  need_timeout "q: invalid priority forms" || return 0
+  local values=(08 x '' 1+1) i v label warn
+  for i in "${!values[@]}"; do
+    v="${values[$i]}"
+    label="q: priority '$v'"
+    run_prio "q$i" mix "$v" 3 || { fail_case "$label" "sandbox setup"; continue; }
+    prio_no_crash "$label" || continue
+    ! grep -qx 'STORY-101' "$PRIO_DIR/record" || { fail_case "$label" "STORY-101 was dispatched"; continue; }
+    [[ "$(prio_order)" == 103,102 ]] || { fail_case "$label" "dispatch order $(prio_order), expected 103,102"; continue; }
+    warn="$(prio_warn_count "$v")"
+    [[ "$warn" == 1 ]] || { fail_case "$label" "warning line count $warn, expected 1"; continue; }
+    [[ "$PRIO_RC" -eq 0 ]] || { fail_case "$label" "loop exit $PRIO_RC"; continue; }
+    report PASS "$label is skipped with one warning, order 103,102"
+  done
+  label="q: lone story with priority 'x'"
+  run_prio q-alone alone x 1 || { fail_case "$label" "sandbox setup"; return; }
+  prio_no_crash "$label" || return
+  ! grep -qx 'STORY-101' "$PRIO_DIR/record" || { fail_case "$label" "STORY-101 was dispatched"; return; }
+  warn="$(prio_warn_count x)"
+  [[ "$warn" == 1 ]] || { fail_case "$label" "warning line count $warn, expected 1"; return; }
+  [[ "$PRIO_RC" -eq 0 || "$PRIO_RC" -eq 1 ]] || { fail_case "$label" "loop exit $PRIO_RC"; return; }
+  report PASS "$label is never dispatched, warns once, no crash"
+}
+
+case_r() {
+  need_timeout "r: priority injection" || return 0
+  local label="r: priority injection" marker="$FIXTURE_TMPDIR/r-injected-marker" v i warn
+  local values=()
+  values[0]="_bl_id[\$(touch\${IFS}$marker)0]"
+  values[1]="\$(touch\${IFS}$marker)"
+  for i in 0 1; do
+    v="${values[$i]}"
+    rm -f "$marker"
+    run_prio "r$i" mix "$v" 3 || { fail_case "$label" "sandbox setup ($i)"; return; }
+    [[ ! -e "$marker" ]] || { fail_case "$label" "marker file was created by payload $i: priority value was evaluated"; return; }
+    prio_no_crash "$label (payload $i)" || return
+    ! grep -qx 'STORY-101' "$PRIO_DIR/record" || { fail_case "$label" "payload $i: STORY-101 was dispatched"; return; }
+    warn="$(prio_warn_count "$v")"
+    [[ "$warn" == 1 ]] || { fail_case "$label" "payload $i: warning line count $warn, expected 1"; return; }
+    grep -qx 'STORY-103' "$PRIO_DIR/record" && grep -qx 'STORY-102' "$PRIO_DIR/record" \
+      || { fail_case "$label" "payload $i: STORY-103/STORY-102 did not both run"; return; }
+  done
+  report PASS "$label (subscript and command substitution) is never evaluated, warns once, 103 and 102 run"
+}
+
 if [[ ! -f "$DRIVER_SRC" || ! -f "$BREAKER_SRC" || ! -f "$PROMPT_SRC" ]]; then
   report FAIL "precheck: driver" "missing loop driver/instance files; run scripts/agent-kit/self-install.sh"
   printf 'PASS: %s   FAIL: %s   SKIP: %s\n' "$pass" "$fail" "$skip"
   exit 1
 fi
-case_ids=(a b c d e f g h i k j l m n o)
+case_ids=(a b c d e f g h i k j l m n o p q r)
 for id in "${case_ids[@]}"; do
   if [[ -n "${PROGRESS_LINE_ONLY:-}" && "$PROGRESS_LINE_ONLY" != "$id" ]]; then
     continue
