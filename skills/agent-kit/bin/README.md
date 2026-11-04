@@ -151,7 +151,7 @@ to WSL's `System32\bash.exe`, whose Windows-style paths never match the root —
 open.
 
 **CI recipe:** install the kit (e.g.
-`npx skills add kdcllc/skills#agent-kit/v2.3.0 --skill agent-kit`) and run
+`npx skills add kdcllc/skills#agent-kit/v2.4.0 --skill agent-kit`) and run
 `bash <kit>/bin/emit.sh --check --root .`.
 
 ## `_kit/trace-lint.sh`
