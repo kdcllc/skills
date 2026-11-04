@@ -253,6 +253,8 @@ Each reaped or killed slot appends one JSON line with: `schema`, `run_id`, `ts_s
 
 After **≥ 1** reap or kill, the driver prints a **stderr run summary** on exit (outcome counts plus run token/cost totals when seen) — **never** in `--lint` mode.
 
+After every reap, the driver also prints one stderr progress line: `Progress: <pct>% (<done>/<total> steps[, <B> blocked], metric v1); <story> attempt <n> <outcome>, <in flight>.` Under loop metric v1, steps are the `## STORY-` blocks in the backlog at print time; a step is done when `passes: true`; blocked means not done and (`blocked: true` or attempts ≥ 3), counted in the total but never done, and shown only when greater than 0. `pct` is `floor(done × 100 / total)`, or 0 with no stories. `<outcome>` is the reap's ledger outcome, and the in-flight clause reads `idle` or `<k> slot(s) running (<story> attempt <n>[ + …])`. Stories missing a pinned field, or with a non-decimal or leading-zero `attempts` value, count as pending (not done, not blocked); `--lint` reports them. The line is not printed in `--lint` mode, for killed slots, at dispatch, or when the reap stops the driver (exit 4 or 5). Example: `Progress: 66% (2/3 steps, 1 blocked, metric v1); STORY-102 attempt 1 passed, idle.` The rules live in the `# PROGRESS:` header of `_loop/loop.sh`; a change to the step, done or blocked rule bumps the label to `metric v2`.
+
 ### Backlog lint
 
 Readiness check with **no side effects**:
