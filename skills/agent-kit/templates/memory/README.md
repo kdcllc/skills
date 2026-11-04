@@ -668,10 +668,10 @@ file is not in it → `keep:unmerged:<id>`; the first failing id decides; all du
 **Goal decision**, first match wins: (1) git gate fails → `keep:no-git`; (2) the candidate,
 `_memory/work/goals/`, or `_memory/work/` is a symbolic link → `keep:symlink`; (3)
 `git ls-files` lists any tracked file under the candidate → `keep:tracked`; (4)
-`progress.md` exists with a `status:` other than `done` → `keep:progress:<status>` (the
-status is the first whitespace-delimited token after the first `^status:` line, trailing CR
-stripped; no `status:` line, an empty value, or a token outside `[A-Za-z0-9._-]` gives
-`keep:progress:unknown`; `done` or no `progress.md` falls through); (5) no
+`progress.md` is a regular file with a `status:` other than `done` → `keep:progress:<status>`
+(the status is the first whitespace-delimited token after the first `^status:` line, trailing
+CR stripped; no `status:` line, an empty value, or a token outside `[A-Za-z0-9._-]` gives
+`keep:progress:unknown`; `done`, or no regular-file `progress.md`, falls through); (5) no
 `orchestration-log.md` → `keep:no-log`; (6) the log has at least one **archive line** — a
 line matching `^### [0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}[+-][0-9]{2}:[0-9]{2} — `
 (em dash U+2014) that contains `ARCHIVED:` anywhere (body lines that are not `### `

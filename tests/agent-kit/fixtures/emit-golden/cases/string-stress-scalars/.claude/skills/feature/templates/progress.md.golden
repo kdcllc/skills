@@ -73,4 +73,5 @@ See ## Tasks.
 - [ ] PR title + body drafted from branch commits
 - [ ] User approved the draft
 - [ ] PR/MR created/updated on the project's forge, or hand-over printed — URL or artifact: [link]
+
 See ORCHESTRATION.md § Forge adapter (Phase 7 delivery).

@@ -27,7 +27,7 @@ Only the **orchestrator** searches and selects records (at most **five**). Only 
 ```mermaid
 flowchart TD
     Store["_memory/ records"]
-    FeatureRecall["Feature: recall once\nbefore Phase 2"]
+    FeatureRecall["Feature: recall once\nin Phase 2"]
     ResearchRecall["Research: recall once\nPhase 1 --kind research-ingest,decision"]
     FeatureArchive["Feature: archive after\nPhase 5 APPROVED + green QC"]
     ResearchArchive["Research: one research-ingest\nafter ingestion review"]
@@ -69,7 +69,7 @@ sequenceDiagram
 ### Feature workflow (`/feature`)
 
 - **Prune:** Once at the start of **Phase 2**, before `_memory/work/goals/<goal>/` exists; Phase 2 runs Prune, then the unfinished-goal offer, then Recall. Run `_kit/memory.sh prune --apply` to delete finished goal and research folders under `_memory/work/` when every linked record id is **durable** (present in `HEAD` and, when the repo has a remote default branch ref, in that ref too — see [Prune (`prune`)](#prune-prune)). Non-zero exit, missing tool, or `failed` lines never block Phase 2; after the goal folder exists, log the summary with `_kit/log-spawn.sh note`.
-- **Recall:** Once **before Phase 2** (goal creation). Run `_kit/memory.sh search <term>… --limit 10`, read candidates with `show <id>`, pick **≤ 5** (drop anything contradicted by the codebase). Write ids or `none` into `goal.md` **`## Recalled memory`**. After `_memory/work/goals/<goal>/` exists, log picks or failure with `_kit/log-spawn.sh note`. Any non-zero exit, missing tool, or stderr `memory: 0 results` ⇒ treat as **no prior knowledge** — the phase never blocks.
+- **Recall:** Once in **Phase 2**, after Prune and the unfinished-goal offer, before the goal folder is created. Run `_kit/memory.sh search <term>… --limit 10`, read candidates with `show <id>`, pick **≤ 5** (drop anything contradicted by the codebase). Write ids or `none` into `goal.md` **`## Recalled memory`**. After `_memory/work/goals/<goal>/` exists, log picks or failure with `_kit/log-spawn.sh note`. Any non-zero exit, missing tool, or stderr `memory: 0 results` ⇒ treat as **no prior knowledge** — the phase never blocks.
 - **Archive:** After Phase 5 **APPROVED** and green **Quality Checks**, before optional Phases 6/7: one **`goal-summary`** plus zero to three **`decision`** / **`pitfall`** records via `_kit/memory.sh add` (drafts under `_memory/work/goals/<goal>/memory-drafts/`). After each added or quarantined path, run `_kit/memory.sh check <path>`; exit **3** ⇒ report the failing stdout line to the user and do not commit until fixed. After every path passes `check`, the orchestrator logs one closed marker `_kit/log-spawn.sh note --goal <g> --text "ARCHIVED: <id> [<id>…]"` listing **all** ids `add` wrote (including quarantined). Driver-dispatched slots write no ARCHIVED note; their **`goal-summary`** proposals set `source: goal <g> (goal.md)`. Untracked bad record ⇒ `_kit/memory.sh rm <id>`; committed correction ⇒ new record with **`--supersedes`**. Records stay **uncommitted** with the goal for human review. Exit **5** (quarantined) ⇒ report to the user, run `check` on the quarantined path too; do not retry automatically.
 
 See [feature-workflow.md](feature-workflow.md) for phase mechanics.
@@ -85,7 +85,7 @@ See [research-workflow.md](research-workflow.md).
 ### Autonomous loop
 
 - **Prune:** **Manual** loop iterations and driver-dispatched slots at **`LOOP_WORKTREE=0`** run the feature **Prune** once at Phase 2 start (same `--apply` rules as interactive `/feature`). At **`LOOP_WORKTREE=1`**, slot worktrees have no `_kit/` — prune is **skipped** there.
-- **Recall (read):** **Manual** loop iterations and driver-dispatched slots at **`LOOP_WORKTREE=0`** run the feature **Recall** once before Phase 2 (same search/pick rules as interactive `/feature`). At **`LOOP_WORKTREE=1`**, slot worktrees have no `_kit/` — recall is **empty** there.
+- **Recall (read):** **Manual** loop iterations and driver-dispatched slots at **`LOOP_WORKTREE=0`** run the feature **Recall** once in Phase 2 (same search/pick rules as interactive `/feature`). At **`LOOP_WORKTREE=1`**, slot worktrees have no `_kit/` — recall is **empty** there.
 - **Manual mode:** Archive uses `_kit/memory.sh add` directly; include new record paths in the story commit like any other tracked `_memory/` file.
 - **Driver-dispatched mode:** The feature archive step writes **proposals** under `<outbox>/memory/<name>.md` (header/body format in memory-protocol.md) instead of calling `add`.
 - **Integrator step 3b:** At the **end** of the slot reap, **after** CB0 and disposal, only when there is no ITERATION-mismatch, no subset violation, and at `LOOP_WORKTREE=1` the branch was integrated (any verdict, including `failed`): proposals are applied via `_kit/memory.* add`, then a path-limited `chore(memory): <story-id> records` commit runs when something was added or quarantined. Step 3b **never** changes exit code, backlog, or breakers; failures print `!!!` lines only.
