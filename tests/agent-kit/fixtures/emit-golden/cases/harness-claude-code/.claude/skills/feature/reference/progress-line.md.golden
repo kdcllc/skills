@@ -51,4 +51,4 @@ For one goal with six enabled phases (Phases 1–6) and four Phase 4 tasks, ther
 
 ## Loop driver
 
-The autonomous loop driver prints its own line on stderr after each reap with the same shape. Its own step metric (loop `metric v1`: steps are backlog stories) is defined in the `_loop/loop.sh` header, so the feature and loop labels are independent.
+The autonomous loop driver prints its own line on stderr after each reap with a similar shape. Its own step metric (loop `metric v1`: steps are backlog stories) is defined in the `_loop/loop.sh` header, so the feature and loop labels are independent.

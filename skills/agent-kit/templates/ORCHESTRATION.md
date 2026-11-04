@@ -501,8 +501,8 @@ fixes are made and the orchestrator proceeds without re-verification. A reported
 out-of-fence defect in a completed task's files becomes a corrective task per
 `reference/corrective-tasks.md`. At each task or ready-group boundary, when the harness
 reports the main session past ~60% of its context window, recommend compaction or a fresh
-session to the user (e.g. Claude Code `/compact`; other harnesses: start a new chat and
-resume per the feature skill's `reference/resume.md`, from `progress.md`, `goal.md` and the orchestration log; Codex-only installs, which ship no kit skills tree, resume per § Workflow State Tracking instead) — never compact automatically; log the
+session to the user (`/compact`, or a new chat to
+resume per the feature skill's `reference/resume.md`, from `progress.md`; Codex-only: § Workflow State Tracking) — never compact automatically; log the
 recommendation via `note`.
 
 **Phase 5 — Final audit (mandatory re-audit loop).** All tasks complete → final
@@ -1080,13 +1080,13 @@ flowchart TD
 
 | Workflow | Read | Write |
 |----------|------|-------|
-| **Feature** | Once before Phase 2; ids in `goal.md` `## Recalled memory` | After Phase 5 APPROVED + green QC — one `goal-summary` + 0–3 `decision`/`pitfall` via `_kit/memory.*` |
+| **Feature** | Once in Phase 2, after Prune and the unfinished-goal offer; ids in `goal.md` `## Recalled memory` | After Phase 5 APPROVED + green QC — one `goal-summary` + 0–3 `decision`/`pitfall` via `_kit/memory.*` |
 <!-- IF research -->
 | **Research** | Phase 1 → `_memory/work/research/<topic>/recalled-memory.md`; Phase 4 copies ids into the new goal | One `research-ingest` after Phase 2 ingestion review |
 <!-- ENDIF research -->
 <!-- IF loop -->
-| **Loop (manual)** | Feature recall once before Phase 2 in the iteration | Direct `_kit/memory.sh add`; new record paths in the story commit |
-| **Loop (dispatched)** | At `LOOP_WORKTREE=0`: feature recall once before Phase 2 in the slot; at `LOOP_WORKTREE=1`: empty recall (no `_kit/` in slot worktrees) | Proposals in `<outbox>/memory/*.md`; integrator **step 3b** at reap end |
+| **Loop (manual)** | Feature recall once in Phase 2 (after Prune and the unfinished-goal offer) in the iteration | Direct `_kit/memory.sh add`; new record paths in the story commit |
+| **Loop (dispatched)** | At `LOOP_WORKTREE=0`: feature recall once in Phase 2 (after Prune and the unfinished-goal offer) in the slot; at `LOOP_WORKTREE=1`: empty recall (no `_kit/` in slot worktrees) | Proposals in `<outbox>/memory/*.md`; integrator **step 3b** at reap end |
 <!-- ENDIF loop -->
 | **Capture** | Optional recall when distilling a session | `memory-capture` skill: `_kit/memory.sh capture` → scope confirm → distill → `add` → `check`; gitignored `_memory/raw/` |
 | **Back-fill** | Optional recall before a one-time legacy import | `_kit/memory.sh backfill --plan` (no writes), review output, then `--apply`; sources under `_memory/work/goals/`, `_memory/work/research/`, and `_memory/loop/ESCALATIONS.md` plus `_memory/loop/archive/`; closed signals — the kit writes the `ARCHIVED:` note and `_memory/work/research/<topic>/ingested`; a human adds the escalation `resolved:` line — see `_memory/README.md` (`backfill`, **Closed signals**); one-time transcript import via `memory-capture` (runbook: `{{IDE_DIR}}/skills/feature/reference/memory-capture.md`; Codex-only installs: run `capture` per `_memory/README.md` and distill from a Claude Code, Cursor or Copilot session) |

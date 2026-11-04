@@ -20,7 +20,7 @@
     "_memory/loop/backlog.md"
   ],
   "files": {
-    ".claude/ORCHESTRATION.md": "644ab6d6b4c4db0a8d70cf2ddd4ed8e3fc350dc11659c67fe316943cb851fd3b",
+    ".claude/ORCHESTRATION.md": "2227cdcbebd3197b3109f9b9cf866f832fc924a49bb3ee92660cd25fdceba206",
     ".claude/agents/diagnostician.md": "cbcbaecf95fe98f3218e20b6b0fff3d949647710ede58a026d5106d973e97510",
     ".claude/agents/evaluator.md": "9452babf7c5050a62b7d6417339e4c45eade6de6e7918244cd9ffa8eb97a7fab",
     ".claude/agents/evidence-collector.md": "1e73d369a9fb92b7aa7f017b9f43c6d24b6151cfb5ad8526d752b3bcec55bf45",
@@ -39,11 +39,11 @@
     ".claude/skills/feature/reference/fix-cycles.md": "78c0ac30a629180821cc369b8ae746c387b034faf1bf9cf63032732463232e94",
     ".claude/skills/feature/reference/goal-revisions.md": "b5324622f852fa3a0a9f106bc6ecf808e77b2870fd8c94048f2d63172453637c",
     ".claude/skills/feature/reference/memory-capture.md": "9cef97d7a882f3510d97a8fb2e4b870a8db7708df2c7196fba068269ff24db0b",
-    ".claude/skills/feature/reference/memory-protocol.md": "90cc29e0d04377b9430892b138a73b64902f0f9cce2e57545f74b7a20d9719f9",
+    ".claude/skills/feature/reference/memory-protocol.md": "547c26edd8c7ea565d88014b8a2dd6f34e55dd8c927c49aad6f9d8c7fa26f696",
     ".claude/skills/feature/reference/preflight.md": "70f23b64c17e42b141dc3753de3c60bede718439f72c65b7249ecc61bb1f5264",
-    ".claude/skills/feature/reference/progress-line.md": "cfefd7f092dbbd5b95199d0db8681dac370925efac8f2344f50b41bcf5593f60",
+    ".claude/skills/feature/reference/progress-line.md": "59107e3874fdbc75ac19e668d560b2a304a4cc76ac3ce247bc98422c30862c5c",
     ".claude/skills/feature/reference/ready-groups.md": "fc7fc709e5b2a770ec2b1f25f440ec6f256ced1617c1b09da6753e193909dbf1",
-    ".claude/skills/feature/reference/resume.md": "fa480d1fd65a5be2afe39b8cb19b9ea433d587af9d3cc11c16214789d2b8dd32",
+    ".claude/skills/feature/reference/resume.md": "3abbf17daeb8f18170d459e84f133577e627b16a87590eb78192fd93afad79ec",
     ".claude/skills/feature/templates/goal.md": "6705d87988ca2419aa4eb1ae9c38153fdaceaa83c59f7b22218182ebc6da954e",
     ".claude/skills/feature/templates/progress.md": "7f49660889c9a5a7e817499c8ddf449b98fcbd7385e5ea63d16e437b2dc02668",
     ".claude/skills/feature/templates/task.md": "ddcb2bb92a001be20bfd2d6fecc5d7276d0f62910b4a9f56dcfd6f36e1c0a124",
@@ -58,7 +58,7 @@
     ".claude/skills/ship-pr/SKILL.md": "6be04d9ecaa8b508bfd2033cde3b860510f7ea5451e1e06882a6a6e6f209efdb",
     ".claude/skills/task-criteria/SKILL.md": "9c5103f8200c70ab9b49e838a777d78ced40b5f4a767d9c8c62f4e68fef03788",
     ".claude/skills/test-ladder/SKILL.md": "260ea92d99623639d102e4384b21463c4f1e99298808ba148e62234277fdd5d8",
-    ".cursor/ORCHESTRATION.md": "215e90f4c56595a2559627b09e80b5410d4cebcd0de921bc303622729046e629",
+    ".cursor/ORCHESTRATION.md": "bb493ed523ce9187631ed86309d02fc9fa1f18b354b1f9ee8d875f74192728f7",
     ".cursor/agents/diagnostician.md": "b928d0d486f8f451901617f54c59eb1ab18ddc2462b2e346932df0a77a34c4de",
     ".cursor/agents/evaluator.md": "e1ef222b682fd1ceb0ccf30addcefe32278213fbf22eeefbf47b06478ede8b04",
     ".cursor/agents/evidence-collector.md": "681a2ee685962cd275e19e49138e179abcfe11f982f3c9f0e9d5d8f92f5386a6",
@@ -77,11 +77,11 @@
     ".cursor/skills/feature/reference/fix-cycles.md": "7c5e93d0cb545cb45582bb8ddc140270588172f595b0152bf5642a8462f19feb",
     ".cursor/skills/feature/reference/goal-revisions.md": "f2eb689d0b0a0582d7ba4b2a92a5b646ef7ea91103eb8d52800e6104d51f934f",
     ".cursor/skills/feature/reference/memory-capture.md": "9cef97d7a882f3510d97a8fb2e4b870a8db7708df2c7196fba068269ff24db0b",
-    ".cursor/skills/feature/reference/memory-protocol.md": "2bdce40f82022c0f2db4e25c628e5d57fd0fc16a9f9230da9797481b628457e1",
+    ".cursor/skills/feature/reference/memory-protocol.md": "f16755d8763dc28a63fdcb88d4c7d63d506c8207e87d78d13a60cc01f7c33cb3",
     ".cursor/skills/feature/reference/preflight.md": "70f23b64c17e42b141dc3753de3c60bede718439f72c65b7249ecc61bb1f5264",
-    ".cursor/skills/feature/reference/progress-line.md": "cfefd7f092dbbd5b95199d0db8681dac370925efac8f2344f50b41bcf5593f60",
+    ".cursor/skills/feature/reference/progress-line.md": "59107e3874fdbc75ac19e668d560b2a304a4cc76ac3ce247bc98422c30862c5c",
     ".cursor/skills/feature/reference/ready-groups.md": "b0f12b6642450ab092a10d088b9e0b581a513ffb0ea77300f12cfad02ba1c5e8",
-    ".cursor/skills/feature/reference/resume.md": "fa480d1fd65a5be2afe39b8cb19b9ea433d587af9d3cc11c16214789d2b8dd32",
+    ".cursor/skills/feature/reference/resume.md": "3abbf17daeb8f18170d459e84f133577e627b16a87590eb78192fd93afad79ec",
     ".cursor/skills/feature/templates/goal.md": "6705d87988ca2419aa4eb1ae9c38153fdaceaa83c59f7b22218182ebc6da954e",
     ".cursor/skills/feature/templates/progress.md": "7f49660889c9a5a7e817499c8ddf449b98fcbd7385e5ea63d16e437b2dc02668",
     ".cursor/skills/feature/templates/task.md": "ddcb2bb92a001be20bfd2d6fecc5d7276d0f62910b4a9f56dcfd6f36e1c0a124",
@@ -106,7 +106,7 @@
     "_loop/breaker.sh": "5b9f6a78d6f532c16cfc9a6ca45d10d8c078dead66544b05aeb0d615f6340df1",
     "_loop/loop.cmd": "ae9541294a03f741311ff8bc0d5c6f9985d6947fb42f7aaeaf6613088e34bf7e",
     "_loop/loop.sh": "1378df2796d360641c850ccf2d1722b123b5c5f905281749a2c4eae47d1f1f65",
-    "_memory/README.md": "7efae57ad77658ecc2c33744f67474301e052495c92c704e6ddd075edc22bfce"
+    "_memory/README.md": "1dce7671f81b45571eb7d08430f2b249b801aab8801bb979347ef043131e6437"
   },
   "answers": {
     "bootstrap": {

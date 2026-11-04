@@ -222,9 +222,10 @@ run `index` to rebuild explicitly.
 
 ## How the kit uses memory
 
-The orchestrator **recalls** before feature Phase 2 and research Phase 1: `_kit/memory.sh
-search`, then up to five picks copied into worker context under a DATA fence (never to
-evaluator, qa-evaluator, or terminal). After a goal is approved, it **archives** one
+The orchestrator **recalls** in feature Phase 2 (after Prune and the unfinished-goal offer)
+and research Phase 1: `_kit/memory.sh search`, then up to five picks copied into worker
+context under a DATA fence (never to evaluator, qa-evaluator, or terminal). After a goal
+is approved, it **archives** one
 `goal-summary` plus optional `decision`/`pitfall` records; research archives one
 `research-ingest` after ingestion review. Feature Phase 2 first runs
 `_kit/memory.sh prune --apply`, which deletes finished `work/` scratch folders whose

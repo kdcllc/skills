@@ -9,7 +9,8 @@ On Windows outside Git Bash, use `_kit\memory.cmd` wherever this doc says
 
 ## Recall
 
-**When.** Once before feature Phase 2 (goal planning). Once at research Phase 1, with
+**When.** Once in feature Phase 2 (goal planning),
+after Prune and the unfinished-goal offer. Once at research Phase 1, with
 `_kit/memory.sh search … --kind research-ingest,decision` so settled research is not
 re-litigated. Research-born goals: research Phase 4 copies Phase 1 picks into the new
 goal's `## Recalled memory`; feature Recall does not run for them.

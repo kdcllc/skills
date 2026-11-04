@@ -24,6 +24,7 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 
 ### Fixed
 
+- **Wording follow-ups** — the loop progress line is described as having a similar (not the same) shape; the resume reference and feature guide name `/feature resume <goal>`; the architecture guide notes that prune keeps a goal whose `progress.md` status is not `done` (`keep:progress:<status>`); feature recall runs in Phase 2 after Prune and the unfinished-goal offer (ORCHESTRATION memory table, memory README, memory protocol); the ORCHESTRATION compaction note is shorter; the evaluation guide says "regression proof" once.
 - **Loop invalid `attempts:` value** — A story whose `attempts:` value is non-numeric, empty (selected as 0 before), or a digit string bash rejects such as `08` is now warned once (`!!! backlog: <id> has an invalid attempts value '<value>' -- INELIGIBLE`) and skipped instead of crashing the driver or being run as bash arithmetic. Numeric values keep their selection.
 - **`terminal` roster wording** — ORCHESTRATION's subagent tables now describe `terminal` as running only the command in its spawn prompt under the harness's normal approval and sandbox settings, matching the agent file; no behavior change.
 - **Codex resume pointers** — the ORCHESTRATION Context fatigue row, compaction note and File Locations section now tell Codex-only installs (no kit skills tree) to write and resume `progress.md` per § Workflow State Tracking.

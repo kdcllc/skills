@@ -161,7 +161,7 @@ Write authority is **contract-driven**. Task files declare a YAML `writes:` fenc
 | **terminal** | None (command output only) |
 | **Loop driver / integrator** | Driver: `_memory/loop/backlog.md`, outbox, integration commits; integrator step **3b**: `_memory/records/` or `quarantine/` via `_kit/memory.* add` |
 | **`log-spawn.sh`** | Appends to `_memory/work/goals/<goal>/orchestration-log.md` only |
-| **`memory.sh`** | Creates files under `_memory/records/` or `_memory/quarantine/` via `add`; never edits existing record bodies; `prune --apply` deletes direct child folders of `_memory/work/goals/` and `_memory/work/research/` that pass the `prune` decision rules (record ids durable) |
+| **`memory.sh`** | Creates files under `_memory/records/` or `_memory/quarantine/` via `add`; never edits existing record bodies; `prune --apply` deletes direct child folders of `_memory/work/goals/` and `_memory/work/research/` that pass the `prune` decision rules (record ids durable); a goal folder whose `progress.md` status is not `done` is kept (`keep:progress:<status>`) |
 | **`hook-log.sh`** (`flags.hook_telemetry`) | Appends to `_memory/work/hooks/events.jsonl` only (rotates once to `events.1.jsonl`); `summary` never writes |
 
 ```mermaid

@@ -1,6 +1,6 @@
 # Resume a goal
 
-A fresh session can continue a half-finished interactive `/feature` goal without trusting stale chat state, spawn reports, or an outdated working tree. Read this reference when the user asks to resume a named goal or picks one during Phase 2.
+A fresh session can continue a half-finished interactive `/feature` goal without trusting stale chat state, spawn reports, or an outdated working tree. Read this reference when the user types `/feature resume <goal>`, asks to resume a named goal, or picks one during Phase 2.
 
 ## When progress.md is written
 
