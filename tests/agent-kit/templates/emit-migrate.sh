@@ -58,6 +58,8 @@ run_emit() { # root extra-args...
 
 git_fixture() {
   assert_fixture_root "$1" || exit 1
+  # Every subcommand except `init` (which creates the repo) requires the repo to resolve to $1 itself.
+  [[ "${2-}" == init ]] || assert_fixture_repo "$1" || exit 1
   git -C "$1" "${@:2}"
 }
 
@@ -89,8 +91,7 @@ mk_old_layout() { # root [space_name:0|1] -> 0 ok, 1 fixture setup failed
   local R="$1" sp="${2:-0}" gdir tdir
   assert_fixture_root "$R" || exit 1
   git_fixture "$R" init -q || return 1
-  git_fixture "$R" config user.email emit-migrate@test || return 1
-  git_fixture "$R" config user.name emit-migrate || return 1
+  assert_fixture_repo "$R" || return 1
   # .gitattributes: retired lines interleaved with a user line, a blank user line, a CRLF user
   # line and a CRLF copy of the kit's own `_memory/**` line (last line, CRLF-terminated).
   cat > "$R/.gitattributes" <<'EOF'

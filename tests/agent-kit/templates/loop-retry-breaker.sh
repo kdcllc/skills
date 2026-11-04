@@ -128,8 +128,7 @@ lrb_make_sandbox() { # dest ide track_loop track_ide [n_stories] [story_id]
   (
     cd "$dest"
     git init -q
-    git config user.email test@example.com
-    git config user.name "loop-retry-breaker"
+    assert_fixture_repo "$dest" || exit 1
     mkdir -p _memory/loop "$ide"
     {
       printf '# backlog\n'

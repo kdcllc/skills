@@ -948,7 +948,7 @@ run_behavioral_suite() {
 
   report_section "h" "120/4096 boundaries + field rendering"
   echo "== git root commit"
-  mktemp_root G; (cd "$G" && git init -q && git -c user.email=a@b -c user.name=n commit -q --allow-empty -m i)
+  mktemp_root G; (cd "$G" && git init -q && assert_fixture_repo "$G" && git -c user.email=a@b -c user.name=n commit -q --allow-empty -m i) || return 1
   run 20261008T150000Z add --kind fact --title G --body "$B/b.md" --root "$G"
   gf="$G/$(echo "$OUT" | awk '{print $4}')"; local gcommit; gcommit="$(grep '^commit:' "$gf" | awk '{print $2}')"
   [ "$gcommit" = "$(git -C "$G" rev-parse --short=12 HEAD)" ] && ok "commit short=12" || ko "commit" "[$gcommit]"

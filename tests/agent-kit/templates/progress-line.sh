@@ -151,8 +151,7 @@ make_sandbox() {
   (
     cd "$dir" || exit 1
     git init -q
-    git config user.email progress-line@example.com
-    git config user.name progress-line-test
+    assert_fixture_repo "$dir" || exit 1
     git add -A && git commit -qm init
   ) || return 1
   printf '%s\n' "$dir"

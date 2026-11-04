@@ -176,6 +176,7 @@ static_loop_cmd_absent_when_disabled() {
   root="$(mktemp -d "$RUN_TMP/noloop.XXXXXX")" || return 1
   assert_fixture_root "$root" || return 1
   git -C "$root" init -q 2>/dev/null || true
+  assert_fixture_repo "$root" || return 1
   "$BASH" "$EMIT_SH" --root "$root" --kit "$KIT" --answers "$ans" >/dev/null 2>&1 || return 1
   [[ ! -f "$root/_loop/loop.cmd" ]]
 }
@@ -192,6 +193,7 @@ static_gitattributes_ps1_line_upgrade_retained() {
   root="$(mktemp -d "$RUN_TMP/gattr.XXXXXX")" || return 1
   assert_fixture_root "$root" || return 1
   git -C "$root" init -q 2>/dev/null || true
+  assert_fixture_repo "$root" || return 1
   emit_cache_copy "$root" "$FIXTURE" || return 1
   grep -qxF '*.ps1 text eol=lf' "$root/.gitattributes" || echo '*.ps1 text eol=lf' >> "$root/.gitattributes"
   "$BASH" "$EMIT_SH" --root "$root" --kit "$KIT" --force --upgrade >/dev/null 2>&1 || return 1

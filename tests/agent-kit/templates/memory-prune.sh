@@ -12,6 +12,8 @@ export GIT_CEILING_DIRECTORIES="$FIXTURE_TMPDIR_ABS"
 
 git_fixture() {
   assert_fixture_root "$1" || exit 1
+  # Every subcommand except `init` (which creates the repo) requires the repo to resolve to $1 itself.
+  [[ "${2-}" == init ]] || assert_fixture_repo "$1" || exit 1
   git -C "$1" "${@:2}"
 }
 
@@ -86,8 +88,7 @@ git_refs_snap() { # root
 git_init_fixture() { # root
   local R="$1"
   git_fixture "$R" init -q
-  git_fixture "$R" config user.email 'mempr@test.local'
-  git_fixture "$R" config user.name 'mempr'
+  assert_fixture_repo "$R" || exit 1
   printf '_memory/work/\n' > "$R/.gitignore"
   git_fixture "$R" add -- .gitignore
   git_fixture "$R" commit -qm 'init'
@@ -439,8 +440,7 @@ grep -qxF 'memory: prune goal x keep:no-git' <<<"$PR_OUT" && [[ "$PR_RC" -eq 0 ]
 
 mktemp_dir R11c
 git_fixture "$R11c" init -q
-git_fixture "$R11c" config user.email t@t
-git_fixture "$R11c" config user.name t
+assert_fixture_repo "$R11c" || exit 1
 printf '_memory/work/\n' > "$R11c/.gitignore"
 mkdir -p "$R11c/_memory/work/goals/y"
 printf '# log\n\n### 2026-01-01T10:00-04:00 — ARCHIVED: 19990101T000000Z-deadbeef\n' > "$R11c/_memory/work/goals/y/orchestration-log.md"

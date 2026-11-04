@@ -21,6 +21,7 @@ run_release_c_bash_only() {
     mkdir -p "$R"
     rc_assert "$R"
     rc_git_at "$R" init -q
+    assert_fixture_repo "$R" || exit 1
   }
 
   rc_git() { rc_assert "$R"; git -C "$R" -c user.email=e@x -c user.name=n "$@"; }
@@ -148,6 +149,7 @@ run_release_c_bash_only() {
     || report FAIL "[bash-only] (rc-check-staged-diff)" "rc=$rc out=$out"
 
   R0="$T/top"; mkdir -p "$R0/sub"; rc_assert "$R0"; rc_git_at "$R0" init -q
+  assert_fixture_repo "$R0" || exit 1
   R="$R0/sub"; rc_assert "$R"; p="$(rc_add 20261013T130000Z 'clean body\n')"; rc_git_at "$R0" add -A
   out="$(bash "$MEMORY_SH" check --staged --root "$R" 2>&1)"; rc=$?
   [[ "$rc" -eq 0 ]] && report PASS "[bash-only] (rc-check-subdir-staged-clean)" || report FAIL "[bash-only] (rc-check-subdir-staged-clean)" "rc=$rc"
@@ -269,6 +271,7 @@ run_release_c_mutations() {
     fi
     chmod +x "$mutsh"
     Rm="$T/mut-$cname"; mkdir -p "$Rm"; _mrc_assert "$Rm"; _mrc_git_at "$Rm" init -q
+    assert_fixture_repo "$Rm" || exit 1
     printf 'clean body\n' > "$B/msec.md"
     p="$(MEMORY_NOW=20261013T150000Z bash "$MEMORY_SH" add --kind fact --title t --body "$B/msec.md" --root "$Rm" 2>/dev/null | awk '{print $4}')"
     case "$setup" in
@@ -357,6 +360,7 @@ run_release_c_mutations() {
     sed "$sedscript" "$MEMORY_SH" > "$mutsh"; chmod +x "$mutsh"
     mkdir -p "$H2"
     Rc="$T/cap-${assert##*:}"; mkdir -p "$Rc"; _mrc_assert "$Rc"; _mrc_git_at "$Rc" init -q
+    assert_fixture_repo "$Rc" || exit 1
     S1="$(printf '%s' "$Rc" | sed 's/[^A-Za-z0-9]/-/g; s/^-//')"
     CU2="$H2/.cursor/projects/$S1/agent-transcripts"
     case "$cap_mode" in

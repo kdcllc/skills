@@ -100,8 +100,7 @@ lg_make_sandbox() { # dest ide track_loop track_ide [n_stories]
   (
     cd "$dest"
     git init -q
-    git config user.email test@example.com
-    git config user.name "loop-guards"
+    assert_fixture_repo "$dest" || exit 1
     mkdir -p _memory/loop "$ide"
     {
       printf '# backlog\n'
