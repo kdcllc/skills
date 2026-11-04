@@ -1606,7 +1606,7 @@ EOF
 alwaysApply: true
 ---
 The orchestrator/worker/evaluator system described in .cursor/ORCHESTRATION.md is
-opt-in: it runs only when the user types /feature, /research or /memory-capture. Ordinary
+opt-in: it runs only when the user types /feature, /research or /memory-capture (`/feature resume <goal>` resumes an unfinished goal). Ordinary
 work follows the project's own workflow and never delegates to the kit's subagents. Inside
 a kit workflow, implementation goes to the implementer/test-writer subagents and all
 verification goes to the evaluator subagents; never mark orchestrated work complete
@@ -1619,7 +1619,7 @@ EOF
 alwaysApply: true
 ---
 The orchestrator/worker/evaluator system described in .cursor/ORCHESTRATION.md is
-opt-in: it runs only when the user types /feature or /memory-capture. Ordinary
+opt-in: it runs only when the user types /feature or /memory-capture (`/feature resume <goal>` resumes an unfinished goal). Ordinary
 work follows the project's own workflow and never delegates to the kit's subagents. Inside
 a kit workflow, implementation goes to the implementer/test-writer subagents and all
 verification goes to the evaluator subagents; never mark orchestrated work complete
@@ -1657,7 +1657,7 @@ description = "${prefix}Coverage-obsessed test writer, external services mocked.
 config_file = "agents/test-writer.toml"
 
 [agents.terminal]
-description = "${prefix}Command runner — any Bash or PowerShell command; returns only the result the caller asked for. Read .codex/agents/terminal.md first."
+description = "${prefix}Command runner — runs the Bash or PowerShell command in its spawn prompt; returns only the result the caller asked for. Read .codex/agents/terminal.md first."
 config_file = "agents/terminal.toml"
 
 [agents.diagnostician]
@@ -1971,7 +1971,7 @@ load_global_tokens() {
   fi
   if flag_is opt_in; then
     map_set TOKENS OPT_IN_AGENT_PREFIX 'Orchestration-kit agent — spawn only from the /feature, /research or /align-docs workflow, never for ordinary work. '
-    map_set TOKENS OPT_IN_FEATURE_SENTENCE 'Opt-in — runs only when the user types /feature or asks to resume a goal.'
+    map_set TOKENS OPT_IN_FEATURE_SENTENCE 'Opt-in — runs only when the user types /feature, including /feature resume with a goal name.'
     map_set TOKENS OPT_IN_RESEARCH_SUFFIX ' Opt-in — runs only when the user types /research.'
     map_set TOKENS OPT_IN_MEMORY_CAPTURE_SUFFIX ' Opt-in — runs only when the user types /memory-capture.'
   else
