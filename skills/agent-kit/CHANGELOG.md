@@ -6,6 +6,11 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 
 ## [Unreleased]
 
+### Added
+
+- **Progress line (feature)** — The feature orchestrator leads each user update at a `progress.md` rewrite with `Progress: <pct>% (<done>/<total> steps, metric v1); <current unit>, <in flight>.`, writes the same line as `progress:` in `progress.md`, and defines the rule in the new `reference/progress-line.md`.
+- **Progress line (loop)** — The driver prints a stderr line after each reap using loop `metric v1` (steps are backlog stories; `passes: true` is done; blocked stories are shown separately and never done).
+
 ### Changed
 
 - **Loop skill probe paragraph** — the auto-loop skill's upward-probe paragraph now describes the `probeEpoch` stale-result rule (epoch advances, per-slot capture at dispatch, older-epoch results ignored, 2.2.x state loads as epoch 0) instead of the 2.2.1 model-equality filter.

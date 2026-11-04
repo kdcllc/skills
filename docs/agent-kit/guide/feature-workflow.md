@@ -416,6 +416,14 @@ Entries are never edited or deleted. Rejections and respawns are new entries wit
 
 ---
 
+## Progress line
+
+At every `progress.md` rewrite, the orchestrator opens its user update with one line: `Progress: <pct>% (<done>/<total> steps, metric v1); <current unit>, <in flight>.` It writes the same line, with `Progress:` as `progress:`, into the `progress:` header line (line 5) of `progress.md`. Under feature metric v1, a step is each enabled phase (Phases 1–5 always, plus Phase 6 and Phase 7 when `goal.md` `phases:` enables them) and each Phase 4 task file. A step counts done at its gate: Phase 1 at user confirmation, Phases 2 and 3 at the Phase 3 goal-evaluator PASS, a task at its task-evaluator PASS or PASS (with notes), Phase 4 when every task is done, Phase 5 when it exits, Phase 6 at the final doc audit APPROVED, and Phase 7 when a PR is created or updated, hand-over is printed, or a runtime skip is logged. `pct` is `floor(done × 100 / total)`.
+
+The current unit names the phase or task in progress (`Phase 4 T03+T04` for a ready group, `done` when `status: done`). The in-flight clause comes from SPAWN entries without an OUTCOME (`implementer running`, `2 implementers + evaluator running`), or reads `waiting on user` or `idle` when nothing is running. Changing what counts as a step, when it counts done, or the percentage formula bumps the label to `metric v2`. Example: `Progress: 30% (3/10 steps, metric v1); Phase 4 T01, implementer running.` The full definition is [`reference/progress-line.md`](../../../skills/agent-kit/templates/skills/feature/reference/progress-line.md). The autonomous loop prints its own line on stderr with a separate metric; see [Autonomous loop](autonomous-loop.md), § Run ledger and summary.
+
+---
+
 ## Guarded installs (`flags.kit_guard`)
 
 The rules below, except the last bullet (`emit.sh --check`), are emitted only when the install's answers set `flags.kit_guard` to true (they sit in `kit_guard` IF blocks of [`ORCHESTRATION.md`](../../../skills/agent-kit/templates/ORCHESTRATION.md), the feature skill, the writer agents, and the evaluator). They treat every path under `files` in `orchestration-kit.manifest.json` as kit-owned — except the user-owned harness configs (the Claude Code settings file, `.codex/config.toml`, `.cursor/hooks.json`) — and change kit behavior only through the answers file and `emit.sh --answers <file> --upgrade`.
@@ -493,6 +501,7 @@ Shipped on `migrate/agent-kit` (local commit, no PR, no push) per archived goal-
 - [`skills/agent-kit/templates/skills/feature/reference/corrective-tasks.md`](../../../skills/agent-kit/templates/skills/feature/reference/corrective-tasks.md) — corrective tasks after completed work
 - [`skills/agent-kit/templates/skills/feature/reference/fix-cycles.md`](../../../skills/agent-kit/templates/skills/feature/reference/fix-cycles.md) — Phase 4 fix cycles: line-patch resume, bypass and criteria-defect routing, tree snapshots, citation checks, backlog and keys, cycle-3 and early ladder entry, rotation
 - [`skills/agent-kit/templates/skills/feature/reference/resume.md`](../../../skills/agent-kit/templates/skills/feature/reference/resume.md) — resume procedure for unfinished goals
+- [`skills/agent-kit/templates/skills/feature/reference/progress-line.md`](../../../skills/agent-kit/templates/skills/feature/reference/progress-line.md) — the one-line progress report: format, feature metric v1, current-unit and in-flight wording, when it prints
 - [`skills/agent-kit/templates/skills/feature/templates/progress.md`](../../../skills/agent-kit/templates/skills/feature/templates/progress.md) — per-goal resume checkpoint shape
 - [`skills/agent-kit/templates/skills/feature/reference/ready-groups.md`](../../../skills/agent-kit/templates/skills/feature/reference/ready-groups.md) — Phase 4 concurrent ready groups
 - [`skills/agent-kit/templates/skills/feature/reference/degraded-mode.md`](../../../skills/agent-kit/templates/skills/feature/reference/degraded-mode.md) — spawn limitations, self-evaluated gates, rotation skips

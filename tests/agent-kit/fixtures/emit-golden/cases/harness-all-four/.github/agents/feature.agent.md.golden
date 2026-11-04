@@ -40,7 +40,7 @@ Re-evaluations RESUME the same evaluator with a delta: Phase 4/5 list applied fi
 
 ### Goal checkpoint and resume
 
-Rewrite `_memory/work/goals/[goal]/progress.md` from `templates/progress.md` per `reference/resume.md` § When progress.md is written; resume goals per that file.
+Rewrite `_memory/work/goals/[goal]/progress.md` from `templates/progress.md` per `reference/resume.md` § When progress.md is written; resume goals per that file. Lead the user update at each rewrite with its progress line (`reference/progress-line.md`).
 
 ## Phase 1 — Alignment (no files)
 
@@ -51,7 +51,7 @@ Understanding" + **wait for explicit confirmation** before Phase 2. Record Phase
 
 ## Phase 2 — Goal creation
 
-**Prune** (once): before Recall and before the goal folder exists, run `_kit/memory.sh prune --apply` per `reference/memory-protocol.md` (Prune); it deletes finished `_memory/work/` folders whose records are committed and merged; any exit code or a missing tool never blocks.
+**Prune** (once): before Recall and before the goal folder exists, run `_kit/memory.sh prune --apply` per `reference/memory-protocol.md` (Prune); any exit code or a missing tool never blocks.
 `note` the summary line once `_memory/work/goals/<goal>/` exists.
 
 **Unfinished goals:** offer per `reference/resume.md` (not in loop iterations).
@@ -67,7 +67,7 @@ Create `_memory/work/goals/[goal-name]/` containing:
 
 Every task file carries the ownership contract (see
 `templates/task.md`), `## Acceptance Criteria` (criterion +
-verification method each; Phase 3 validates once), disjoint `writes` for unordered pairs. `eval_depth`
+verification method each), disjoint `writes` for unordered pairs. `eval_depth`
 default `light`; set `full` with reason for contract/scaffold, tasks with interface consumers (mirror/doc/test excluded), tasks writing agents/criteria/drivers/shared infra. Contract-first: shared boundary → contract/scaffold FIRST, `depends_on` on every consumer.
 
 Decision gate: multiple approaches → present tradeoffs and **wait**.

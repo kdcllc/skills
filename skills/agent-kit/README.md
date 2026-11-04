@@ -222,7 +222,7 @@ workflow, so workers use them on the right layers.
 | `agents/implementer`, `agents/test-writer` | Workers on the light tier |
 | `agents/evidence-collector` | QA evidence for the optional QA gate, light tier, no verdicts |
 | `agents/terminal` | Command runner on the fast tier |
-| `skills/feature` | The seven-phase workflow with goal/task templates, orchestration log, memory protocol, and progress checkpoint plus `reference/resume.md` |
+| `skills/feature` | The seven-phase workflow with goal/task templates, orchestration log, memory protocol, and progress checkpoint plus `reference/resume.md` and the one-line progress report (`reference/progress-line.md`) |
 | `skills/research` | Research → Plan workflow (optional) |
 | `skills/memory-capture` | Turns finished chat sessions into searchable session summaries |
 | `skills/{goal,task,qa}-criteria` | Evaluation checklists (goal evaluation includes devil's advocate) |
