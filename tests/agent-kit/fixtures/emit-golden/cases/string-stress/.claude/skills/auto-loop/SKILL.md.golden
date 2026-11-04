@@ -125,10 +125,14 @@ preferred entry, which is what just got rate-limited. **Upward probe:** after a
 rate-limit fallback in CLOSED, the breaker schedules a probe of chain[0] — first delay
 1800 s, doubling on each failed probe with an 1800 s floor and 14400 s (4 h) cap; a
 successful probe stays on chain[0]; a failed probe restores the pre-probe model
-exactly, including the omit-the-pin empty model at chain end. While a probe runs,
-results from slots dispatched on another model are ignored, so they neither close nor
-fail the probe. Deleting `_memory/loop/breaker-state.json` is optional — it still
-resets the breaker if you want a clean slate.
+exactly, including the omit-the-pin empty model at chain end. Breaker state
+carries `probeEpoch`, which advances on every chain advance, probe start and failed-probe
+restore (not on OPEN→HALF-OPEN, HALF-OPEN→CLOSED or a successful probe). Each slot
+captures the epoch at dispatch and the driver passes it to `breaker_record`; a result
+from an older epoch changes no state, so it neither closes nor fails a probe and never
+advances the chain twice. State files from 2.2.x load as epoch 0. Deleting
+`_memory/loop/breaker-state.json` is optional — it still resets the breaker if you want
+a clean slate.
 `totalFallbacks` counts CLOSED→OPEN trips only — a HALF-OPEN re-trip advances the
 chain without incrementing it (a diagnostics caveat, not a bug).
 
@@ -198,7 +202,9 @@ treat that as a blocking issue (step 4). When creating `goal.md` under
 values with `ladder: auto` (alongside `align_docs` and `pull_request`). If the derived
 goal's tasks need to write outside the story's declared `writes:` set, that is also
 a blocking issue (step 4) — escalate it; never silently widen scope past what was
-declared.
+declared. Such paths include tests that pin the exact text the story changes and files
+that pin line numbers in a changed file when the story adds or removes lines above a
+pinned line, so the backlog author should declare them.
 
 All invariants hold unchanged: implementer/test-writer execute, `evaluator` verifies every
 task and the final audit, fixes are always re-evaluated, 3 evaluation cycles max per task,

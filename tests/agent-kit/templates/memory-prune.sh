@@ -732,6 +732,7 @@ mktemp_dir R20
 mk_progress_fixture "$R20" '# Progress\r\n\r\nstatus: done\r\n'
 pr_run "$R20" --plan --only g-prog
 grep -qxF 'memory: prune goal g-prog would-delete' <<<"$PR_OUT" \
+  && [[ "$PR_RC" -eq 0 ]] \
   && report PASS "case-20: status: done + CRLF -> would-delete" || report FAIL "case-20"
 
 # case 21: unknown / unparsable status -> keep:progress:unknown
@@ -739,16 +740,20 @@ ok=1
 mktemp_dir R21a
 mk_progress_fixture "$R21a" '# Progress\n\nno status here\n'
 pr_run "$R21a" --plan --only g-prog
+[[ "$PR_RC" -eq 0 ]] || ok=0
 grep -qxF 'memory: prune goal g-prog keep:progress:unknown' <<<"$PR_OUT" || ok=0
 mktemp_dir R21b
 mk_progress_fixture "$R21b" '# Progress\n\nstatus:\n'
 pr_run "$R21b" --plan --only g-prog
+[[ "$PR_RC" -eq 0 ]] || ok=0
 grep -qxF 'memory: prune goal g-prog keep:progress:unknown' <<<"$PR_OUT" || ok=0
 mktemp_dir R21c
 mk_progress_fixture "$R21c" '# Progress\n\nstatus: a/b\n'
 pr_run "$R21c" --plan --only g-prog
+[[ "$PR_RC" -eq 0 ]] || ok=0
 grep -qxF 'memory: prune goal g-prog keep:progress:unknown' <<<"$PR_OUT" || ok=0
 pr_run "$R21c" --apply --only g-prog
+[[ "$PR_RC" -eq 0 ]] || ok=0
 [[ -d "$R21c/_memory/work/goals/g-prog" ]] || ok=0
 [[ "$ok" -eq 1 ]] && report PASS "case-21: missing/empty/invalid status -> keep:progress:unknown" || report FAIL "case-21"
 

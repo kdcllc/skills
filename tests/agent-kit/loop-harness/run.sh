@@ -2053,41 +2053,44 @@ fi
 # 34 (NEW, story-009 task-03, cycle-1 MAJOR-3 / Check-G-parity-guard
 # deviation landing site; FIX-CYCLE-1: t34_move_check re-scoped): breaker
 # mechanics structural guard. The canonical breaker.sh is grepped for three
-# mechanics, block-scoped per the assertion-18 coupling precedent (a
-# line-window anchored at the relevant function/message, not independent
-# file-wide greps a decoy could satisfy):
+# mechanics, block-scoped per the assertion-18 coupling precedent (each grep
+# runs against one function's body, from its line-anchored `^<name>() {$`
+# line through the first following line that is exactly `}`, via t34_fn_body;
+# a missing start or closing brace fails the check; not independent
+# file-wide greps a decoy could satisfy, and not fixed line counts that drift
+# when lines are added inside a function):
 #   - mv -f atomic write inside _breaker_write;
 #   - the terminator guard inside _breaker_terminator_ok;
 #   - breaker_load's fail-safe path (failing SAFE to OPEN -> _breaker_failsafe_open)
 #     and _breaker_failsafe_open's OPEN state write.
 # ---------------------------------------------------------------------------
+t34_fn_body() { # t34_fn_body <file> <function-name>; non-zero + no output if start or close missing
+  awk -v n="$2" '
+    !f && $0 == n "() {" { f = 1 }
+    f { print }
+    f && $0 == "}" { closed = 1; exit }
+    END { exit (f && closed) ? 0 : 1 }
+  ' "$1"
+}
 t34_move_check() {
-  local f="$1" ln window
-  ln="$(grep -n '_breaker_write() {' "$f" | head -1 | cut -d: -f1)"
-  [[ -z "$ln" ]] && return 1
-  window="$(sed -n "${ln},$((ln + 40))p" "$f")"
-  grep -qF 'mv -f "$tmp" "$file"' <<< "$window"
+  local body
+  body="$(t34_fn_body "$1" _breaker_write)" || return 1
+  grep -qF 'mv -f "$tmp" "$file"' <<< "$body"
 }
 t34_term_check() {
-  local f="$1" ln window
-  ln="$(grep -n '_breaker_terminator_ok() {' "$f" | head -1 | cut -d: -f1)"
-  [[ -z "$ln" ]] && return 1
-  window="$(sed -n "${ln},$((ln + 20))p" "$f")"
-  grep -qF '"}"' <<< "$window"
+  local body
+  body="$(t34_fn_body "$1" _breaker_terminator_ok)" || return 1
+  grep -qF '"}"' <<< "$body"
 }
 t34_failsafe_msg_check() {
-  local f="$1" ln window
-  ln="$(grep -n 'breaker_load() {' "$f" | head -1 | cut -d: -f1)"
-  [[ -z "$ln" ]] && return 1
-  window="$(sed -n "${ln},$((ln + 25))p" "$f")"
-  grep -qF 'failing SAFE to OPEN' <<< "$window" && grep -qF '_breaker_failsafe_open' <<< "$window"
+  local body
+  body="$(t34_fn_body "$1" breaker_load)" || return 1
+  grep -qF 'failing SAFE to OPEN' <<< "$body" && grep -qF '_breaker_failsafe_open' <<< "$body"
 }
 t34_failsafe_state_check() {
-  local f="$1" ln window
-  ln="$(grep -n '_breaker_failsafe_open() {' "$f" | head -1 | cut -d: -f1)"
-  [[ -z "$ln" ]] && return 1
-  window="$(sed -n "${ln},$((ln + 50))p" "$f")"
-  grep -qE '_breaker_write "\$file" OPEN' <<< "$window"
+  local body
+  body="$(t34_fn_body "$1" _breaker_failsafe_open)" || return 1
+  grep -qE '_breaker_write "\$file" OPEN' <<< "$body"
 }
 if t34_move_check "$BREAKER_SH" && t34_term_check "$BREAKER_SH" \
    && t34_failsafe_msg_check "$BREAKER_SH" && t34_failsafe_state_check "$BREAKER_SH"; then
