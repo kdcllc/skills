@@ -511,7 +511,7 @@ _loop_st_cost_micro=()
 _loop_st_cost_seen=()
 _loop_st_reaps=()
 _loop_st_last_outcome=()
-_bl_warned_attempts=""
+_bl_warned_invalid=""
 _loop_story_idx=0
 _loop_outcome_names=(passed failed blocked mismatch abnormal subset tamper timeout protected nonff killed)
 _loop_outcome_counts=(0 0 0 0 0 0 0 0 0 0 0)
@@ -1764,11 +1764,34 @@ _loop_hotspot_conflict() {
 # loudly to stderr, never a crash, never a silent skip. A malformed
 # (mid-path '*') writes: glob is reported loudly and the WHOLE story is
 # treated as writes-absent (intersects everything, runs alone) this run --
-# the suffix-only rule, goal-pinned. A story whose attempts: value is not a
-# plain integer (or is an octal-invalid digit string such as 08) has an
-# invalid attempts value: it is warned once per id and skipped (INELIGIBLE),
-# never evaluated as bash arithmetic. With second argument `lint`, each story
+# the suffix-only rule, goal-pinned. A candidate story whose attempts: or
+# priority: value is not a plain integer (or is an octal-invalid digit string
+# such as 08) has an invalid attempts value / invalid priority value: each is
+# warned once per story and skipped (INELIGIBLE), never evaluated as bash
+# arithmetic. With second argument `lint`, each story
 # dispatches to _loop_lint_bl_flush instead of _loop_bl_flush.
+
+# _loop_bl_int_ok <value> -- 0 only for a digit string bash arithmetic accepts
+# (optional sign; no octal-invalid leading-zero string). Never evaluates it.
+_loop_bl_int_ok() {
+  if [[ "$1" =~ ^[-+]?[0-9]+$ ]] && ! [[ "$1" =~ ^[-+]?0[0-9]*[89] ]]; then
+    return 0
+  fi
+  return 1
+}
+
+# _loop_bl_warn_invalid <field> <id> <value> -- warn once per field and story.
+_loop_bl_warn_invalid() {
+  case "$_bl_warned_invalid" in
+    *"|$1:$2|"*) ;;
+    *)
+      _bl_warned_invalid="${_bl_warned_invalid}|$1:$2|"
+      echo "!!! backlog: $2 has an invalid $1 value '$3' -- INELIGIBLE" >&2
+      ;;
+  esac
+  return 0
+}
+
 _loop_bl_flush() {
   # `if`-form throughout (never a bare `COND && action`/`COND || action` at
   # top level): under this script's `set -e`, a bare short-circuit list
@@ -1794,23 +1817,22 @@ _loop_bl_flush() {
       fi
     done
   fi
-  local _bl_att_ok=0
+  local _bl_att_ok=0 _bl_prio_ok=0
   if [[ "$_bl_cur_blocked" == "false" && "$_bl_cur_passes" == "false" ]]; then
-    if [[ "$_bl_cur_attempts" =~ ^[-+]?[0-9]+$ ]] && ! [[ "$_bl_cur_attempts" =~ ^[-+]?0[0-9]*[89] ]]; then
+    if _loop_bl_int_ok "$_bl_cur_attempts"; then
       if (( _bl_cur_attempts < 3 )); then
         _bl_att_ok=1
       fi
     else
-      case "$_bl_warned_attempts" in
-        *"|${_bl_cur_id}|"*) ;;
-        *)
-          _bl_warned_attempts="${_bl_warned_attempts}|${_bl_cur_id}|"
-          echo "!!! backlog: $_bl_cur_id has an invalid attempts value '$_bl_cur_attempts' -- INELIGIBLE" >&2
-          ;;
-      esac
+      _loop_bl_warn_invalid attempts "$_bl_cur_id" "$_bl_cur_attempts"
+    fi
+    if _loop_bl_int_ok "$_bl_cur_priority"; then
+      _bl_prio_ok=1
+    else
+      _loop_bl_warn_invalid priority "$_bl_cur_id" "$_bl_cur_priority"
     fi
   fi
-  if (( _bl_att_ok == 1 )); then
+  if (( _bl_att_ok == 1 && _bl_prio_ok == 1 )); then
     local n=${#_bl_id[@]} j
     local idx=$n
     for ((j = 0; j < n; j++)); do
