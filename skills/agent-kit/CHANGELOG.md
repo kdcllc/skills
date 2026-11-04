@@ -23,7 +23,7 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 - **`terminal` wording** — the Codex `[agents.terminal]` description on new installs and the test-ladder `terminal` row now say the terminal runs the Bash or PowerShell command in its spawn prompt, matching the terminal agent. The feature skill's terminal spawn rule only drops "any" (`**Bash or PowerShell commands**`, was `**any Bash or PowerShell command**`).
 - **Prune keeps unfinished goals** — `memory.sh prune` keeps a goal folder whose `progress.md` status is not `done` (`keep:progress:<status>`) even when its records are durable; goals without `progress.md` are unchanged.
 - **Stricter suite checks** — memory-prune cases 20/21 now assert the prune exit code; regression-proof-resume check (k) fails when the harness list cannot be read and prints one SKIP for Codex-only answers; loop-harness test 34 bounds each breaker.sh window by the function's closing brace instead of fixed line counts.
-- **`progress-line.sh` portability and attempts tests** — `progress-line.sh` resolves `timeout` or `gtimeout` and SKIPs its driver cases when neither exists, and pins the `attempts` selection, warning and counter behavior.
+- **`progress-line.sh` portability, attempts and priority tests** — `progress-line.sh` resolves `timeout` or `gtimeout` and SKIPs its driver cases when neither exists, pins the `attempts` selection, warning and counter behavior, and pins loop `priority` handling: ordering parity, ties, the invalid-value warning and the injection payload never evaluated.
 
 ### Fixed
 
