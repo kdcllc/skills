@@ -274,7 +274,7 @@ Ask (multiple-choice where possible) only what you could not infer:
 7. **Opt-in only, or let the agent invoke `/feature` itself?** Default: auto-invocable.
    Opt-in ⇒ `flags.opt_in: true`: `feature`, `research`, `memory-capture` get
    `disable-model-invocation: true` (run only via `/feature`, `/research`,
-   `/memory-capture`); the seven kit agents' descriptions are scoped to kit workflows;
+   `/memory-capture`; resume an unfinished goal with `/feature resume <goal>`); the seven kit agents' descriptions are scoped to kit workflows;
    the ORCHESTRATION.md skills note and the Cursor rule switch to opt-in wording. Partial
    on Codex (no skills tree; existing `.codex/config.toml` agent tables not rewritten). Record `flags.opt_in`.
 8. **Guard kit-owned files?** (recommended yes for new installs.) `flags.kit_guard: true`
