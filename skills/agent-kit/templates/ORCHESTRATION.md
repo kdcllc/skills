@@ -1134,7 +1134,7 @@ installs have no kit skills tree (no protocol copy on disk).
 ├── skills/
 │   ├── feature/       # Feature coordination
 │   │   ├── SKILL.md
-│   │   ├── reference/{continuation-ladder.md,preflight.md,ready-groups.md,degraded-mode.md,memory-protocol.md,memory-capture.md,resume.md,goal-revisions.md,corrective-tasks.md,fix-cycles.md}
+│   │   ├── reference/{continuation-ladder.md,preflight.md,ready-groups.md,degraded-mode.md,memory-protocol.md,progress-line.md,memory-capture.md,resume.md,goal-revisions.md,corrective-tasks.md,fix-cycles.md}
 │   │   └── templates/{goal.md,task.md,progress.md}
 │   │
 │   ├── memory-capture/SKILL.md       # Session transcript distillation
@@ -1196,7 +1196,7 @@ _loop/{loop.sh,loop.cmd,breaker.sh,PROMPT.md}  # Headless loop driver (if enable
 ├── skills/
 │   ├── feature/       # Feature coordination
 │   │   ├── SKILL.md
-│   │   ├── reference/{continuation-ladder.md,preflight.md,ready-groups.md,degraded-mode.md,memory-protocol.md,memory-capture.md,resume.md,goal-revisions.md,corrective-tasks.md,fix-cycles.md}
+│   │   ├── reference/{continuation-ladder.md,preflight.md,ready-groups.md,degraded-mode.md,memory-protocol.md,progress-line.md,memory-capture.md,resume.md,goal-revisions.md,corrective-tasks.md,fix-cycles.md}
 │   │   └── templates/{goal.md,task.md,progress.md}
 │   │
 │   ├── memory-capture/SKILL.md       # Session transcript distillation
@@ -1253,7 +1253,7 @@ _memory/.index/ · _memory/raw/  # Derived index; capture output, ledgers and dr
 ├── skills/
 │   ├── feature/       # Feature coordination
 │   │   ├── SKILL.md
-│   │   ├── reference/{continuation-ladder.md,preflight.md,ready-groups.md,degraded-mode.md,memory-protocol.md,memory-capture.md,resume.md,goal-revisions.md,corrective-tasks.md,fix-cycles.md}
+│   │   ├── reference/{continuation-ladder.md,preflight.md,ready-groups.md,degraded-mode.md,memory-protocol.md,progress-line.md,memory-capture.md,resume.md,goal-revisions.md,corrective-tasks.md,fix-cycles.md}
 │   │   └── templates/{goal.md,task.md,progress.md}
 │   │
 │   ├── memory-capture/SKILL.md       # Session transcript distillation
@@ -1310,7 +1310,7 @@ _loop/{loop.sh,loop.cmd,breaker.sh,PROMPT.md}  # Headless loop driver (if enable
 ├── skills/
 │   ├── feature/       # Feature coordination
 │   │   ├── SKILL.md
-│   │   ├── reference/{continuation-ladder.md,preflight.md,ready-groups.md,degraded-mode.md,memory-protocol.md,memory-capture.md,resume.md,goal-revisions.md,corrective-tasks.md,fix-cycles.md}
+│   │   ├── reference/{continuation-ladder.md,preflight.md,ready-groups.md,degraded-mode.md,memory-protocol.md,progress-line.md,memory-capture.md,resume.md,goal-revisions.md,corrective-tasks.md,fix-cycles.md}
 │   │   └── templates/{goal.md,task.md,progress.md}
 │   │
 │   ├── memory-capture/SKILL.md       # Session transcript distillation

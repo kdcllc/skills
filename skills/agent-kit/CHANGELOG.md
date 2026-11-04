@@ -6,6 +6,11 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 
 ## [Unreleased]
 
+### Added
+
+- **Progress line (feature)** — The feature orchestrator leads each user update at a `progress.md` rewrite with `Progress: <pct>% (<done>/<total> steps, metric v1); <current unit>, <in flight>.`, writes the same line as `progress:` in `progress.md`, and defines the rule in the new `reference/progress-line.md`.
+- **Progress line (loop)** — The driver prints a stderr line after each reap using loop `metric v1` (steps are backlog stories; `passes: true` is done; blocked stories are shown separately and never done).
+
 ### Changed
 
 - **Guarding-test wording** — the test-writer agent now asks for a regression proof for every guarding test it adds or rewrites, matching the implementer and test-ladder; feature Phase 4 step 3 (and the guides that copy it) asks for the pre-evaluator regression proof only when the task has guarding tests.

@@ -289,6 +289,7 @@ a stderr run summary on exit (never in `--lint` mode). With `LOOP_ITER_TIMEOUT` 
 driver may interrupt a long iteration; with `LOOP_TAMPER_CHECK=fail` in worktree mode
 (`LOOP_WORKTREE=1`) it may quarantine a branch that deletes, skips, or weakens tests — slots
 must never do that to pass.
+After each reap the driver also prints one stderr progress line, `Progress: <pct>% (<done>/<total> steps[, <B> blocked], metric v1); <story> attempt <n> <outcome>, <in flight>.`; its loop `metric v1` (steps are backlog stories) is defined in the `_loop/loop.sh` header.
 
 ## Output contract (the loop driver parses this)
 

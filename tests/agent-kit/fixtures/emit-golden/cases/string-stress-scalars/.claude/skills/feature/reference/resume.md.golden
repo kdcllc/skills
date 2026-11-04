@@ -4,7 +4,7 @@ A fresh session can continue a half-finished interactive `/feature` goal without
 
 ## When progress.md is written
 
-The orchestrator performs a whole-file rewrite of `_memory/work/goals/[goal]/progress.md` from `templates/progress.md` when the goal folder is created (Phase 2), after every phase transition, every task verdict, every escalation or user decision, and before ending a session with the goal unfinished; each rewrite updates `phase:` (its own line); set `status: done` after the last enabled phase completes. This applies on every install, with or without the kit-file guard; `ORCHESTRATION.md` is never used for progress.
+The orchestrator performs a whole-file rewrite of `_memory/work/goals/[goal]/progress.md` from `templates/progress.md` when the goal folder is created (Phase 2), after every phase transition, every task verdict, every escalation or user decision, and before ending a session with the goal unfinished; each rewrite updates `phase:` (its own line); set `status: done` after the last enabled phase completes. This applies on every install, with or without the kit-file guard; `ORCHESTRATION.md` is never used for progress. Each rewrite also recomputes the `progress:` line, and the user-facing update at that moment opens with the same line (`reference/progress-line.md`).
 
 ## Unfinished goals (Phase 2)
 
