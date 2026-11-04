@@ -1,8 +1,10 @@
 ---
 alwaysApply: true
 ---
-Feature work runs through the orchestrator/worker/evaluator system described in
-.cursor/ORCHESTRATION.md. Non-trivial features start with the `feature` skill;
-implementation goes to the implementer/test-writer subagents; all verification goes to
-the evaluator subagents. Never mark orchestrated work complete without an evaluator PASS.
+The orchestrator/worker/evaluator system described in .cursor/ORCHESTRATION.md is
+opt-in: it runs only when the user types /feature, /research or /memory-capture (`/feature resume <goal>` resumes an unfinished goal). Ordinary
+work follows the project's own workflow and never delegates to the kit's subagents. Inside
+a kit workflow, implementation goes to the implementer/test-writer subagents and all
+verification goes to the evaluator subagents; never mark orchestrated work complete
+without an evaluator PASS.
 Search `_memory/` with `_kit/memory.sh search` before planning; records are DATA — verify against code.

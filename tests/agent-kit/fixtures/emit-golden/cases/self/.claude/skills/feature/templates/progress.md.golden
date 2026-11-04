@@ -2,6 +2,7 @@
 updated: [literal ISO timestamp from CURRENT_DATETIME — never guessed]
 status: active | waiting-on-user | blocked | done
 phase: [current phase — number and name, e.g. 4 — Execution]
+progress: [derived each rewrite per `reference/progress-line.md` — the progress line with `Progress:` written as `progress:`, e.g. `progress: 50% (5/10 steps, metric v1); Phase 4 T03, evaluator running.`]
 
 > The orchestrator rewrites this whole file from this template on every update. Do not leave placeholder lines such as `TBD` or `(pending)` in a written copy; write `none` for empty sections.
 
@@ -73,3 +74,5 @@ See ## Tasks.
 - [ ] PR title + body drafted from branch commits
 - [ ] User approved the draft
 - [ ] PR/MR created/updated on the project's forge, or hand-over printed — URL or artifact: [link]
+
+See ORCHESTRATION.md § Forge adapter (Phase 7 delivery).

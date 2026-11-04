@@ -93,7 +93,7 @@ parse_warnings_w() {
 AGENT_PREFIX='Orchestration-kit agent — spawn only from the /feature, /research or /align-docs workflow, never for ordinary work. '
 
 read -r -d '' OPT_IN_FEATURE <<'EOF' || true
-Opt-in — runs only when the user types /feature.
+Opt-in — runs only when the user types /feature, including /feature resume with a goal name.
 EOF
 
 read -r -d '' OPT_IN_RESEARCH <<'EOF' || true
@@ -105,7 +105,7 @@ read -r -d '' OPT_IN_MEMORY <<'EOF' || true
 EOF
 
 read -r -d '' INVOKEFEATURE <<'EOF' || true
-Invoke for any non-trivial feature.
+Invoke for any non-trivial feature, or when the user asks to resume a goal.
 EOF
 
 read -r -d '' CODEX_OPT_IN_WARN <<'EOF' || true
@@ -153,7 +153,7 @@ read -r -d '' CURSOR_MDC_RESEARCH_ON <<'EOF' || true
 alwaysApply: true
 ---
 The orchestrator/worker/evaluator system described in .cursor/ORCHESTRATION.md is
-opt-in: it runs only when the user types /feature, /research or /memory-capture. Ordinary
+opt-in: it runs only when the user types /feature, /research or /memory-capture (`/feature resume <goal>` resumes an unfinished goal). Ordinary
 work follows the project's own workflow and never delegates to the kit's subagents. Inside
 a kit workflow, implementation goes to the implementer/test-writer subagents and all
 verification goes to the evaluator subagents; never mark orchestrated work complete
@@ -166,7 +166,7 @@ read -r -d '' CURSOR_MDC_RESEARCH_OFF <<'EOF' || true
 alwaysApply: true
 ---
 The orchestrator/worker/evaluator system described in .cursor/ORCHESTRATION.md is
-opt-in: it runs only when the user types /feature or /memory-capture. Ordinary
+opt-in: it runs only when the user types /feature or /memory-capture (`/feature resume <goal>` resumes an unfinished goal). Ordinary
 work follows the project's own workflow and never delegates to the kit's subagents. Inside
 a kit workflow, implementation goes to the implementer/test-writer subagents and all
 verification goes to the evaluator subagents; never mark orchestrated work complete
@@ -491,7 +491,7 @@ check_cursor() {
   mdc="$root1/.cursor/rules/orchestration.mdc"
   cmp -s <(printf '%s\n' "$CURSOR_MDC_RESEARCH_ON") "$mdc" || return 1
   line="$(sed -n '5p' "$root2/.cursor/rules/orchestration.mdc")"
-  [[ "$line" == 'opt-in: it runs only when the user types /feature or /memory-capture. Ordinary' ]] || return 1
+  [[ "$line" == 'opt-in: it runs only when the user types /feature or /memory-capture (`/feature resume <goal>` resumes an unfinished goal). Ordinary' ]] || return 1
   grep -qF 'Non-trivial features start with the `feature` skill' "$root3/.cursor/rules/orchestration.mdc" || return 1
   return 0
 }

@@ -8,6 +8,19 @@
 #   - both inputs are non-empty absolute paths of existing directories, and
 #   - FIXTURE_TMPDIR is not "/", is not the repository root, is not under it, and is not an
 #     ancestor of it.
+#
+# Git isolation (applied on source, unconditional, nothing inherited or opt-out): the repo-locating
+# and config-redirecting variables (GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY
+# GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_CONFIG GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT)
+# are unset, and system/global config is disabled (GIT_CONFIG_NOSYSTEM=1, GIT_CONFIG_GLOBAL=/dev/null).
+# Why: an exported repo-locating variable, or a linked worktree's shared config, lets fixture git
+# write the caller's repository. Fixture identity comes from the environment (GIT_AUTHOR_* /
+# GIT_COMMITTER_*); fixtures never write user.name or user.email into a repository.
+#
+# assert_fixture_repo <root> — after `git init <root>` and before any other git write, require that
+# <root> passes assert_fixture_root AND that git resolves its top level to <root> itself and its
+# git dir to <root>/.git (rejects nested/failed-init, subdirectories, and linked worktrees).
+# Returns 1 with one `assert_fixture_repo: ...` stderr line otherwise.
 
 # Resolve an existing directory to its physical absolute path. Empty/missing input fails
 # (it must never fall back to the current directory).
@@ -69,6 +82,15 @@ REPO_ROOT_ABS=""
 FIXTURE_TMPDIR_ABS=""
 _fixture_root_init || exit 1
 
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES \
+  GIT_COMMON_DIR GIT_CONFIG GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT
+export GIT_CONFIG_NOSYSTEM=1
+export GIT_CONFIG_GLOBAL=/dev/null
+export GIT_AUTHOR_NAME=agent-kit-fixture
+export GIT_AUTHOR_EMAIL=fixture@agent-kit.invalid
+export GIT_COMMITTER_NAME=agent-kit-fixture
+export GIT_COMMITTER_EMAIL=fixture@agent-kit.invalid
+
 assert_fixture_root() {
   local root="${1-}" abs
   if [[ -z "$root" ]]; then
@@ -94,4 +116,27 @@ assert_fixture_root() {
   esac
   echo "assert_fixture_root: outside FIXTURE_TMPDIR ($FIXTURE_TMPDIR_ABS): $abs" >&2
   return 1
+}
+
+assert_fixture_repo() {
+  local root="${1-}" abs top gitdir rtop rgd
+  assert_fixture_root "$root" || return 1
+  abs="$(_fixture_root_resolve "$root")"
+  top="$(git -C "$root" rev-parse --show-toplevel 2>/dev/null)" || top=""
+  gitdir="$(git -C "$root" rev-parse --absolute-git-dir 2>/dev/null)" || gitdir=""
+  if [[ -z "$top" || -z "$gitdir" ]]; then
+    echo "assert_fixture_repo: no git repository resolves for root $abs (top='${top}' gitdir='${gitdir}')" >&2
+    return 1
+  fi
+  rtop="$(_fixture_root_resolve "$top")" || rtop=""
+  rgd="$(_fixture_root_resolve "$gitdir")" || rgd=""
+  if [[ "$rtop" != "$abs" ]]; then
+    echo "assert_fixture_repo: root $abs resolves to top level '${rtop:-$top}', not itself" >&2
+    return 1
+  fi
+  if [[ "$rgd" != "$abs/.git" ]]; then
+    echo "assert_fixture_repo: root $abs resolves to git dir '${rgd:-$gitdir}', not $abs/.git" >&2
+    return 1
+  fi
+  return 0
 }

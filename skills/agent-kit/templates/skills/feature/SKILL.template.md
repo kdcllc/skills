@@ -26,7 +26,7 @@ to `implementer`/`test-writer`; verification to `evaluator`. Read
 
 ### Terminal spawn rule
 
-Spawn `terminal` for **any Bash or PowerShell command** whose raw output should not
+Spawn `terminal` for **Bash or PowerShell commands** whose raw output should not
 land here — pass the exact command, shell (`bash` or `pwsh`), and the result needed;
 it returns **only** that result. Never run `{{FULL_TEST_COMMAND}}` yourself — spawn
 `terminal` for rung 3. Rungs 1–2 stay with `implementer`/`test-writer` when output is
@@ -37,7 +37,9 @@ inline by the orchestrator (single-line output), never via `terminal`.
 
 Re-evaluations RESUME the same evaluator with a delta: Phase 4/5 list applied fixes and carry earlier required-fix lists; Phase 3 quotes newly written passages verbatim, attempt 3 fresh (`reference/goal-revisions.md`). Implementer resume and rotation per fix cycle: `reference/fix-cycles.md`.
 
-Rewrite `_memory/work/goals/[goal]/progress.md` from `templates/progress.md` after each phase, verdict and user decision; resume goals per `reference/resume.md`.
+### Goal checkpoint and resume
+
+Rewrite `_memory/work/goals/[goal]/progress.md` from `templates/progress.md` per `reference/resume.md` § When progress.md is written; resume goals per that file. Lead the user update at each rewrite with its progress line (`reference/progress-line.md`).
 
 ## Phase 1 — Alignment (no files)
 
@@ -48,7 +50,7 @@ Understanding" + **wait for explicit confirmation** before Phase 2. Record Phase
 
 ## Phase 2 — Goal creation
 
-**Prune** (once): before Recall and before the goal folder exists, run `_kit/memory.sh prune --apply` per `reference/memory-protocol.md` (Prune); it deletes finished `_memory/work/` folders whose records are committed and merged; any exit code or a missing tool never blocks.
+**Prune** (once): before Recall and before the goal folder exists, run `_kit/memory.sh prune --apply` per `reference/memory-protocol.md` (Prune); any exit code or a missing tool never blocks.
 `note` the summary line once `_memory/work/goals/<goal>/` exists.
 
 **Unfinished goals:** offer per `reference/resume.md` (not in loop iterations).
@@ -62,9 +64,9 @@ Create `_memory/work/goals/[goal-name]/` containing:
 - One `NN-task-name.md` per task from `templates/task.md`, in dependency order along
   {{EXECUTION_LAYERS}}, then a final test task.
 
-Every task file carries the ownership contract (`writes`/`reads`/`depends_on`/`owner`/
-`rewrite_semantics` — see `templates/task.md`), `## Acceptance Criteria` (criterion +
-verification method each; Phase 3 validates once), disjoint `writes` for unordered pairs. `eval_depth`
+Every task file carries the ownership contract (see
+`templates/task.md`), `## Acceptance Criteria` (criterion +
+verification method each), disjoint `writes` for unordered pairs. `eval_depth`
 default `light`; set `full` with reason for contract/scaffold, tasks with interface consumers (mirror/doc/test excluded), tasks writing agents/criteria/drivers/shared infra. Contract-first: shared boundary → contract/scaffold FIRST, `depends_on` on every consumer.
 
 Decision gate: multiple approaches → present tradeoffs and **wait**.
@@ -98,7 +100,7 @@ For each ready group (`reference/ready-groups.md`; `parallel: false` → one tas
 1. Launch `implementer` (`test-writer` for the test task) with a full context package.
 2. **Silent-success check**: empty/missing report ⇒ verify artifacts: present ⇒ done
    ("report lost, files verified"); absent ⇒ failed, respawn once. Never re-run when artifacts exist.
-3. Launch `evaluator` with task file, report, matching rule files, `{{IDE_DIR}}/skills/task-criteria/SKILL.md`; if read-only (evaluator.md `readonly` or refused shell), first spawn `terminal` per acceptance-criterion command and one regression proof, attach output.
+3. Launch `evaluator` with task file, report, matching rule files, `{{IDE_DIR}}/skills/task-criteria/SKILL.md`; if read-only (evaluator.md `readonly` or refused shell), first spawn `terminal` per acceptance-criterion command and, when the task has guarding tests, one regression proof, attach output.
 4. **PASS** or **PASS (with notes)** → next task (notes via `--note`). **NEEDS FIXES** → fix cycle + re-evaluate (max 3). **REJECT** → escalate.
    Before any fix cycle, bypass escalation, `criteria-defect` route, or cycle-3 action, **Read `reference/fix-cycles.md`** and follow it (line-patch resume, bypass tags, ladder, rotation).
    Out-of-fence defect in a completed task's files → `reference/corrective-tasks.md`.

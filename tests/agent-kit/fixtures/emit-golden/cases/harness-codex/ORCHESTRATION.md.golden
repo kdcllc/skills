@@ -34,7 +34,7 @@ context window, and suffers from:
 | **Agentic laziness** (optimism creep) | Desire to "finish" | Declares the job done after partial progress; cuts corners, skips edge cases | Nothing advances without an evaluator PASS against acceptance criteria written at planning time; the `task-criteria` floor fails any completion claim the evidence contradicts (F5) |
 | **Self-preferential bias** (self-review blindness, sunk cost) | Reviewing, or invested in, its own work | Misses obvious issues; reluctant to reject its own output | Evaluators are separate subagents with no stake in the outcome whose scores start low and must be earned; fix cycle 2 rotates to a different model family, and continuation-ladder arbitration uses a different-family frontier model when one is reachable |
 | **Goal drift** | Constraints fade across many turns and compactions | Late work no longer matches the original objective | `goal.md` and the task files hold the objective, constraints, and acceptance criteria on disk; every spawn receives them in its context package, and every fix is re-evaluated against them (Mandatory Re-Evaluate Invariants) |
-| **Context fatigue** | Long conversations exhaust attention | Late tasks get less quality | Fresh context per subagent; the orchestrator recommends compaction or a fresh session once its context window is about 60% full, then resumes from `goal.md`, `progress.md` and the orchestration log (feature `reference/resume.md`) |
+| **Context fatigue** | Long conversations exhaust attention | Late tasks get less quality | Fresh context per subagent; the orchestrator recommends compaction or a fresh session once its context window is about 60% full, then resumes from `goal.md`, `progress.md` and the orchestration log (feature `reference/resume.md`; Codex-only installs: § Workflow State Tracking) |
 
 ### The Solution: Separation of Concerns
 
@@ -168,7 +168,7 @@ At the same moment the orchestrator saves `git rev-parse HEAD` to
 | `evidence-collector` | Evidence-only gatherer | Smoke + optional visual QA index (no verdicts) | light, effort medium |
 | `implementer` | Focused, checklist-driven | Implementation + fixes | light, effort medium |
 | `test-writer` | Coverage-obsessed | Test creation, all external services mocked | light, effort medium |
-| `terminal` | Compact command runner | Any Bash or PowerShell command — returns only the result the caller asked for | fast, effort low |
+| `terminal` | Compact command runner | Runs only the Bash or PowerShell command in its spawn prompt, under the harness's normal approval and sandbox settings — returns only the result the caller asked for | fast, effort low |
 | `diagnostician` | Analytical, diagnosis-only | Root-cause analysis after fix-cycle exhaustion — no code writes | frontier, effort xhigh |
 
 The roster is seven subagents — `evaluator`, `qa-evaluator`, `evidence-collector`,
@@ -285,7 +285,8 @@ shape, existing patterns to follow, priority.
 
 **Phase 2 — Goal creation (with decision gates).** Before recall, the orchestrator runs
 `_kit/memory.sh prune --apply` once to delete finished `_memory/work/` folders whose records
-are committed and merged (memory protocol, Prune). Create `_memory/work/goals/[name]/` and write
+are committed and merged; a goal whose `progress.md` status is not `done` is kept
+(`keep:progress:<status>`; memory protocol, Prune). Create `_memory/work/goals/[name]/` and write
 `goal.md`. For each task: if multiple viable approaches exist, present them to the
 user and WAIT for the decision; only then create the task file. Each task file carries
 `## Acceptance Criteria` (criterion + verification method each); the Phase 3 evaluator
@@ -357,8 +358,8 @@ fixes are made and the orchestrator proceeds without re-verification. A reported
 out-of-fence defect in a completed task's files becomes a corrective task per
 `reference/corrective-tasks.md`. At each task or ready-group boundary, when the harness
 reports the main session past ~60% of its context window, recommend compaction or a fresh
-session to the user (e.g. Claude Code `/compact`; other harnesses: start a new chat and
-resume per the feature skill's `reference/resume.md`, from `progress.md`, `goal.md` and the orchestration log) — never compact automatically; log the
+session to the user (`/compact`, or a new chat to
+resume per the feature skill's `reference/resume.md`, from `progress.md`; Codex-only: § Workflow State Tracking) — never compact automatically; log the
 recommendation via `note`.
 
 **Phase 5 — Final audit (mandatory re-audit loop).** All tasks complete → final
@@ -851,7 +852,7 @@ flowchart TD
 | Max iterations per run | 10 (argument to the loop driver (`loop.sh`)) |
 | Per-story attempt cap | 3, then blocked + escalation entry |
 | Circuit breaker | per slot: retire after 3 consecutive no-commit reaps or 5 identical failure signatures (run continues); every slot retired stops the run — exit 3 if any signature-retirement, else 2 |
-| Model breaker | CLOSED/OPEN/HALF-OPEN on anchored rate-limit detection; 600s cooldown, 2 successes to close; falls down the loop model chain, omit-pin at chain end; OPEN sleeps instead of hammering; rate-limited passes CB1-exempt; upward probe of chain[0] after a fallback — first delay 1800 s, doubling with 1800 s floor, 14400 s (4 h) cap; success stays on chain[0], failure restores the pre-probe model (shared across slots) |
+| Model breaker | CLOSED/OPEN/HALF-OPEN on anchored rate-limit detection; 600s cooldown, 2 successes to close; falls down the loop model chain, omit-pin at chain end; OPEN sleeps instead of hammering; rate-limited passes CB1-exempt; upward probe of chain[0] after a fallback — first delay 1800 s, doubling with 1800 s floor, 14400 s (4 h) cap; success stays on chain[0], failure restores the pre-probe model exactly, including the empty (omit-pin) model at chain end (shared across slots); stale results ignored — each slot carries the breaker's `probeEpoch` from dispatch, which advances on every chain advance, probe start and failed-probe restore, and a result from an older epoch changes no state |
 | Exit condition | driver-dispatched runs: the driver's own backlog re-scan, gated on zero quarantined branches (exit 0); manual runs: explicit `<promise>COMPLETE</promise>` sentinel — never inferred from prose |
 | Merge gate | evaluator PASS + green ladder rungs 1–2 before any commit; rung 3 per story after that story's Phase 5 audit, before that story's commit |
 | Docs | align-docs (Phase 6) runs per story — doc updates land in the story's commit |
@@ -917,13 +918,13 @@ flowchart TD
 
 | Workflow | Read | Write |
 |----------|------|-------|
-| **Feature** | Once before Phase 2; ids in `goal.md` `## Recalled memory` | After Phase 5 APPROVED + green QC — one `goal-summary` + 0–3 `decision`/`pitfall` via `_kit/memory.*` |
+| **Feature** | Once in Phase 2, after Prune and the unfinished-goal offer; ids in `goal.md` `## Recalled memory` | After Phase 5 APPROVED + green QC — one `goal-summary` + 0–3 `decision`/`pitfall` via `_kit/memory.*` |
 | **Research** | Phase 1 → `_memory/work/research/<topic>/recalled-memory.md`; Phase 4 copies ids into the new goal | One `research-ingest` after Phase 2 ingestion review |
-| **Loop (manual)** | Feature recall once before Phase 2 in the iteration | Direct `_kit/memory.sh add`; new record paths in the story commit |
-| **Loop (dispatched)** | At `LOOP_WORKTREE=0`: feature recall once before Phase 2 in the slot; at `LOOP_WORKTREE=1`: empty recall (no `_kit/` in slot worktrees) | Proposals in `<outbox>/memory/*.md`; integrator **step 3b** at reap end |
+| **Loop (manual)** | Feature recall once in Phase 2 (after Prune and the unfinished-goal offer) in the iteration | Direct `_kit/memory.sh add`; new record paths in the story commit |
+| **Loop (dispatched)** | At `LOOP_WORKTREE=0`: feature recall once in Phase 2 (after Prune and the unfinished-goal offer) in the slot; at `LOOP_WORKTREE=1`: empty recall (no `_kit/` in slot worktrees) | Proposals in `<outbox>/memory/*.md`; integrator **step 3b** at reap end |
 | **Capture** | Optional recall when distilling a session | `memory-capture` skill: `_kit/memory.sh capture` → scope confirm → distill → `add` → `check`; gitignored `_memory/raw/` |
 | **Back-fill** | Optional recall before a one-time legacy import | `_kit/memory.sh backfill --plan` (no writes), review output, then `--apply`; sources under `_memory/work/goals/`, `_memory/work/research/`, and `_memory/loop/ESCALATIONS.md` plus `_memory/loop/archive/`; closed signals — the kit writes the `ARCHIVED:` note and `_memory/work/research/<topic>/ingested`; a human adds the escalation `resolved:` line — see `_memory/README.md` (`backfill`, **Closed signals**); one-time transcript import via `memory-capture` (runbook: `.codex/skills/feature/reference/memory-capture.md`; Codex-only installs: run `capture` per `_memory/README.md` and distill from a Claude Code, Cursor or Copilot session) |
-| **Prune** | — | Feature Phase 2 start, before recall: `_kit/memory.sh prune --apply` deletes `_memory/work/goals/<goal>/` and `_memory/work/research/<topic>/` folders whose archived record ids are all committed in `HEAD` and on the remote default branch when one exists; uncommitted, unmerged or unarchived folders are kept with a reason; preview with `--plan` — see `_memory/README.md` (`prune`) |
+| **Prune** | — | Feature Phase 2 start, before recall: `_kit/memory.sh prune --apply` deletes `_memory/work/goals/<goal>/` and `_memory/work/research/<topic>/` folders whose archived record ids are all committed in `HEAD` and on the remote default branch when one exists; uncommitted, unmerged or unarchived folders are kept with a reason, and so are unfinished goals (`progress.md` status not `done`, `keep:progress:<status>`); preview with `--plan` — see `_memory/README.md` (`prune`) |
 
 Before committing memory records, run `_kit/memory.sh check <paths>`, or
 `check --staged` for everything staged. Exit **3** means the gate failed (secret, hash/id mismatch,
@@ -966,7 +967,7 @@ installs have no kit skills tree (no protocol copy on disk).
 ├── skills/
 │   ├── feature/       # Feature coordination
 │   │   ├── SKILL.md
-│   │   ├── reference/{continuation-ladder.md,preflight.md,ready-groups.md,degraded-mode.md,memory-protocol.md,memory-capture.md,resume.md,goal-revisions.md,corrective-tasks.md,fix-cycles.md}
+│   │   ├── reference/{continuation-ladder.md,preflight.md,ready-groups.md,degraded-mode.md,memory-protocol.md,progress-line.md,memory-capture.md,resume.md,goal-revisions.md,corrective-tasks.md,fix-cycles.md}
 │   │   └── templates/{goal.md,task.md,progress.md}
 │   │
 │   ├── memory-capture/SKILL.md       # Session transcript distillation
@@ -1003,6 +1004,8 @@ _memory/loop/                   # Tracked loop ledgers and archive (breaker-stat
 _memory/.index/ · _memory/raw/  # Derived index; capture output, ledgers and drafts (gitignored)
 _loop/{loop.sh,loop.cmd,breaker.sh,PROMPT.md}  # Headless loop driver (if enabled)
 ```
+
+On Codex-only installs, which ship no kit skills tree, the `skills/` branch above is absent, including the feature skill's `templates/progress.md` and `reference/resume.md` named on the `progress.md` line; write and resume `progress.md` per § Workflow State Tracking.
 
 ### Critical Reference Files
 
@@ -1114,6 +1117,8 @@ evaluator subagents — they are not invoked directly.
 ### Workflow State Tracking
 
 The orchestrator maintains this state throughout execution: the block lives in `_memory/work/goals/[goal]/progress.md`, written from the feature skill's `templates/progress.md` (which adds Next step, Git, Tasks, In flight, Waiting on user, Deviations and exclusions, and replaces the Phase 4 table below with its `## Tasks` table), never in this file; resume per the feature skill's `reference/resume.md`.
+
+On Codex-only installs, which ship no kit skills tree, write `progress.md` with the fields this section lists, and resume from `progress.md`, `goal.md` and the orchestration log after checking the branch and HEAD against `progress.md`.
 
 ```markdown
 ## Orchestration Progress: [Goal Name]

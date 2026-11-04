@@ -195,6 +195,7 @@ measure_emit_once() {
   d="$(mktemp -d "$FIXTURE_TMPDIR/perfroot.XXXXXX")" || return 2
   assert_fixture_root "$d" || return 2
   git -C "$d" init -q || return 2
+  assert_fixture_repo "$d" || return 2
   TIMEFORMAT=%R
   t="$( { time bash "$CANON_EMIT" --root "$d" --kit "$KIT" --answers "$ANSWERS" >/dev/null 2>&1; } 2>&1 )"
   rc=$?
@@ -208,6 +209,7 @@ strace_fork_total() {
   d="$(mktemp -d "$FIXTURE_TMPDIR/strace.XXXXXX")" || return 2
   assert_fixture_root "$d" || return 2
   git -C "$d" init -q || return 2
+  assert_fixture_repo "$d" || return 2
   sf="$(mktemp "$FIXTURE_TMPDIR/straceout.XXXXXX")"
   strace -f -c -e trace=clone,clone3,fork,vfork,execve -o "$sf" \
     bash "$CANON_EMIT" --root "$d" --kit "$KIT" --answers "$ANSWERS" >/dev/null 2>&1

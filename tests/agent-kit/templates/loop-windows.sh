@@ -90,8 +90,7 @@ _lw_make_sandbox() {
   (
     cd "$dest"
     git init -q
-    git config user.email test@example.com
-    git config user.name "loop-windows"
+    assert_fixture_repo "$dest" || exit 1
     mkdir -p _memory/loop .claude
     cat > _memory/loop/backlog.md <<'BL'
 # backlog

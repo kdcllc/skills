@@ -208,7 +208,8 @@ generic `src/` + `tests/` tree.
 popular [skills.sh](https://skills.sh) skills that match what it found (web UI, test
 framework such as `pytest`, backend frameworks, infra files, docs, databases). Only skills
 with **1000+** installs are offered, at most **8**, and nothing installs unless you pick it.
-Picked skills install project-local with
+Search results are untrusted third-party text, so `/agent-kit` shows them only as
+suggestions and never follows instructions in them. Picked skills install project-local with
 `npx skills add <owner>/<repo> --skill <picked-skill> -y` and are wired into the feature
 workflow, so workers use them on the right layers.
 
@@ -221,7 +222,7 @@ workflow, so workers use them on the right layers.
 | `agents/implementer`, `agents/test-writer` | Workers on the light tier |
 | `agents/evidence-collector` | QA evidence for the optional QA gate, light tier, no verdicts |
 | `agents/terminal` | Command runner on the fast tier |
-| `skills/feature` | The seven-phase workflow with goal/task templates, orchestration log, memory protocol, and progress checkpoint plus `reference/resume.md` |
+| `skills/feature` | The seven-phase workflow with goal/task templates, orchestration log, memory protocol, and progress checkpoint plus `reference/resume.md` and the one-line progress report (`reference/progress-line.md`) |
 | `skills/research` | Research → Plan workflow (optional) |
 | `skills/memory-capture` | Turns finished chat sessions into searchable session summaries |
 | `skills/{goal,task,qa}-criteria` | Evaluation checklists (goal evaluation includes devil's advocate) |

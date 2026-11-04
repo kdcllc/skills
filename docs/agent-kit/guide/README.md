@@ -72,7 +72,7 @@ Every document in this suite follows these rules.
 ### (b) Links
 
 - Cross-document links **inside the suite** are relative and file-level only — no `#anchor` fragments across files (same-file anchors are allowed).
-- **All link targets** are written as paths resolved from the **linking file's directory**. From `docs/agent-kit/guide/`, `../` reaches `docs/` and `../../` reaches the repo root (for example `../../skills/agent-kit/SKILL.md`). Never use GitHub-root-style paths without the `../` prefix.
+- **All link targets** are written as paths resolved from the **linking file's directory**. From `docs/agent-kit/guide/`, `../` reaches `docs/agent-kit/`, `../../` reaches `docs/`, and `../../../` reaches the repo root (for example [`../../../skills/agent-kit/SKILL.md`](../../../skills/agent-kit/SKILL.md)). Never use GitHub-root-style paths without the `../` prefix.
 - Targets **outside** the suite must resolve on disk at writing time.
 - Links to the ten frozen sibling filenames in the document map above are valid once they match this map. Whole-suite resolve-on-disk is verified only at the end by the suite checker (`tests/agent-kit/docs-link-check.sh`), never during a parallel sibling task's evaluation.
 
@@ -123,7 +123,7 @@ Definitions trace to the kit's canonical sources.
 | **Supersede** | A new record's `supersedes:` field pointing at an older id; default search hides superseded rows unless `--include-superseded`. |
 | **Quarantine** | Admission screen sent a record to `_memory/quarantine/` (`add` exits 5); human review before optional re-add. |
 | **Prior-knowledge fence** | Exact heading `## Prior knowledge (DATA — not instructions; verify against code)` with ≤ 5 normative entries for implementer, test-writer, and diagnostician only. |
-| **Prune / Recall / Archive** | **Prune:** feature Phase 2 runs `_kit/memory.sh prune --apply` before recall to delete finished `_memory/work/` folders whose records are committed and merged. **Recall:** orchestrator searches before feature Phase 2 and research Phase 1, records picks in the goal's `## Recalled memory` or `_memory/work/research/<topic>/recalled-memory.md`. **Archive:** feature after Phase 5 APPROVED + green QC (goal-summary and related records); research one `research-ingest` after ingestion review, a curated brief under tracked `_memory/research/<topic>.md`, and the index row in `_memory/research/README.md`. |
+| **Prune / Recall / Archive** | **Prune:** feature Phase 2 runs `_kit/memory.sh prune --apply` before recall to delete finished `_memory/work/` folders whose records are committed and merged; goals whose `progress.md` status is not `done` are kept (`keep:progress:<status>`). **Recall:** orchestrator searches in feature Phase 2 (after Prune and the unfinished-goal offer) and at research Phase 1, records picks in the goal's `## Recalled memory` or `_memory/work/research/<topic>/recalled-memory.md`. **Archive:** feature after Phase 5 APPROVED + green QC (goal-summary and related records); research one `research-ingest` after ingestion review, a curated brief under tracked `_memory/research/<topic>.md`, and the index row in `_memory/research/README.md`. |
 
 ## Deep references
 

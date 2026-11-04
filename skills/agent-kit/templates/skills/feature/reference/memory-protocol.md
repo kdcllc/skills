@@ -9,7 +9,8 @@ On Windows outside Git Bash, use `_kit\memory.cmd` wherever this doc says
 
 ## Recall
 
-**When.** Once before feature Phase 2 (goal planning). Once at research Phase 1, with
+**When.** Once in feature Phase 2 (goal planning),
+after Prune and the unfinished-goal offer. Once at research Phase 1, with
 `_kit/memory.sh search … --kind research-ingest,decision` so settled research is not
 re-litigated. Research-born goals: research Phase 4 copies Phase 1 picks into the new
 goal's `## Recalled memory`; feature Recall does not run for them.
@@ -44,7 +45,8 @@ record `none` in `recalled-memory.md` at Phase 1 when search fails).
 
 ## Prune
 
-**When.** Once at the start of feature Phase 2, immediately before Recall, so the new goal's
+**When.** Once at the start of feature Phase 2:
+Prune, then the unfinished-goal offer (`reference/resume.md`), then Recall, so the new goal's
 folder does not exist yet. The research workflow does not run prune.
 
 **Who.** Orchestrator only, inline. Loop slots in `LOOP_WORKTREE=1` worktrees have no `_kit/`;
@@ -57,7 +59,8 @@ committed in `HEAD` and, when the repo has a remote default branch (`origin/HEAD
 `origin/main`, else `origin/master`), present there too; a research folder only when every id
 on line 2 of `ingested` is. Uncommitted or unmerged records keep the folder, so a goal
 awaiting review, commit, its PR, or PR feedback survives (the PR step reads every goal
-folder delivered on its branch).
+folder delivered on its branch). A goal folder whose `progress.md` status is not `done` is kept
+(`keep:progress:<status>`) even when its records are durable, so the offer can still list it.
 
 **Failure handling.** Non-zero exit, missing tool (exit 127), or `failed` lines never block
 Phase 2; record them in the note.

@@ -1,10 +1,10 @@
 # Resume a goal
 
-A fresh session can continue a half-finished interactive `/feature` goal without trusting stale chat state, spawn reports, or an outdated working tree. Read this reference when the user asks to resume a named goal or picks one during Phase 2.
+A fresh session can continue a half-finished interactive `/feature` goal without trusting stale chat state, spawn reports, or an outdated working tree. Read this reference when the user types `/feature resume <goal>`, asks to resume a named goal, or picks one during Phase 2.
 
 ## When progress.md is written
 
-The orchestrator performs a whole-file rewrite of `_memory/work/goals/[goal]/progress.md` from `templates/progress.md` when the goal folder is created (Phase 2), after every phase transition, every task verdict, every escalation or user decision, and before ending a session with the goal unfinished; each rewrite updates `phase:` (its own line); set `status: done` after the last enabled phase completes. This applies on every install, with or without the kit-file guard; `ORCHESTRATION.md` is never used for progress.
+The orchestrator performs a whole-file rewrite of `_memory/work/goals/[goal]/progress.md` from `templates/progress.md` when the goal folder is created (Phase 2), after every phase transition, every task verdict, every escalation or user decision, and before ending a session with the goal unfinished; each rewrite updates `phase:` (its own line); set `status: done` after the last enabled phase completes. This applies on every install, with or without the kit-file guard; `ORCHESTRATION.md` is never used for progress. Each rewrite also recomputes the `progress:` line, and the user-facing update at that moment opens with the same line (`reference/progress-line.md`).
 
 ## Unfinished goals (Phase 2)
 
@@ -12,17 +12,17 @@ After Prune and before Recall, list `_memory/work/goals/*/progress.md` whose `st
 
 ## Resume procedure
 
-Triggered when the user asks to resume a named goal or picks one at Phase 2.
+Triggered when the user types `/feature resume <goal>`, asks to resume a named goal, or picks one at Phase 2.
 
 1. Read `progress.md`, `goal.md`, every task file, `orchestration-log.md`, and — when they exist (from Phase 4 on) — `base-commit.txt` and `preexisting-dirty.txt`.
 2. **Ledger cross-check.** Every task verdict in `progress.md` has a matching OUTCOME in the log, and the log has no OUTCOME newer than `updated:` that `progress.md` does not reflect. Each SPAWN with no OUTCOME is in flight: apply the Phase 4 silent-success check (artifacts present ⇒ record "report lost, files verified"; absent ⇒ re-spawn as a new numbered entry). Never edit or delete ledger entries.
 3. **Repository check.** Confirm each item below; any mismatch is handled in step 4:
    - When a remote exists run `git fetch` (if it fails, log it, say so to the user, and continue on local refs).
    - The current branch is the recorded branch.
-   - HEAD equals `HEAD at this write`, or every commit since it is a goal commit or a recorded excluded external commit.
+   - HEAD equals `HEAD at this write`, or every commit since it is a goal commit or a recorded excluded external commit. A goal commit is one whose changed paths, listed by `git diff-tree --no-commit-id --name-only -r <sha>`, all lie inside the goal's task fences or its `_memory/work/goals/<goal>/` folder.
    - The base commit is still an ancestor of HEAD.
    - The unpushed-commit list is recomputed.
-   - No PR merged *this goal's* work: a merged PR for the branch is a mismatch only when its head commit descends from, and is not, the recorded base commit — an unknown head commit (`git merge-base --is-ancestor` exit 128) also counts as a mismatch (for example `gh pr list --state merged --head <branch> --json headRefOid` and `git merge-base --is-ancestor <base> <headRefOid>`), so older merged PRs of a reused branch do not count — squash merges create new hashes, so ancestry of HEAD alone cannot show the work is unmerged; when no forge CLI is available, say so to the user and ask whether the branch's work was merged.
+   - No PR merged *this goal's* work: a merged PR for the branch is a mismatch only when its head commit descends from, and is not, the recorded base commit, so older merged PRs of a reused branch do not count. An unknown head commit (`git merge-base --is-ancestor` exit 128) is also a mismatch; check with, for example, `gh pr list --state merged --head <branch> --json headRefOid` and `git merge-base --is-ancestor <base> <headRefOid>`. Because squash merges create new hashes, ancestry of HEAD alone cannot show the work is unmerged; when no forge CLI is available, say so to the user and ask whether the branch's work was merged.
    - Working-tree changes are limited to the goal's task fences, `preexisting-dirty.txt` and recorded exclusions.
    - **Before Phase 4** (no `base-commit.txt` yet; `progress.md` shows `base commit: not recorded until Phase 4`): skip the base-ancestry, merged-PR and pre-existing-dirty comparisons and compare HEAD with `HEAD at goal creation` instead.
 4. **Any mismatch stops the resume.** Log a note, then escalate (feature skill escalation format) naming each mismatch, with options such as re-baselining `progress.md` to the current state after the user confirms, investigating, or abandoning the goal. Never edit `progress.md` to hide a mismatch.

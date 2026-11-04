@@ -10,6 +10,15 @@ export EMIT_DATE=2026-01-01
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$HERE/../../.." && pwd)"
 
+# Private TMPDIR: every temp file/dir this suite creates (and the memory-wiring.* leak counts)
+# live here, so concurrent runs sharing the outer TMPDIR cannot make the counts drift.
+# Created before any other temp path; removed last by the EXIT trap.
+MW_PRIVATE_TMP="$(mktemp -d "${TMPDIR:-/tmp}/mwtmp.XXXXXX")" || {
+  echo "memory-wiring: cannot create private TMPDIR under ${TMPDIR:-/tmp}" >&2
+  exit 1
+}
+export TMPDIR="$MW_PRIVATE_TMP"
+
 . "$HERE/../lib/parallel.sh"
 . "$HERE/../lib/emit-cache.sh"
 
@@ -52,6 +61,7 @@ _suite_cleanup() {
   [[ ${#CLEANUP[@]} -gt 0 ]] && rm -rf "${CLEANUP[@]}"
   par_cleanup
   emit_cache_cleanup
+  [[ -n "${MW_PRIVATE_TMP:-}" ]] && rm -rf "$MW_PRIVATE_TMP"
 }
 trap _suite_cleanup EXIT
 
@@ -420,6 +430,7 @@ B1_ROOT="$b1_root"
 b1_rc=0
 emit_cache_copy "$b1_root" "$ans_path" || b1_rc=$?
 ( cd "$b1_root" && git init -q )
+assert_fixture_repo "$b1_root" || exit 1
 if [[ "${b1_rc:-0}" -eq 0 ]] && check_b1_fresh "$b1_root"; then
   report PASS "B1: fresh emit memory marker once + exact .mdc sentence"
 else
@@ -492,7 +503,9 @@ blk_b4() {
   mktemp_dir b4_fresh
   mktemp_dir b4_fresh2
   ( cd "$b4_fresh" && git init -q )
+  assert_fixture_repo "$b4_fresh" || return 1
   ( cd "$b4_fresh2" && git init -q )
+  assert_fixture_repo "$b4_fresh2" || return 1
   run_emit_sh "$b4_fresh" --answers "$ans_path" >/dev/null 2>&1 || ok=0
   run_emit_sh "$b4_fresh2" --answers "$ans_path" >/dev/null 2>&1 || ok=0
   for pf in "${POINTER_FILES[@]}" .cursor/rules/orchestration.mdc; do
@@ -582,7 +595,9 @@ b4m_applied=0
 mktemp_dir b4_mut_root
 mktemp_dir b4_good_root
 ( cd "$b4_mut_root" && git init -q )
+assert_fixture_repo "$b4_mut_root" || exit 1
 ( cd "$b4_good_root" && git init -q )
+assert_fixture_repo "$b4_good_root" || exit 1
 EMIT_SH_SAVE="$EMIT_SH"
 EMIT_SH="$b4_emit_mut/emit.sh"
 run_emit_sh "$b4_mut_root" --answers "$ans_path" >/dev/null 2>&1 || B4M_RC=$?

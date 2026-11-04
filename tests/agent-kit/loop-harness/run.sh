@@ -1483,11 +1483,10 @@ STATEEOF
   (
     cd "$CB1_DIR" && \
     git init -q && \
-    git config user.email test@example.com && \
-    git config user.name "cb1-test" && \
+    assert_fixture_repo "$CB1_DIR" && \
     git add -A && \
     git commit -qm init
-  )
+  ) || exit 1
 
   cb1_log="$TMP/cb1-run.log"
   (
@@ -2053,41 +2052,44 @@ fi
 # 34 (NEW, story-009 task-03, cycle-1 MAJOR-3 / Check-G-parity-guard
 # deviation landing site; FIX-CYCLE-1: t34_move_check re-scoped): breaker
 # mechanics structural guard. The canonical breaker.sh is grepped for three
-# mechanics, block-scoped per the assertion-18 coupling precedent (a
-# line-window anchored at the relevant function/message, not independent
-# file-wide greps a decoy could satisfy):
+# mechanics, block-scoped per the assertion-18 coupling precedent (each grep
+# runs against one function's body, from its line-anchored `^<name>() {$`
+# line through the first following line that is exactly `}`, via t34_fn_body;
+# a missing start or closing brace fails the check; not independent
+# file-wide greps a decoy could satisfy, and not fixed line counts that drift
+# when lines are added inside a function):
 #   - mv -f atomic write inside _breaker_write;
 #   - the terminator guard inside _breaker_terminator_ok;
 #   - breaker_load's fail-safe path (failing SAFE to OPEN -> _breaker_failsafe_open)
 #     and _breaker_failsafe_open's OPEN state write.
 # ---------------------------------------------------------------------------
+t34_fn_body() { # t34_fn_body <file> <function-name>; non-zero + no output if start or close missing
+  awk -v n="$2" '
+    !f && $0 == n "() {" { f = 1 }
+    f { print }
+    f && $0 == "}" { closed = 1; exit }
+    END { exit (f && closed) ? 0 : 1 }
+  ' "$1"
+}
 t34_move_check() {
-  local f="$1" ln window
-  ln="$(grep -n '_breaker_write() {' "$f" | head -1 | cut -d: -f1)"
-  [[ -z "$ln" ]] && return 1
-  window="$(sed -n "${ln},$((ln + 40))p" "$f")"
-  grep -qF 'mv -f "$tmp" "$file"' <<< "$window"
+  local body
+  body="$(t34_fn_body "$1" _breaker_write)" || return 1
+  grep -qF 'mv -f "$tmp" "$file"' <<< "$body"
 }
 t34_term_check() {
-  local f="$1" ln window
-  ln="$(grep -n '_breaker_terminator_ok() {' "$f" | head -1 | cut -d: -f1)"
-  [[ -z "$ln" ]] && return 1
-  window="$(sed -n "${ln},$((ln + 20))p" "$f")"
-  grep -qF '"}"' <<< "$window"
+  local body
+  body="$(t34_fn_body "$1" _breaker_terminator_ok)" || return 1
+  grep -qF '"}"' <<< "$body"
 }
 t34_failsafe_msg_check() {
-  local f="$1" ln window
-  ln="$(grep -n 'breaker_load() {' "$f" | head -1 | cut -d: -f1)"
-  [[ -z "$ln" ]] && return 1
-  window="$(sed -n "${ln},$((ln + 25))p" "$f")"
-  grep -qF 'failing SAFE to OPEN' <<< "$window" && grep -qF '_breaker_failsafe_open' <<< "$window"
+  local body
+  body="$(t34_fn_body "$1" breaker_load)" || return 1
+  grep -qF 'failing SAFE to OPEN' <<< "$body" && grep -qF '_breaker_failsafe_open' <<< "$body"
 }
 t34_failsafe_state_check() {
-  local f="$1" ln window
-  ln="$(grep -n '_breaker_failsafe_open() {' "$f" | head -1 | cut -d: -f1)"
-  [[ -z "$ln" ]] && return 1
-  window="$(sed -n "${ln},$((ln + 50))p" "$f")"
-  grep -qE '_breaker_write "\$file" OPEN' <<< "$window"
+  local body
+  body="$(t34_fn_body "$1" _breaker_failsafe_open)" || return 1
+  grep -qE '_breaker_write "\$file" OPEN' <<< "$body"
 }
 if t34_move_check "$BREAKER_SH" && t34_term_check "$BREAKER_SH" \
    && t34_failsafe_msg_check "$BREAKER_SH" && t34_failsafe_state_check "$BREAKER_SH"; then
@@ -2202,8 +2204,7 @@ make_sandbox() { # make_sandbox <dest_dir> <ide_dir_name> <track_loop:0|1> <trac
   (
     cd "$dest"
     git init -q
-    git config user.email test@example.com
-    git config user.name "story010-test"
+    assert_fixture_repo "$dest" || exit 1
     mkdir -p _memory/loop "$ide"
     {
       printf '# backlog\n'
@@ -2220,7 +2221,7 @@ make_sandbox() { # make_sandbox <dest_dir> <ide_dir_name> <track_loop:0|1> <trac
     if [[ "$track_ide" != "1" ]]; then printf '%s/\n' "$ide" >> .gitignore; fi
     git add -A
     git commit -qm init
-  )
+  ) || exit 1
 }
 
 sandbox_install_memory_kit() { # sandbox_install_memory_kit <dest_dir>
@@ -2919,8 +2920,7 @@ sandbox_write_loop "$SEL_DIR" ".claude"
 (
   cd "$SEL_DIR"
   git init -q
-  git config user.email test@example.com
-  git config user.name "sel-test"
+  assert_fixture_repo "$SEL_DIR" || exit 1
   mkdir -p _memory/loop .claude
   cat > _memory/loop/backlog.md << 'EOF'
 # backlog
@@ -2953,7 +2953,7 @@ EOF
   : > .gitignore
   git add -A
   git commit -qm init
-)
+) || exit 1
 
 sel_dispatched_file="$TMP/sel-dispatched.txt"
 sel_attempts_file="$TMP/sel-attempts-at-dispatch.txt"
@@ -3012,8 +3012,7 @@ sandbox_write_loop "$PINNING_DIR" ".claude"
 (
   cd "$PINNING_DIR"
   git init -q
-  git config user.email test@example.com
-  git config user.name "pinning-test"
+  assert_fixture_repo "$PINNING_DIR" || exit 1
   mkdir -p _memory/loop .claude
   {
     printf '# backlog\n\n## STORY-201: pinning test story\n'
@@ -3023,7 +3022,7 @@ sandbox_write_loop "$PINNING_DIR" ".claude"
   : > .gitignore
   git add -A
   git commit -qm init
-)
+) || exit 1
 
 pinning_received="$TMP/pinning-received-prompt.txt"
 rm -f "$pinning_received"
@@ -3183,8 +3182,7 @@ sandbox_write_loop "$MIDGLOB_DIR" ".claude"
 (
   cd "$MIDGLOB_DIR"
   git init -q
-  git config user.email test@example.com
-  git config user.name "midglob-test"
+  assert_fixture_repo "$MIDGLOB_DIR" || exit 1
   mkdir -p _memory/loop .claude
   {
     printf '# backlog\n\n## STORY-301: mid-path glob story\n'
@@ -3195,7 +3193,7 @@ sandbox_write_loop "$MIDGLOB_DIR" ".claude"
   : > .gitignore
   git add -A
   git commit -qm init
-)
+) || exit 1
 
 midglob_log="$TMP/midglob-run.log"
 cat > "$MIDGLOB_DIR/_loop/stub-midglob.sh" <<'STUBEOF'
@@ -3238,8 +3236,7 @@ sandbox_write_loop "$REFUSEDCOMP_DIR" ".claude"
 (
   cd "$REFUSEDCOMP_DIR"
   git init -q
-  git config user.email test@example.com
-  git config user.name "refused-test"
+  assert_fixture_repo "$REFUSEDCOMP_DIR" || exit 1
   mkdir -p _memory/loop .claude
   {
     printf '# backlog\n\n## STORY-401: protected-path story\n'
@@ -3250,7 +3247,7 @@ sandbox_write_loop "$REFUSEDCOMP_DIR" ".claude"
   : > .gitignore
   git add -A
   git commit -qm init
-)
+) || exit 1
 
 backlog_sha_before="$(sha256sum "$REFUSEDCOMP_DIR/_memory/loop/backlog.md" | cut -d' ' -f1)"
 refusedcomp_out="$TMP/refusedcomp-stdout.txt"
@@ -3292,8 +3289,7 @@ sandbox_write_loop "$INTEG_DIR" ".claude"
 (
   cd "$INTEG_DIR"
   git init -q
-  git config user.email test@example.com
-  git config user.name "integ-test"
+  assert_fixture_repo "$INTEG_DIR" || exit 1
   mkdir -p _memory/loop .claude
   {
     printf '# backlog\n\n'
@@ -3308,7 +3304,7 @@ sandbox_write_loop "$INTEG_DIR" ".claude"
   : > .gitignore
   git add -A
   git commit -qm init
-)
+) || exit 1
 # Stub: cycles through stories in dispatch order, emitting appropriate verdicts
 cat > "$INTEG_DIR/_loop/stub-integ.sh" <<'STUBEOF'
 #!/usr/bin/env bash
@@ -3414,8 +3410,7 @@ sandbox_write_loop "$SUBSET_DIR" ".claude"
 (
   cd "$SUBSET_DIR"
   git init -q
-  git config user.email test@example.com
-  git config user.name "subset-test"
+  assert_fixture_repo "$SUBSET_DIR" || exit 1
   mkdir -p _memory/loop .claude
   {
     printf '# backlog\n\n## STORY-601: subset-check story\n'
@@ -3426,7 +3421,7 @@ sandbox_write_loop "$SUBSET_DIR" ".claude"
   : > .gitignore
   git add -A
   git commit -qm init
-)
+) || exit 1
 
 cat > "$SUBSET_DIR/_loop/stub-subset.sh" <<'STUBEOF'
 #!/usr/bin/env bash
@@ -3472,8 +3467,7 @@ sandbox_write_loop "$MUT63_DIR" ".claude"
 (
   cd "$MUT63_DIR"
   git init -q
-  git config user.email test@example.com
-  git config user.name "subset-mut-test"
+  assert_fixture_repo "$MUT63_DIR" || exit 1
   mkdir -p _memory/loop .claude
   {
     printf '# backlog\n\n## STORY-601: subset-check story\n'
@@ -3484,7 +3478,7 @@ sandbox_write_loop "$MUT63_DIR" ".claude"
   : > .gitignore
   git add -A
   git commit -qm init
-)
+) || exit 1
 cp "$SUBSET_DIR/_loop/stub-subset.sh" "$MUT63_DIR/_loop/stub-subset.sh"
 # Mutate loop.sh: remove the subset-violation early-exit by replacing the
 # subset_bad computation with a forced-empty result (same approach as the
@@ -3527,8 +3521,7 @@ sandbox_write_loop "$ADMIT_E_DIR" ".claude"
 (
   cd "$ADMIT_E_DIR"
   git init -q
-  git config user.email test@example.com
-  git config user.name "admit-e-test"
+  assert_fixture_repo "$ADMIT_E_DIR" || exit 1
   mkdir -p _memory/loop .claude
   {
     printf '# backlog\n\n'
@@ -3542,7 +3535,7 @@ sandbox_write_loop "$ADMIT_E_DIR" ".claude"
   : > .gitignore
   git add -A
   git commit -qm init
-)
+) || exit 1
 
 admit_e_marker="$TMP/admit-e-stub-ran.marker"
 rm -f "$admit_e_marker"
@@ -3594,8 +3587,7 @@ sandbox_write_loop "$ADMIT_D_DIR" ".claude"
 (
   cd "$ADMIT_D_DIR"
   git init -q
-  git config user.email test@example.com
-  git config user.name "admit-d-test"
+  assert_fixture_repo "$ADMIT_D_DIR" || exit 1
   mkdir -p _memory/loop .claude
   {
     printf '# backlog\n\n'
@@ -3609,7 +3601,7 @@ sandbox_write_loop "$ADMIT_D_DIR" ".claude"
   : > .gitignore
   git add -A
   git commit -qm init
-)
+) || exit 1
 
 admit_d_dispatched_file="$TMP/admit-d-dispatched.txt"
 admit_d_inflight_dir="$TMP/admit-d-inflight"; mkdir -p "$admit_d_inflight_dir"
@@ -3674,8 +3666,7 @@ sandbox_write_loop "$ADMIT_B_DIR" ".claude"
 (
   cd "$ADMIT_B_DIR"
   git init -q
-  git config user.email test@example.com
-  git config user.name "admit-b-test"
+  assert_fixture_repo "$ADMIT_B_DIR" || exit 1
   mkdir -p _memory/loop .claude
   {
     printf '# backlog\n\n'
@@ -3690,7 +3681,7 @@ sandbox_write_loop "$ADMIT_B_DIR" ".claude"
   : > .gitignore
   git add -A
   git commit -qm init
-)
+) || exit 1
 
 admit_b_dispatched_file="$TMP/admit-b-dispatched.txt"
 admit_b_inflight_dir="$TMP/admit-b-inflight"; mkdir -p "$admit_b_inflight_dir"
@@ -3750,8 +3741,7 @@ sandbox_write_loop "$MUT66_DIR" ".claude"
 (
   cd "$MUT66_DIR"
   git init -q
-  git config user.email test@example.com
-  git config user.name "admit-b-mut66-test"
+  assert_fixture_repo "$MUT66_DIR" || exit 1
   mkdir -p _memory/loop .claude
   {
     printf '# backlog\n\n'
@@ -3766,7 +3756,7 @@ sandbox_write_loop "$MUT66_DIR" ".claude"
   : > .gitignore
   git add -A
   git commit -qm init
-)
+) || exit 1
 
 mut66_dispatch_log="$TMP/mut66-dispatch.log"
 mut66_inflight_dir="$TMP/mut66-inflight"; mkdir -p "$mut66_inflight_dir"
@@ -3841,8 +3831,7 @@ sandbox_write_loop "$ADMIT_A_DIR" ".claude"
 (
   cd "$ADMIT_A_DIR"
   git init -q
-  git config user.email test@example.com
-  git config user.name "admit-a-test"
+  assert_fixture_repo "$ADMIT_A_DIR" || exit 1
   mkdir -p _memory/loop .claude src
   {
     printf '# backlog\n\n'
@@ -3857,7 +3846,7 @@ sandbox_write_loop "$ADMIT_A_DIR" ".claude"
   : > .gitignore
   git add -A
   git commit -qm init
-)
+) || exit 1
 
 a_mark1="$TMP/admit-a-mark-001A.txt"
 a_mark2="$TMP/admit-a-mark-002A.txt"
@@ -3949,8 +3938,7 @@ sandbox_write_loop "$ADMIT_C_DIR" ".claude"
 (
   cd "$ADMIT_C_DIR"
   git init -q
-  git config user.email test@example.com
-  git config user.name "admit-c-test"
+  assert_fixture_repo "$ADMIT_C_DIR" || exit 1
   mkdir -p _memory/loop .claude
   {
     printf '# backlog\n\n'
@@ -3965,7 +3953,7 @@ sandbox_write_loop "$ADMIT_C_DIR" ".claude"
   : > .gitignore
   git add -A
   git commit -qm init
-)
+) || exit 1
 
 admit_c_dispatched_file="$TMP/admit-c-dispatched.txt"
 admit_c_inflight_dir="$TMP/admit-c-inflight"; mkdir -p "$admit_c_inflight_dir"
@@ -4026,8 +4014,7 @@ sandbox_write_loop "$MUT68_DIR" ".claude"
 (
   cd "$MUT68_DIR"
   git init -q
-  git config user.email test@example.com
-  git config user.name "admit-c-mut68-test"
+  assert_fixture_repo "$MUT68_DIR" || exit 1
   mkdir -p _memory/loop .claude
   {
     printf '# backlog\n\n'
@@ -4042,7 +4029,7 @@ sandbox_write_loop "$MUT68_DIR" ".claude"
   : > .gitignore
   git add -A
   git commit -qm init
-)
+) || exit 1
 
 mut68_dispatch_log="$TMP/mut68-dispatch.log"
 mut68_inflight_dir="$TMP/mut68-inflight"; mkdir -p "$mut68_inflight_dir"
@@ -4145,8 +4132,7 @@ sandbox_write_loop "$RETIRE_DIR" ".claude"
 (
   cd "$RETIRE_DIR"
   git init -q
-  git config user.email test@example.com
-  git config user.name "retire-test"
+  assert_fixture_repo "$RETIRE_DIR" || exit 1
   mkdir -p _memory/loop .claude dummy
   {
     printf '# backlog\n\n'
@@ -4164,7 +4150,7 @@ sandbox_write_loop "$RETIRE_DIR" ".claude"
   : > .gitignore
   git add -A
   git commit -qm init
-)
+) || exit 1
 
 cat > "$RETIRE_DIR/_loop/stub-retire.sh" <<'STUBEOF'
 #!/usr/bin/env bash
@@ -4242,8 +4228,7 @@ sandbox_write_loop "$PREC_DIR" ".claude"
 (
   cd "$PREC_DIR"
   git init -q
-  git config user.email test@example.com
-  git config user.name "precedence-test"
+  assert_fixture_repo "$PREC_DIR" || exit 1
   mkdir -p _memory/loop .claude dummy
   {
     printf '# backlog\n\n'
@@ -4261,7 +4246,7 @@ sandbox_write_loop "$PREC_DIR" ".claude"
   : > .gitignore
   git add -A
   git commit -qm init
-)
+) || exit 1
 
 cat > "$PREC_DIR/_loop/stub-precedence.sh" <<'STUBEOF'
 #!/usr/bin/env bash
@@ -5269,8 +5254,7 @@ sandbox_install_memory_kit "$MEM_L2_DIR"
 (
   cd "$MEM_L2_DIR"
   git init -q
-  git config user.email test@example.com
-  git config user.name "mem-l2"
+  assert_fixture_repo "$MEM_L2_DIR" || exit 1
   mkdir -p _memory/loop .claude
   {
     printf '# backlog\n\n## STORY-MISMATCH: wrong iteration id\n'
@@ -5279,7 +5263,7 @@ sandbox_install_memory_kit "$MEM_L2_DIR"
   printf 'k\n' > .claude/.keep
   printf '_kit/\n' > .gitignore
   git add -A && git commit -qm init
-)
+) || exit 1
 mem_l2_log="$TMP/mem-l2.log"
 ( cd "$MEM_L2_DIR" && env -u LOOP_SLOTS LOOP_WORKTREE=0 \
     LOOP_CLI="$MEM_STUB" bash ./_loop/loop.sh 1 ) >"$TMP/mem-l2-out.txt" 2>"$TMP/mem-l2-err.txt"
@@ -5307,8 +5291,7 @@ sandbox_install_memory_kit "$MEM_L2M_DIR"
 (
   cd "$MEM_L2M_DIR"
   git init -q
-  git config user.email test@example.com
-  git config user.name "mem-l2m"
+  assert_fixture_repo "$MEM_L2M_DIR" || exit 1
   mkdir -p _memory/loop .claude
   {
     printf '# backlog\n\n## STORY-MISMATCH: match iteration control\n'
@@ -5317,7 +5300,7 @@ sandbox_install_memory_kit "$MEM_L2M_DIR"
   printf 'k\n' > .claude/.keep
   printf '_kit/\n' > .gitignore
   git add -A && git commit -qm init
-)
+) || exit 1
 cat > "$MEM_L2M_DIR/_loop/stub-l2-match.sh" <<'STUBEOF'
 #!/usr/bin/env bash
 outbox_dir="$(echo "$1" | sed 's/.*outbox \([^;]*\).*/\1/')"
@@ -5351,8 +5334,7 @@ mem_l3_make() { # <dir> <committer-name> — STORY-101 (proposals) then STORY-10
   (
     cd "$d"
     git init -q
-    git config user.email test@example.com
-    git config user.name "$who"
+    assert_fixture_repo "$d" || exit 1
     mkdir -p _memory/loop .claude src
     {
       printf '# backlog\n\n## STORY-101: proposals first\n'
@@ -5363,7 +5345,7 @@ mem_l3_make() { # <dir> <committer-name> — STORY-101 (proposals) then STORY-10
     printf 'k\n' > .claude/.keep
     printf '_kit/\n' > .gitignore
     git add -A && git commit -qm init
-  )
+  ) || exit 1
 }
 
 # mem_l3_eval <dir> <driver-log> — the 139 predicate. Sets mem_l3_cb0/_rec/_tracked/_both;
@@ -5459,8 +5441,7 @@ sandbox_write_loop "$MEM_L4B_DIR" ".claude"
 (
   cd "$MEM_L4B_DIR"
   git init -q
-  git config user.email test@example.com
-  git config user.name "mem-l4b"
+  assert_fixture_repo "$MEM_L4B_DIR" || exit 1
   mkdir -p _memory/loop .claude
   {
     printf '# backlog\n\n## STORY-104: proposals without kit\n'
@@ -5469,7 +5450,7 @@ sandbox_write_loop "$MEM_L4B_DIR" ".claude"
   printf 'k\n' > .claude/.keep
   : > .gitignore
   git add -A && git commit -qm init
-)
+) || exit 1
 mem_l4b_log="$TMP/mem-l4b.log"
 ( cd "$MEM_L4B_DIR" && env -u LOOP_SLOTS -u LOOP_WORKTREE \
     LOOP_CLI="$MEM_STUB" bash ./_loop/loop.sh 1 ) >"$TMP/mem-l4b-out.txt" 2>"$mem_l4b_log"

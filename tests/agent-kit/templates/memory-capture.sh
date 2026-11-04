@@ -69,6 +69,7 @@ R="$T/proj.v1_x"
 mkdir -p "$H" "$R"
 assert_fixture_root "$R" || exit 1
 git_fixture "$R" init -q
+assert_fixture_repo "$R" || exit 1
 
 S1="$(slug_s1 "$R")"
 S2="$(slug_s2 "$R")"
@@ -252,6 +253,7 @@ ROOT_DOT="$T/work/foo_bar.v2"
 mkdir -p "$ROOT_DOT"
 assert_fixture_root "$ROOT_DOT" || exit 1
 git_fixture "$ROOT_DOT" init -q
+assert_fixture_repo "$ROOT_DOT" || exit 1
 EXP_S1="$(slug_s1 "$ROOT_DOT")"
 EXP_S2="$(slug_s2 "$ROOT_DOT")"
 DERIVED_CU="$H/.cursor/projects/$EXP_S1/agent-transcripts"
@@ -276,6 +278,7 @@ grep -qF 'memory: captured cursor slug-only' <<<"$cap_slug" \
 R2="$T/offroot"; mkdir -p "$R2"
 assert_fixture_root "$R2" || exit 1
 git_fixture "$R2" init -q
+assert_fixture_repo "$R2" || exit 1
 S1b="$(slug_s1 "$R2")"
 write_cursor_session "$H/.cursor/projects/$S1b/agent-transcripts" u1 "hello unrelated topic only"
 touch_old "$H/.cursor/projects/$S1b/agent-transcripts/u1/u1.jsonl"
