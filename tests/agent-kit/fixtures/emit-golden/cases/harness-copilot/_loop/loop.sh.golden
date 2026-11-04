@@ -43,12 +43,12 @@
 # PROGRESS: After every reap the driver prints one stderr line:
 #          `Progress: <pct>% (<done>/<total> steps[, <B> blocked], metric v1); <story> attempt <n> <outcome>, <in flight>.`
 #          Loop metric v1: steps are every `## STORY-` block in the backlog at print time;
-#          done is `passes: true`; blocked is not done and (`blocked: true` or attempts >= 3),
+#          done is `passes: true` whatever the attempts value; blocked is not done and (`blocked: true` or attempts >= 3),
 #          counted in total but never done, and shown only when B > 0. `pct` is floor(done * 100 /
 #          total), or 0 when total is 0. `<outcome>` is the reap's ledger outcome; in flight
 #          lists slots not yet reaped as `idle` or `<k> slot(s) running (<story> attempt <n>[ + …])`.
-#          Stories missing a pinned field, or with a non-decimal / leading-zero `attempts`
-#          value, count as pending (not done, not blocked); `--lint` reports them. This line
+#          Stories missing a pinned field, or not done and with a non-decimal / leading-zero
+#          `attempts` value, count as pending (not done, not blocked); `--lint` reports them. This line
 #          is never printed in `--lint` mode, for killed slots, at dispatch, or when the reap
 #          stops the driver (exit 4 CB0 or exit 5 integration failure). A change to the step,
 #          done or blocked rule bumps this label (`metric v2`).
@@ -511,6 +511,7 @@ _loop_st_cost_micro=()
 _loop_st_cost_seen=()
 _loop_st_reaps=()
 _loop_st_last_outcome=()
+_bl_warned_attempts=""
 _loop_story_idx=0
 _loop_outcome_names=(passed failed blocked mismatch abnormal subset tamper timeout protected nonff killed)
 _loop_outcome_counts=(0 0 0 0 0 0 0 0 0 0 0)
@@ -1006,6 +1007,31 @@ _loop_dossier_inject_block() {
     "$story" "$content"
 }
 
+# _loop_pg_finish_story -- finish one story for _loop_progress_counts; reads the
+# caller's story locals (dynamic scope). done: all four pinned lines present and
+# `passes: true`, whatever the attempts text. Otherwise blocked needs a decimal
+# attempts value (no leading zero); non-decimal / leading-zero stays pending.
+_loop_pg_finish_story() {
+  local attempts_valid=0 exhausted=0
+  _loop_pg_total=$((_loop_pg_total + 1))
+  if [[ "$attempts" =~ ^(0|[1-9][0-9]*)$ ]]; then
+    attempts_valid=1
+    if (( ${#attempts} > 1 )) || [[ "$attempts" == [3-9] ]]; then
+      exhausted=1
+    fi
+  fi
+  if (( has_priority == 1 && has_passes == 1 && has_attempts == 1 && has_blocked == 1 )); then
+    if [[ "$passes" == "true" ]]; then
+      _loop_pg_done=$((_loop_pg_done + 1))
+    elif (( attempts_valid == 1 )); then
+      if [[ "$blocked" == "true" ]] || (( exhausted == 1 )); then
+        _loop_pg_blocked=$((_loop_pg_blocked + 1))
+      fi
+    fi
+  fi
+  return 0
+}
+
 _loop_progress_counts() {
   _loop_pg_total=0
   _loop_pg_done=0
@@ -1015,27 +1041,12 @@ _loop_progress_counts() {
   fi
 
   local line in_story=0 has_priority=0 has_passes=0 has_attempts=0 has_blocked=0
-  local passes="" attempts="" blocked="" attempts_valid=0 exhausted=0
+  local passes="" attempts="" blocked=""
   if ! {
     while IFS= read -r line || [[ -n "$line" ]]; do
       if [[ "$line" == "## STORY-"* ]]; then
         if (( in_story == 1 )); then
-          _loop_pg_total=$((_loop_pg_total + 1))
-          attempts_valid=0
-          exhausted=0
-          if [[ "$attempts" =~ ^(0|[1-9][0-9]*)$ ]]; then
-            attempts_valid=1
-            if (( ${#attempts} > 1 )) || [[ "$attempts" == [3-9] ]]; then
-              exhausted=1
-            fi
-          fi
-          if (( has_priority == 1 && has_passes == 1 && has_attempts == 1 && has_blocked == 1 && attempts_valid == 1 )); then
-            if [[ "$passes" == "true" ]]; then
-              _loop_pg_done=$((_loop_pg_done + 1))
-            elif [[ "$blocked" == "true" ]] || (( exhausted == 1 )); then
-              _loop_pg_blocked=$((_loop_pg_blocked + 1))
-            fi
-          fi
+          _loop_pg_finish_story
         fi
         in_story=1
         has_priority=0
@@ -1064,22 +1075,7 @@ _loop_progress_counts() {
   fi
 
   if (( in_story == 1 )); then
-    _loop_pg_total=$((_loop_pg_total + 1))
-    attempts_valid=0
-    exhausted=0
-    if [[ "$attempts" =~ ^(0|[1-9][0-9]*)$ ]]; then
-      attempts_valid=1
-      if (( ${#attempts} > 1 )) || [[ "$attempts" == [3-9] ]]; then
-        exhausted=1
-      fi
-    fi
-    if (( has_priority == 1 && has_passes == 1 && has_attempts == 1 && has_blocked == 1 && attempts_valid == 1 )); then
-      if [[ "$passes" == "true" ]]; then
-        _loop_pg_done=$((_loop_pg_done + 1))
-      elif [[ "$blocked" == "true" ]] || (( exhausted == 1 )); then
-        _loop_pg_blocked=$((_loop_pg_blocked + 1))
-      fi
-    fi
+    _loop_pg_finish_story
   fi
   return 0
 }
@@ -1768,7 +1764,10 @@ _loop_hotspot_conflict() {
 # loudly to stderr, never a crash, never a silent skip. A malformed
 # (mid-path '*') writes: glob is reported loudly and the WHOLE story is
 # treated as writes-absent (intersects everything, runs alone) this run --
-# the suffix-only rule, goal-pinned. With second argument `lint`, each story
+# the suffix-only rule, goal-pinned. A story whose attempts: value is not a
+# plain integer (or is an octal-invalid digit string such as 08) has an
+# invalid attempts value: it is warned once per id and skipped (INELIGIBLE),
+# never evaluated as bash arithmetic. With second argument `lint`, each story
 # dispatches to _loop_lint_bl_flush instead of _loop_bl_flush.
 _loop_bl_flush() {
   # `if`-form throughout (never a bare `COND && action`/`COND || action` at
@@ -1795,7 +1794,23 @@ _loop_bl_flush() {
       fi
     done
   fi
-  if [[ "$_bl_cur_blocked" == "false" && "$_bl_cur_passes" == "false" ]] && (( _bl_cur_attempts < 3 )); then
+  local _bl_att_ok=0
+  if [[ "$_bl_cur_blocked" == "false" && "$_bl_cur_passes" == "false" ]]; then
+    if [[ "$_bl_cur_attempts" =~ ^[-+]?[0-9]+$ ]] && ! [[ "$_bl_cur_attempts" =~ ^[-+]?0[0-9]*[89] ]]; then
+      if (( _bl_cur_attempts < 3 )); then
+        _bl_att_ok=1
+      fi
+    else
+      case "$_bl_warned_attempts" in
+        *"|${_bl_cur_id}|"*) ;;
+        *)
+          _bl_warned_attempts="${_bl_warned_attempts}|${_bl_cur_id}|"
+          echo "!!! backlog: $_bl_cur_id has an invalid attempts value '$_bl_cur_attempts' -- INELIGIBLE" >&2
+          ;;
+      esac
+    fi
+  fi
+  if (( _bl_att_ok == 1 )); then
     local n=${#_bl_id[@]} j
     local idx=$n
     for ((j = 0; j < n; j++)); do

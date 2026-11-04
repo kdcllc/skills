@@ -9,7 +9,7 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 ### Added
 
 - **Progress line (feature)** — The feature orchestrator leads each user update at a `progress.md` rewrite with `Progress: <pct>% (<done>/<total> steps, metric v1); <current unit>, <in flight>.`, writes the same line as `progress:` in `progress.md`, and defines the rule in the new `reference/progress-line.md`.
-- **Progress line (loop)** — The driver prints a stderr line after each reap using loop `metric v1` (steps are backlog stories; `passes: true` is done; blocked stories are shown separately and never done).
+- **Progress line (loop)** — The driver prints a stderr line after each reap using loop `metric v1` (steps are backlog stories; `passes: true` is done whatever the attempts value; blocked stories are shown separately and never done).
 
 ### Changed
 
@@ -24,6 +24,7 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 
 ### Fixed
 
+- **Loop invalid `attempts:` value** — A story whose `attempts:` value is non-numeric, empty (selected as 0 before), or a digit string bash rejects such as `08` is now warned once (`!!! backlog: <id> has an invalid attempts value '<value>' -- INELIGIBLE`) and skipped instead of crashing the driver or being run as bash arithmetic. Numeric values keep their selection.
 - **`terminal` roster wording** — ORCHESTRATION's subagent tables now describe `terminal` as running only the command in its spawn prompt under the harness's normal approval and sandbox settings, matching the agent file; no behavior change.
 - **Codex resume pointers** — the ORCHESTRATION Context fatigue row, compaction note and File Locations section now tell Codex-only installs (no kit skills tree) to write and resume `progress.md` per § Workflow State Tracking.
 - **Breaker stale results, all states** — The breaker state gains a `probeEpoch` key that advances on every chain advance, probe start and failed-probe restore. The bash driver records each slot's epoch at dispatch and passes it to `breaker_record`, which ignores results from an older epoch. A slot dispatched before a trip no longer counts toward HALF-OPEN recovery, a stale rate limit no longer re-trips after a probe closes or advances past a restored model, and two slots rate-limited on one model advance the chain once. State files without the key load as epoch 0, and callers that omit the epoch keep the 2.2.1 rule. The stale-result line prints `(no model pin)` for an empty model.
