@@ -44,7 +44,7 @@ Changing what counts as a step, when a step counts as done, or the percentage fo
 
 For one goal with six enabled phases (Phases 1–6) and four Phase 4 tasks, there are ten steps:
 
-- `Progress: 0% (0/10 steps, metric v1); Phase 1 alignment, idle.`
+- `Progress: 10% (1/10 steps, metric v1); Phase 2 goal creation, idle.`
 - `Progress: 30% (3/10 steps, metric v1); Phase 4 T01, implementer running.`
 - `Progress: 50% (5/10 steps, metric v1); Phase 4 T03, waiting on user.`
 - `Progress: 100% (10/10 steps, metric v1); done, idle.`

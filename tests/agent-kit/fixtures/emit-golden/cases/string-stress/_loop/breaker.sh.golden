@@ -36,7 +36,8 @@
 #     (chain end); meaningful only while probing == 1, else "">,
 #   "probeEpoch": <non-negative int; +1 on every chain advance (any -> OPEN), probe
 #     start and failed-probe restore; unchanged on OPEN -> HALF-OPEN, HALF-OPEN ->
-#     CLOSED and a successful probe. Optional on read: absent (2.2.x files) = 0>
+#     CLOSED and a successful probe. Optional on read: absent (2.2.x and 2.3.x files)
+#     = 0>
 #   }
 # NOTE: there is no `consecutiveFailures` key — it was a dead key in the original
 # design note and is intentionally dropped from this schema.

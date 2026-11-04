@@ -130,7 +130,7 @@ carries `probeEpoch`, which advances on every chain advance, probe start and fai
 restore (not on OPEN→HALF-OPEN, HALF-OPEN→CLOSED or a successful probe). Each slot
 captures the epoch at dispatch and the driver passes it to `breaker_record`; a result
 from an older epoch changes no state, so it neither closes nor fails a probe and never
-advances the chain twice. State files from 2.2.x load as epoch 0. Deleting
+advances the chain twice. State files from 2.2.x and 2.3.x load as epoch 0. Deleting
 `_memory/loop/breaker-state.json` is optional — it still resets the breaker if you want
 a clean slate.
 `totalFallbacks` counts CLOSED→OPEN trips only — a HALF-OPEN re-trip advances the
