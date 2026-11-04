@@ -1,5 +1,7 @@
 #!/usr/bin/env bash
 # Guards feature-template progress-line wiring and loop-driver stderr progress behavior.
+# Also guards loop-driver `attempts` handling: story selection, the invalid-value warning, and the done counter.
+# Driver cases need timeout or gtimeout and SKIP with that reason when neither is on PATH.
 set -u
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -17,6 +19,13 @@ TEMPLATES_SRC="${PROGRESS_LINE_TEMPLATES:-$REPO_ROOT/skills/agent-kit/templates}
 pass=0
 fail=0
 skip=0
+# Same resolution order as the driver (loop.sh) and loop-guards.sh.
+TIMEOUT_BIN=""
+if command -v timeout >/dev/null 2>&1; then
+  TIMEOUT_BIN="$(command -v timeout)"
+elif command -v gtimeout >/dev/null 2>&1; then
+  TIMEOUT_BIN="$(command -v gtimeout)"
+fi
 BACKGROUND_PIDS="$FIXTURE_TMPDIR/background-pids"
 SUITE_START=$SECONDS
 
@@ -33,7 +42,7 @@ trap cleanup EXIT
 report() {
   case "$1" in
     PASS) pass=$((pass + 1)); printf 'PASS: %s\n' "$2" ;;
-    SKIP) skip=$((skip + 1)); printf 'SKIP: %s\n' "$2" ;;
+    SKIP) skip=$((skip + 1)); printf 'SKIP: %s%s\n' "$2" "${3:+ -- $3}" ;;
     *)
       fail=$((fail + 1))
       printf 'FAIL: %s -- %s\n' "$2" "$3" >&2
@@ -43,6 +52,12 @@ report() {
 
 fail_case() {
   report FAIL "$1" "$2"
+  return 1
+}
+
+need_timeout() {
+  [[ -n "$TIMEOUT_BIN" ]] && return 0
+  report SKIP "$1" "neither timeout nor gtimeout on PATH"
   return 1
 }
 
@@ -170,7 +185,7 @@ run_loop() {
   (
     cd "$dir" || exit 1
     env PL_PID_FILE="$BACKGROUND_PIDS" LOOP_USAGE_FORMAT=none "$@" \
-      timeout 20s bash ./_loop/loop.sh "$iterations"
+      "$TIMEOUT_BIN" 20s bash ./_loop/loop.sh "$iterations"
   ) > "$out" 2> "$err"
 }
 
@@ -186,6 +201,7 @@ assert_no_progress_stdout() {
 }
 
 case_f() {
+  need_timeout "f: blocked backlog" || return 0
   local dir out err expected actual rc
   dir="$(make_sandbox f)" || { fail_case "f: blocked backlog" "sandbox setup"; return; }
   {
@@ -209,6 +225,7 @@ case_f() {
 }
 
 case_g() {
+  need_timeout "g: failed verdict" || return 0
   local dir out err expected actual rc
   dir="$(make_sandbox g)" || { fail_case "g: failed verdict" "sandbox setup"; return; }
   { printf '# backlog\n'; story STORY-101 1 0 false false src/101.txt; story STORY-102 2 0 false false src/102.txt; } \
@@ -226,6 +243,7 @@ case_g() {
 }
 
 case_h() {
+  need_timeout "h: attempts cap" || return 0
   local dir out err expected actual rc
   dir="$(make_sandbox h)" || { fail_case "h: attempts cap" "sandbox setup"; return; }
   { printf '# backlog\n'; story STORY-101 1 3 false false src/101.txt; story STORY-102 2 0 false false src/102.txt; } \
@@ -243,6 +261,7 @@ case_h() {
 }
 
 case_i() {
+  need_timeout "i: multi-slot in-flight" || return 0
   local dir out err expected actual route marker pid rc found i
   dir="$(make_sandbox i)" || { fail_case "i: multi-slot in-flight" "sandbox setup"; return; }
   { printf '# backlog\n'; story STORY-101 1 0 false false src/101.txt; story STORY-102 2 0 false false src/102.txt; } \
@@ -280,7 +299,7 @@ ROUTE
   (
     cd "$dir" || exit 1
     env PL_PID_FILE="$BACKGROUND_PIDS" PL_MARKER="$marker" LOOP_USAGE_FORMAT=none \
-      LOOP_WORKTREE=1 LOOP_SLOTS=2 LOOP_CLI="$route" timeout 20s bash ./_loop/loop.sh 2
+      LOOP_WORKTREE=1 LOOP_SLOTS=2 LOOP_CLI="$route" "$TIMEOUT_BIN" 20s bash ./_loop/loop.sh 2
   ) > "$out" 2> "$err" &
   pid=$!
   printf '%s\n' "$pid" >> "$BACKGROUND_PIDS"
@@ -304,6 +323,7 @@ ROUTE
 }
 
 case_j() {
+  need_timeout "j: no-iteration modes" || return 0
   local dir out err rc
   dir="$(make_sandbox j)" || { fail_case "j: no-iteration modes" "sandbox setup"; return; }
   { printf '# backlog\n'; story STORY-101 1 0 false false src/101.txt; } > "$dir/_memory/loop/backlog.md"
@@ -324,6 +344,7 @@ case_j() {
 }
 
 case_k() {
+  need_timeout "k: leading-zero attempts" || return 0
   local dir out err expected actual rc
   dir="$(make_sandbox k)" || { fail_case "k: leading-zero attempts" "sandbox setup"; return; }
   { printf '# backlog\n'; story STORY-101 1 0 false false src/101.txt; story STORY-102 2 03 false false src/102.txt; } \
@@ -340,18 +361,127 @@ case_k() {
   report PASS "k: leading-zero attempts are pending, not blocked"
 }
 
+# --- attempts handling (selection, warning, injection, counter) ---
+
+# run_att <name> <attempts> <passes> <blocked> -> sets ATT_DIR, ATT_RC.
+# STORY-101 (priority 1) carries the value under test; STORY-102 (priority 2) is pending.
+run_att() {
+  local name="$1" value="$2" passes="$3" blocked="$4" dir
+  ATT_DIR="" ATT_RC=""
+  dir="$(make_sandbox "$name")" || return 1
+  { printf '# backlog\n'; story STORY-101 1 "$value" "$passes" "$blocked" src/STORY-101.txt
+    story STORY-102 2 0 false false src/STORY-102.txt; } > "$dir/_memory/loop/backlog.md"
+  cat > "$dir/_loop/rec-stub.sh" <<'STUB'
+#!/usr/bin/env bash
+set -u
+printf '%s\n' "$$" >> "$PL_PID_FILE"
+story="$(grep -oE 'STORY-[0-9]+' <<< "${@: -1}" | head -1)"
+printf '%s\n' "$story" >> "$PL_RECORD"
+mkdir -p src
+printf 'passed\n' > "src/$story.txt"
+git add "src/$story.txt" && git commit -qm "passed $story"
+printf 'ITERATION: %s passed (attempt 1/3)\n' "$story"
+STUB
+  chmod +x "$dir/_loop/rec-stub.sh"
+  git -C "$dir" add _memory/loop/backlog.md _loop/rec-stub.sh && git -C "$dir" commit -qm backlog || return 1
+  : > "$dir/record"
+  run_loop "$dir" 2 "$dir/stdout" "$dir/stderr" PL_RECORD="$dir/record" LOOP_CLI="$dir/_loop/rec-stub.sh"
+  ATT_RC=$?
+  ATT_DIR="$dir"
+}
+
+# claimed_attempts <dir> -> STORY-101 attempts line value in the backlog
+claimed_attempts() {
+  awk '/^## STORY-101:/{s=1;next} /^## STORY-/{s=0} s && /^- attempts:/{sub(/^- attempts: */,""); print; exit}' \
+    "$1/_memory/loop/backlog.md"
+}
+
+# check_att <label> <value> <dispatch yes|no> <claimed|-> <warn-count>
+check_att() {
+  local label="$1" value="$2" want_disp="$3" want_claim="$4" want_warn="$5" disp=no claim warn
+  if grep -qE 'unbound variable|value too great for base' "$ATT_DIR/stderr"; then
+    fail_case "$label" "driver crash text on stderr: $(grep -m1 -E 'unbound variable|value too great for base' "$ATT_DIR/stderr")"
+    return 1
+  fi
+  grep -qx 'STORY-101' "$ATT_DIR/record" && disp=yes
+  [[ "$disp" == "$want_disp" ]] || { fail_case "$label" "STORY-101 dispatched=$disp, expected $want_disp"; return 1; }
+  if [[ "$want_disp" == yes ]]; then
+    claim="$(claimed_attempts "$ATT_DIR")"
+    [[ "$claim" == "$want_claim" ]] || { fail_case "$label" "claimed attempts '$claim', expected '$want_claim'"; return 1; }
+  fi
+  warn="$(grep -cxF "!!! backlog: STORY-101 has an invalid attempts value '$value' -- INELIGIBLE" "$ATT_DIR/stderr" || :)"
+  [[ "$warn" == "$want_warn" ]] || { fail_case "$label" "warning line count $warn, expected $want_warn"; return 1; }
+  grep -qx 'STORY-102' "$ATT_DIR/record" || { fail_case "$label" "STORY-102 was not dispatched"; return 1; }
+  [[ "$ATT_RC" -eq 0 ]] || { fail_case "$label" "loop exit $ATT_RC"; return 1; }
+  return 0
+}
+
+case_l() {
+  need_timeout "l: attempts selection table" || return 0
+  local values=(-1 0 00 01 02 2 -9 +1 3 07 08 -08 x '' 1+1)
+  local disp=(yes yes yes yes yes yes yes yes no no no no no no no)
+  local claim=(0 1 1 2 3 3 -8 2 - - - - - - -)
+  local warn=(0 0 0 0 0 0 0 0 0 0 1 1 1 1 1)
+  local i v label
+  for i in "${!values[@]}"; do
+    v="${values[$i]}"
+    label="l: attempts '$v'"
+    run_att "l$i" "$v" false false || { fail_case "$label" "sandbox setup"; continue; }
+    check_att "$label" "$v" "${disp[$i]}" "${claim[$i]}" "${warn[$i]}" \
+      && report PASS "$label dispatch=${disp[$i]} claimed=${claim[$i]} warnings=${warn[$i]}"
+  done
+}
+
+case_m() {
+  need_timeout "m: done and blocked stories skip the attempts warning" || return 0
+  local label="m: invalid attempts on done/blocked story" mode passes blocked n
+  for mode in passes blocked; do
+    passes=false blocked=false
+    [[ "$mode" == passes ]] && passes=true || blocked=true
+    run_att "m-$mode" x "$passes" "$blocked" || { fail_case "$label" "sandbox setup ($mode)"; return; }
+    n="$(grep -c 'has an invalid attempts value' "$ATT_DIR/stderr" || :)"
+    [[ "$n" == 0 ]] || { fail_case "$label" "$mode run printed $n attempts warning lines"; return; }
+    ! grep -qx 'STORY-101' "$ATT_DIR/record" || { fail_case "$label" "$mode run dispatched STORY-101"; return; }
+    grep -qx 'STORY-102' "$ATT_DIR/record" || { fail_case "$label" "$mode run did not dispatch STORY-102"; return; }
+    [[ "$ATT_RC" -eq 0 ]] || { fail_case "$label" "$mode run exit $ATT_RC"; return; }
+  done
+  report PASS "$label print no warning and run STORY-102"
+}
+
+case_n() {
+  need_timeout "n: attempts injection" || return 0
+  local label="n: attempts injection" marker="$FIXTURE_TMPDIR/n-injected-marker" v
+  rm -f "$marker"
+  v="_bl_id[\$(touch\${IFS}$marker)0]"
+  run_att n "$v" false false || { fail_case "$label" "sandbox setup"; return; }
+  [[ ! -e "$marker" ]] || { fail_case "$label" "marker file was created: attempts value was evaluated"; return; }
+  ! grep -qx 'STORY-101' "$ATT_DIR/record" || { fail_case "$label" "STORY-101 was dispatched"; return; }
+  check_att "$label" "$v" no - 1 || return
+  report PASS "$label is never evaluated, warns once, STORY-102 runs"
+}
+
+case_o() {
+  need_timeout "o: done counter ignores attempts" || return 0
+  local label="o: done counter ignores attempts" dir expected actual
+  dir="$(make_sandbox o)" || { fail_case "$label" "sandbox setup"; return; }
+  { printf '# backlog\n'; story STORY-101 1 -1 true false src/101.txt; story STORY-102 2 0 false false src/102.txt; } \
+    > "$dir/_memory/loop/backlog.md"
+  git -C "$dir" add _memory/loop/backlog.md && git -C "$dir" commit -qm backlog
+  write_stub "$dir/_loop/stub.sh" || { fail_case "$label" "stub setup"; return; }
+  expected="$dir/expected" actual="$dir/actual"
+  printf '%s\n' 'Progress: 100% (2/2 steps, metric v1); STORY-102 attempt 1 passed, idle.' > "$expected"
+  run_loop "$dir" 1 "$dir/stdout" "$dir/stderr" LOOP_CLI="$dir/_loop/stub.sh"
+  [[ "$?" -eq 0 ]] || { fail_case "$label" "loop exit nonzero"; return; }
+  assert_progress "$dir/stderr" "$expected" "$actual" || { fail_case "$label" "progress line differs: $(cat "$actual")"; return; }
+  report PASS "$label (passes: true with attempts -1 is done)"
+}
+
 if [[ ! -f "$DRIVER_SRC" || ! -f "$BREAKER_SRC" || ! -f "$PROMPT_SRC" ]]; then
   report FAIL "precheck: driver" "missing loop driver/instance files; run scripts/agent-kit/self-install.sh"
   printf 'PASS: %s   FAIL: %s   SKIP: %s\n' "$pass" "$fail" "$skip"
   exit 1
 fi
-if ! command -v timeout >/dev/null 2>&1; then
-  report FAIL "precheck: timeout" "GNU timeout is required for bounded loop-driver runs"
-  printf 'PASS: %s   FAIL: %s   SKIP: %s\n' "$pass" "$fail" "$skip"
-  exit 1
-fi
-
-case_ids=(a b c d e f g h i k j)
+case_ids=(a b c d e f g h i k j l m n o)
 for id in "${case_ids[@]}"; do
   if [[ -n "${PROGRESS_LINE_ONLY:-}" && "$PROGRESS_LINE_ONLY" != "$id" ]]; then
     continue
