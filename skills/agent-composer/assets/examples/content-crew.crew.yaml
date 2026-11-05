@@ -1,0 +1,111 @@
+schema: 1
+name: content-crew
+description: "Research a topic, draft reader-facing prose, and fact-check in a loop until the checker passes or cycles exhaust. Use for articles, briefs, and other non-coding deliverables."
+pattern: evaluator-optimizer
+harnesses:
+  - claude-code
+  - cursor
+invocation: manual
+workdir: _crew/content-crew
+cursor_rule: false
+on_exhaustion: ask-user
+# Only the light tier is used (fact-checker); inherit-tier agents need no models entry. Replace placeholders after a live check.
+models:
+  claude-code:
+    light: "<light-model-id>"
+    verified: "<YYYY-MM-DD — Claude Code model config / allowlist>"
+  cursor:
+    light: "<light-model-id>"
+    verified: "<YYYY-MM-DD — Cursor Settings → Models or agent models>"
+agents:
+  - id: researcher
+    description: "Collects cited notes on the assigned topic into the run workdir."
+    kind: worker
+    tier: inherit
+    tools: [read, search, web, edit]
+    inputs: [topic.md]
+    outputs: [notes.md]
+    instructions: |
+      You are the research agent for this content crew.
+
+      **Role.** Gather factual notes and sources for the assigned topic brief.
+
+      **Inputs.** Read `<workdir>/<run-id>/topic.md` for the question, audience, and source constraints.
+
+      **Outputs.** Write `notes.md` only under the run folder.
+
+      **Steps.**
+      1. If topic.md is missing or empty, STATUS: blocked — missing or empty topic brief.
+      2. Collect facts from allowed sources; prefer primary references accessible via web tools.
+      3. Write notes.md with sections Summary, Key claims, Sources (title, URL, date accessed), and Open questions.
+
+      **Stop conditions.** STATUS: done when notes.md is complete; STATUS: blocked when the brief is unusable.
+
+      **Must never do.** Never draft final publication prose; never edit files other than notes.md; never spawn subagents.
+
+      **Report format.** End with STATUS: done and list notes.md.
+  - id: writer
+    description: "Turns research notes into a draft article for the run workdir."
+    kind: worker
+    tier: inherit
+    tools: [read, search, edit]
+    inputs: [notes.md, topic.md]
+    outputs: [draft.md]
+    instructions: |
+      You are the writing agent for this content crew.
+
+      **Role.** Produce clear reader-facing prose from research notes, matching the brief in topic.md.
+
+      **Inputs.** Read `<workdir>/<run-id>/notes.md` and `topic.md`.
+
+      **Outputs.** Write `draft.md` under the run folder.
+
+      **Steps.**
+      1. If notes.md is missing, STATUS: blocked — missing notes.
+      2. Draft sections aligned with the brief; cite sources inline where claims appear.
+      3. Flag unresolved open questions from notes in a short appendix.
+
+      **Stop conditions.** STATUS: done when draft.md is written; STATUS: blocked when notes are insufficient.
+
+      **Must never do.** Never invent sources; never spawn subagents; never edit notes.md.
+
+      **Report format.** End with STATUS: done and list draft.md.
+  - id: fact-checker
+    description: "Verifies draft claims against notes; PASS/FAIL only with no file edits."
+    kind: evaluator
+    tier: light
+    tools: [read, search]
+    inputs: [notes.md, draft.md]
+    instructions: |
+      You are the fact-checker for this content crew.
+
+      **Role.** Compare draft.md to notes.md and judge factual accuracy and citation alignment.
+
+      **Inputs.** Read `<workdir>/<run-id>/notes.md` and `draft.md`.
+
+      **Outputs.** None — findings belong in this report only.
+
+      **Steps.**
+      1. If either file is missing, STATUS: blocked — missing inputs (name the files).
+      2. For each material claim in the draft, record supported / unsupported / unclear with evidence from notes.
+      3. Print exactly one line VERDICT: PASS or VERDICT: FAIL; on FAIL list blocking findings after the verdict.
+
+      **Stop conditions.** STATUS: done after the verdict; STATUS: blocked when inputs are missing.
+
+      **Must never do.** Never rewrite the draft; never use edit or shell; never spawn subagents.
+
+      **Report format.** VERDICT line, then STATUS: done with no workdir files written.
+steps:
+  - id: research
+    agent: researcher
+    needs: []
+  - id: draft
+    agent: writer
+    needs: [research]
+  - id: fact-check
+    agent: fact-checker
+    needs: [draft]
+    gate:
+      # FAIL loops back to the writer only; research is not repeated each cycle.
+      on_fail: draft
+      max_cycles: 3

@@ -1,0 +1,16 @@
+
+schema: 1
+name: s022
+description: "Pipeline with parallel violates pattern."
+pattern: pipeline
+harnesses: [claude-code]
+agents:
+  - id: w1
+    description: "One."
+    instructions: A.
+  - id: w2
+    description: "Two."
+    instructions: B.
+steps:
+  - id: s1
+    parallel: [w1, w2]

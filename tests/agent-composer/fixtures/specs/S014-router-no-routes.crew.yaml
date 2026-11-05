@@ -1,0 +1,14 @@
+
+schema: 1
+name: s014
+description: "Router without routes."
+pattern: router
+harnesses: [claude-code]
+agents:
+  - id: r
+    description: "Router."
+    kind: router
+    instructions: Route.
+steps:
+  - id: s1
+    agent: r

@@ -1,0 +1,49 @@
+
+schema: 1
+name: s028
+description: "Seven agents warning."
+pattern: pipeline
+harnesses: [claude-code]
+agents:
+  - id: a0
+    description: "Agent 0."
+    instructions: Work.
+  - id: a1
+    description: "Agent 1."
+    instructions: Work.
+  - id: a2
+    description: "Agent 2."
+    instructions: Work.
+  - id: a3
+    description: "Agent 3."
+    instructions: Work.
+  - id: a4
+    description: "Agent 4."
+    instructions: Work.
+  - id: a5
+    description: "Agent 5."
+    instructions: Work.
+  - id: a6
+    description: "Agent 6."
+    instructions: Work.
+steps:
+  - id: s0
+    agent: a0
+  - id: s1
+    agent: a1
+    needs: [s0]
+  - id: s2
+    agent: a2
+    needs: [s1]
+  - id: s3
+    agent: a3
+    needs: [s2]
+  - id: s4
+    agent: a4
+    needs: [s3]
+  - id: s5
+    agent: a5
+    needs: [s4]
+  - id: s6
+    agent: a6
+    needs: [s5]

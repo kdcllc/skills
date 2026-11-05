@@ -1,0 +1,23 @@
+schema: 1
+name: s025
+description: "Evaluator with shell warns only."
+pattern: evaluator-optimizer
+harnesses: [claude-code]
+agents:
+  - id: w
+    description: "Worker step."
+    instructions: Work.
+  - id: ev
+    description: "Evaluator."
+    kind: evaluator
+    tools: [read, shell]
+    instructions: Check.
+steps:
+  - id: work
+    agent: w
+  - id: check
+    agent: ev
+    needs: [work]
+    gate:
+      on_fail: work
+      max_cycles: 1

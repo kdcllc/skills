@@ -60,6 +60,14 @@ Kit-specific maintainer material lives outside the skill folder so it never ship
 bash tests/agent-kit/run-all.sh
 ```
 
+## Working on agent-composer
+
+`scripts/checks/agent-composer.sh` guards agent-composer's files and pinned phrases and runs inside `scripts/validate-skills.sh`. `tests/agent-composer/run.sh` is its fixture suite (bash, python3, and PyYAML; cases that need PyYAML skip when it is missing); `.github/workflows/agent-composer.yml` runs it when a push to `master` or a pull request touches `skills/agent-composer/`, `tests/agent-composer/`, the guard, or the workflow. Run it before opening a pull request that touches `skills/agent-composer/`:
+
+```bash
+bash tests/agent-composer/run.sh
+```
+
 ## Domain bundles (Claude Code, Copilot CLI, Codex)
 
 The `kdcllc-skills` plugin in [.claude-plugin/marketplace.json](.claude-plugin/marketplace.json) has no `skills` list, so it loads every folder under `skills/`. Smaller bundles are extra entries that list skills explicitly. Paths must start with `./`, and plugin names must not start with `claude-`, `anthropic-`, or `cc-plugin-`. The existing `kdcllc-azure` bundle looks like this:

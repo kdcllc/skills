@@ -1,0 +1,14 @@
+
+schema: 1
+name: s010
+description: "Unknown step in needs."
+pattern: pipeline
+harnesses: [claude-code]
+agents:
+  - id: w
+    description: "Worker."
+    instructions: Work.
+steps:
+  - id: s1
+    agent: w
+    needs: [nope]

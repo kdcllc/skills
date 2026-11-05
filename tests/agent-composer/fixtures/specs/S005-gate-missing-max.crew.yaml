@@ -1,0 +1,16 @@
+
+schema: 1
+name: s005g
+description: "Gate missing max_cycles."
+pattern: evaluator-optimizer
+harnesses: [claude-code]
+agents:
+  - id: ev
+    description: "Evaluator."
+    kind: evaluator
+    instructions: Check.
+steps:
+  - id: s1
+    agent: ev
+    gate:
+      on_fail: s1

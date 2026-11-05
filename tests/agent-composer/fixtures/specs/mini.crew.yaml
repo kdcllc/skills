@@ -1,0 +1,15 @@
+schema: 1
+name: mini
+description: "Tiny one-step crew used to exercise tree validation. Use for tests only."
+pattern: pipeline
+harnesses:
+  - claude-code
+  - cursor
+agents:
+  - id: w
+    description: "Summarizes the input. Use as the only step."
+    instructions: |
+      Read the brief and write a summary in your report.
+steps:
+  - id: s1
+    agent: w

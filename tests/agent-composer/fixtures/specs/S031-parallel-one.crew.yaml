@@ -1,0 +1,13 @@
+
+schema: 1
+name: s031
+description: "Parallel with one agent."
+pattern: fan-out
+harnesses: [claude-code]
+agents:
+  - id: w
+    description: "Worker."
+    instructions: Work.
+steps:
+  - id: s1
+    parallel: [w]

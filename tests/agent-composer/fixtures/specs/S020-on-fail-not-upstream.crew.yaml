@@ -1,0 +1,25 @@
+
+schema: 1
+name: s020
+description: "on_fail not upstream."
+pattern: evaluator-optimizer
+harnesses: [claude-code]
+agents:
+  - id: ev
+    description: "Evaluator."
+    kind: evaluator
+    instructions: Check.
+  - id: w
+    description: "Worker."
+    instructions: Work.
+steps:
+  - id: work
+    agent: w
+  - id: side
+    agent: w
+  - id: check
+    agent: ev
+    needs: [work]
+    gate:
+      on_fail: side
+      max_cycles: 3

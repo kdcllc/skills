@@ -1,0 +1,12 @@
+
+schema: 1
+name: s005
+description: "Missing instructions triggers S005."
+pattern: pipeline
+harnesses: [claude-code]
+agents:
+  - id: w
+    description: "Worker."
+steps:
+  - id: s1
+    agent: w

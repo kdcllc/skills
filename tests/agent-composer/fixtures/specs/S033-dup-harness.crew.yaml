@@ -1,0 +1,13 @@
+
+schema: 1
+name: s033
+description: "Duplicate harness."
+pattern: pipeline
+harnesses: [claude-code, claude-code]
+agents:
+  - id: w
+    description: "Worker."
+    instructions: Work.
+steps:
+  - id: s1
+    agent: w

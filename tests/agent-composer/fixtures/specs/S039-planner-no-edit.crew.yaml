@@ -1,0 +1,21 @@
+
+schema: 1
+name: s039b
+description: "Planner without edit."
+pattern: orchestrator-workers
+harnesses: [claude-code]
+agents:
+  - id: p
+    description: "Planner."
+    kind: planner
+    tools: [read, search]
+    instructions: Plan.
+  - id: w
+    description: "Worker."
+    instructions: Work.
+steps:
+  - id: plan
+    agent: p
+    dispatch:
+      workers: [w]
+      max_tasks: 1

@@ -1,0 +1,18 @@
+
+schema: 1
+name: s035
+description: "Unknown gate key."
+pattern: evaluator-optimizer
+harnesses: [claude-code]
+agents:
+  - id: ev
+    description: "Evaluator."
+    kind: evaluator
+    instructions: Check.
+steps:
+  - id: s1
+    agent: ev
+    gate:
+      on_fail: s1
+      max_cycles: 1
+      retry: true

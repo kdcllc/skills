@@ -1,0 +1,16 @@
+
+schema: 1
+name: s023
+description: "Unused agent."
+pattern: pipeline
+harnesses: [claude-code]
+agents:
+  - id: w
+    description: "Used."
+    instructions: Work.
+  - id: orphan
+    description: "Never used."
+    instructions: Idle.
+steps:
+  - id: s1
+    agent: w

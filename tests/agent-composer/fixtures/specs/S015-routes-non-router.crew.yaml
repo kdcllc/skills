@@ -1,0 +1,26 @@
+
+schema: 1
+name: s015
+description: "Routes on non-router."
+pattern: router
+harnesses: [claude-code]
+agents:
+  - id: r
+    description: "Router."
+    kind: router
+    instructions: Route.
+  - id: w
+    description: "Worker."
+    instructions: Work.
+steps:
+  - id: route
+    agent: r
+    routes:
+      a: target
+  - id: target
+    agent: w
+    needs: [route]
+  - id: bad
+    agent: w
+    routes:
+      x: route

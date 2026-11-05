@@ -1,0 +1,14 @@
+
+schema: 1
+name: s027
+description: "Missing models tier."
+pattern: pipeline
+harnesses: [claude-code, cursor]
+agents:
+  - id: w
+    description: "Worker."
+    tier: light
+    instructions: Work.
+steps:
+  - id: s1
+    agent: w

@@ -1,0 +1,20 @@
+schema: 1
+name: positive-fake-models
+description: "Spec with non-placeholder model IDs for S040 negative test."
+pattern: pipeline
+harnesses: [claude-code, cursor]
+models:
+  claude-code:
+    light: fake-light-1
+    verified: "2026-11-05 — test"
+  cursor:
+    light: fake-light-1
+    verified: "2026-11-05 — test"
+agents:
+  - id: w
+    description: "Worker using light tier."
+    tier: light
+    instructions: Work.
+steps:
+  - id: s1
+    agent: w

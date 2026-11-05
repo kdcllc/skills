@@ -1,0 +1,20 @@
+schema: 1
+name: s040
+description: "Placeholder models warning fixture for agent-composer tests."
+pattern: pipeline
+harnesses: [claude-code, cursor]
+models:
+  claude-code:
+    light: "<light-model-id>"
+    verified: "<YYYY-MM-DD — source>"
+  cursor:
+    light: "<light-model-id>"
+    verified: "<YYYY-MM-DD — source>"
+agents:
+  - id: w
+    description: "Worker using light tier."
+    tier: light
+    instructions: Work.
+steps:
+  - id: s1
+    agent: w

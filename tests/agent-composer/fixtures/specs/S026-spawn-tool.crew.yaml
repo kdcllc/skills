@@ -1,0 +1,14 @@
+
+schema: 1
+name: s026
+description: "Spawn tool forbidden."
+pattern: pipeline
+harnesses: [claude-code]
+agents:
+  - id: w
+    description: "Worker."
+    tools: [read, search, spawn]
+    instructions: Work.
+steps:
+  - id: s1
+    agent: w

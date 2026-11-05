@@ -1,0 +1,12 @@
+schema: 1
+name: s022-fan-out-no-parallel
+description: "Fan-out without parallel step."
+pattern: fan-out
+harnesses: [claude-code]
+agents:
+  - id: w
+    description: "Worker."
+    instructions: Work.
+steps:
+  - id: s1
+    agent: w

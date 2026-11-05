@@ -68,6 +68,7 @@ Open **Customize** in the sidebar, choose **From GitHub Repository**, paste `htt
 | [azure-rbac-least-privilege](skills/azure-rbac-least-privilege/SKILL.md) | Azure RBAC | Rank the smallest built-in Azure roles that grant a set of operations, from an offline snapshot; flags roles that can assign roles. | `npx skills add kdcllc/skills --skill azure-rbac-least-privilege` |
 | [greek-to-hebrew](skills/greek-to-hebrew/SKILL.md) | Bible study | Trace a New Testament Greek word through the Septuagint to the Old Testament Hebrew behind it, with free web tools, a first-mention study, and a confidence level. Licensed CC BY-SA 4.0. | `npx skills add kdcllc/skills --skill greek-to-hebrew` |
 | [agent-kit](skills/agent-kit/SKILL.md) | Agent orchestration | Install the orchestrator/worker/evaluator multi-agent system (seven subagents, `/feature` and `/research` workflows, evaluator gates, optional autonomous loop) compiled for Claude Code, Cursor, GitHub Copilot, and Codex. Run `/agent-kit` once per project; re-run to upgrade. | `npx skills add kdcllc/skills --skill agent-kit` |
+| [agent-composer](skills/agent-composer/SKILL.md) | Agent orchestration | Design a custom crew of agents from an interview, write a YAML crew spec, and generate validated Claude Code and Cursor agents plus an orchestrator skill. | `npx skills add kdcllc/skills --skill agent-composer` |
 | [skill-versioning](skills/skill-versioning/SKILL.md) | Skill authoring | Keep each skill in a multi-skill repo on its own version and changelog: record changes under Unreleased, pick the bump, and tag `<name>/vX.Y.Z` releases. | `npx skills add kdcllc/skills --skill skill-versioning` |
 | [youtube-download](skills/youtube-download/SKILL.md) | Media | Download YouTube video or audio, metadata, and English transcripts via yt-dlp; Copilot CLI extension with webview UI. | `npx skills add kdcllc/skills --skill youtube-download` |
 | [mp3-normalize](skills/mp3-normalize/SKILL.md) | Media | Lossless MP3 loudness normalization with mp3gain; Copilot CLI extension with webview UI. | `npx skills add kdcllc/skills --skill mp3-normalize` |
@@ -110,6 +111,7 @@ scripts/release-skill.sh           # release one skill: bump, commit, tag <skill
 scripts/agent-kit/                 # agent-kit dogfood installer (self-install.sh)
 docs/agent-kit/                    # agent-kit developer guide (research briefs: _memory/research/) (not shipped)
 tests/agent-kit/                   # agent-kit test suites; run-all.sh runs everything
+tests/agent-composer/              # agent-composer fixture suite (run.sh; python3, plus PyYAML for most cases)
 _memory/                           # agent-kit memory store for this repo (immutable records)
 ```
 

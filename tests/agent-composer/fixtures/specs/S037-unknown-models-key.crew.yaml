@@ -1,0 +1,16 @@
+
+schema: 1
+name: s037
+description: "Unknown models key."
+pattern: pipeline
+harnesses: [claude-code]
+models:
+  claude-code:
+    default: x
+agents:
+  - id: w
+    description: "Worker."
+    instructions: Work.
+steps:
+  - id: s1
+    agent: w

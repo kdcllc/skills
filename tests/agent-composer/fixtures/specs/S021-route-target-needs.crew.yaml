@@ -1,0 +1,21 @@
+
+schema: 1
+name: s021
+description: "Route target missing router in needs."
+pattern: router
+harnesses: [claude-code]
+agents:
+  - id: r
+    description: "Router."
+    kind: router
+    instructions: Route.
+  - id: w
+    description: "Worker."
+    instructions: Work.
+steps:
+  - id: route
+    agent: r
+    routes:
+      a: target
+  - id: target
+    agent: w

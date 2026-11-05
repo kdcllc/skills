@@ -1,0 +1,28 @@
+schema: 1
+name: s022-router-two-routes
+description: "Router pattern with two route steps."
+pattern: router
+harnesses: [claude-code]
+agents:
+  - id: r
+    description: "Router."
+    kind: router
+    instructions: Route.
+  - id: w
+    description: "Worker."
+    instructions: Work.
+steps:
+  - id: route1
+    agent: r
+    routes:
+      a: t1
+  - id: route2
+    agent: r
+    routes:
+      b: t2
+  - id: t1
+    agent: w
+    needs: [route1]
+  - id: t2
+    agent: w
+    needs: [route2]

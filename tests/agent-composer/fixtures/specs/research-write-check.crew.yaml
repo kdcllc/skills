@@ -1,0 +1,56 @@
+
+schema: 1
+name: research-write-check
+description: "Research a topic, draft content, and fact-check in a loop until the checker passes or cycles exhaust."
+pattern: evaluator-optimizer
+harnesses:
+  - claude-code
+  - cursor
+invocation: manual
+workdir: _crew/research-write-check
+cursor_rule: false
+on_exhaustion: ask-user
+models:
+  claude-code:
+    light: fake-light-model
+  cursor:
+    light: fake-light-model
+agents:
+  - id: researcher
+    description: "Gather sources and notes for the assigned topic."
+    kind: worker
+    tier: inherit
+    tools: [read, search, web, edit]
+    instructions: |
+      Research the user's topic and write structured notes to the run workdir.
+    outputs: [notes.md]
+  - id: writer
+    description: "Turn research notes into a draft article."
+    kind: worker
+    tier: inherit
+    tools: [read, search, edit]
+    instructions: |
+      Read notes.md and write draft.md in the run workdir.
+    inputs: [notes.md]
+    outputs: [draft.md]
+  - id: checker
+    description: "Verify factual claims in the draft against the notes."
+    kind: evaluator
+    tier: light
+    tools: [read, search]
+    instructions: |
+      Compare draft.md to notes.md. Print exactly one line VERDICT: PASS or VERDICT: FAIL, followed by findings on FAIL.
+    inputs: [notes.md, draft.md]
+steps:
+  - id: research
+    agent: researcher
+    needs: []
+  - id: draft
+    agent: writer
+    needs: [research]
+  - id: review
+    agent: checker
+    needs: [draft]
+    gate:
+      on_fail: draft
+      max_cycles: 3

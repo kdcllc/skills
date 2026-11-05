@@ -1,0 +1,15 @@
+schema: 1
+name: s002
+description: "Test fixture for agent-composer validator coverage. Use in automated tests only."
+crew: x
+pattern: pipeline
+harnesses:
+  - claude-code
+agents:
+  - id: w
+    description: "Worker for test harness."
+    instructions: |
+      Do the work.
+steps:
+  - id: s1
+    agent: w

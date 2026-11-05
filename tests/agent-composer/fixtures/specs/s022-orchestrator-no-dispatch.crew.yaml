@@ -1,0 +1,14 @@
+schema: 1
+name: s022-orchestrator-no-dispatch
+description: "Orchestrator-workers without dispatch."
+pattern: orchestrator-workers
+harnesses: [claude-code]
+agents:
+  - id: p
+    description: "Planner."
+    kind: planner
+    tools: [read, edit]
+    instructions: Plan.
+steps:
+  - id: s1
+    agent: p

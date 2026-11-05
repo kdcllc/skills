@@ -1,0 +1,10 @@
+
+schema: 1
+name: s032
+description: "Zero agents."
+pattern: pipeline
+harnesses: [claude-code]
+agents: []
+steps:
+  - id: s1
+    agent: w

@@ -1,0 +1,17 @@
+
+schema: 1
+name: s011
+description: "Needs cycle."
+pattern: pipeline
+harnesses: [claude-code]
+agents:
+  - id: w
+    description: "Worker."
+    instructions: Work.
+steps:
+  - id: a
+    agent: w
+    needs: [b]
+  - id: b
+    agent: w
+    needs: [a]

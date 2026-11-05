@@ -1,0 +1,18 @@
+schema: 1
+name: two-agent-mini
+description: "Two-agent pipeline for manifest orphan test. Use in tests only."
+pattern: pipeline
+harnesses: [claude-code, cursor]
+agents:
+  - id: w
+    description: "First worker."
+    instructions: Work one.
+  - id: w2
+    description: "Second worker."
+    instructions: Work two.
+steps:
+  - id: s1
+    agent: w
+  - id: s2
+    agent: w2
+    needs: [s1]

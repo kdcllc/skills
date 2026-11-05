@@ -1,0 +1,13 @@
+
+schema: 1
+name: step-id-reuse
+description: "Step id may reuse agent id in separate namespace. Use in tests only."
+pattern: pipeline
+harnesses: [claude-code]
+agents:
+  - id: w
+    description: "Worker agent."
+    instructions: Work.
+steps:
+  - id: w
+    agent: w

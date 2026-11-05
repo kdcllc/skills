@@ -1,0 +1,15 @@
+
+schema: 1
+name: s039
+description: "Outputs without edit."
+pattern: pipeline
+harnesses: [claude-code]
+agents:
+  - id: w
+    description: "Worker."
+    tools: [read, search]
+    outputs: [out.md]
+    instructions: Work.
+steps:
+  - id: s1
+    agent: w

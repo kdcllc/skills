@@ -1,0 +1,23 @@
+
+schema: 1
+name: fanout-mini
+description: "Valid fan-out pattern for tree and spec tests. Use in tests only."
+pattern: fan-out
+harnesses: [claude-code, cursor]
+cursor_rule: true
+agents:
+  - id: w1
+    description: "First parallel worker."
+    instructions: Work one.
+  - id: w2
+    description: "Second parallel worker."
+    instructions: Work two.
+  - id: join
+    description: "Joins parallel outputs."
+    instructions: Merge.
+steps:
+  - id: par
+    parallel: [w1, w2]
+  - id: merge
+    agent: join
+    needs: [par]

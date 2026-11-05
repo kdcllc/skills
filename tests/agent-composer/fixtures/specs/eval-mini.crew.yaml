@@ -1,0 +1,17 @@
+schema: 1
+name: eval-mini
+description: "Mini crew with evaluator for T008 tree test. Use in tests only."
+pattern: evaluator-optimizer
+harnesses: [claude-code]
+agents:
+  - id: ev
+    description: "Evaluator agent."
+    kind: evaluator
+    tools: [read]
+    instructions: Check.
+steps:
+  - id: check
+    agent: ev
+    gate:
+      on_fail: check
+      max_cycles: 1

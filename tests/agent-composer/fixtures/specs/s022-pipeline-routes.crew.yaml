@@ -1,0 +1,21 @@
+schema: 1
+name: s022-pipeline-routes
+description: "Pipeline with routes step triggers S022."
+pattern: pipeline
+harnesses: [claude-code]
+agents:
+  - id: r
+    description: "Router."
+    kind: router
+    instructions: Route.
+  - id: w
+    description: "Worker."
+    instructions: Work.
+steps:
+  - id: s1
+    agent: r
+    routes:
+      a: s2
+  - id: s2
+    agent: w
+    needs: [s1]

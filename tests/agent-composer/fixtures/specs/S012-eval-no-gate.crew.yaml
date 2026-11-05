@@ -1,0 +1,14 @@
+
+schema: 1
+name: s012
+description: "Evaluator without gate."
+pattern: evaluator-optimizer
+harnesses: [claude-code]
+agents:
+  - id: ev
+    description: "Evaluator."
+    kind: evaluator
+    instructions: Check.
+steps:
+  - id: s1
+    agent: ev

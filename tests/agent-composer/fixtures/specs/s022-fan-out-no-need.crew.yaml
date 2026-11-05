@@ -1,0 +1,20 @@
+schema: 1
+name: s022-fan-out-no-need
+description: "Fan-out parallel not needed by later step."
+pattern: fan-out
+harnesses: [claude-code]
+agents:
+  - id: w1
+    description: "One."
+    instructions: A.
+  - id: w2
+    description: "Two."
+    instructions: B.
+  - id: join
+    description: "Join."
+    instructions: J.
+steps:
+  - id: par
+    parallel: [w1, w2]
+  - id: merge
+    agent: join

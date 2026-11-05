@@ -1,0 +1,15 @@
+
+schema: 1
+name: s016
+description: "Planner without dispatch."
+pattern: orchestrator-workers
+harnesses: [claude-code]
+agents:
+  - id: p
+    description: "Planner."
+    kind: planner
+    tools: [read, edit]
+    instructions: Plan.
+steps:
+  - id: s1
+    agent: p

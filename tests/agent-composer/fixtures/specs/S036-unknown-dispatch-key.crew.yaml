@@ -1,0 +1,22 @@
+
+schema: 1
+name: s036
+description: "Unknown dispatch key."
+pattern: orchestrator-workers
+harnesses: [claude-code]
+agents:
+  - id: p
+    description: "Planner."
+    kind: planner
+    tools: [read, edit]
+    instructions: Plan.
+  - id: w
+    description: "Worker."
+    instructions: Work.
+steps:
+  - id: plan
+    agent: p
+    dispatch:
+      workers: [w]
+      max_tasks: 1
+      queue: x

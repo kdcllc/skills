@@ -1,0 +1,21 @@
+
+schema: 1
+name: s019
+description: "Dispatch max_tasks out of range."
+pattern: orchestrator-workers
+harnesses: [claude-code]
+agents:
+  - id: p
+    description: "Planner."
+    kind: planner
+    tools: [read, edit]
+    instructions: Plan.
+  - id: w
+    description: "Worker."
+    instructions: Work.
+steps:
+  - id: plan
+    agent: p
+    dispatch:
+      workers: [w]
+      max_tasks: 21

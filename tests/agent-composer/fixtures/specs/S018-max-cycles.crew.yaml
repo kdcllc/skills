@@ -1,0 +1,23 @@
+
+schema: 1
+name: s018
+description: "Gate max_cycles out of range."
+pattern: evaluator-optimizer
+harnesses: [claude-code]
+agents:
+  - id: ev
+    description: "Evaluator."
+    kind: evaluator
+    instructions: Check.
+  - id: w
+    description: "Worker."
+    instructions: Work.
+steps:
+  - id: work
+    agent: w
+  - id: check
+    agent: ev
+    needs: [work]
+    gate:
+      on_fail: work
+      max_cycles: 6

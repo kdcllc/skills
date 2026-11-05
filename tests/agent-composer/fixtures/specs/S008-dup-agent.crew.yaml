@@ -1,0 +1,16 @@
+
+schema: 1
+name: s008
+description: "Duplicate agent id."
+pattern: pipeline
+harnesses: [claude-code]
+agents:
+  - id: w
+    description: "One."
+    instructions: A.
+  - id: w
+    description: "Two."
+    instructions: B.
+steps:
+  - id: s1
+    agent: w
