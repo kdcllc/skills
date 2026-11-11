@@ -47,5 +47,5 @@ Next steps:
 | [${name}](skills/${name}/SKILL.md) | TODO | TODO | \`npx skills add kdcllc/skills --skill ${name}\` |
 
   3. Run: bash scripts/validate-skills.sh
-  4. After it merges, tag the first release: bash scripts/release-skill.sh ${name} 0.1.0
+  4. After it merges, CI tags the first release (fallback: bash scripts/release-skill.sh ${name} 0.1.0)
 EOF

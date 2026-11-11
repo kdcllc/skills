@@ -15,18 +15,43 @@ SKILL_DIR="${ORCHESTRATION_ADVISOR_SKILL_DIR:-$REPO/skills/orchestration-advisor
 INSPECT="$SKILL_DIR/scripts/inspect.sh"
 SIGNALS="$SKILL_DIR/references/signals.md"
 GUARD="$REPO/scripts/checks/orchestration-advisor.sh"
-BASH_BIN="$(type -P bash)"
+# The bash that is executing this suite, so inspect.sh and the guard run under
+# the same version (bash 3.2 when the suite is started with macOS /bin/bash).
+BASH_BIN="${BASH:-$(type -P bash)}"
 
 PASS=0
 FAIL=0
 SKIP=0
+SUMMARY_PRINTED=0
 
 SCRATCH_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/orchestration-advisor.XXXXXX")"
 SCRATCH_ROOT="$(cd "$SCRATCH_ROOT" && pwd -P)"
 cleanup() {
+  chmod -R u+rwx "$SCRATCH_ROOT" 2>/dev/null || true
   rm -rf "$SCRATCH_ROOT"
 }
-trap cleanup EXIT
+
+print_summary() {
+  echo "PASS: $PASS FAIL: $FAIL SKIP: $SKIP"
+  SUMMARY_PRINTED=1
+}
+
+# Exit trap. When the suite stops before main printed the summary (a set-up
+# command failed under `set -e`), say so on stderr, still print the summary
+# line, and never exit 0.
+on_exit() {
+  local rc=$?
+  if [ "$SUMMARY_PRINTED" -eq 0 ]; then
+    echo "ABORTED: suite stopped before all cases ran" >&2
+    print_summary
+    if [ "$rc" -eq 0 ]; then
+      rc=1
+    fi
+  fi
+  cleanup
+  exit "$rc"
+}
+trap on_exit EXIT
 
 # --- ambient conditions, pinned ------------------------------------------------
 
@@ -435,6 +460,117 @@ run_description_cases() {
   fi
 }
 
+# `wc -m` failing (BSD wc does on bytes that are not valid in the locale): the
+# bytes of the same text are counted instead.
+run_wc_fallback_cases() {
+  local name="claude_agent_description/wc-m-failure-falls-back-to-bytes"
+  local root stub real_wc probe
+
+  # A `wc` that exits 1 for `wc -m` and is the real one otherwise.
+  real_wc="$(type -P wc 2>/dev/null || true)"
+  case "$real_wc" in
+    /*) ;;
+    *)
+      case_skip "$name" "cannot resolve wc to an absolute path"
+      return 0
+      ;;
+  esac
+  stub="$SCRATCH_ROOT/path-wc-no-m"
+  mkdir -p "$stub"
+  printf '%s\n' '#!/bin/sh' 'if [ "${1-}" = "-m" ]; then' '  exit 1' 'fi' \
+    "exec '$real_wc' \"\$@\"" >"$stub/wc"
+  chmod +x "$stub/wc"
+
+  # "Reviews pull requests" is 21 ASCII characters; 21 / 4 rounds down to 5.
+  root="$(new_root)"
+  put "$root/.claude/agents/reviewer.md" "$(printf '%s\n' '---' 'name: reviewer' 'description: Reviews pull requests' '---' 'Body.')"
+
+  # Preconditions: the stub fails for -m, still counts bytes, and is the wc
+  # that a run with the stub directory first on PATH resolves.
+  probe="$(printf 'abc' | "$stub/wc" -c 2>/dev/null | tr -d '[:space:]' || true)"
+  if printf 'abc' | "$stub/wc" -m >/dev/null 2>&1; then
+    case_fail "$name" "precondition: the stub wc does not fail for -m"
+  elif [ "$probe" != "3" ]; then
+    case_fail "$name" "precondition: the stub wc -c printed '$probe' want 3"
+  elif [ "$(PATH="$stub:$PATH" && type -P wc)" != "$stub/wc" ]; then
+    case_fail "$name" "precondition: the stub wc is not first on PATH"
+  else
+    INSPECT_PATH="$stub:$PATH"
+    run_inspect "$root"
+    INSPECT_PATH=""
+    assert_out "$name" \
+      claude_agent_files=1 \
+      claude_agent_description_chars=21 \
+      claude_agent_description_tokens_est=5
+  fi
+}
+
+# Both `wc -m` and `wc -c` failing: nothing can count the description text, so
+# the script exits 1 with a message and prints no key.
+run_wc_failure_cases() {
+  local name="claude_agent_description/wc-m-and-wc-c-failure-exits-1"
+  local root stub real_wc probe
+
+  real_wc="$(type -P wc 2>/dev/null || true)"
+  case "$real_wc" in
+    /*) ;;
+    *)
+      case_skip "$name" "cannot resolve wc to an absolute path"
+      return 0
+      ;;
+  esac
+  # A `wc` that prints a line on standard error and exits 1 for `wc -m` and
+  # `wc -c`, and is the real one otherwise.
+  stub="$SCRATCH_ROOT/path-wc-no-m-no-c"
+  if ! mkdir -p "$stub" ||
+    ! printf '%s\n' '#!/bin/sh' 'case "${1-}" in' \
+      '  -m | -c) echo "wc: stub failure" >&2; exit 1 ;;' 'esac' \
+      "exec '$real_wc' \"\$@\"" >"$stub/wc" ||
+    ! chmod +x "$stub/wc"; then
+    case_skip "$name" "cannot build a stub wc"
+    return 0
+  fi
+
+  # "Reviews pull requests" is 21 ASCII characters.
+  root="$(new_root)"
+  put "$root/.claude/agents/reviewer.md" "$(printf '%s\n' '---' 'name: reviewer' 'description: Reviews pull requests' '---' 'Body.')"
+
+  # Preconditions: the stub fails for -m and for -c, still counts lines, and is
+  # the wc that a run with the stub directory first on PATH resolves; with the
+  # real wc the same tree is counted (the run reaches the description count).
+  probe="$(printf 'a\nb\n' | "$stub/wc" -l 2>/dev/null | tr -d '[:space:]' || true)"
+  run_inspect "$root"
+  if printf 'abc' | "$stub/wc" -m >/dev/null 2>&1; then
+    case_fail "$name" "precondition: the stub wc does not fail for -m"
+  elif printf 'abc' | "$stub/wc" -c >/dev/null 2>&1; then
+    case_fail "$name" "precondition: the stub wc does not fail for -c"
+  elif [ -z "$(printf 'abc' | "$stub/wc" -m 2>&1 >/dev/null || true)" ] ||
+    [ -z "$(printf 'abc' | "$stub/wc" -c 2>&1 >/dev/null || true)" ]; then
+    case_fail "$name" "precondition: the stub wc prints nothing on stderr for -m or -c"
+  elif [ "$probe" != "2" ]; then
+    case_fail "$name" "precondition: the stub wc -l printed '$probe' want 2"
+  elif [ "$(PATH="$stub:$PATH" && type -P wc)" != "$stub/wc" ]; then
+    case_fail "$name" "precondition: the stub wc is not first on PATH"
+  elif [ "$RC" -ne 0 ] || [ "$(value_of claude_agent_description_chars)" != "21" ]; then
+    case_fail "$name" "precondition: with the real wc exit $RC, chars=$(value_of claude_agent_description_chars) want 0 and 21"
+  else
+    INSPECT_PATH="$stub:$PATH"
+    run_inspect "$root"
+    INSPECT_PATH=""
+    if [ "$RC" -ne 1 ]; then
+      case_fail "$name" "exit $RC want 1"
+    elif [ -n "$OUT" ]; then
+      case_fail "$name" "stdout not empty: $OUT"
+    elif ! printf '%s\n' "$ERR" | grep -qF "cannot count the description text"; then
+      case_fail "$name" "stderr does not say 'cannot count the description text': $ERR"
+    elif [ "$ERR" != "inspect.sh: cannot count the description text" ]; then
+      case_fail "$name" "stderr is not exactly the one line 'inspect.sh: cannot count the description text': $ERR"
+    else
+      case_pass "$name"
+    fi
+  fi
+}
+
 # --- skills --------------------------------------------------------------------
 
 run_skill_cases() {
@@ -487,6 +623,120 @@ run_skill_cases() {
   put "$root/.codex/skills/other/SKILL.md"
   ln -s ../skills "$root/.codex/skills/loop"
   expect "skill_files/symlink-cycle" "$root" skill_files=2
+}
+
+# An unreadable skill folder must not fail the script. It sits in the last root
+# the script walks, so a walk error that is not ignored decides the exit status.
+run_unreadable_skill_cases() {
+  local name="skill_files/unreadable-folder-in-last-root"
+  local root locked uid
+
+  uid="$(id -u 2>/dev/null || true)"
+  if [ "$uid" = "0" ]; then
+    case_skip "$name" "running as user id 0, which reads through the mode"
+    return 0
+  fi
+
+  root="$(new_root)"
+  put "$root/.claude/skills/readable/SKILL.md"
+  locked="$root/.codex/skills/locked"
+  put "$locked/SKILL.md"
+
+  # Precondition: while the folder is readable the walk reaches it.
+  run_inspect "$root"
+  if [ "$RC" -ne 0 ] || [ "$(value_of skill_files)" != "2" ]; then
+    case_fail "$name" "precondition: before chmod exit $RC, skill_files=$(value_of skill_files) want 0 and 2"
+    return 0
+  fi
+
+  if ! chmod 000 "$locked" 2>/dev/null; then
+    case_skip "$name" "chmod 000 is not supported here"
+    return 0
+  fi
+  if [ -r "$locked" ] || [ -x "$locked" ]; then
+    chmod 755 "$locked" 2>/dev/null || true
+    case_skip "$name" "mode 000 does not stop reads here"
+    return 0
+  fi
+
+  run_inspect "$root"
+  # Restore the mode at once, so the scratch root can be removed on exit.
+  if ! chmod 755 "$locked"; then
+    case_fail "$name" "could not restore the mode of $locked"
+    return 0
+  fi
+  assert_out "$name" skill_files=1
+}
+
+# A copy of this suite that stops (an injected `exit 1`) while the folder of the
+# case above still has mode 000 must still remove its scratch folder: its own
+# TMPDIR is empty afterwards. The copy runs with ORCHESTRATION_ADVISOR_NESTED=1,
+# and this case returns at once under that marker, so a copy never runs it.
+run_interrupted_run_cases() {
+  local name="summary/interrupted-run-leaves-no-scratch-folder"
+  local uid self dir copy restored outf errf at rc err left
+
+  if [ -n "${ORCHESTRATION_ADVISOR_NESTED:-}" ]; then
+    return 0
+  fi
+  uid="$(id -u 2>/dev/null || true)"
+  if [ "$uid" = "0" ]; then
+    case_skip "$name" "running as user id 0: the unreadable-folder case skips, so the copy never reaches the injected stop"
+    return 0
+  fi
+
+  self="$HERE/${BASH_SOURCE[0]##*/}"
+  dir="$SCRATCH_ROOT/suite-interrupted"
+  copy="$dir/tests/orchestration-advisor/run.sh"
+  restored="$dir/restored.sh"
+  outf="$dir/stdout.txt"
+  errf="$dir/stderr.txt"
+  if ! mkdir -p "$dir/tests/orchestration-advisor" "$dir/tmp" 2>/dev/null; then
+    case_fail "$name" "precondition: cannot create a folder for the suite copy"
+    return 0
+  fi
+
+  # The stop goes after the `fi` that closes the `chmod 000` test, three lines
+  # below its `if` line, and so before the mode is restored.
+  at="$(awk '$0 == "  if ! chmod 000 \"$locked\" 2>/dev/null; then" { print NR; exit }' "$self" 2>/dev/null || true)"
+  if [ -z "$at" ]; then
+    case_fail "$name" "precondition: no 'if ! chmod 000 \"\$locked\"' line in $self"
+    return 0
+  fi
+  at=$((at + 3))
+  if [ "$(awk -v n="$at" 'NR == n { print }' "$self")" != "  fi" ]; then
+    case_fail "$name" "precondition: line $at of $self does not close the chmod 000 test"
+    return 0
+  fi
+  awk -v at="$at" '{ print } NR == at { print "  exit 1" }' "$self" >"$copy"
+
+  # Precondition: the copy is the suite plus exactly one line, `exit 1`.
+  awk -v skip="$((at + 1))" 'NR != skip { print }' "$copy" >"$restored"
+  if [ "$(($(lines_of "$copy") - $(lines_of "$self")))" -ne 1 ] ||
+    [ "$(awk -v n="$((at + 1))" 'NR == n { print }' "$copy")" != "  exit 1" ] ||
+    ! cmp -s "$restored" "$self"; then
+    case_fail "$name" "precondition: the copy does not differ from the suite by exactly one line"
+    return 0
+  fi
+
+  # The copy gets its own, empty TMPDIR under the scratch root.
+  rc=0
+  ORCHESTRATION_ADVISOR_NESTED=1 TMPDIR="$dir/tmp" \
+    ORCHESTRATION_ADVISOR_SKILL_DIR="$SKILL_DIR" \
+    "$BASH_BIN" "$copy" >"$outf" 2>"$errf" || rc=$?
+  err="$(cat "$errf")"
+  left="$(find "$dir/tmp" -mindepth 1 -maxdepth 1 -print 2>/dev/null || true)"
+  # Whatever the copy left behind must not stop the removal of the scratch root.
+  chmod -R u+rwx "$dir/tmp" 2>/dev/null || true
+  if [ "$rc" -eq 0 ]; then
+    case_fail "$name" "exit 0 want non-zero"
+  elif ! printf '%s\n' "$err" | grep -qF "ABORTED: suite stopped before all cases ran"; then
+    case_fail "$name" "stderr does not say 'ABORTED: suite stopped before all cases ran': $err"
+  elif [ -n "$left" ]; then
+    case_fail "$name" "the copy left a scratch folder in its TMPDIR: $left"
+  else
+    case_pass "$name"
+  fi
 }
 
 run_skip_list_cases() {
@@ -728,6 +978,62 @@ run_error_cases() {
   expect_usage_error "errors/argument-is-a-file" "$root/file.txt"
 }
 
+# --- required tools --------------------------------------------------------------
+
+# One required tool missing from PATH: exit 3, nothing on stdout, the tool named
+# on stderr. A usage error is reported first (exit 2) even then.
+run_required_tool_cases() {
+  local root tool other others stub name
+
+  # A tree that prints non-zero counts when the tools are present.
+  root="$(new_root)"
+  put "$root/CLAUDE.md" "# rules"
+  put "$root/package.json" '{}'
+  put "$root/.claude/agents/reviewer.md" "$(printf '%s\n' '---' 'description: Reviews code' '---')"
+
+  for tool in $CORE_TOOLS; do
+    name="errors/missing-required-tool-$tool"
+    others=""
+    for other in $CORE_TOOLS; do
+      if [ "$other" != "$tool" ]; then
+        others="$others $other"
+      fi
+    done
+    stub="$SCRATCH_ROOT/path-no-$tool"
+    # shellcheck disable=SC2086
+    if ! make_stub_path "$stub" $others; then
+      case_skip "$name" "cannot build a PATH without $tool"
+      continue
+    elif (PATH="$stub" && type -P "$tool" >/dev/null 2>&1); then
+      case_skip "$name" "$tool still reachable on the stub PATH"
+      continue
+    fi
+    INSPECT_PATH="$stub"
+    run_inspect "$root"
+    INSPECT_PATH=""
+    if [ "$RC" -ne 3 ]; then
+      case_fail "$name" "exit $RC want 3"
+    elif [ -n "$OUT" ]; then
+      case_fail "$name" "stdout not empty: $OUT"
+    elif ! printf '%s\n' "$ERR" | grep -qF "required tool not found: $tool"; then
+      case_fail "$name" "stderr does not say 'required tool not found: $tool': $ERR"
+    else
+      case_pass "$name"
+    fi
+  done
+
+  # The argument is checked before the tools.
+  name="errors/usage-error-wins-over-missing-tool"
+  stub="$SCRATCH_ROOT/path-no-find"
+  if [ ! -d "$stub" ] || (PATH="$stub" && type -P find >/dev/null 2>&1); then
+    case_skip "$name" "no PATH without find"
+  else
+    INSPECT_PATH="$stub"
+    expect_usage_error "$name" "$root/does-not-exist"
+    INSPECT_PATH=""
+  fi
+}
+
 # A tree that gives every key something to read.
 build_rich_tree() {
   local root="$1"
@@ -804,7 +1110,7 @@ run_guard_cases() {
   local out rc tmp copy key before after
 
   rc=0
-  out="$("$BASH_BIN" "$GUARD" 2>&1)" || rc=$?
+  out="$(TMPDIR="$SCRATCH_ROOT" "$BASH_BIN" "$GUARD" 2>&1)" || rc=$?
   if [ "$rc" -eq 0 ]; then
     case_pass "guard/passes-on-repository"
   else
@@ -818,7 +1124,7 @@ run_guard_cases() {
   cp -R "$SKILL_DIR" "$copy"
 
   rc=0
-  out="$("$BASH_BIN" "$GUARD" "$tmp" 2>&1)" || rc=$?
+  out="$(TMPDIR="$SCRATCH_ROOT" "$BASH_BIN" "$GUARD" "$tmp" 2>&1)" || rc=$?
   if [ "$rc" -eq 0 ]; then
     case_pass "guard/passes-on-unmodified-copy"
   else
@@ -838,7 +1144,7 @@ run_guard_cases() {
   fi
 
   rc=0
-  out="$("$BASH_BIN" "$GUARD" "$tmp" 2>&1)" || rc=$?
+  out="$(TMPDIR="$SCRATCH_ROOT" "$BASH_BIN" "$GUARD" "$tmp" 2>&1)" || rc=$?
   if [ "$rc" -ne 1 ]; then
     case_fail "guard/fails-when-signal-key-removed" "exit $rc want 1"
   elif ! printf '%s\n' "$out" | grep -q '^error: orchestration-advisor:'; then
@@ -850,6 +1156,342 @@ run_guard_cases() {
   fi
 }
 
+# run_guard [repo-root]: runs the guard; sets GUARD_OUT (stdout and stderr) and
+# GUARD_RC. The guard's here-strings make temporary files, so TMPDIR is the
+# scratch root.
+GUARD_OUT=""
+GUARD_RC=0
+run_guard() {
+  GUARD_RC=0
+  GUARD_OUT="$(TMPDIR="$SCRATCH_ROOT" "$BASH_BIN" "$GUARD" "$@" 2>&1)" || GUARD_RC=$?
+}
+
+lines_of() {
+  wc -l <"$1" | tr -d '[:space:]'
+}
+
+# mutate_skill_file <kind> <from> <to>: writes a mutated copy of one skill file.
+mutate_skill_file() {
+  case "$1" in
+    shape-only-in-frontmatter)
+      # Every "message bus" (any case) after the frontmatter's closing line.
+      awk '
+        !body { print; if (NR > 1 && $0 == "---") body = 1; next }
+        {
+          line = $0
+          while ((at = index(tolower(line), "message bus")) > 0) {
+            line = substr(line, 1, at - 1) "event relay" substr(line, at + 11)
+          }
+          print line
+        }
+      ' "$2" >"$3"
+      ;;
+    step-heading-inside-fence)
+      awk '
+        /^## Step 1 .* Detect[ \t]*$/ { print "```"; print; print "```"; next }
+        { print }
+      ' "$2" >"$3"
+      ;;
+    report-headings-swapped)
+      awk '
+        $0 == "## Evidence" { print "## Ruled out"; next }
+        $0 == "## Ruled out" { print "## Evidence"; next }
+        { print }
+      ' "$2" >"$3"
+      ;;
+    report-heading-deleted)
+      awk '$0 != "## Cost note" { print }' "$2" >"$3"
+      ;;
+    model-id-in-scripts)
+      {
+        cat "$2"
+        printf '%s\n' '# model gpt-4'
+      } >"$3"
+      ;;
+    no-closing-frontmatter)
+      # Drop the second line that is exactly "---".
+      awk '
+        $0 == "---" { seen++; if (seen == 2) next }
+        { print }
+      ' "$2" >"$3"
+      ;;
+    report-heading-moved-out-of-fence)
+      # "## Cost note" leaves the fenced block and becomes a real heading right
+      # after the block's closing fence line.
+      awk '
+        $0 == "## Cost note" && !moved { moved = 1; next }
+        { print }
+        moved == 1 && $0 == "```" { print "## Cost note"; moved = 2 }
+      ' "$2" >"$3"
+      ;;
+    crlf-line-endings)
+      awk '{ sub(/\r$/, ""); printf "%s\r\n", $0 }' "$2" >"$3"
+      ;;
+    step-heading-inside-tilde-fence)
+      awk '
+        /^## Step 1 .* Detect[ \t]*$/ { print "~~~"; print; print "~~~"; next }
+        { print }
+      ' "$2" >"$3"
+      ;;
+    report-block-tilde-fence)
+      # The two fence lines of the report-heading block become tilde fences.
+      awk '
+        $0 == "```markdown" && !block { print "~~~markdown"; block = 1; next }
+        block == 1 && $0 == "```" { print "~~~"; block = 2; next }
+        { print }
+      ' "$2" >"$3"
+      ;;
+    *) return 1 ;;
+  esac
+}
+
+# expect_guard_rejects <case> <kind> <file> <line-delta> <text>: on a fresh copy
+# of the skill under a new temporary root, mutates one file, then wants the
+# guard to exit 1 with <text> in its output. Preconditions: the mutation changed
+# the file, by exactly <line-delta> lines.
+expect_guard_rejects() {
+  local name="$1" kind="$2" rel="$3" delta="$4" want="$5"
+  local tmp copy got named
+
+  tmp="$(new_root)"
+  copy="$tmp/skills/orchestration-advisor"
+  mkdir -p "$tmp/skills"
+  cp -R "$SKILL_DIR" "$copy"
+
+  if ! mutate_skill_file "$kind" "$SKILL_DIR/$rel" "$copy/$rel"; then
+    case_fail "$name" "precondition: the mutation of $rel did not run"
+    return 0
+  fi
+  if cmp -s "$SKILL_DIR/$rel" "$copy/$rel"; then
+    case_fail "$name" "precondition: the mutation left $rel unchanged"
+    return 0
+  fi
+  got=$(($(lines_of "$copy/$rel") - $(lines_of "$SKILL_DIR/$rel")))
+  if [ "$got" -ne "$delta" ]; then
+    case_fail "$name" "precondition: the mutation changed $rel by $got lines, want $delta"
+    return 0
+  fi
+  if [ "$kind" = "shape-only-in-frontmatter" ]; then
+    # The shape is still named, and only on the frontmatter description line.
+    named="$(grep -i 'message bus' "$copy/$rel" || true)"
+    case "$named" in
+      description:*) ;;
+      *)
+        case_fail "$name" "precondition: 'message bus' is not left on the description line only: $named"
+        return 0
+        ;;
+    esac
+    if [ "$(printf '%s\n' "$named" | wc -l | tr -d '[:space:]')" != "1" ]; then
+      case_fail "$name" "precondition: 'message bus' is left on more than one line"
+      return 0
+    fi
+  fi
+
+  run_guard "$tmp"
+  if [ "$GUARD_RC" -ne 1 ]; then
+    case_fail "$name" "exit $GUARD_RC want 1: $GUARD_OUT"
+  elif ! printf '%s\n' "$GUARD_OUT" | grep -qF -- "$want"; then
+    case_fail "$name" "output does not say '$want': $GUARD_OUT"
+  else
+    case_pass "$name"
+  fi
+}
+
+run_guard_mutation_cases() {
+  expect_guard_rejects "guard/fails-when-shape-only-in-frontmatter" \
+    shape-only-in-frontmatter SKILL.md 0 \
+    "does not name the shape: message bus"
+
+  expect_guard_rejects "guard/fails-when-step-heading-only-in-fence" \
+    step-heading-inside-fence SKILL.md 2 \
+    "missing procedure step heading: Detect"
+
+  expect_guard_rejects "guard/fails-when-report-headings-out-of-order" \
+    report-headings-swapped SKILL.md 0 \
+    "report headings are out of order"
+
+  expect_guard_rejects "guard/fails-when-report-heading-missing" \
+    report-heading-deleted SKILL.md -1 \
+    "missing report heading: ## Cost note"
+
+  expect_guard_rejects "guard/fails-when-model-id-in-scripts" \
+    model-id-in-scripts scripts/inspect.sh 1 \
+    "concrete model ID found in scripts/"
+
+  expect_guard_rejects "guard/fails-when-frontmatter-not-closed" \
+    no-closing-frontmatter SKILL.md -1 \
+    "missing procedure step heading: Detect"
+}
+
+# Number of lines of a file that match an awk condition.
+count_matching() {
+  awk "$1 { n++ } END { print n + 0 }" "$2"
+}
+
+# expect_guard_accepts <case> <kind> <file> <line-delta>: on a fresh copy of the
+# skill under a new temporary root, mutates one file, then wants the guard to
+# exit 0. Preconditions: the mutation changed the file, by exactly <line-delta>
+# lines, and left the text the kind promises.
+expect_guard_accepts() {
+  local name="$1" kind="$2" rel="$3" delta="$4"
+  local tmp copy got
+
+  tmp="$(new_root)"
+  copy="$tmp/skills/orchestration-advisor"
+  mkdir -p "$tmp/skills"
+  cp -R "$SKILL_DIR" "$copy"
+
+  if ! mutate_skill_file "$kind" "$SKILL_DIR/$rel" "$copy/$rel"; then
+    case_fail "$name" "precondition: the mutation of $rel did not run"
+    return 0
+  fi
+  if cmp -s "$SKILL_DIR/$rel" "$copy/$rel"; then
+    case_fail "$name" "precondition: the mutation left $rel unchanged"
+    return 0
+  fi
+  got=$(($(lines_of "$copy/$rel") - $(lines_of "$SKILL_DIR/$rel")))
+  if [ "$got" -ne "$delta" ]; then
+    case_fail "$name" "precondition: the mutation changed $rel by $got lines, want $delta"
+    return 0
+  fi
+  case "$kind" in
+    crlf-line-endings)
+      # Every line ends with a carriage return.
+      if [ "$(count_matching '/\r$/' "$copy/$rel")" != "$(lines_of "$copy/$rel")" ]; then
+        case_fail "$name" "precondition: not every line of $rel ends with a carriage return"
+        return 0
+      fi
+      ;;
+    report-block-tilde-fence)
+      # One tilde block, and two backtick fence lines fewer than the original.
+      got=$(($(count_matching '/^```/' "$SKILL_DIR/$rel") - $(count_matching '/^```/' "$copy/$rel")))
+      if [ "$(count_matching '$0 == "~~~markdown"' "$copy/$rel")" != "1" ] ||
+        [ "$(count_matching '$0 == "~~~"' "$copy/$rel")" != "1" ] ||
+        [ "$got" -ne 2 ]; then
+        case_fail "$name" "precondition: the report block of $rel is not fenced by one tilde pair"
+        return 0
+      fi
+      ;;
+  esac
+
+  run_guard "$tmp"
+  if [ "$GUARD_RC" -ne 0 ]; then
+    case_fail "$name" "exit $GUARD_RC want 0: $GUARD_OUT"
+  else
+    case_pass "$name"
+  fi
+}
+
+# A symbolic link under scripts/ is not read: the model ID in its target, a
+# file outside the skill copy, is not a finding.
+run_guard_symlink_case() {
+  local name="guard/passes-when-model-id-behind-symlink-in-scripts"
+  local tmp copy target link
+
+  tmp="$(new_root)"
+  copy="$tmp/skills/orchestration-advisor"
+  mkdir -p "$tmp/skills"
+  cp -R "$SKILL_DIR" "$copy"
+  target="$tmp/outside/notes.sh"
+  put "$target" "$(printf '%s\n' '# model gpt-4')"
+  link="$copy/scripts/linked.sh"
+
+  if ! ln -s "$target" "$link" 2>/dev/null || [ ! -L "$link" ]; then
+    case_skip "$name" "symbolic links are not supported here"
+    return 0
+  fi
+  # Preconditions: the target is outside the copy, and the model ID is readable
+  # through the link.
+  case "$target" in
+    "$copy"/*)
+      case_fail "$name" "precondition: the link target is inside the skill copy"
+      return 0
+      ;;
+  esac
+  if ! grep -qE 'gpt-[0-9]' "$link" 2>/dev/null; then
+    case_fail "$name" "precondition: the model ID cannot be read through the link"
+    return 0
+  fi
+
+  run_guard "$tmp"
+  if [ "$GUARD_RC" -ne 0 ]; then
+    case_fail "$name" "exit $GUARD_RC want 0: $GUARD_OUT"
+  else
+    case_pass "$name"
+  fi
+}
+
+run_guard_fence_and_link_cases() {
+  expect_guard_rejects "guard/fails-when-report-heading-moved-out-of-fence" \
+    report-heading-moved-out-of-fence SKILL.md 0 \
+    "missing report heading: ## Cost note"
+
+  expect_guard_accepts "guard/passes-on-crlf-line-endings" \
+    crlf-line-endings SKILL.md 0
+
+  expect_guard_rejects "guard/fails-when-step-heading-only-in-tilde-fence" \
+    step-heading-inside-tilde-fence SKILL.md 2 \
+    "missing procedure step heading: Detect"
+
+  run_guard_symlink_case
+
+  expect_guard_accepts "guard/passes-when-report-block-uses-tilde-fence" \
+    report-block-tilde-fence SKILL.md 0
+}
+
+# --- exit trap -------------------------------------------------------------------
+
+# A copy of this suite that stops inside its first case function (an injected
+# `false` under `set -e`) must say so, still print the summary line, and exit
+# non-zero. The copy stops before any case runs, so it never reaches this case.
+run_abort_cases() {
+  local name="summary/abort-says-so-prints-summary-exits-non-zero"
+  local self dir copy restored errf at out rc last err
+
+  self="$HERE/${BASH_SOURCE[0]##*/}"
+  dir="$SCRATCH_ROOT/suite-copy"
+  copy="$dir/tests/orchestration-advisor/run.sh"
+  restored="$dir/restored.sh"
+  errf="$dir/stderr.txt"
+  if ! mkdir -p "$dir/tests/orchestration-advisor" "$dir/tmp" 2>/dev/null; then
+    case_skip "$name" "cannot create a folder for the suite copy"
+    return 0
+  fi
+
+  at="$(awk '$0 == "run_contract_cases() {" { print NR; exit }' "$self" 2>/dev/null || true)"
+  if [ -z "$at" ]; then
+    case_fail "$name" "precondition: no 'run_contract_cases() {' line in $self"
+    return 0
+  fi
+  awk -v at="$at" '{ print } NR == at { print "  false" }' "$self" >"$copy"
+
+  # Precondition: the copy is the suite plus exactly one line, `false`, right
+  # after the function's opening line.
+  awk -v skip="$((at + 1))" 'NR != skip { print }' "$copy" >"$restored"
+  if [ "$(($(lines_of "$copy") - $(lines_of "$self")))" -ne 1 ] ||
+    [ "$(awk -v n="$((at + 1))" 'NR == n { print }' "$copy")" != "  false" ] ||
+    ! cmp -s "$restored" "$self"; then
+    case_fail "$name" "precondition: the copy does not differ from the suite by exactly one line"
+    return 0
+  fi
+
+  # The copy gets its own TMPDIR under the scratch root.
+  rc=0
+  out="$(TMPDIR="$dir/tmp" ORCHESTRATION_ADVISOR_SKILL_DIR="$SKILL_DIR" \
+    "$BASH_BIN" "$copy" 2>"$errf")" || rc=$?
+  err="$(cat "$errf")"
+  last="$(printf '%s\n' "$out" | awk '{ last = $0 } END { print last }')"
+  if [ "$rc" -eq 0 ]; then
+    case_fail "$name" "exit 0 want non-zero"
+  elif ! printf '%s\n' "$err" | grep -qF "ABORTED: suite stopped before all cases ran"; then
+    case_fail "$name" "stderr does not say 'ABORTED: suite stopped before all cases ran': $err"
+  elif [ "$last" != "PASS: 0 FAIL: 0 SKIP: 0" ]; then
+    case_fail "$name" "last stdout line is '$last' want 'PASS: 0 FAIL: 0 SKIP: 0'"
+  else
+    case_pass "$name"
+  fi
+}
+
 # --- main ------------------------------------------------------------------------
 
 KEYS="$(keys_from_contract)"
@@ -857,12 +1499,12 @@ KEYS="$(keys_from_contract)"
 main() {
   if [ -z "$KEYS" ]; then
     case_fail "contract/keys-parsed-from-signals-md" "no keys found under '## Keys' in $SIGNALS"
-    echo "PASS: $PASS FAIL: $FAIL SKIP: $SKIP"
+    print_summary
     return 1
   fi
   if [ ! -f "$INSPECT" ]; then
     case_fail "contract/inspect-script-exists" "missing $INSPECT"
-    echo "PASS: $PASS FAIL: $FAIL SKIP: $SKIP"
+    print_summary
     return 1
   fi
 
@@ -870,16 +1512,24 @@ main() {
   run_harness_cases
   run_agent_cases
   run_description_cases
+  run_wc_fallback_cases
+  run_wc_failure_cases
   run_skill_cases
+  run_unreadable_skill_cases
+  run_interrupted_run_cases
   run_skip_list_cases
   run_mcp_cases
   run_project_cases
   run_tracked_cases
   run_error_cases
+  run_required_tool_cases
   run_whole_tree_cases
   run_guard_cases
+  run_guard_mutation_cases
+  run_guard_fence_and_link_cases
+  run_abort_cases
 
-  echo "PASS: $PASS FAIL: $FAIL SKIP: $SKIP"
+  print_summary
   [ "$FAIL" -eq 0 ]
 }
 

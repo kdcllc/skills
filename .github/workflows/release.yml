@@ -3,6 +3,8 @@ name: Release
 on:
   push:
     tags: ['*/v*']
+  # The tag-on-merge workflow starts this workflow with `--ref <tag>`, because tags pushed with the workflow token do not trigger it.
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -20,7 +22,9 @@ jobs:
         id: tag
         env:
           TAG: ${{ github.ref_name }}
+          REF: ${{ github.ref }}
         run: |
+          [[ "$REF" == refs/tags/* ]] || { echo "::error::release runs only on a tag ref (got ${REF}); start it with --ref <skill>/vX.Y.Z"; exit 1; }
           name="${TAG%/v*}"
           version="${TAG##*/v}"
           [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::tag ${TAG} is not <skill>/vX.Y.Z"; exit 1; }

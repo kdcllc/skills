@@ -22,9 +22,18 @@ This repository is **kdcllc/skills**, a multi-skill pack distributed through [sk
 ## Versioning rules
 
 - Every skill carries its own version in `metadata.version` (`MAJOR.MINOR.PATCH`, quoted) and its own `skills/<name>/CHANGELOG.md`. The changelog keeps an `## [Unreleased]` section at the top, and its first released `## [X.Y.Z]` heading must equal `metadata.version`.
-- When you change a skill's folder, add a line under `## [Unreleased]` in that skill's changelog. Don't bump `metadata.version` yourself (the `agent-kit` release-PR exception is below). Follow [skills/skill-versioning/SKILL.md](skills/skill-versioning/SKILL.md) for how to write entries, pick a bump, and release; `bash skills/skill-versioning/scripts/skill-status.sh` shows which skills need an entry or a release.
-- Releases go through `bash scripts/release-skill.sh <name> X.Y.Z`, which bumps the version, commits, and creates the tag `<name>/vX.Y.Z`. Never hand-edit versions or create release tags manually, and never push tags unless the user asks.
-- Exception: `agent-kit` bumps its version inside the release PR, because its install pins and emit goldens encode the version and its tests check them. Follow [docs/agent-kit/guide/contributing.md § Version and releases](docs/agent-kit/guide/contributing.md#version-and-releases). After the merge, `release-skill.sh agent-kit X.Y.Z` only validates and tags.
+- While you work on a change, add a line under `## [Unreleased]` in the changelog of every skill whose folder you change. [skills/skill-versioning/SKILL.md](skills/skill-versioning/SKILL.md) says how to write entries.
+- Before a pull request is opened or updated for review, prepare the release of every skill whose folder the pull request changes:
+  1. Pick the bump (MAJOR, MINOR, or PATCH) with the table in [skills/skill-versioning/SKILL.md](skills/skill-versioning/SKILL.md).
+  2. Set `metadata.version` in `skills/<name>/SKILL.md` to the new version.
+  3. In `skills/<name>/CHANGELOG.md`, insert `## [X.Y.Z] - YYYY-MM-DD` directly under `## [Unreleased]`, so Unreleased is empty and the notes sit under the new heading. The date is the day the pull request is opened.
+  4. Name the new versions in the pull request description.
+- One bump per skill per pull request. Later commits on the same pull request add their notes under the same `## [X.Y.Z]` heading, and raise the bump only if they add an entry with a higher impact. If another pull request released the same skill first, rebase and pick the next version again.
+- A change confined to repository tooling (`scripts/`, `tests/`, `.github/`, `templates/`, `docs/`, root files) changes no skill folder and bumps nothing.
+- `agent-kit` also updates its install pin and emit goldens in the same pull request, because they encode the version and its tests check them. Follow [docs/agent-kit/guide/contributing.md § Version and releases](docs/agent-kit/guide/contributing.md#version-and-releases).
+- After the merge, the workflow `.github/workflows/tag-on-merge.yml` runs `scripts/tag-released-skills.sh`, which creates and pushes the tag `<name>/vX.Y.Z` for every skill whose recorded version has no tag yet. The workflow then starts the release workflow for each tag. Nobody tags by hand. `bash scripts/release-skill.sh <name> X.Y.Z` on `master` is the manual fallback when the workflow did not run or failed; it only validates and tags, because the version is already recorded. Agents never create or push release tags unless the user asks.
+- This rule takes precedence over Workflow 2 (release a skill, only when the user asks) in [skills/skill-versioning/SKILL.md](skills/skill-versioning/SKILL.md). Here, opening a pull request that changes a skill is the request to prepare its release, and the merge to `master` creates the tag through the workflow above. Creating or pushing a tag by hand still needs the user.
+- `bash skills/skill-versioning/scripts/skill-status.sh` shows where each skill stands. Before the bump it shows which skills changed and have notes under Unreleased. After the bump it shows the new VERSION ahead of LAST_TAG, UNRELEASED 0, and the NEXT text `record changes under Unreleased`. Here that means the release is prepared and waits for its tag after the merge, not that notes are missing.
 
 ## When adding, renaming, or removing a skill
 

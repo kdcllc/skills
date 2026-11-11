@@ -282,6 +282,56 @@ run_positive_specs() {
     "$FIXTURES/specs/step-id-reuse.crew.yaml" 0
 }
 
+# --- Example content cases (bash, grep and awk only; never skipped) ---
+# Prints the agent entry <id>: the lines from "  - id: <id>" up to, not
+# including, the next "  - id: " line or the line "steps:".
+example_agent_entry() {
+  local file="$1"
+  local id="$2"
+  awk -v start="  - id: $id" '
+    $0 == start { on = 1; print; next }
+    on && (index($0, "  - id: ") == 1 || $0 == "steps:") { on = 0 }
+    on { print }
+  ' "$file"
+}
+
+run_example_content_cases() {
+  local name="example/coding-crew-no-shared-output"
+  local file="$SKILL_DIR/assets/examples/coding-crew.crew.yaml"
+  local impl rev
+  local failed=()
+  if [[ ! -f "$file" ]]; then
+    case_fail "$name" "precondition: example file not found: $file"
+    return 0
+  fi
+  impl="$(example_agent_entry "$file" implementer)"
+  if [[ -z "$impl" ]]; then
+    case_fail "$name" "precondition: no implementer agent entry in $file"
+    return 0
+  fi
+  rev="$(example_agent_entry "$file" reviewer)"
+  if [[ -z "$rev" ]]; then
+    case_fail "$name" "precondition: no reviewer agent entry in $file"
+    return 0
+  fi
+  if grep -qF 'implementation-summary' "$file"; then
+    failed+=("(a) the file has a line with the text implementation-summary")
+  fi
+  if grep -qE '^[[:space:]]*outputs:' <<<"$impl"; then
+    failed+=("(b) the implementer entry has an outputs: line")
+  fi
+  if ! grep -qE '^[[:space:]]*inputs: \[tasks\.yaml, task-brief\.md\][[:space:]]*$' <<<"$rev"; then
+    failed+=("(c) the reviewer entry has no line 'inputs: [tasks.yaml, task-brief.md]'")
+  fi
+  if ((${#failed[@]} > 0)); then
+    local msg
+    msg="$(printf '%s; ' "${failed[@]}")"
+    case_fail "$name" "${msg%; }"
+    return 0
+  fi
+  case_pass "$name"
+}
+
 # --- Negative spec cases (one per S### except S034) ---
 run_negative_specs() {
   local p="$FIXTURES/specs"
@@ -653,6 +703,7 @@ run_guard_model_ids() {
 
 main() {
   run_positive_specs
+  run_example_content_cases
   run_negative_specs
   run_tree_cases
   run_manifest_cases
