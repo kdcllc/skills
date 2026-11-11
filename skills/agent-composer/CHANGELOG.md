@@ -4,6 +4,8 @@ All notable changes to the `agent-composer` skill. Format: [Keep a Changelog](ht
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-10
+
 ### Changed
 
 - The crew-or-not test in `references/patterns.md` now requires one of four reasons for a crew (context pollution, independent parallel units, tool or prompt conflict, need for an independent verifier), states the token cost of multi-agent runs, says a split by type of work is not a reason, and points to the `orchestration-advisor` skill.
