@@ -1,0 +1,29 @@
+name: orchestration-advisor
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'skills/orchestration-advisor/**'
+      - 'tests/orchestration-advisor/**'
+      - 'scripts/checks/orchestration-advisor.sh'
+      - '.github/workflows/orchestration-advisor.yml'
+  pull_request:
+    paths:
+      - 'skills/orchestration-advisor/**'
+      - 'tests/orchestration-advisor/**'
+      - 'scripts/checks/orchestration-advisor.sh'
+      - '.github/workflows/orchestration-advisor.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  suite:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: orchestration-advisor test suite
+        run: bash tests/orchestration-advisor/run.sh

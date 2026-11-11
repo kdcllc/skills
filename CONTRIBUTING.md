@@ -68,6 +68,14 @@ bash tests/agent-kit/run-all.sh
 bash tests/agent-composer/run.sh
 ```
 
+## Working on orchestration-advisor
+
+`scripts/checks/orchestration-advisor.sh` guards orchestration-advisor's files, headings, shape names, and signal keys and runs inside `scripts/validate-skills.sh`. `tests/orchestration-advisor/run.sh` is its fixture suite (bash only; cases that need `jq` or `git` skip when the tool is missing); `.github/workflows/orchestration-advisor.yml` runs it when a push to `master` or a pull request touches `skills/orchestration-advisor/`, `tests/orchestration-advisor/`, the guard, or the workflow. Run it before opening a pull request that touches `skills/orchestration-advisor/`:
+
+```bash
+bash tests/orchestration-advisor/run.sh
+```
+
 ## Domain bundles (Claude Code, Copilot CLI, Codex)
 
 The `kdcllc-skills` plugin in [.claude-plugin/marketplace.json](.claude-plugin/marketplace.json) has no `skills` list, so it loads every folder under `skills/`. Smaller bundles are extra entries that list skills explicitly. Paths must start with `./`, and plugin names must not start with `claude-`, `anthropic-`, or `cc-plugin-`. The existing `kdcllc-azure` bundle looks like this:

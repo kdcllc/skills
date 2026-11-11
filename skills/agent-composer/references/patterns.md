@@ -26,6 +26,25 @@ Not every workflow needs a generated crew.
 
 The skill **must tell the user** when a crew is unnecessary and recommend the simpler option. A crew spec is justified when there are distinct roles, explicit handoffs in the run workdir, and an orchestrator that schedules steps (including gates, routes, parallel blocks, or dispatch).
 
+### The test: four reasons
+
+A crew is justified only when **at least one** of these four reasons holds. Ask it of every agent beyond the first.
+
+| Reason | It holds when |
+| --- | --- |
+| **Context pollution** | A subtask produces large output (searches, logs, long test runs) that the main agent does not need afterwards. |
+| **Independent parallel units** | The work splits into units that do not share files and can each be checked separately. |
+| **Tool or prompt conflict** | Two jobs need tool sets or instructions that interfere with each other. |
+| **Need for an independent verifier** | The result must be judged by something that did not produce it. |
+
+If none holds, recommend one agent or a skill.
+
+**A split by type of work is not one of the reasons.** Separate plan, build, test and review agents are phases of the same work, and each handoff drops context the next phase needs. A separate test author helps only when it works from the spec without reading the implementation; one that reads the implementation first pays for the handoff and gains no independence. The coding example therefore has one implementer that writes the code and its tests, and a reviewer that is the independent verifier.
+
+**Cost.** Anthropic reports multi-agent runs use roughly 3–10x the tokens of a single agent for the same task (Anthropic, "Building multi-agent systems: when and how to use them", 2026-01-23). The figure moves as models improve, so treat it as a guide to the size of the cost, not a fixed rule.
+
+**Not sure?** Run the `orchestration-advisor` skill first. It inspects the repository, asks about the workload, and recommends a shape with the evidence behind it.
+
 ## Combining patterns
 
 Real crews can embed one pattern inside another (for example, a `pipeline` whose last step is an evaluator `gate`). The spec allows only **one** top-level `pattern` enum — it names the **dominant** shape. The validator applies that pattern’s rule set from [spec-schema.md](spec-schema.md) (**Pattern rules**). Name the dominant behavior: a linear research → write → review loop is `evaluator-optimizer` even if research and draft are sequential; a triage step followed by parallel research is `router` if routing is the defining behavior, or `fan-out` if every path runs the same parallel merge.
@@ -263,3 +282,15 @@ The planner writes `<workdir>/<run-id>/tasks.yaml` (YAML list of `{id, title, wo
 ### Anti-patterns
 
 Multiple `dispatch` steps (**S022** / pattern rules). Non-worker ids in `dispatch.workers`. Planner step without `dispatch` (**S016**). Subagents spawning subagents (forbidden in v1 — orchestrator spawns all workers).
+
+## Patterns this skill does not generate
+
+The five patterns above all have one orchestrator that spawns every agent and passes work through files in the run workdir. Three other coordination patterns fall outside that model. The harness statements below were checked on 2026-11-10.
+
+**Agent teams.** Long-running peer agents work independent units in parallel and coordinate among themselves. You would want this when the units are large, take many steps each, and need little from one another. Agent teams are an experimental Claude Code feature, disabled by default (Claude Code agent teams documentation, checked 2026-11-10). This skill does not generate them because an experimental feature can change under a generated crew, and because no equivalent was found for Cursor (inferred on 2026-11-10: not checked exhaustively), so one crew spec could not produce the same behavior on both harnesses. If the units are small and known up front, `fan-out` or `orchestrator-workers` covers the need.
+
+**Message bus.** Agents react to published events and nothing schedules them centrally. You would want this when events (a webhook, a queue, a schedule) start the work and the set of agents that respond changes over time. A message bus is not native in Claude Code or Cursor (inferred on 2026-11-10: no vendor page states it either way). It needs a broker and glue code that you write and run, which a generated agent file cannot supply.
+
+**Shared state.** Agents read and write a common store and build on each other's findings without a coordinator. You would want this for open-ended research where any agent's finding may redirect the others. Shared state is not native in Claude Code or Cursor (inferred on 2026-11-10: no vendor page states it either way). It needs a store, and rules for concurrent writes, that you provide. The closest generated behavior is the run workdir, which agents write one declared file at a time under the orchestrator's schedule.
+
+For help choosing among these and the five generated patterns, run the `orchestration-advisor` skill.

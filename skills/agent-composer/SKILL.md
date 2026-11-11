@@ -24,6 +24,8 @@ Schema, validation codes, generated layout, manifest states, and runtime protoco
 
 **Do not use** when one agent or a single skill is enough — say so during the interview. Use **`agent-kit`** instead when you want the standard orchestrator/worker/evaluator kit (seven fixed agents, `/feature` and `/research`, evaluator gates).
 
+**Not sure a crew is needed?** Run the **`orchestration-advisor`** skill first. It inspects the repository, asks about the workload, and recommends a shape; come back here when it recommends custom roles.
+
 **Patterns** (pick one dominant `pattern` in the spec; details in [references/patterns.md](references/patterns.md)): `pipeline`, `router`, `fan-out`, `evaluator-optimizer`, `orchestrator-workers`.
 
 **Example specs** to adapt: [assets/examples/coding-crew.crew.yaml](assets/examples/coding-crew.crew.yaml) (coding), [assets/examples/content-crew.crew.yaml](assets/examples/content-crew.crew.yaml) (content), [assets/examples/triage-crew.crew.yaml](assets/examples/triage-crew.crew.yaml) (triage).
@@ -42,6 +44,7 @@ Schema, validation codes, generated layout, manifest states, and runtime protoco
    - `.claude/skills/`, `.cursor/skills/`
    - `.agent-composer/*.crew.yaml`
 3. Report **name collisions** (agent ids, skill names, spec basenames) before the interview.
+4. Report **how many agent files already exist** and the rough combined size of their `description` values (characters divided by 4 as a token estimate). Claude Code warns when custom subagent descriptions together exceed 15,000 tokens (Claude Code subagents documentation, checked 2026-11-10); say how close the existing agents are before adding more.
 
 ## Step 2 — Interview
 
@@ -50,6 +53,7 @@ One round at a time; prefer multiple-choice. Cover:
 - Crew goal in one sentence
 - Work type: coding, general (research, writing, ops, analysis), or domain-specific
 - Inputs and final deliverable
+- **Before roles:** for each agent beyond the first, which of the four reasons justifies it — context pollution, independent parallel units, tool or prompt conflict, or need for an independent verifier ([references/patterns.md](references/patterns.md) § Do you need a crew at all?). A split by type of work (plan, build, test, review) is not a reason. When no reason holds, offer one agent or a skill instead.
 - Roles, handoffs, quality gates (who judges, what PASS means, max cycles, behavior on exhaustion)
 - Tools per role; model tiers (`frontier`, `light`, `fast`, `inherit`)
 

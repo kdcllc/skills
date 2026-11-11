@@ -4,6 +4,13 @@ All notable changes to the `agent-composer` skill. Format: [Keep a Changelog](ht
 
 ## [Unreleased]
 
+### Changed
+
+- The crew-or-not test in `references/patterns.md` now requires one of four reasons for a crew (context pollution, independent parallel units, tool or prompt conflict, need for an independent verifier), states the token cost of multi-agent runs, says a split by type of work is not a reason, and points to the `orchestration-advisor` skill.
+- The interview asks which of the four reasons justifies each additional agent before it asks for roles, and offers one agent or a skill when none holds. Step 1 also reports how many agent files exist and the rough size of their descriptions against Claude Code's 15,000-token warning.
+- `references/patterns.md` has a new section, "Patterns this skill does not generate", covering agent teams, message bus and shared state.
+- The coding example crew has three agents instead of four: one `implementer` writes the code and the tests for each task and runs them, the `test-writer` is gone, and the `reviewer` judges the changed files against the plan and task briefs without taking the implementer's summary as evidence.
+
 ## [0.1.0] - 2026-11-02
 
 ### Added
