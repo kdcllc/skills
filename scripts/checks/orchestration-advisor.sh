@@ -84,25 +84,41 @@ SIGNAL_KEYS=(
 
 MODEL_ID_PATTERN='(claude|gpt|gemini|composer|opus|sonnet|haiku)-[0-9]'
 
-# Prints lines of SKILL.md. The frontmatter is line 1 through the next line that
-# is exactly "---"; the body is every line after it. With no closing line the
-# body is empty. A fence line (first non-space characters are three backticks)
-# toggles between outside and inside a fenced block, starting outside.
+# Prints lines of SKILL.md. One trailing carriage return is removed from every
+# line first, so a file with CRLF line endings reads like one with LF endings.
+# The frontmatter is line 1 through the next line that is exactly "---"; the
+# body is every line after it. With no closing line the body is empty.
+# A fence line is a line that has, after optional leading spaces and tabs, three
+# or more backticks or three or more tildes. Outside a block, a fence line opens
+# one.
+# A block opened by a backtick fence is closed only by a backtick fence line,
+# and a block opened by a tilde fence only by a tilde fence line; a fence line
+# of the other kind inside a block is content. A block that is never closed
+# runs to the end of the file.
 #   body    — every body line
 #   outside — body lines outside fenced blocks (fence lines excluded)
-#   inside  — body lines inside fenced blocks (fence lines excluded)
+#   inside  — body lines inside fenced blocks (opening and closing fence lines
+#             excluded)
 skill_lines() {
   awk -v want="$1" '
+    { sub(/\r$/, "") }
     !started { if (NR > 1 && $0 == "---") started = 1; next }
     want == "body" { print; next }
-    /^[ \t]*```/ { fenced = !fenced; next }
-    want == "inside" && fenced { print }
-    want == "outside" && !fenced { print }
+    {
+      kind = ""
+      if ($0 ~ /^[ \t]*```/) kind = "backtick"
+      else if ($0 ~ /^[ \t]*~~~/) kind = "tilde"
+    }
+    kind != "" && opened == "" { opened = kind; next }
+    kind != "" && opened == kind { opened = ""; next }
+    want == "inside" && opened != "" { print }
+    want == "outside" && opened == "" { print }
   ' "${SKILL}/SKILL.md"
 }
 
 # Prints the number of the first line on standard input that is exactly the
-# given text, trailing spaces allowed; prints nothing when there is none.
+# given text, trailing spaces, tabs and carriage returns allowed; prints nothing
+# when there is none.
 first_line_number() {
   awk -v want="$1" '
     { line = $0; sub(/[ \t\r]+$/, "", line) }
@@ -164,13 +180,17 @@ check_signal_keys() {
 }
 
 # Prints "path:line:text" for every line matching the model-ID pattern in every
-# file under the given directory, hidden files included. Symlinked directories
-# are not entered. /dev/null as a second operand makes grep print the path.
+# regular file under the given directory, hidden files included. Symbolic links
+# of every kind are skipped: a link to a file is not read and a link to a
+# directory is not entered. /dev/null as a second operand makes grep print the
+# path.
 model_id_matches_under() {
   local dir="$1" entry
   for entry in "$dir"/* "$dir"/.[!.]* "$dir"/..?*; do
-    if [[ -d "$entry" ]]; then
-      [[ -L "$entry" ]] || model_id_matches_under "$entry"
+    if [[ -L "$entry" ]]; then
+      continue
+    elif [[ -d "$entry" ]]; then
+      model_id_matches_under "$entry"
     elif [[ -f "$entry" ]]; then
       grep -En "$MODEL_ID_PATTERN" "$entry" /dev/null || true
     fi

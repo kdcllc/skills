@@ -29,7 +29,7 @@ Inspects a project, asks about the workload, and recommends one orchestration sh
 
 ## Requirements
 
-- **bash** for [scripts/inspect.sh](scripts/inspect.sh). The script needs `find`, `awk`, `sort`, `wc` and `tr` on `PATH`. `git` and `jq` are optional; without them two keys report `unknown`. When bash is unavailable, use the manual fallback in Step 2.
+- **bash** for [scripts/inspect.sh](scripts/inspect.sh). The script needs `find`, `awk`, `sort`, `wc` and `tr` on `PATH`. `git` and `jq` are optional; without them two keys report `unknown`. When bash or one of the required tools is unavailable, use the manual fallback in Step 2.
 - In commands below, **`<skill-dir>`** is the directory containing this `SKILL.md`, and **`<project-root>`** is the root of the user's project.
 
 ## Step 1 — Detect
@@ -52,11 +52,11 @@ Run:
 bash <skill-dir>/scripts/inspect.sh <project-root>
 ```
 
-It prints one `key=value` line per signal and changes nothing. Read the lines per [references/signals.md](references/signals.md), which defines every key, how it is computed, how it bears on the decision, and its known undercounts. Exit code 2 means the argument was not an existing directory or more than one argument was given. Exit code 3 means a required tool (`find`, `awk`, `sort`, `wc` or `tr`) is missing; in that case use the manual fallback below.
+It prints one `key=value` line per signal and changes nothing. The argument is optional and defaults to the current directory; this skill passes it explicitly. Read the lines per [references/signals.md](references/signals.md), which defines every key, how it is computed, how it bears on the decision, and its known undercounts. Exit code 1 means the description text could not be counted; in that case use the manual fallback below. Exit code 2 means the argument was not an existing directory or more than one argument was given. Exit code 3 means a required tool (`find`, `awk`, `sort`, `wc` or `tr`) is missing; in that case use the manual fallback below.
 
 A value of `unknown` means the signal could not be computed. Report it as unknown; do not guess a number.
 
-**Manual fallback (no bash).** Count by hand, using the definitions in [references/signals.md](references/signals.md):
+**Manual fallback (no bash, or exit code 1 or 3).** Count by hand, using the definitions in [references/signals.md](references/signals.md):
 
 - Which of the four harnesses are present (Step 1 already did this).
 - Whether `orchestration-kit.manifest.json` exists, and how many `.agent-composer/*.crew.yaml` files exist.

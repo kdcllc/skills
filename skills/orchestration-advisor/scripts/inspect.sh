@@ -2,7 +2,8 @@
 # Usage: inspect.sh [project-root]
 #
 # Prints the inspection signals of a project as `key=value` lines on standard
-# output: 18 keys, always all of them, always in the same order. The output
+# output: 18 keys, all of them and in the same order on every successful run
+# (exit codes 1, 2 and 3 print nothing on standard output). The output
 # contract (every key, how it is computed, the skip list, the symlink rule and
 # the `unknown` cases) lives in ../references/signals.md. Change that file and
 # this script together.
@@ -16,6 +17,10 @@
 #
 # Exit codes:
 #   0  success, all 18 lines were printed
+#   1  the description text could not be counted: `wc -m` and `wc -c` each
+#      failed or printed something that is not a count (the message
+#      `inspect.sh: cannot count the description text` is printed on standard
+#      error, nothing on standard output)
 #   2  the argument is not an existing directory, or more than one argument
 #      was given (a usage line is printed on standard error)
 #   3  a required tool (`find`, `awk`, `sort`, `wc` or `tr`) is not on PATH
@@ -213,9 +218,20 @@ if [ -d .claude/agents ]; then
   )"; then
     v_description_chars=""
   fi
+  # When that count fails the same way, nothing can be counted: exit code 1.
   case "${v_description_chars}" in
     '' | *[!0-9]*)
-      v_description_chars="$(claude_description_text | wc -c | tr -d '[:space:]')"
+      if ! v_description_chars="$(
+        claude_description_text | wc -c 2>/dev/null | tr -d '[:space:]'
+      )"; then
+        v_description_chars=""
+      fi
+      case "${v_description_chars}" in
+        '' | *[!0-9]*)
+          echo "inspect.sh: cannot count the description text" >&2
+          exit 1
+          ;;
+      esac
       ;;
   esac
 fi

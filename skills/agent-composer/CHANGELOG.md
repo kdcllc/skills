@@ -4,6 +4,11 @@ All notable changes to the `agent-composer` skill. Format: [Keep a Changelog](ht
 
 ## [Unreleased]
 
+### Fixed
+
+- The coding example crew's `reviewer` now lists `task-brief.md` in its `inputs` beside `tasks.yaml`, and its instructions name that file (the user's request) and each task's entry in `tasks.yaml` in place of "the task briefs", which named no file the reviewer was given.
+- The coding example crew's `implementer` no longer writes `implementation-summary.md`, which every parallel task overwrote. It lists the changed files, the commands run and their results in its final report, which the orchestrator saves per task as `<workdir>/<run-id>/plan.<task-id>.report.md`; the `reviewer` reads those reports to find which files changed.
+
 ## [0.2.0] - 2026-11-10
 
 ### Changed

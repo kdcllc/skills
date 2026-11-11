@@ -6,6 +6,10 @@ The kit version is `metadata.version` in [SKILL.md](SKILL.md); the emitter write
 
 ## [Unreleased]
 
+### Changed
+
+- **Harness matrix: concurrent spawns row** — the Cursor cell now notes that cursor.com/docs/subagents § Isolated project copies documents per-subagent isolation on request (a Git worktree or a cloud environment, asked for in the prompt, no frontmatter field), that the shared checkout stays the default and that the kit does not request isolation; the Copilot cell now notes that code.visualstudio.com/docs/copilot/agents/subagents does not state whether subagents run in parallel. Both were spot-checked 2026-11-11; no install or behavior change.
+
 ## [2.4.0] - 2026-11-04
 
 ### Added
