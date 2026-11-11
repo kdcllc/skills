@@ -108,12 +108,14 @@ templates/                         # SKILL.md and CHANGELOG.md starters used by 
 scripts/new-skill.sh               # scaffold a new skill
 scripts/validate-skills.sh         # repo, frontmatter, and version checks (also run in CI)
 scripts/checks/                    # skill-specific content guards, run by validate-skills.sh
-scripts/release-skill.sh           # release one skill: bump, commit, tag <skill>/vX.Y.Z
+scripts/release-skill.sh           # manual fallback: tag a release the pull request already recorded (bumps too if it did not)
+scripts/tag-released-skills.sh     # tag every recorded skill version that has no tag; run by the tag-on-merge workflow
 scripts/agent-kit/                 # agent-kit dogfood installer (self-install.sh)
 docs/agent-kit/                    # agent-kit developer guide (research briefs: _memory/research/) (not shipped)
 tests/agent-kit/                   # agent-kit test suites; run-all.sh runs everything
 tests/agent-composer/              # agent-composer fixture suite (run.sh; python3, plus PyYAML for most cases)
 tests/orchestration-advisor/       # orchestration-advisor inspection-script suite (run.sh; bash only)
+tests/release/                     # suite for the tagging script (run.sh; bash and git only)
 _memory/                           # agent-kit memory store for this repo (immutable records)
 ```
 

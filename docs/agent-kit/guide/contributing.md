@@ -153,7 +153,7 @@ order-independent relative to Claude Code (self-contained emission).
 
 `metadata.version` in [`skills/agent-kit/SKILL.md`](../../../skills/agent-kit/SKILL.md) holds the kit version; `bin/emit.*` reads it from there (the old `VERSION` file is gone). Record every kit change under `## [Unreleased]` in [`skills/agent-kit/CHANGELOG.md`](../../../skills/agent-kit/CHANGELOG.md). Changes confined to `docs/agent-kit/`, `tests/agent-kit/`, or `scripts/` ship nothing to users and need no release.
 
-Unlike other skills in this repo, agent-kit bumps its version **inside the PR that ships the release**, not with `release-skill.sh` after the merge. Other tracked files encode the version and the suite checks them: every emit golden (`kitVersion` in `orchestration-kit.manifest.json.golden`, `kit X.Y.Z` in `emit.stdout.golden`). A bump made only by the release script on `master` leaves them stale, so the tagged commit fails `run-all.sh`. The skill README is deliberately unversioned (it is the kit's public pitch); the loop harness fails if a hard-coded `X.Y.Z` appears in it, and its install pin uses a `v<version>` placeholder.
+Like every skill in this repository, agent-kit bumps its version **inside the pull request that changes it**. What is specific to agent-kit is that other tracked files encode the version and the suite checks them: every emit golden (`kitVersion` in `orchestration-kit.manifest.json.golden`, `kit X.Y.Z` in `emit.stdout.golden`). A bump that leaves them stale fails `run-all.sh`. The skill README is deliberately unversioned (it is the kit's public pitch); the loop harness fails if a hard-coded `X.Y.Z` appears in it, and its install pin uses a `v<version>` placeholder.
 
 In the release PR:
 
@@ -163,7 +163,7 @@ In the release PR:
 4. Regenerate goldens with `bash tests/agent-kit/templates/emit-golden.sh --update`; beyond the PR's own template changes, the diff should touch only the `kitVersion` and `kit X.Y.Z` lines.
 5. Run `bash scripts/validate-skills.sh && bash tests/agent-kit/run-all.sh`.
 
-After the PR merges, run `bash scripts/release-skill.sh agent-kit X.Y.Z` on an up-to-date, clean `master`. Because `X.Y.Z` is already the recorded version, the script only validates and creates the `agent-kit/vX.Y.Z` tag; it never pushes. Publish with `git push origin master agent-kit/vX.Y.Z`.
+After the PR merges, the tag-on-merge workflow (`.github/workflows/tag-on-merge.yml`) creates and pushes the `agent-kit/vX.Y.Z` tag and starts the release. Fallback, only when the workflow did not run or failed: run `bash scripts/release-skill.sh agent-kit X.Y.Z` on an up-to-date, clean `master`, then `git push origin agent-kit/vX.Y.Z`. Because `X.Y.Z` is already the recorded version, the script only validates and creates the tag; it never pushes.
 
 ### Manifest shape
 
@@ -312,7 +312,7 @@ Install and user-side usage topics belong in [getting-started.md](getting-starte
 | Fast subset of the kit suite | `bash tests/agent-kit/run-all.sh --quick` |
 | Bash 3.2 Docker check | `docker pull bash:3.2`, then `AGENT_KIT_DOCKER=1 bash tests/agent-kit/templates/emit-portability.sh` |
 | Emitter speed guard | `EMIT_PERF=1 bash tests/agent-kit/templates/emit-perf.sh` |
-| Release | `bash scripts/release-skill.sh agent-kit X.Y.Z` |
+| Release (fallback when the tag-on-merge workflow did not run or failed) | `bash scripts/release-skill.sh agent-kit X.Y.Z` |
 | Harness research ground truth | [`_memory/research/multi-harness-upgrade.md`](../../../_memory/research/multi-harness-upgrade.md) |
 
 ## Sources

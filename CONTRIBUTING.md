@@ -22,7 +22,7 @@ Read [AGENTS.md](AGENTS.md) first. It has the layout and frontmatter rules that 
    npx skills add . --list
    ```
 
-6. After it merges to `master`, tag the first release with `bash scripts/release-skill.sh my-new-skill 0.1.0` (see [Releases](#releases)).
+6. After it merges to `master`, the tag-on-merge workflow tags the first release, because version `0.1.0` is already recorded and has no tag (see [Releases](#releases)). `bash scripts/release-skill.sh my-new-skill 0.1.0` is only the fallback when the workflow did not run or failed.
 
 ## Migrate a skill from an existing repo
 
@@ -41,7 +41,7 @@ Read [AGENTS.md](AGENTS.md) first. It has the layout and frontmatter rules that 
 6. If the old repo had its own content checks (required files, pinned versions, phrases that must not disappear), port them to `scripts/checks/<name>.sh`. Each check takes the repo root as its first argument, exits non-zero on failure, and is run automatically by `scripts/validate-skills.sh`. Scope its greps to the skill's own folders.
 7. Add a row to the Skills table in [README.md](README.md), and add the skill to a domain bundle and a `skills.sh.json` grouping if it belongs to one.
 8. Run the validator and `npx skills add . --list`.
-9. After it merges, tag the first release with `bash scripts/release-skill.sh <name> 1.0.0`.
+9. After it merges, the tag-on-merge workflow tags the first release, because the version is already recorded and has no tag. `bash scripts/release-skill.sh <name> 1.0.0` is only the fallback when the workflow did not run or failed.
 10. In the old repo, replace the README with a pointer to the new location, for example `npx skills add kdcllc/skills --skill <name>`, then archive the repo on GitHub.
 
 ## Working on agent-kit (dogfood)
@@ -118,7 +118,7 @@ Every skill is versioned and released on its own:
 
 - **Version:** `metadata.version` in `skills/<name>/SKILL.md`, as `MAJOR.MINOR.PATCH`.
 - **History:** `skills/<name>/CHANGELOG.md` in [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) format. The `## [Unreleased]` section is always at the top, and the first released `## [X.Y.Z]` heading must equal `metadata.version`. The validator enforces both.
-- **Tag:** `<name>/vX.Y.Z`, for example `terraform-azure/v1.0.0`. Pushing the tag triggers [.github/workflows/release.yml](.github/workflows/release.yml), which checks that the tag matches `metadata.version` and creates a GitHub release titled `<name> vX.Y.Z` with that version's changelog section as its notes.
+- **Tag:** `<name>/vX.Y.Z`, for example `terraform-azure/v1.0.0`. After a merge to `master`, [.github/workflows/tag-on-merge.yml](.github/workflows/tag-on-merge.yml) creates and pushes the tag for every recorded version that has none. [.github/workflows/release.yml](.github/workflows/release.yml) is started by that workflow, or by a tag a person pushes by hand. It checks that the tag matches `metadata.version` and creates a GitHub release titled `<name> vX.Y.Z` with that version's changelog section as its notes.
 
 How users get updates:
 
@@ -140,20 +140,39 @@ When skills link to each other (like the four `terraform-azure*` skills), a chan
 
 ### Release steps
 
-1. Write the notes under `## [Unreleased]` in `skills/<name>/CHANGELOG.md`, merge to `master`, and make sure CI is green.
-2. On an up-to-date, clean `master`:
+1. While you work, write the notes under `## [Unreleased]` in `skills/<name>/CHANGELOG.md` for every skill whose folder you change.
+2. Before the pull request is opened or updated for review, for every skill whose folder it changes:
+
+   - pick the bump with the table above;
+   - set `metadata.version` in `skills/<name>/SKILL.md` to the new version;
+   - insert `## [X.Y.Z] - YYYY-MM-DD` directly under `## [Unreleased]` in `skills/<name>/CHANGELOG.md`, so Unreleased is empty and the notes sit under the new heading. The date is the day the pull request is opened;
+   - name the new versions in the pull request description.
+
+   One bump per skill per pull request: later commits add their notes under the same heading and raise the bump only if they add an entry with a higher impact. If another pull request released the same skill first, rebase and pick the next version again.
+
+   After the bump, `bash skills/skill-versioning/scripts/skill-status.sh` shows the new VERSION ahead of LAST_TAG, UNRELEASED 0, and the NEXT text `record changes under Unreleased`. Here that means the release is prepared and waits for its tag, not that notes are missing.
+3. Merge to `master`. [.github/workflows/tag-on-merge.yml](.github/workflows/tag-on-merge.yml) then creates and pushes the tag `<name>/vX.Y.Z` for each newly recorded version and starts `release.yml` for it. There is no manual step.
+4. Fallback, only when the workflow did not run or failed: on an up-to-date, clean `master`, run
 
    ```bash
    bash scripts/release-skill.sh <name> X.Y.Z
+   git push origin <name>/vX.Y.Z
    ```
 
-   The script promotes `## [Unreleased]` to `## [X.Y.Z] - <today>`, bumps `metadata.version`, runs the validator, commits `release: <name> vX.Y.Z`, and creates the annotated tag. If `X.Y.Z` already is the recorded version (a skill's first release), it only validates and tags. It never pushes.
-3. Publish by pushing the commit and the tag:
+   Because `X.Y.Z` already is the recorded version, the script only validates and creates the annotated tag. It never pushes, and it stops if the tag already exists. A tag pushed by a person starts `release.yml` by itself.
+
+   If a pull request was merged without a bump, the same command bumps as well: it promotes `## [Unreleased]` to `## [X.Y.Z] - <today>`, sets `metadata.version`, runs the validator, commits `release: <name> vX.Y.Z`, and creates the tag. Push the commit and the tag together, as the script prints:
 
    ```bash
    git push origin master <name>/vX.Y.Z
    ```
 
-**Exception: `agent-kit`.** Its install pins and emit test goldens encode the version, and its tests check them, so agent-kit bumps `metadata.version`, adds the `## [X.Y.Z]` heading, and updates those files inside the release PR. After the merge, `release-skill.sh` only validates and tags. The steps are in [docs/agent-kit/guide/contributing.md](docs/agent-kit/guide/contributing.md#version-and-releases).
+The tag-on-merge workflow runs on every push to `master` that touches `skills/`, and can be started by hand on `master`. It runs `scripts/tag-released-skills.sh --push`, and its job summary lists the tags it created and, for a release that was not started, the command to start it. `tests/release/run.sh` is the suite for that script (bash and git only); it runs in `.github/workflows/validate.yml`. Run it after changing the script:
 
-Apart from that exception, never edit `metadata.version` or create a release tag by hand. `gh skill publish --dry-run` (`gh` 2.90 or newer) is still useful as an extra check, but let the release workflow create the releases. The repo needs the `agent-skills` topic for `gh skill` discovery: `gh repo edit kdcllc/skills --add-topic agent-skills`.
+```bash
+bash tests/release/run.sh
+```
+
+**`agent-kit` has more files to update.** Its install pin and emit test goldens encode the version, and its tests check them, so the same pull request that sets the version also updates those files. The steps are in [docs/agent-kit/guide/contributing.md](docs/agent-kit/guide/contributing.md#version-and-releases).
+
+Never create a release tag by hand (the fallback in step 4 is the only case), and never edit `metadata.version` outside a pull request that changes that skill. `gh skill publish --dry-run` (`gh` 2.90 or newer) is still useful as an extra check, but let the release workflow create the releases. The repo needs the `agent-skills` topic for `gh skill` discovery: `gh repo edit kdcllc/skills --add-topic agent-skills`.
