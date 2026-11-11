@@ -4,6 +4,8 @@ All notable changes to the `agent-composer` skill. Format: [Keep a Changelog](ht
 
 ## [Unreleased]
 
+## [0.2.1] - 2026-11-11
+
 ### Fixed
 
 - The coding example crew's `reviewer` now lists `task-brief.md` in its `inputs` beside `tasks.yaml`, and its instructions name that file (the user's request) and each task's entry in `tasks.yaml` in place of "the task briefs", which named no file the reviewer was given.

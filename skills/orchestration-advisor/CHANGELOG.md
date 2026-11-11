@@ -4,6 +4,8 @@ All notable changes to the `orchestration-advisor` skill. Format: [Keep a Change
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-11
+
 ### Changed
 
 - The inspection script exits with code 3 when a required tool (`find`, `awk`, `sort`, `wc` or `tr`) is not on `PATH`: it prints nothing on standard output and names the missing tool on standard error. `SKILL.md` Step 2 says to use the manual fallback in that case.
