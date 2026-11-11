@@ -1,0 +1,105 @@
+name: Tag on merge
+
+on:
+  push:
+    branches: [master]
+    paths: ['skills/**']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+# One run at a time, so two merges never tag at the same moment.
+concurrency:
+  group: tag-on-merge
+  cancel-in-progress: false
+
+jobs:
+  tag:
+    # A manual run from any other ref does nothing.
+    if: github.ref == 'refs/heads/master'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Repo layout, frontmatter, and marketplaces
+        run: bash scripts/validate-skills.sh
+
+      - name: Committer identity for annotated tags
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      # Each tag name is written to the file as soon as that tag is pushed, so
+      # tags pushed before a failure still reach the summary.
+      - name: Tag released skill versions
+        id: tags
+        shell: bash
+        run: |
+          set -euo pipefail
+          : > "$RUNNER_TEMP/tags.txt"
+          bash scripts/tag-released-skills.sh --push | tee "$RUNNER_TEMP/tags.txt"
+
+      # Tags pushed with the workflow token do not trigger release.yml, so it
+      # is started here, once per tag. Every tag is tried. The step also runs
+      # after a tagging failure, for the tags that were pushed before it.
+      - name: Start the release workflow for each tag
+        id: dispatch
+        if: always() && steps.tags.outcome != 'skipped'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -uo pipefail
+          : > "$RUNNER_TEMP/dispatch.txt"
+          failed=0
+          # No tag file, or an empty one: nothing to start.
+          [[ -s "$RUNNER_TEMP/tags.txt" ]] || exit 0
+          while IFS= read -r tag; do
+            [[ -n "$tag" ]] || continue
+            if gh workflow run release.yml --ref "$tag" </dev/null; then
+              echo "started ${tag}" >> "$RUNNER_TEMP/dispatch.txt"
+            else
+              echo "failed ${tag}" >> "$RUNNER_TEMP/dispatch.txt"
+              echo "::error::release workflow not started for ${tag}; run: gh workflow run release.yml --ref ${tag}"
+              failed=1
+            fi
+          done < "$RUNNER_TEMP/tags.txt"
+          exit "$failed"
+
+      - name: Job summary
+        if: always()
+        shell: bash
+        env:
+          TAGS_OUTCOME: ${{ steps.tags.outcome }}
+        run: |
+          set -uo pipefail
+          tags_file="$RUNNER_TEMP/tags.txt"
+          dispatch_file="$RUNNER_TEMP/dispatch.txt"
+          {
+            echo "## Tag on merge"
+            echo
+            if [[ "$TAGS_OUTCOME" != "success" ]]; then
+              echo "The tagging step did not finish (outcome: ${TAGS_OUTCOME:-not run}). Tags listed below were pushed before it stopped."
+              echo
+            fi
+            if [[ ! -s "$tags_file" ]]; then
+              if [[ "$TAGS_OUTCOME" == "success" ]]; then
+                echo "nothing to tag"
+              else
+                echo "No tag was created."
+              fi
+            else
+              while IFS= read -r tag; do
+                [[ -n "$tag" ]] || continue
+                if [[ -f "$dispatch_file" ]] && grep -qxF "started ${tag}" "$dispatch_file"; then
+                  echo "- \`${tag}\`: tag created; release workflow started"
+                else
+                  echo "- \`${tag}\`: tag created; release workflow NOT started. Run by hand: \`gh workflow run release.yml --ref ${tag}\`"
+                fi
+              done < "$tags_file"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

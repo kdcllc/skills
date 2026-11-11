@@ -21,6 +21,9 @@ jobs:
       - name: Repo layout, frontmatter, and marketplaces
         run: bash scripts/validate-skills.sh
 
+      - name: Release tagging script
+        run: bash tests/release/run.sh
+
       - name: Count skills
         id: skills
         run: |
