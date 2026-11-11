@@ -29,7 +29,7 @@ Inspects a project, asks about the workload, and recommends one orchestration sh
 
 ## Requirements
 
-- **bash** for [scripts/inspect.sh](scripts/inspect.sh). `git` and `jq` are optional; without them two keys report `unknown`. When bash is unavailable, use the manual fallback in Step 2.
+- **bash** for [scripts/inspect.sh](scripts/inspect.sh). The script needs `find`, `awk`, `sort`, `wc` and `tr` on `PATH`. `git` and `jq` are optional; without them two keys report `unknown`. When bash is unavailable, use the manual fallback in Step 2.
 - In commands below, **`<skill-dir>`** is the directory containing this `SKILL.md`, and **`<project-root>`** is the root of the user's project.
 
 ## Step 1 — Detect
@@ -52,7 +52,7 @@ Run:
 bash <skill-dir>/scripts/inspect.sh <project-root>
 ```
 
-It prints one `key=value` line per signal and changes nothing. Read the lines per [references/signals.md](references/signals.md), which defines every key, how it is computed, how it bears on the decision, and its known undercounts. Exit code 2 means the argument was not an existing directory or more than one argument was given.
+It prints one `key=value` line per signal and changes nothing. Read the lines per [references/signals.md](references/signals.md), which defines every key, how it is computed, how it bears on the decision, and its known undercounts. Exit code 2 means the argument was not an existing directory or more than one argument was given. Exit code 3 means a required tool (`find`, `awk`, `sort`, `wc` or `tr`) is missing; in that case use the manual fallback below.
 
 A value of `unknown` means the signal could not be computed. Report it as unknown; do not guess a number.
 
@@ -133,7 +133,7 @@ Pick one. [references/patterns.md](references/patterns.md) has the table: when t
 | Evaluator-gated feature work on a codebase (generator-verifier with an orchestrator) | Install [`agent-kit`](https://github.com/kdcllc/skills/tree/master/skills/agent-kit): `npx skills add kdcllc/skills --skill agent-kit`. It compiles for Claude Code, Cursor, GitHub Copilot and Codex (per its own SKILL.md). |
 | Custom roles (generator-verifier or orchestrator-subagent with roles you define) | Use [`agent-composer`](https://github.com/kdcllc/skills/tree/master/skills/agent-composer) and name one of its five patterns: `pipeline`, `router`, `fan-out`, `evaluator-optimizer`, `orchestrator-workers`. It generates for Claude Code and Cursor (per its own SKILL.md). The mapping from shapes to these patterns is in [references/patterns.md](references/patterns.md). |
 | Overlapping or knowledge-only existing agents | Fold them into skills. For the measured method, point to [`single-agent-loop-kit`](https://github.com/anthropics/single-agent-loop-kit) (reference implementation, not maintained per its README, checked 2026-11-10). |
-| Agent teams | A Claude Code experimental feature (experimental and disabled by default, per Anthropic's Claude Code agent teams documentation, accessed 2026-11-10; see Source 9 in [references/patterns.md](references/patterns.md)). Neither `agent-kit` nor `agent-composer` generates it. |
+| Agent teams | A Claude Code feature that is experimental and disabled by default (per Anthropic's Claude Code agent teams documentation, accessed 2026-11-10; see `[9]` in the Sources of [references/patterns.md](references/patterns.md)). Neither `agent-kit` nor `agent-composer` generates it. |
 | Message bus or shared state | Not native in Claude Code, Cursor, GitHub Copilot or Codex (`inferred`: no documentation found, none of the four was checked exhaustively). It needs glue the user writes. |
 
 ## Step 5 — Report
@@ -153,7 +153,7 @@ Give the report in chat. Save it to a file only when the user asks. Use exactly 
 - **Recommendation** — one shape, named as in the list above, in one or two sentences. When the default applies, say so plainly.
 - **Evidence** — the signal values and the workload answers you used, each on its own line (`agent_files=7`, "Q2: yes — api and web packages"). Include `unknown` values and say when signals were counted by hand. For any non-default shape, name which of the four reasons applies and which line backs it.
 - **Ruled out** — one line per shape not recommended, with the reason it does not fit here.
-- **Harness notes** — what the detected harnesses support for the recommended shape, from [references/patterns.md](references/patterns.md). Keep its `inferred` and `not checked` marks; do not restate an unchecked claim as fact.
+- **Harness notes** — what the detected harnesses support for the recommended shape, from [references/patterns.md](references/patterns.md). Keep its `inferred` and `not checked` marks; do not restate an unchecked claim as fact. When today's date is after the re-check date given in `references/patterns.md`, say in the report that the harness statements may be out of date.
 - **Cost note** — Anthropic reports multi-agent runs use roughly 3–10x the tokens of a single agent for equivalent tasks (Anthropic, "Building multi-agent systems: when and how to use them", 2026-01-23). Set that against workload answer 6. For the default shape, say no multiple applies.
 - **Next step** — the matching row of the routing table.
 - **How to check this** — a small experiment the user can run: pick about 10 representative tasks (the starting size Anthropic gives in "When to fold subagents into your main agent loop", 2026-10-22), run each more than once on the current setup and on the recommended one, and compare task completion, tokens and wall time. Change one thing at a time and look at which tasks flipped. This recommendation is triage; the experiment decides.

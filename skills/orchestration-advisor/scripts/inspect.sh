@@ -10,13 +10,17 @@
 # project-root defaults to `.` (the current directory).
 #
 # Read-only and offline: this script creates, modifies and deletes nothing, and
-# makes no network call. `jq` and `git` are optional; without them `mcp_servers`
-# and `tracked_files` print `unknown` as the contract says.
+# makes no network call. `find`, `awk`, `sort`, `wc` and `tr` are required.
+# `jq` and `git` are optional; without them `mcp_servers` and `tracked_files`
+# print `unknown` as the contract says.
 #
 # Exit codes:
 #   0  success, all 18 lines were printed
 #   2  the argument is not an existing directory, or more than one argument
 #      was given (a usage line is printed on standard error)
+#   3  a required tool (`find`, `awk`, `sort`, `wc` or `tr`) is not on PATH
+#      (a message naming the tool is printed on standard error, nothing on
+#      standard output)
 #
 # Written for bash 3.2: only features that version has.
 set -euo pipefail
@@ -45,6 +49,15 @@ if ! cd -- "${ROOT}" 2>/dev/null; then
   echo "inspect.sh: cannot enter directory: ${ROOT}" >&2
   usage
 fi
+
+# Required tools, checked after the argument and before any signal is computed.
+# Without this check a missing `find` would print zero counts and exit 0.
+for required_tool in find awk sort wc tr; do
+  if ! command -v "${required_tool}" >/dev/null 2>&1; then
+    echo "inspect.sh: required tool not found: ${required_tool}" >&2
+    exit 3
+  fi
+done
 
 # --- helpers -----------------------------------------------------------------
 
@@ -124,6 +137,39 @@ mcp_count() {
     "$1" 2>/dev/null || true
 }
 
+# The single-line `description:` value of each `.md` file directly inside
+# `.claude/agents`: taken from the frontmatter, trimmed, with surrounding quotes
+# removed, and concatenated with no separator. A walk error is ignored.
+claude_description_text() {
+  find -L .claude/agents -mindepth 1 -maxdepth 1 -type f -name '*.md' \
+    -exec awk '
+      FNR == 1 { infm = 0; found = 0 }
+      {
+        line = $0
+        sub(/\r$/, "", line)
+      }
+      FNR == 1 {
+        if (line ~ /^---[ \t]*$/) infm = 1
+        next
+      }
+      !infm || found { next }
+      line ~ /^(---|\.\.\.)[ \t]*$/ { infm = 0; next }
+      line ~ /^description:/ {
+        v = line
+        sub(/^description:/, "", v)
+        sub(/^[ \t]+/, "", v)
+        sub(/[ \t]+$/, "", v)
+        first = substr(v, 1, 1)
+        last = substr(v, length(v), 1)
+        if (length(v) != 1 && first == last && (first == "\"" || first == "\047")) {
+          v = substr(v, 2, length(v) - 2)
+        }
+        printf "%s", v
+        found = 1
+      }
+    ' {} + 2>/dev/null || true
+}
+
 # --- harness and existing orchestration ---------------------------------------
 
 v_harness_claude="$(any_exists .claude/ CLAUDE.md)"
@@ -159,37 +205,19 @@ if [ -d .claude/agents ]; then
     { find -L .claude/agents -mindepth 1 -maxdepth 1 -type f -name '*.md' \
         -print 2>/dev/null || true; } | count_lines
   )"
-  # The single-line `description:` value of each file's frontmatter, trimmed and
-  # with surrounding quotes removed, concatenated and counted by `wc -m`.
-  v_description_chars="$(
-    { find -L .claude/agents -mindepth 1 -maxdepth 1 -type f -name '*.md' \
-        -exec awk '
-          FNR == 1 { infm = 0; found = 0 }
-          {
-            line = $0
-            sub(/\r$/, "", line)
-          }
-          FNR == 1 {
-            if (line ~ /^---[ \t]*$/) infm = 1
-            next
-          }
-          !infm || found { next }
-          line ~ /^(---|\.\.\.)[ \t]*$/ { infm = 0; next }
-          line ~ /^description:/ {
-            v = line
-            sub(/^description:/, "", v)
-            sub(/^[ \t]+/, "", v)
-            sub(/[ \t]+$/, "", v)
-            first = substr(v, 1, 1)
-            last = substr(v, length(v), 1)
-            if (length(v) != 1 && first == last && (first == "\"" || first == "\047")) {
-              v = substr(v, 2, length(v) - 2)
-            }
-            printf "%s", v
-            found = 1
-          }
-        ' {} + 2>/dev/null || true; } | wc -m | tr -d '[:space:]'
-  )"
+  # The description text counted by `wc -m`. When `wc -m` exits non-zero (BSD wc
+  # does on bytes that are not valid in the locale) or prints something that is
+  # not a non-negative integer, the bytes of the same text are counted instead.
+  if ! v_description_chars="$(
+    claude_description_text | wc -m 2>/dev/null | tr -d '[:space:]'
+  )"; then
+    v_description_chars=""
+  fi
+  case "${v_description_chars}" in
+    '' | *[!0-9]*)
+      v_description_chars="$(claude_description_text | wc -c | tr -d '[:space:]')"
+      ;;
+  esac
 fi
 v_description_tokens=$((v_description_chars / 4))
 

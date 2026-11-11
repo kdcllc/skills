@@ -15,18 +15,42 @@ SKILL_DIR="${ORCHESTRATION_ADVISOR_SKILL_DIR:-$REPO/skills/orchestration-advisor
 INSPECT="$SKILL_DIR/scripts/inspect.sh"
 SIGNALS="$SKILL_DIR/references/signals.md"
 GUARD="$REPO/scripts/checks/orchestration-advisor.sh"
-BASH_BIN="$(type -P bash)"
+# The bash that is executing this suite, so inspect.sh and the guard run under
+# the same version (bash 3.2 when the suite is started with macOS /bin/bash).
+BASH_BIN="${BASH:-$(type -P bash)}"
 
 PASS=0
 FAIL=0
 SKIP=0
+SUMMARY_PRINTED=0
 
 SCRATCH_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/orchestration-advisor.XXXXXX")"
 SCRATCH_ROOT="$(cd "$SCRATCH_ROOT" && pwd -P)"
 cleanup() {
   rm -rf "$SCRATCH_ROOT"
 }
-trap cleanup EXIT
+
+print_summary() {
+  echo "PASS: $PASS FAIL: $FAIL SKIP: $SKIP"
+  SUMMARY_PRINTED=1
+}
+
+# Exit trap. When the suite stops before main printed the summary (a set-up
+# command failed under `set -e`), say so on stderr, still print the summary
+# line, and never exit 0.
+on_exit() {
+  local rc=$?
+  if [ "$SUMMARY_PRINTED" -eq 0 ]; then
+    echo "ABORTED: suite stopped before all cases ran" >&2
+    print_summary
+    if [ "$rc" -eq 0 ]; then
+      rc=1
+    fi
+  fi
+  cleanup
+  exit "$rc"
+}
+trap on_exit EXIT
 
 # --- ambient conditions, pinned ------------------------------------------------
 
@@ -435,6 +459,51 @@ run_description_cases() {
   fi
 }
 
+# `wc -m` failing (BSD wc does on bytes that are not valid in the locale): the
+# bytes of the same text are counted instead.
+run_wc_fallback_cases() {
+  local name="claude_agent_description/wc-m-failure-falls-back-to-bytes"
+  local root stub real_wc probe
+
+  # A `wc` that exits 1 for `wc -m` and is the real one otherwise.
+  real_wc="$(type -P wc 2>/dev/null || true)"
+  case "$real_wc" in
+    /*) ;;
+    *)
+      case_skip "$name" "cannot resolve wc to an absolute path"
+      return 0
+      ;;
+  esac
+  stub="$SCRATCH_ROOT/path-wc-no-m"
+  mkdir -p "$stub"
+  printf '%s\n' '#!/bin/sh' 'if [ "${1-}" = "-m" ]; then' '  exit 1' 'fi' \
+    "exec '$real_wc' \"\$@\"" >"$stub/wc"
+  chmod +x "$stub/wc"
+
+  # "Reviews pull requests" is 21 ASCII characters; 21 / 4 rounds down to 5.
+  root="$(new_root)"
+  put "$root/.claude/agents/reviewer.md" "$(printf '%s\n' '---' 'name: reviewer' 'description: Reviews pull requests' '---' 'Body.')"
+
+  # Preconditions: the stub fails for -m, still counts bytes, and is the wc
+  # that a run with the stub directory first on PATH resolves.
+  probe="$(printf 'abc' | "$stub/wc" -c 2>/dev/null | tr -d '[:space:]' || true)"
+  if printf 'abc' | "$stub/wc" -m >/dev/null 2>&1; then
+    case_fail "$name" "precondition: the stub wc does not fail for -m"
+  elif [ "$probe" != "3" ]; then
+    case_fail "$name" "precondition: the stub wc -c printed '$probe' want 3"
+  elif [ "$(PATH="$stub:$PATH" && type -P wc)" != "$stub/wc" ]; then
+    case_fail "$name" "precondition: the stub wc is not first on PATH"
+  else
+    INSPECT_PATH="$stub:$PATH"
+    run_inspect "$root"
+    INSPECT_PATH=""
+    assert_out "$name" \
+      claude_agent_files=1 \
+      claude_agent_description_chars=21 \
+      claude_agent_description_tokens_est=5
+  fi
+}
+
 # --- skills --------------------------------------------------------------------
 
 run_skill_cases() {
@@ -728,6 +797,62 @@ run_error_cases() {
   expect_usage_error "errors/argument-is-a-file" "$root/file.txt"
 }
 
+# --- required tools --------------------------------------------------------------
+
+# One required tool missing from PATH: exit 3, nothing on stdout, the tool named
+# on stderr. A usage error is reported first (exit 2) even then.
+run_required_tool_cases() {
+  local root tool other others stub name
+
+  # A tree that prints non-zero counts when the tools are present.
+  root="$(new_root)"
+  put "$root/CLAUDE.md" "# rules"
+  put "$root/package.json" '{}'
+  put "$root/.claude/agents/reviewer.md" "$(printf '%s\n' '---' 'description: Reviews code' '---')"
+
+  for tool in $CORE_TOOLS; do
+    name="errors/missing-required-tool-$tool"
+    others=""
+    for other in $CORE_TOOLS; do
+      if [ "$other" != "$tool" ]; then
+        others="$others $other"
+      fi
+    done
+    stub="$SCRATCH_ROOT/path-no-$tool"
+    # shellcheck disable=SC2086
+    if ! make_stub_path "$stub" $others; then
+      case_skip "$name" "cannot build a PATH without $tool"
+      continue
+    elif (PATH="$stub" && type -P "$tool" >/dev/null 2>&1); then
+      case_skip "$name" "$tool still reachable on the stub PATH"
+      continue
+    fi
+    INSPECT_PATH="$stub"
+    run_inspect "$root"
+    INSPECT_PATH=""
+    if [ "$RC" -ne 3 ]; then
+      case_fail "$name" "exit $RC want 3"
+    elif [ -n "$OUT" ]; then
+      case_fail "$name" "stdout not empty: $OUT"
+    elif ! printf '%s\n' "$ERR" | grep -qF "required tool not found: $tool"; then
+      case_fail "$name" "stderr does not say 'required tool not found: $tool': $ERR"
+    else
+      case_pass "$name"
+    fi
+  done
+
+  # The argument is checked before the tools.
+  name="errors/usage-error-wins-over-missing-tool"
+  stub="$SCRATCH_ROOT/path-no-find"
+  if [ ! -d "$stub" ] || (PATH="$stub" && type -P find >/dev/null 2>&1); then
+    case_skip "$name" "no PATH without find"
+  else
+    INSPECT_PATH="$stub"
+    expect_usage_error "$name" "$root/does-not-exist"
+    INSPECT_PATH=""
+  fi
+}
+
 # A tree that gives every key something to read.
 build_rich_tree() {
   local root="$1"
@@ -804,7 +929,7 @@ run_guard_cases() {
   local out rc tmp copy key before after
 
   rc=0
-  out="$("$BASH_BIN" "$GUARD" 2>&1)" || rc=$?
+  out="$(TMPDIR="$SCRATCH_ROOT" "$BASH_BIN" "$GUARD" 2>&1)" || rc=$?
   if [ "$rc" -eq 0 ]; then
     case_pass "guard/passes-on-repository"
   else
@@ -818,7 +943,7 @@ run_guard_cases() {
   cp -R "$SKILL_DIR" "$copy"
 
   rc=0
-  out="$("$BASH_BIN" "$GUARD" "$tmp" 2>&1)" || rc=$?
+  out="$(TMPDIR="$SCRATCH_ROOT" "$BASH_BIN" "$GUARD" "$tmp" 2>&1)" || rc=$?
   if [ "$rc" -eq 0 ]; then
     case_pass "guard/passes-on-unmodified-copy"
   else
@@ -838,7 +963,7 @@ run_guard_cases() {
   fi
 
   rc=0
-  out="$("$BASH_BIN" "$GUARD" "$tmp" 2>&1)" || rc=$?
+  out="$(TMPDIR="$SCRATCH_ROOT" "$BASH_BIN" "$GUARD" "$tmp" 2>&1)" || rc=$?
   if [ "$rc" -ne 1 ]; then
     case_fail "guard/fails-when-signal-key-removed" "exit $rc want 1"
   elif ! printf '%s\n' "$out" | grep -q '^error: orchestration-advisor:'; then
@@ -850,6 +975,147 @@ run_guard_cases() {
   fi
 }
 
+# run_guard [repo-root]: runs the guard; sets GUARD_OUT (stdout and stderr) and
+# GUARD_RC. The guard's here-strings make temporary files, so TMPDIR is the
+# scratch root.
+GUARD_OUT=""
+GUARD_RC=0
+run_guard() {
+  GUARD_RC=0
+  GUARD_OUT="$(TMPDIR="$SCRATCH_ROOT" "$BASH_BIN" "$GUARD" "$@" 2>&1)" || GUARD_RC=$?
+}
+
+lines_of() {
+  wc -l <"$1" | tr -d '[:space:]'
+}
+
+# mutate_skill_file <kind> <from> <to>: writes a mutated copy of one skill file.
+mutate_skill_file() {
+  case "$1" in
+    shape-only-in-frontmatter)
+      # Every "message bus" (any case) after the frontmatter's closing line.
+      awk '
+        !body { print; if (NR > 1 && $0 == "---") body = 1; next }
+        {
+          line = $0
+          while ((at = index(tolower(line), "message bus")) > 0) {
+            line = substr(line, 1, at - 1) "event relay" substr(line, at + 11)
+          }
+          print line
+        }
+      ' "$2" >"$3"
+      ;;
+    step-heading-inside-fence)
+      awk '
+        /^## Step 1 .* Detect[ \t]*$/ { print "```"; print; print "```"; next }
+        { print }
+      ' "$2" >"$3"
+      ;;
+    report-headings-swapped)
+      awk '
+        $0 == "## Evidence" { print "## Ruled out"; next }
+        $0 == "## Ruled out" { print "## Evidence"; next }
+        { print }
+      ' "$2" >"$3"
+      ;;
+    report-heading-deleted)
+      awk '$0 != "## Cost note" { print }' "$2" >"$3"
+      ;;
+    model-id-in-scripts)
+      {
+        cat "$2"
+        printf '%s\n' '# model gpt-4'
+      } >"$3"
+      ;;
+    no-closing-frontmatter)
+      # Drop the second line that is exactly "---".
+      awk '
+        $0 == "---" { seen++; if (seen == 2) next }
+        { print }
+      ' "$2" >"$3"
+      ;;
+    *) return 1 ;;
+  esac
+}
+
+# expect_guard_rejects <case> <kind> <file> <line-delta> <text>: on a fresh copy
+# of the skill under a new temporary root, mutates one file, then wants the
+# guard to exit 1 with <text> in its output. Preconditions: the mutation changed
+# the file, by exactly <line-delta> lines.
+expect_guard_rejects() {
+  local name="$1" kind="$2" rel="$3" delta="$4" want="$5"
+  local tmp copy got named
+
+  tmp="$(new_root)"
+  copy="$tmp/skills/orchestration-advisor"
+  mkdir -p "$tmp/skills"
+  cp -R "$SKILL_DIR" "$copy"
+
+  if ! mutate_skill_file "$kind" "$SKILL_DIR/$rel" "$copy/$rel"; then
+    case_fail "$name" "precondition: the mutation of $rel did not run"
+    return 0
+  fi
+  if cmp -s "$SKILL_DIR/$rel" "$copy/$rel"; then
+    case_fail "$name" "precondition: the mutation left $rel unchanged"
+    return 0
+  fi
+  got=$(($(lines_of "$copy/$rel") - $(lines_of "$SKILL_DIR/$rel")))
+  if [ "$got" -ne "$delta" ]; then
+    case_fail "$name" "precondition: the mutation changed $rel by $got lines, want $delta"
+    return 0
+  fi
+  if [ "$kind" = "shape-only-in-frontmatter" ]; then
+    # The shape is still named, and only on the frontmatter description line.
+    named="$(grep -i 'message bus' "$copy/$rel" || true)"
+    case "$named" in
+      description:*) ;;
+      *)
+        case_fail "$name" "precondition: 'message bus' is not left on the description line only: $named"
+        return 0
+        ;;
+    esac
+    if [ "$(printf '%s\n' "$named" | wc -l | tr -d '[:space:]')" != "1" ]; then
+      case_fail "$name" "precondition: 'message bus' is left on more than one line"
+      return 0
+    fi
+  fi
+
+  run_guard "$tmp"
+  if [ "$GUARD_RC" -ne 1 ]; then
+    case_fail "$name" "exit $GUARD_RC want 1: $GUARD_OUT"
+  elif ! printf '%s\n' "$GUARD_OUT" | grep -qF -- "$want"; then
+    case_fail "$name" "output does not say '$want': $GUARD_OUT"
+  else
+    case_pass "$name"
+  fi
+}
+
+run_guard_mutation_cases() {
+  expect_guard_rejects "guard/fails-when-shape-only-in-frontmatter" \
+    shape-only-in-frontmatter SKILL.md 0 \
+    "does not name the shape: message bus"
+
+  expect_guard_rejects "guard/fails-when-step-heading-only-in-fence" \
+    step-heading-inside-fence SKILL.md 2 \
+    "missing procedure step heading: Detect"
+
+  expect_guard_rejects "guard/fails-when-report-headings-out-of-order" \
+    report-headings-swapped SKILL.md 0 \
+    "report headings are out of order"
+
+  expect_guard_rejects "guard/fails-when-report-heading-missing" \
+    report-heading-deleted SKILL.md -1 \
+    "missing report heading: ## Cost note"
+
+  expect_guard_rejects "guard/fails-when-model-id-in-scripts" \
+    model-id-in-scripts scripts/inspect.sh 1 \
+    "concrete model ID found in scripts/"
+
+  expect_guard_rejects "guard/fails-when-frontmatter-not-closed" \
+    no-closing-frontmatter SKILL.md -1 \
+    "missing procedure step heading: Detect"
+}
+
 # --- main ------------------------------------------------------------------------
 
 KEYS="$(keys_from_contract)"
@@ -857,12 +1123,12 @@ KEYS="$(keys_from_contract)"
 main() {
   if [ -z "$KEYS" ]; then
     case_fail "contract/keys-parsed-from-signals-md" "no keys found under '## Keys' in $SIGNALS"
-    echo "PASS: $PASS FAIL: $FAIL SKIP: $SKIP"
+    print_summary
     return 1
   fi
   if [ ! -f "$INSPECT" ]; then
     case_fail "contract/inspect-script-exists" "missing $INSPECT"
-    echo "PASS: $PASS FAIL: $FAIL SKIP: $SKIP"
+    print_summary
     return 1
   fi
 
@@ -870,16 +1136,19 @@ main() {
   run_harness_cases
   run_agent_cases
   run_description_cases
+  run_wc_fallback_cases
   run_skill_cases
   run_skip_list_cases
   run_mcp_cases
   run_project_cases
   run_tracked_cases
   run_error_cases
+  run_required_tool_cases
   run_whole_tree_cases
   run_guard_cases
+  run_guard_mutation_cases
 
-  echo "PASS: $PASS FAIL: $FAIL SKIP: $SKIP"
+  print_summary
   [ "$FAIL" -eq 0 ]
 }
 

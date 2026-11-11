@@ -21,9 +21,17 @@ permissions:
 
 jobs:
   suite:
-    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v7
 
+      # The system bash: 3.2 on the macOS runner.
+      - name: bash version
+        run: /bin/bash --version | head -1
+
       - name: orchestration-advisor test suite
-        run: bash tests/orchestration-advisor/run.sh
+        run: /bin/bash tests/orchestration-advisor/run.sh

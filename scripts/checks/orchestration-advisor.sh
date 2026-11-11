@@ -3,11 +3,16 @@ set -euo pipefail
 
 # Usage: scripts/checks/orchestration-advisor.sh [repo-root]
 # Content-contract guards for the orchestration-advisor skill: required files,
-# the procedure and report headings, the six shape names, the 18 signal keys in
-# both the contract and the script, and no concrete model IDs in shipped docs.
-# Run by scripts/validate-skills.sh. Needs only bash and grep.
+# the procedure step headings (real headings, outside fenced blocks), the seven
+# report headings (inside a fenced block, in order), the six shape names (in the
+# body, not the frontmatter), the 18 signal keys in both the contract and the
+# script, and no concrete model IDs in the shipped docs or scripts.
+# Run by scripts/validate-skills.sh. Needs only bash, grep and awk.
+# Written for bash 3.2 and POSIX grep and awk; it creates no file in the repository.
 
-ROOT="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+SELF_DIR="${BASH_SOURCE[0]%/*}"
+[[ "$SELF_DIR" != "${BASH_SOURCE[0]}" ]] || SELF_DIR="."
+ROOT="${1:-$(cd "${SELF_DIR}/../.." && pwd)}"
 SKILL_DIR="skills/orchestration-advisor"
 SKILL="${ROOT}/${SKILL_DIR}"
 
@@ -33,7 +38,8 @@ STEP_NAMES=(
   "Report"
 )
 
-# Report headings: each is a whole "## <name>" line.
+# Report headings: each is a whole "## <name>" line inside a fenced block. The
+# first occurrence of each must come in this order.
 REPORT_HEADINGS=(
   "Recommendation"
   "Evidence"
@@ -44,7 +50,7 @@ REPORT_HEADINGS=(
   "How to check this"
 )
 
-# Matched case-insensitively.
+# Matched case-insensitively, in the body of SKILL.md only.
 SHAPES=(
   "single agent plus skills"
   "generator-verifier"
@@ -78,6 +84,32 @@ SIGNAL_KEYS=(
 
 MODEL_ID_PATTERN='(claude|gpt|gemini|composer|opus|sonnet|haiku)-[0-9]'
 
+# Prints lines of SKILL.md. The frontmatter is line 1 through the next line that
+# is exactly "---"; the body is every line after it. With no closing line the
+# body is empty. A fence line (first non-space characters are three backticks)
+# toggles between outside and inside a fenced block, starting outside.
+#   body    — every body line
+#   outside — body lines outside fenced blocks (fence lines excluded)
+#   inside  — body lines inside fenced blocks (fence lines excluded)
+skill_lines() {
+  awk -v want="$1" '
+    !started { if (NR > 1 && $0 == "---") started = 1; next }
+    want == "body" { print; next }
+    /^[ \t]*```/ { fenced = !fenced; next }
+    want == "inside" && fenced { print }
+    want == "outside" && !fenced { print }
+  ' "${SKILL}/SKILL.md"
+}
+
+# Prints the number of the first line on standard input that is exactly the
+# given text, trailing spaces allowed; prints nothing when there is none.
+first_line_number() {
+  awk -v want="$1" '
+    { line = $0; sub(/[ \t\r]+$/, "", line) }
+    line == want { print NR; exit }
+  '
+}
+
 check_required_paths() {
   local rel
   for rel in "${REQUIRED_PATHS[@]}"; do
@@ -86,24 +118,34 @@ check_required_paths() {
 }
 
 check_headings() {
-  local headings name
-  headings="$(grep -E '^#{1,6} ' "${SKILL}/SKILL.md" || true)"
+  local outside inside name at previous
+  outside="$(skill_lines outside)"
+  inside="$(skill_lines inside)"
 
   for name in "${STEP_NAMES[@]}"; do
-    grep -qE "^#{1,6} Step [0-9]+ .* ${name}[[:space:]]*\$" <<<"$headings" ||
+    grep -qE "^#{1,6} Step [0-9]+ .* ${name}[[:space:]]*\$" <<<"$outside" ||
       fail "SKILL.md missing procedure step heading: ${name}"
   done
 
+  # Presence of all seven first, then their order.
   for name in "${REPORT_HEADINGS[@]}"; do
-    grep -qE "^## ${name}[[:space:]]*\$" <<<"$headings" ||
-      fail "SKILL.md missing report heading: ## ${name}"
+    at="$(first_line_number "## ${name}" <<<"$inside")"
+    [[ -n "$at" ]] || fail "SKILL.md missing report heading: ## ${name}"
+  done
+
+  previous=0
+  for name in "${REPORT_HEADINGS[@]}"; do
+    at="$(first_line_number "## ${name}" <<<"$inside")"
+    [[ "$at" -gt "$previous" ]] || fail "SKILL.md report headings are out of order"
+    previous="$at"
   done
 }
 
 check_shapes() {
-  local shape
+  local body shape
+  body="$(skill_lines body)"
   for shape in "${SHAPES[@]}"; do
-    grep -qiF -- "$shape" "${SKILL}/SKILL.md" ||
+    grep -qiF -- "$shape" <<<"$body" ||
       fail "SKILL.md does not name the shape: ${shape}"
   done
 }
@@ -121,9 +163,23 @@ check_signal_keys() {
   done
 }
 
+# Prints "path:line:text" for every line matching the model-ID pattern in every
+# file under the given directory, hidden files included. Symlinked directories
+# are not entered. /dev/null as a second operand makes grep print the path.
+model_id_matches_under() {
+  local dir="$1" entry
+  for entry in "$dir"/* "$dir"/.[!.]* "$dir"/..?*; do
+    if [[ -d "$entry" ]]; then
+      [[ -L "$entry" ]] || model_id_matches_under "$entry"
+    elif [[ -f "$entry" ]]; then
+      grep -En "$MODEL_ID_PATTERN" "$entry" /dev/null || true
+    fi
+  done
+}
+
 check_no_concrete_model_ids() {
   local matches
-  matches="$(grep -rEn "$MODEL_ID_PATTERN" "${SKILL}/references" 2>/dev/null || true)"
+  matches="$(model_id_matches_under "${SKILL}/references" 2>/dev/null || true)"
   if [[ -n "$matches" ]]; then
     echo "$matches" >&2
     fail "concrete model ID found in references/"
@@ -132,6 +188,11 @@ check_no_concrete_model_ids() {
   if [[ -n "$matches" ]]; then
     echo "$matches" >&2
     fail "concrete model ID found in SKILL.md"
+  fi
+  matches="$(model_id_matches_under "${SKILL}/scripts" 2>/dev/null || true)"
+  if [[ -n "$matches" ]]; then
+    echo "$matches" >&2
+    fail "concrete model ID found in scripts/"
   fi
 }
 
