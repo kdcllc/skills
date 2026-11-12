@@ -171,7 +171,7 @@ When skills link to each other (like the four `terraform-azure*` skills), a chan
    git push origin master <name>/vX.Y.Z
    ```
 
-The tag-on-merge workflow runs on every push to `master` that touches `skills/`, and can be started by hand on `master`. It runs `scripts/tag-released-skills.sh --push`, and its job summary lists the tags it created and, for a release that was not started, the command to start it. `tests/release/run.sh` is the suite for `scripts/tag-released-skills.sh`, `scripts/check-skill-versions.sh` and the `skill-status.sh` states (bash and git only); it runs in `.github/workflows/validate.yml`. Run it after changing any of them:
+The tag-on-merge workflow runs on every push to `master` that touches `skills/`, and can be started by hand on `master`. It runs `scripts/tag-released-skills.sh --push`, and its job summary lists the tags it created and, for a release that was not started, the command to start it. A rejected tag push is retried twice. If it still fails, that tag is dropped and the other tags are still pushed, and the job fails; start the workflow again by hand on `master` (`gh workflow run tag-on-merge.yml --ref master`) to retry the missing tag. `tests/release/run.sh` is the suite for `scripts/tag-released-skills.sh`, `scripts/check-skill-versions.sh` and the `skill-status.sh` states (bash and git only); it runs in `.github/workflows/validate.yml`. Run it after changing any of them:
 
 ```bash
 bash tests/release/run.sh

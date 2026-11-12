@@ -9,12 +9,19 @@ set -euo pipefail
 # and each created tag is pushed by its full ref. --dry-run only lists.
 # Standard output is one line per tag, exactly <name>/vX.Y.Z, printed after
 # the tag is created (and pushed). Every skill is checked before any tag is
-# created. Never moves or deletes a tag, never commits, never changes files.
+# created. A failed push is retried (TAG_PUSH_ATTEMPTS tries in all, default 3,
+# waiting TAG_PUSH_RETRY_DELAY seconds times the try number, default 5). When
+# every try fails, the tag this run created is deleted again so the next run
+# retries it, the remaining tags are still tagged and pushed, and the script
+# exits 1. Never moves an existing tag or deletes one it did not just create,
+# never commits, never changes files.
 # The repository root comes from this script's path; SKILLS_REPO_ROOT
 # overrides it (used by tests/release/run.sh).
 
 REPO_ROOT="${SKILLS_REPO_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 SEMVER_RE='^[0-9]+\.[0-9]+\.[0-9]+$'
+PUSH_ATTEMPTS="${TAG_PUSH_ATTEMPTS:-3}"
+PUSH_RETRY_DELAY="${TAG_PUSH_RETRY_DELAY:-5}"
 
 # Skills are visited in byte order on every machine.
 export LC_ALL=C
@@ -115,6 +122,22 @@ fi
 
 # --- tag (and push) each due skill ---------------------------------------------
 
+[[ "$PUSH_ATTEMPTS" =~ ^[1-9][0-9]*$ ]] || fail "TAG_PUSH_ATTEMPTS must be a positive integer: ${PUSH_ATTEMPTS}"
+[[ "$PUSH_RETRY_DELAY" =~ ^[0-9]+$ ]] || fail "TAG_PUSH_RETRY_DELAY must be a whole number of seconds: ${PUSH_RETRY_DELAY}"
+
+# push_tag <tag>: push one tag by its full ref, retrying transient rejections.
+push_tag() {
+  local attempt=1
+  while :; do
+    git_ push "$remote" "refs/tags/$1" >&2 && return 0
+    [[ "$attempt" -lt "$PUSH_ATTEMPTS" ]] || return 1
+    echo "warning: push of $1 failed (try ${attempt} of ${PUSH_ATTEMPTS}); retrying" >&2
+    sleep $((PUSH_RETRY_DELAY * attempt))
+    attempt=$((attempt + 1))
+  done
+}
+
+failed=()
 for entry in "${due[@]}"; do
   name="${entry% *}"
   version="${entry##* }"
@@ -122,11 +145,19 @@ for entry in "${due[@]}"; do
 
   if [[ "$dry_run" -eq 0 ]]; then
     git_ tag -a "$tag" -m "${name} v${version}" || fail "could not create tag ${tag}"
-    if [[ "$push" -eq 1 ]]; then
-      git_ push "$remote" "refs/tags/${tag}" >&2 ||
-        fail "could not push ${tag} to '${remote}'; the tag exists locally only"
+    if [[ "$push" -eq 1 ]] && ! push_tag "$tag"; then
+      # Drop the unpushed tag so the next run sees it as due again.
+      git_ tag -d "$tag" >/dev/null
+      echo "error: could not push ${tag} to '${remote}' after ${PUSH_ATTEMPTS} tries; the tag was not created" >&2
+      failed+=("$tag")
+      continue
     fi
   fi
 
   echo "$tag"
 done
+
+if [[ ${#failed[@]} -gt 0 ]]; then
+  echo "error: not tagged: ${failed[*]}; re-run the tag-on-merge workflow to retry" >&2
+  exit 1
+fi

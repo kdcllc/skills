@@ -165,7 +165,7 @@ add_skill() {
 run_script() {
   local out_file="$SCRATCH_ROOT/stdout" err_file="$SCRATCH_ROOT/stderr"
   RC=0
-  SKILLS_REPO_ROOT="$WORK" bash "$SCRIPT" "$@" >"$out_file" 2>"$err_file" || RC=$?
+  SKILLS_REPO_ROOT="$WORK" TAG_PUSH_RETRY_DELAY=0 bash "$SCRIPT" "$@" >"$out_file" 2>"$err_file" || RC=$?
   OUT="$(cat "$out_file")"
   ERR="$(cat "$err_file")"
 }
@@ -436,7 +436,7 @@ expect_local_tags ""
 expect_remote_tags ""
 finish
 
-begin "tag/partial-push-failure-lists-only-pushed"
+begin "tag/push-failure-skips-tag-and-continues"
 new_repo
 add_skill aaa 1.0.0
 add_skill bbb 2.0.0
@@ -454,10 +454,41 @@ push_main
 chmod +x "$REMOTE/hooks/update"
 [ -x "$REMOTE/hooks/update" ] || flunk "precondition: the remote hook is not executable"
 run_script --push
-[ "$RC" -ne 0 ] || flunk "exit code 0, expected non-zero"
-expect_out "aaa/v1.0.0"
+expect_rc 1
+expect_out "aaa/v1.0.0
+ccc/v3.0.0"
 expect_err_has "rejected by the suite hook: refs/tags/bbb/v2.0.0"
-expect_remote_tags "aaa/v1.0.0"
+expect_err_has "try 2 of 3"
+expect_err_has "error: not tagged: bbb/v2.0.0"
+expect_remote_tags "aaa/v1.0.0 ccc/v3.0.0"
+# The unpushed tag is deleted, so a second run retries it.
+expect_local_tags "aaa/v1.0.0 ccc/v3.0.0"
+rm -f "$REMOTE/hooks/update"
+run_script --push
+expect_rc 0
+expect_out "bbb/v2.0.0"
+expect_remote_tags "aaa/v1.0.0 bbb/v2.0.0 ccc/v3.0.0"
+finish
+
+begin "tag/transient-push-failure-is-retried"
+new_repo
+add_skill demo 0.2.0
+commit_all "demo 0.2.0"
+push_main
+# The remote rejects only the first push; the counter file lives in the remote.
+{
+  echo '#!/bin/sh'
+  echo 'n="$GIT_DIR/suite-pushes"'
+  echo 'if [ ! -f "$n" ]; then : >"$n"; echo "transient rejection: $1" >&2; exit 1; fi'
+  echo 'exit 0'
+} >"$REMOTE/hooks/update"
+chmod +x "$REMOTE/hooks/update"
+run_script --push
+expect_rc 0
+expect_out "demo/v0.2.0"
+expect_err_has "transient rejection: refs/tags/demo/v0.2.0"
+expect_err_has "try 1 of 3"
+expect_remote_tags "demo/v0.2.0"
 finish
 
 # --- check-skill-versions.sh ----------------------------------------------------
