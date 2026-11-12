@@ -75,8 +75,9 @@ Agent ids and step ids are **separate namespaces**: **S008** applies within the 
 - `run: inline` requires `tier: inherit` (**S042**). The step runs in the main session on the main session's model, so no per-agent model applies.
 - A `run: inline` agent must not appear in a step's `parallel` list or in `dispatch.workers`, because an inline step cannot run concurrently (**S043**).
 - `tools`, `inputs`, `outputs` and `instructions` keep their meaning and rules (**S026** and **S039** still apply). The tools are the main-session tools the step uses and are listed in the role file body.
-- Choose `inline` when the role has no distinct tools, model tier or isolation need of its own (a knowledge-only role). Evaluator, router and planner roles stay subagents. An inline step shares the orchestrator's context, so a gated producer that runs inline sees the evaluator's findings and its earlier attempts.
-- A `kind: worker` agent that looks knowledge-only but still runs as a subagent gets the warning **S044**: `run` absent or `subagent`, `tier: inherit`, tools a subset of `[read, search]` (the default included), no `outputs`, not in any step's `parallel` list or `dispatch.workers`, not the agent of a step named in any gate's `on_fail` (a gated producer), and the crew has more than one agent (a one-agent crew is better as a plain skill, so the hint does not apply). The message suggests `run: inline`. Warnings do not change the exit code.
+- Choose `inline` when the role has no distinct tools, model tier or isolation need of its own (a knowledge-only role). Evaluator, router and planner roles stay subagents. An inline step shares the orchestrator's context, so an inline step that a gate re-runs sees the evaluator's findings and its earlier attempts.
+- A `kind: worker` agent that looks knowledge-only but still runs as a subagent gets the warning **S044**: `run` absent or `subagent`, `tier: inherit`, tools a subset of `[read, search]` (the default included), no `outputs`, not in any step's `parallel` list or `dispatch.workers`, not the agent of any step a gate re-runs (the gate's `on_fail` step, and every step that transitively needs the `on_fail` step and is transitively needed by the gated step), not an agent id that appears more than once in `agents` (**S008** already reports it), and the crew has more than one agent (a one-agent crew is better as a plain skill, so the hint does not apply). The message suggests `run: inline`. Warnings do not change the exit code.
+- **S027** is not reported for an agent that gets **S042**: the fix S042 asks for (`tier: inherit`) needs no `models` entry.
 
 ## Step object
 
@@ -216,7 +217,7 @@ Planner agents write `<workdir>/<run-id>/tasks.yaml`: a YAML list of at most `di
 
 ### Inline steps
 
-At a step whose agent has `run: inline`, the orchestrator does not spawn. It reads `roles/<agent-id>.md` in its own skill folder and performs the step itself, then saves its report verbatim and writes the outputs exactly as **Agent reports** says for a spawned agent. A gate's `on_fail` re-run of an inline step is performed inline again.
+At a step whose agent has `run: inline`, the orchestrator does not spawn. It reads `roles/<agent-id>.md` in its own skill folder and performs the step itself, then saves its report verbatim and writes the outputs exactly as **Agent reports** says for a spawned agent. A gate's `on_fail` re-run of an inline step is performed inline again. An inline step whose `needs` is empty uses the user's request directly, because there is no spawn context.
 
 ### Orchestrator role
 
@@ -292,6 +293,7 @@ Findings use stable codes. Spec-mode validation uses `S###`; generated-tree vali
 | T012 | error | Name collision (applies to role files too): an expected path exists, is not listed in this crew's manifest, and does not carry this crew's generated-by marker | `error: T012 .claude/agents/writer.md: collides with existing file not in manifest and without this crew's marker` |
 | T013 | error | Orchestrator skill too long | `error: T013 .claude/skills/foo/SKILL.md: exceeds 500 lines` |
 | T014 | error | An agent file `.claude/agents/<agent-id>.md` or `.cursor/agents/<agent-id>.md` exists for a `run: inline` agent and carries this crew's generated-by marker (left over from a subagent run; delete it) | `error: T014 .claude/agents/glossary.md: stale agent file for inline agent 'glossary'; delete it` |
+| T015 | error | Role file is not valid UTF-8 (its other role-file checks are skipped) | `error: T015 .claude/skills/foo/roles/glossary.md: not valid UTF-8` |
 
 T002–T008, T011 and T013 do not apply to role files, which have no frontmatter. A file at an agent path without this crew's marker is not reported by T014.
 

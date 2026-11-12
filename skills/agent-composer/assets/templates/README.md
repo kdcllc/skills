@@ -13,7 +13,7 @@ Fill these templates when generating a crew from `.agent-composer/<name>.crew.ya
 | `{{cursor_model}}` | Agent `tier` → unquoted `models.cursor.<tier>` or `inherit` | cursor-agent.md.tmpl |
 | `{{instructions}}` | Agent `instructions` (role-prompt body) | claude-agent.md.tmpl, cursor-agent.md.tmpl, role.md.tmpl |
 | `{{crew_name}}` | Spec `name` | all `.tmpl` files, including role.md.tmpl |
-| `{{step_id}}` | Step `id` for this agent's scheduled step | claude-agent.md.tmpl, cursor-agent.md.tmpl, role.md.tmpl (report path) |
+| `{{step_id}}` | Step `id` for this agent's scheduled step | claude-agent.md.tmpl, cursor-agent.md.tmpl |
 | `{{role_tools}}` | Agent `tools` in plain words, comma-separated: `read` → read files, `search` → search files, `edit` → edit and write files, `shell` → run shell commands, `web` → fetch and search the web | role.md.tmpl |
 | `{{role_inputs}}` | Agent `inputs` as comma-separated backticked `<workdir>/<run-id>/<file>` paths, or the literal `none` | role.md.tmpl |
 | `{{role_outputs}}` | Agent `outputs` as comma-separated backticked `<workdir>/<run-id>/<file>` paths, or the literal `none` | role.md.tmpl |

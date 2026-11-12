@@ -1442,6 +1442,7 @@ def validate_spec_file(spec_path: Path) -> Tuple[List[Finding], Optional[dict]]:
     if isinstance(agents_raw, list) and isinstance(steps_raw, list) and len(agents_raw) > 1:
         blocked: Set[str] = set()
         on_fail_steps: Set[str] = set()
+        rerun_steps: Set[str] = set()
         for st in steps_raw:
             if not isinstance(st, dict):
                 continue
@@ -1454,13 +1455,29 @@ def validate_spec_file(spec_path: Path) -> Tuple[List[Finding], Optional[dict]]:
             gate = st.get("gate")
             if isinstance(gate, dict) and isinstance(gate.get("on_fail"), str):
                 on_fail_steps.add(gate["on_fail"])
+                fail_id = gate["on_fail"]
+                gate_id = st.get("id")
+                if fail_id in sid_map and isinstance(gate_id, str) and gate_id in sid_map:
+                    gate_needs = transitive_needs(gate_id, steps_raw, sid_map)
+                    for other in steps_raw:
+                        oid = other.get("id") if isinstance(other, dict) else None
+                        if (
+                            isinstance(oid, str)
+                            and oid in gate_needs
+                            and fail_id in transitive_needs(oid, steps_raw, sid_map)
+                        ):
+                            rerun_steps.add(oid)
         for st in steps_raw:
             if (
                 isinstance(st, dict)
-                and st.get("id") in on_fail_steps
+                and (st.get("id") in on_fail_steps or st.get("id") in rerun_steps)
                 and isinstance(st.get("agent"), str)
             ):
                 blocked.add(st["agent"])
+        id_counts: Dict[str, int] = {}
+        for ag in agents_raw:
+            if isinstance(ag, dict) and isinstance(ag.get("id"), str):
+                id_counts[ag["id"]] = id_counts.get(ag["id"], 0) + 1
         for i, ag in enumerate(agents_raw):
             if not isinstance(ag, dict):
                 continue
@@ -1470,6 +1487,7 @@ def validate_spec_file(spec_path: Path) -> Tuple[List[Finding], Optional[dict]]:
             if (
                 isinstance(aid, str)
                 and aid not in blocked
+                and id_counts.get(aid, 0) == 1
                 and ag.get("kind", "worker") == "worker"
                 and ag.get("run", "subagent") == "subagent"
                 and ag.get("tier", "inherit") == "inherit"
@@ -1494,6 +1512,8 @@ def validate_spec_file(spec_path: Path) -> Tuple[List[Finding], Optional[dict]]:
             tier = ag.get("tier", "inherit")
             if not isinstance(tier, str) or tier not in TIERS or tier == "inherit":
                 continue
+            if ag.get("run") == "inline":
+                continue  # S042 already reports the tier
             for harness in harness_list:
                 hmap = models_map.get(harness) if isinstance(models_map, dict) else None
                 if not isinstance(hmap, dict) or tier not in hmap:
@@ -1841,10 +1861,15 @@ def validate_tree(root: Path, spec_path: Path, data: dict) -> Tuple[List[Finding
             )
             continue
         if rel in role_paths:
+            try:
+                role_text = raw_bytes.decode("utf-8")
+            except UnicodeDecodeError:
+                findings.append(Finding("error", "T015", rel, "not valid UTF-8"))
+                continue
             check_role_file(
                 findings,
                 rel,
-                raw_bytes.decode("utf-8", errors="replace"),
+                role_text,
                 crew_name,
                 rel in manifest_files,
             )

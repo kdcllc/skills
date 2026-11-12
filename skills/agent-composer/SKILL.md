@@ -132,7 +132,7 @@ Check spec rules first, then generated tree rules. Each item names its code; ful
 - **S041** — `run: inline` on an agent that is not `kind: worker`.
 - **S042** — `run: inline` on an agent whose `tier` is not `inherit`.
 - **S043** — `run: inline` agent used in `parallel` or `dispatch.workers`.
-- **S044** — Knowledge-only worker that runs as a subagent (warning; hint to use `run: inline`).
+- **S044** — Knowledge-only worker that runs as a subagent (warning; hint to use `run: inline`; skips agents a gate re-runs and duplicate ids).
 
 **Generated tree (`validate.sh tree`) — T codes** — check each target harness against its own list: [references/claude-code.md](references/claude-code.md) and [references/cursor.md](references/cursor.md) (§ Validator rules); T005, T006, T011 apply to Cursor only.
 
@@ -150,11 +150,12 @@ Check spec rules first, then generated tree rules. Each item names its code; ful
 - **T012** — Path collides with foreign file (not in manifest, no marker).
 - **T013** — Orchestrator skill exceeds 500 lines.
 - **T014** — Stale agent file with this crew's marker for a `run: inline` agent (delete it).
+- **T015** — Role file is not valid UTF-8.
 
 ## Step 6 — Report
 
 - List every file written.
-- Walk through one run: “When you run `/<name>`, …” — describe only behavior present in the generated orchestrator skill: run id and run folder, writing the user's request into each root input (and empty-request handling), passing that request in spawn context for steps with empty `needs`, each step in scheduling order with its agent (and parallel/dispatch/gate behavior only when the generated files include those sections), report paths, gate cycle report renaming when applicable, and where the orchestrator writes the run report (`<workdir>/<run-id>/run-report.md`).
+- Walk through one run: “When you run `/<name>`, …” — describe only behavior present in the generated orchestrator skill: run id and run folder, writing the user's request into each root input (and empty-request handling), passing that request in spawn context for steps with empty `needs` (an inline step with empty `needs` uses it directly), each step in scheduling order with its agent (and parallel/dispatch/gate behavior only when the generated files include those sections), report paths, gate cycle report renaming when applicable, and where the orchestrator writes the run report (`<workdir>/<run-id>/run-report.md`).
 - When the crew targets both harnesses, tell the user Cursor may list two identical `/<name>` skills (the `.cursor/skills/` and `.claude/skills/` copies have identical bodies); see [references/cursor.md](references/cursor.md).
 - Tell the user how to change the crew: edit `.agent-composer/<name>.crew.yaml`, then re-run this skill.
 

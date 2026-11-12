@@ -1,0 +1,23 @@
+schema: 1
+name: s044-not-for-duplicate-id
+description: "Knowledge-only agent id listed twice reports S008, not S044."
+pattern: pipeline
+harnesses: [claude-code]
+agents:
+  - id: k
+    description: "First knowledge-only entry."
+    instructions: Answer.
+  - id: k
+    description: "Second knowledge-only entry."
+    instructions: Answer again.
+  - id: w
+    description: "Writes the deliverable."
+    tools: [read, edit]
+    outputs: [o.md]
+    instructions: Write.
+steps:
+  - id: s1
+    agent: k
+  - id: s2
+    agent: w
+    needs: [s1]

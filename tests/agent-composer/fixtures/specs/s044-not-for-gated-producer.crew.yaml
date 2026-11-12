@@ -11,6 +11,9 @@ agents:
     description: "Evaluator."
     kind: evaluator
     instructions: Check.
+  - id: side
+    description: "Knowledge-only agent outside the retry loop."
+    instructions: Side.
 steps:
   - id: s1
     agent: fix
@@ -20,3 +23,6 @@ steps:
     gate:
       on_fail: s1
       max_cycles: 2
+  - id: s3
+    agent: side
+    needs: [s1]

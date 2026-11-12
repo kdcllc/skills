@@ -122,3 +122,4 @@ Checks enforced by `validate.sh tree` for the Cursor harness (codes from [spec-s
 12. Paths that collide with foreign unmarked files — **T012**.
 13. Orchestrator `SKILL.md` ≤ 500 lines — **T013**.
 14. No agent file `.cursor/agents/<id>.md` carrying this crew's marker exists for a `run: inline` agent — **T014**.
+15. Every role file is valid UTF-8 — **T015**.

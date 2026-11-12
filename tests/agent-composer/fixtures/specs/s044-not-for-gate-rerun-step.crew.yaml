@@ -1,0 +1,34 @@
+schema: 1
+name: s044-not-for-gate-rerun-step
+description: "Knowledge-only step between a gated producer and its gate is re-run, so no S044; a branch step is not."
+pattern: evaluator-optimizer
+harnesses: [claude-code]
+agents:
+  - id: p
+    description: "Producer retried by the gate."
+    instructions: Answer.
+  - id: m
+    description: "Knowledge-only agent between producer and gate."
+    instructions: Refine.
+  - id: e
+    description: "Evaluator."
+    kind: evaluator
+    instructions: Check.
+  - id: b
+    description: "Knowledge-only branch agent outside the retry loop."
+    instructions: Branch.
+steps:
+  - id: s1
+    agent: p
+  - id: s2
+    agent: m
+    needs: [s1]
+  - id: s3
+    agent: e
+    needs: [s2]
+    gate:
+      on_fail: s1
+      max_cycles: 2
+  - id: s4
+    agent: b
+    needs: [s1]

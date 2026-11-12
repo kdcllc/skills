@@ -108,3 +108,4 @@ Checks enforced by `validate.sh tree` for the Claude Code harness (codes from [s
 9. Expected paths that exist without this crew's marker and manifest entry are collisions — **T012**.
 10. Orchestrator `SKILL.md` body length ≤ 500 lines — **T013**.
 11. No agent file `.claude/agents/<id>.md` carrying this crew's marker exists for a `run: inline` agent — **T014**.
+12. Every role file is valid UTF-8 — **T015**.

@@ -1,0 +1,23 @@
+schema: 1
+name: s043-with-s038
+description: "Non-worker inline agent in parallel reports both S043 and S038."
+pattern: fan-out
+harnesses: [claude-code]
+agents:
+  - id: a
+    description: "Subagent worker."
+    instructions: One.
+  - id: ev
+    description: "Inline evaluator in parallel."
+    kind: evaluator
+    run: inline
+    instructions: Check.
+  - id: j
+    description: "Joins."
+    instructions: Merge.
+steps:
+  - id: par
+    parallel: [a, ev]
+  - id: merge
+    agent: j
+    needs: [par]

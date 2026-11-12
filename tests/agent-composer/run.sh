@@ -715,6 +715,58 @@ run_validate_spec_no_s044() {
   case_pass "$name"
 }
 
+# Portable in-place edit (BSD and GNU sed): sed_inplace <file> <sed args...>
+sed_inplace() {
+  local f="$1" tmp
+  shift
+  tmp="$f.tmp.$$"
+  sed "$@" "$f" > "$tmp" && mv "$tmp" "$f"
+}
+
+# Passes when exit code is want_rc, every code in `present` has a line and no code in `absent` has a line.
+run_validate_spec_codes() {
+  local name="$1" spec_path="$2" want_rc="$3" present="$4" absent="${5:-}" c
+  need_yaml_or_skip "$name" || return 0
+  spec_output_or_fail "$name" "$spec_path" || return 0
+  if [[ "$SPEC_RC" -ne "$want_rc" ]]; then
+    case_fail "$name" "exit $SPEC_RC want $want_rc"
+    return 0
+  fi
+  for c in $present; do
+    if ! grep -qE "^(error|warn): $c " <<<"$SPEC_OUT"; then
+      case_fail "$name" "missing $c"
+      return 0
+    fi
+  done
+  for c in $absent; do
+    if grep -qE "^(error|warn): $c " <<<"$SPEC_OUT"; then
+      case_fail "$name" "unexpected $c"
+      return 0
+    fi
+  done
+  case_pass "$name"
+}
+
+# Passes when exit code is want_rc, no S044 is located at no_loc_regex and an S044 is located at yes_loc_regex.
+run_validate_spec_s044_scoped() {
+  local name="$1" spec_path="$2" want_rc="$3" no_loc="$4" yes_loc="$5"
+  need_yaml_or_skip "$name" || return 0
+  spec_output_or_fail "$name" "$spec_path" || return 0
+  if [[ "$SPEC_RC" -ne "$want_rc" ]]; then
+    case_fail "$name" "exit $SPEC_RC want $want_rc"
+    return 0
+  fi
+  if grep -qE "^warn: S044 .*:${no_loc}:" <<<"$SPEC_OUT"; then
+    case_fail "$name" "unexpected S044 warning at $no_loc"
+    return 0
+  fi
+  if ! grep -qE "^warn: S044 .*:${yes_loc}:" <<<"$SPEC_OUT"; then
+    case_fail "$name" "no S044 warning at $yes_loc"
+    return 0
+  fi
+  case_pass "$name"
+}
+
 run_inline_spec_cases() {
   local p="$FIXTURES/specs" ex bad=""
   run_validate_spec "spec/S041-inline-non-worker" "$p/s041-inline-non-worker.crew.yaml" 1 S041
@@ -732,7 +784,11 @@ run_inline_spec_cases() {
   fi
   run_validate_spec_no_s044 "spec/S044-not-for-parallel-member" "$p/fanout-mini.crew.yaml" 0 'agents\[[01]\]'
   run_validate_spec_no_s044 "spec/S044-not-for-single-agent" "$p/s044-not-for-single-agent.crew.yaml" 0
-  run_validate_spec_no_s044 "spec/S044-not-for-gated-producer" "$p/s044-not-for-gated-producer.crew.yaml" 0
+  run_validate_spec_s044_scoped "spec/S044-not-for-gated-producer" "$p/s044-not-for-gated-producer.crew.yaml" 0 'agents\[0\]' 'agents\[2\]'
+  run_validate_spec_s044_scoped "spec/S044-not-for-gate-rerun-step" "$p/s044-not-for-gate-rerun-step.crew.yaml" 0 'agents\[[01]\]' 'agents\[3\]'
+  run_validate_spec_codes "spec/S044-not-for-duplicate-id" "$p/s044-not-for-duplicate-id.crew.yaml" 1 S008 S044
+  run_validate_spec_codes "spec/S027-not-with-S042" "$p/s027-not-with-s042.crew.yaml" 1 S042 S027
+  run_validate_spec_codes "spec/S043-with-S038" "$p/s043-with-s038.crew.yaml" 1 "S043 S038"
   run_validate_spec "spec/S006-bad-run" "$p/s006-bad-run.crew.yaml" 1 S006
   run_validate_spec_no_s044 "spec/inline-positive" "$p/inline-mini.crew.yaml" 0
   if need_yaml_or_skip "example/no-S044"; then
@@ -766,7 +822,7 @@ run_inline_tree_cases() {
   run_validate_tree "tree/T001-role-file-missing" "$proj" "$spec" 1 T001
 
   read -r proj spec <<<"$(tree_project_inline | tr '\n' ' ')"
-  sed -i '1d' "$proj/.claude/skills/inline-mini/roles/k.md"
+  sed_inplace "$proj/.claude/skills/inline-mini/roles/k.md" '1d'
   run_validate_tree "tree/T010-role-file-marker" "$proj" "$spec" 1 T010
 
   mk="$(marker_line inline-mini)"
@@ -791,7 +847,7 @@ run_inline_tree_cases() {
 
   read -r proj spec <<<"$(tree_project_inline | tr '\n' ' ')"
   mk="$(marker_line other-crew)"
-  sed -i "1s|.*|$mk|" "$proj/.claude/skills/inline-mini/roles/k.md"
+  sed_inplace "$proj/.claude/skills/inline-mini/roles/k.md" "1s|.*|$mk|"
   rm -f "$proj/.agent-composer/inline-mini.manifest.json"
   run_validate_tree "tree/T012-role-file-collision" "$proj" "$spec" 1 T012
 
@@ -813,6 +869,44 @@ run_inline_tree_cases() {
         case_pass "manifest/inline-write-status"
       else
         case_fail "manifest/inline-write-status" "status rc=$rc out=$(tr '\n' '|' <<<"$out")"
+      fi
+    fi
+  fi
+
+  read -r proj spec <<<"$(tree_project_inline | tr '\n' ' ')"
+  printf '\377\376' >> "$proj/.claude/skills/inline-mini/roles/k.md"
+  run_validate_tree "tree/T015-role-file-not-utf8" "$proj" "$spec" 1 T015
+
+  mk="$(marker_line inline-mini)"
+  read -r proj spec <<<"$(tree_project_inline | tr '\n' ' ')"
+  printf '%s\n\nstale\n' "$mk" > "$proj/.cursor/agents/k.md"
+  need_yaml_or_skip "tree/T014-stale-cursor-agent-file" && {
+    rc=0
+    out="$($VALIDATE tree "$proj" "$proj/$spec" 2>&1)" || rc=$?
+    record_codes "$out"
+    if [[ "$rc" -eq 1 ]] && grep -qE '^error: T014 \.cursor/agents/k\.md:' <<<"$out" && ! grep -qE '^error: T014 \.claude/agents/' <<<"$out"; then
+      case_pass "tree/T014-stale-cursor-agent-file"
+    else
+      case_fail "tree/T014-stale-cursor-agent-file" "rc=$rc out=$(tr '\n' '|' <<<"$out")"
+    fi
+  }
+
+  read -r proj spec <<<"$(tree_project_inline | tr '\n' ' ')"
+  if need_yaml_or_skip "manifest/orphan-role-file-after-switch-back"; then
+    rc=0
+    out="$($MANIFEST write "$proj" "$proj/$spec" 2>&1)" || rc=$?
+    if [[ "$rc" -ne 0 ]]; then
+      case_fail "manifest/orphan-role-file-after-switch-back" "write rc=$rc"
+    else
+      sed_inplace "$proj/$spec" 's/^    run: inline$/    run: subagent/'
+      sed 's/^name: w$/name: k/' "$proj/.claude/agents/w.md" > "$proj/.claude/agents/k.md"
+      sed 's/^name: w$/name: k/' "$proj/.cursor/agents/w.md" > "$proj/.cursor/agents/k.md"
+      rc=0
+      out="$($MANIFEST status "$proj" "$proj/$spec" 2>&1)" || rc=$?
+      if grep -qxF 'orphan .claude/skills/inline-mini/roles/k.md' <<<"$out" && grep -qxF 'orphan .cursor/skills/inline-mini/roles/k.md' <<<"$out"; then
+        case_pass "manifest/orphan-role-file-after-switch-back"
+      else
+        case_fail "manifest/orphan-role-file-after-switch-back" "status rc=$rc out=$(tr '\n' '|' <<<"$out")"
       fi
     fi
   fi

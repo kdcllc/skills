@@ -47,7 +47,7 @@ Keep a role a subagent when it is:
 - an evaluator, router or planner;
 - in need of its own model tier or isolation (a separate context, restricted tools);
 - scheduled in a `parallel` step or as a `dispatch` worker;
-- a gated producer whose re-runs should not see its earlier attempts or the evaluator's findings (an inline step shares the orchestrator's context).
+- the agent of a step a gate re-runs (the `on_fail` step or a step between it and the gate), whose re-runs should not see its earlier attempts or the evaluator's findings (an inline step shares the orchestrator's context).
 
 ## Choosing tiers
 
