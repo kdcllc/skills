@@ -4,6 +4,21 @@ All notable changes to the `orchestration-advisor` skill. Format: [Keep a Change
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-12
+
+### Added
+
+- Audit mode. After the inspection, the skill asks "Recommend a setup, or audit the existing one?" and suggests an answer from the signals (audit when the project has agents, an `agent-kit` install, crews or orchestrator skills). Audit mode reviews an existing orchestration system, hooks and other enforcers included, and produces a current-vs-recommended comparison.
+- A Map step (Step 4) and `references/audit.md`, which describe how to map each system, its tiers, and what enforces each gate, and the audit-mode decision rules.
+- `references/report-audit.md`, the chat summary format, save offer and full report for audit mode.
+- Seven new inspection keys: `harness_hook_entries`, `git_hook_files`, `rule_files`, `rubric_files`, `command_files`, `harness_config_files` and `orchestrator_skills`.
+
+### Changed
+
+- Step numbering: Map is Step 4, and Decide and Report move to Steps 5 and 6.
+- The inspection contract has 25 keys instead of 18. `orchestrator_skills` leaves out the advisor itself.
+- `references/patterns.md` adds "Shapes compose": shapes can be combined in one system, and the report names each in play.
+
 ## [0.2.0] - 2026-11-11
 
 ### Changed

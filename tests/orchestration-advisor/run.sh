@@ -3,8 +3,10 @@
 # in references/signals.md) and for scripts/checks/orchestration-advisor.sh.
 #
 # Every fixture tree is built at run time under one `mktemp -d` directory that
-# is removed on exit. This folder ships no fixture files on purpose: a committed
-# file named SKILL.md under tests/ would be published by the Skills CLI.
+# is removed on exit. This folder ships one markdown scenario,
+# fixtures/audit-scenario.md, and never a SKILL.md or a harness folder: a
+# committed file named SKILL.md under tests/ would be published by the Skills
+# CLI. Trees are still built at run time.
 #
 # Offline. Cases that need `jq` or `git` print SKIP when the tool is absent.
 set -euo pipefail
@@ -1241,6 +1243,36 @@ mutate_skill_file() {
         { print }
       ' "$2" >"$3"
       ;;
+    audit-headings-swapped)
+      awk '
+        $0 == "## Enforcement" { print "## Suggestions"; next }
+        $0 == "## Suggestions" { print "## Enforcement"; next }
+        { print }
+      ' "$2" >"$3"
+      ;;
+    audit-heading-deleted)
+      awk '$0 != "## Left alone" { print }' "$2" >"$3"
+      ;;
+    map-step-heading-deleted)
+      awk '$0 !~ /^#+ Step [0-9]+ .* Map[ \t]*$/ { print }' "$2" >"$3"
+      ;;
+    decide-report-steps-swapped)
+      # The last words of the Step 5 and Step 6 headings trade places.
+      awk '
+        /^#+ Step [0-9]+ .* Decide[ \t]*$/ { sub(/Decide[ \t]*$/, "Report"); print; next }
+        /^#+ Step [0-9]+ .* Report[ \t]*$/ { sub(/Report[ \t]*$/, "Decide"); print; next }
+        { print }
+      ' "$2" >"$3"
+      ;;
+    audit-rule-bold-removed)
+      awk '{ gsub(/\*\*Tier rule\*\*/, "Tier rule"); print }' "$2" >"$3"
+      ;;
+    signals-row-hook-entries-deleted)
+      awk '$0 !~ /^\|[ \t]*`harness_hook_entries`[ \t]*\|/ { print }' "$2" >"$3"
+      ;;
+    inspect-key-renamed)
+      awk '{ sub(/echo "rubric_files=/, "echo \"rubric_count="); print }' "$2" >"$3"
+      ;;
     *) return 1 ;;
   esac
 }
@@ -1439,6 +1471,422 @@ run_guard_fence_and_link_cases() {
     report-block-tilde-fence SKILL.md 0
 }
 
+# --- audit signals: hooks, rules, rubrics, commands, configs, orchestrators ------
+
+# skill_md <file> <name> <body-line>: a SKILL.md with frontmatter and one body line.
+skill_md() {
+  put "$1" "$(printf '%s\n' '---' "name: $2" 'description: A generic skill' '---' "$3")"
+}
+
+run_hook_cases() {
+  local root stub
+
+  root="$(new_root)"
+  expect "harness_hook_entries/no-files-is-zero" "$root" harness_hook_entries=0 git_hook_files=0
+
+  root="$(new_root)"
+  put "$root/.claude/settings.json" '{"hooks": {"x": "not-a-handler"}, "permissions": {}'
+  expect "harness_hook_entries/invalid-json-unknown" "$root" harness_hook_entries=unknown
+
+  root="$(new_root)"
+  put "$root/.claude/settings.json" '{"hooks": {"PreToolUse": [{"matcher": "Edit", "hooks": [{"type": "command"}, {"type": "command"}]}]}}'
+  put "$root/.claude/settings.local.json" '{"hooks": {"Stop": [{"hooks": [{"type": "command"}]}]}'
+  expect "harness_hook_entries/valid-plus-invalid-unknown" "$root" harness_hook_entries=unknown
+
+  if ! have jq; then
+    case_skip "harness_hook_entries/three-files-summed" "jq not installed"
+    case_skip "harness_hook_entries/settings-without-hooks-is-zero" "jq not installed"
+    case_skip "harness_hook_entries/group-without-hooks-array-is-zero" "jq not installed"
+    case_skip "harness_hook_entries/top-level-array-is-zero" "jq not installed"
+    case_skip "harness_hook_entries/no-jq-unknown" "jq not installed"
+    return 0
+  fi
+
+  # 2 + 1 (two matcher groups) + 1 (local) + 2 + 1 (cursor events) = 7.
+  root="$(new_root)"
+  put "$root/.claude/settings.json" '{"hooks": {"PreToolUse": [{"matcher": "Edit", "hooks": [{"type": "command"}, {"type": "command"}]}, {"matcher": "Bash", "hooks": [{"type": "command"}]}]}}'
+  put "$root/.claude/settings.local.json" '{"hooks": {"Stop": [{"hooks": [{"type": "command"}]}]}}'
+  put "$root/.cursor/hooks.json" '{"version": 1, "hooks": {"preToolUse": [{"command": "a"}, {"command": "b"}], "stop": [{"command": "c"}]}}'
+  expect "harness_hook_entries/three-files-summed" "$root" harness_hook_entries=7
+
+  root="$(new_root)"
+  put "$root/.claude/settings.json" '{"permissions": {"allow": []}}'
+  put "$root/.claude/settings.local.json" '{}'
+  expect "harness_hook_entries/settings-without-hooks-is-zero" "$root" harness_hook_entries=0
+
+  root="$(new_root)"
+  put "$root/.claude/settings.json" '{"hooks": {"Stop": [{"matcher": "x"}]}}'
+  expect "harness_hook_entries/group-without-hooks-array-is-zero" "$root" harness_hook_entries=0
+
+  root="$(new_root)"
+  put "$root/.claude/settings.json" '[]'
+  expect "harness_hook_entries/top-level-array-is-zero" "$root" harness_hook_entries=0
+
+  # jq hidden while a hook file exists: unknown. With jq the same tree counts 1.
+  root="$(new_root)"
+  put "$root/.claude/settings.json" '{"hooks": {"Stop": [{"hooks": [{"type": "command"}]}]}}'
+  put "$root/package.json" '{}'
+  stub="$SCRATCH_ROOT/path-no-jq-hooks"
+  # shellcheck disable=SC2086
+  if ! make_stub_path "$stub" $CORE_TOOLS; then
+    case_skip "harness_hook_entries/no-jq-unknown" "cannot build a PATH without jq"
+  elif (PATH="$stub" && type -P jq >/dev/null 2>&1); then
+    case_skip "harness_hook_entries/no-jq-unknown" "jq still reachable on the stub PATH"
+  else
+    run_inspect "$root"
+    if [ "$(value_of harness_hook_entries)" != "1" ]; then
+      case_fail "harness_hook_entries/no-jq-unknown" "precondition: with jq harness_hook_entries=$(value_of harness_hook_entries) want 1"
+    else
+      INSPECT_PATH="$stub"
+      run_inspect "$root"
+      INSPECT_PATH=""
+      assert_out "harness_hook_entries/no-jq-unknown" harness_hook_entries=unknown package_manifests=1
+    fi
+  fi
+}
+
+run_git_hook_cases() {
+  local root
+
+  # Only .sample files in .git/hooks.
+  root="$(new_root)"
+  put "$root/.git/hooks/pre-commit.sample" "#"
+  put "$root/.git/hooks/commit-msg.sample" "#"
+  expect "git_hook_files/only-samples-is-zero" "$root" git_hook_files=0
+
+  root="$(new_root)"
+  put "$root/.git/hooks/pre-commit" "#"
+  put "$root/.git/hooks/pre-push" "#"
+  put "$root/.git/hooks/commit-msg.sample" "#"
+  put "$root/.git/hooks/sub/nested" "#"
+  expect "git_hook_files/git-hooks-without-sample" "$root" git_hook_files=2
+
+  # .husky/_ is a folder of generated files and is not entered.
+  root="$(new_root)"
+  put "$root/.husky/pre-commit" "#"
+  put "$root/.husky/commit-msg" "#"
+  put "$root/.husky/_/husky.sh" "#"
+  put "$root/.husky/_/h" "#"
+  expect "git_hook_files/husky-underscore-not-entered" "$root" git_hook_files=2
+
+  root="$(new_root)"
+  mkdir -p "$root/.husky/_"
+  put "$root/.husky/_/husky.sh" "#"
+  expect "git_hook_files/husky-underscore-only-is-zero" "$root" git_hook_files=0
+
+  # Each root config file counts 1.
+  root="$(new_root)"
+  put "$root/lefthook.yml"
+  put "$root/.lefthook.yml"
+  put "$root/lefthook.yaml"
+  put "$root/.lefthook.yaml"
+  put "$root/.pre-commit-config.yaml"
+  put "$root/sub/lefthook.yml"
+  expect "git_hook_files/each-root-config-counts-one" "$root" git_hook_files=5
+
+  root="$(new_root)"
+  put "$root/.pre-commit-config.yaml"
+  expect "git_hook_files/single-root-config" "$root" git_hook_files=1
+
+  # All three sources add up: 1 + 1 + 1.
+  root="$(new_root)"
+  put "$root/.git/hooks/pre-commit" "#"
+  put "$root/.husky/pre-commit" "#"
+  put "$root/lefthook.yml"
+  expect "git_hook_files/three-sources-summed" "$root" git_hook_files=3
+
+  # A worktree's .git is a file: nothing to count for the .git/hooks part.
+  root="$(new_root)"
+  put "$root/.git" "gitdir: ../elsewhere/.git/worktrees/w"
+  put "$root/lefthook.yml"
+  expect "git_hook_files/dot-git-file-gives-zero-for-hooks-part" "$root" git_hook_files=1
+
+  root="$(new_root)"
+  put "$root/.git" "gitdir: ../elsewhere/.git/worktrees/w"
+  expect "git_hook_files/dot-git-file-alone-is-zero" "$root" git_hook_files=0
+}
+
+run_rule_command_config_cases() {
+  local root
+
+  # --- rule_files
+  root="$(new_root)"
+  put "$root/.cursor/rules/a.mdc"
+  put "$root/.cursor/rules/sub/b.mdc"
+  put "$root/.cursor/rules/notes.md"
+  put "$root/.cursor/rules/c.txt"
+  expect "rule_files/mdc-counted-plain-md-not" "$root" rule_files=2
+
+  root="$(new_root)"
+  put "$root/.claude/rules/style.md"
+  put "$root/.claude/rules/lang/python/typing.md"
+  put "$root/.claude/rules/readme.txt"
+  expect "rule_files/claude-rules-nested-counted" "$root" rule_files=2
+
+  root="$(new_root)"
+  put "$root/.github/instructions/ts.instructions.md"
+  put "$root/.github/instructions/deep/go.instructions.md"
+  put "$root/.github/instructions/plain.md"
+  put "$root/.github/copilot-instructions.md"
+  expect "rule_files/github-needs-instructions-md-suffix" "$root" rule_files=2
+
+  root="$(new_root)"
+  put "$root/rules/a.md"
+  put "$root/.cursor/other/b.mdc"
+  expect "rule_files/outside-rule-folders-is-zero" "$root" rule_files=0
+
+  # --- command_files
+  root="$(new_root)"
+  put "$root/.claude/commands/a.md"
+  put "$root/.claude/commands/sub/b.md"
+  put "$root/.claude/commands/c.txt"
+  put "$root/.cursor/commands/d.md"
+  put "$root/.cursor/commands/e.json"
+  put "$root/.github/prompts/f.prompt.md"
+  put "$root/.github/prompts/g.md"
+  expect "command_files/three-locations-and-suffix-rules" "$root" command_files=4
+
+  root="$(new_root)"
+  put "$root/.claude/commands/x.txt"
+  put "$root/.github/prompts/y.md"
+  put "$root/commands/z.md"
+  expect "command_files/wrong-suffix-or-place-is-zero" "$root" command_files=0
+
+  # --- harness_config_files
+  root="$(new_root)"
+  put "$root/.claude/model-routing.json" '{}'
+  put "$root/.codex/config.toml" 'model = "x"'
+  put "$root/.cursor/routing.yaml"
+  put "$root/.claude/extra.jsonc"
+  put "$root/.claude/settings.json" '{}'
+  put "$root/.claude/settings.local.json" '{}'
+  put "$root/.cursor/hooks.json" '{}'
+  put "$root/.cursor/mcp.json" '{}'
+  put "$root/.claude/notes.md"
+  put "$root/.claude/sub/nested.json" '{}'
+  put "$root/.codex/sub/nested.toml"
+  expect "harness_config_files/routing-and-codex-config-counted" "$root" harness_config_files=4
+
+  root="$(new_root)"
+  put "$root/.claude/settings.json" '{}'
+  put "$root/.claude/settings.local.json" '{}'
+  put "$root/.cursor/hooks.json" '{}'
+  put "$root/.cursor/mcp.json" '{}'
+  put "$root/.claude/sub/nested.json" '{}'
+  put "$root/model-routing.json" '{}'
+  expect "harness_config_files/excluded-and-nested-is-zero" "$root" harness_config_files=0
+}
+
+run_rubric_cases() {
+  local root
+
+  root="$(new_root)"
+  put "$root/.claude/rubrics/judge.md"
+  put "$root/.cursor/criteria/qa.md"
+  put "$root/.codex/x/rubrics/deep.md"
+  put "$root/.claude/rubrics/notes.txt"
+  expect "rubric_files/rubrics-and-criteria-inside-harness-folders" "$root" rubric_files=3
+
+  # Outside every harness folder: not counted.
+  root="$(new_root)"
+  put "$root/rubrics/outside.md"
+  put "$root/docs/criteria/other.md"
+  put "$root/.claude/docs/readme.md"
+  expect "rubric_files/rubrics-outside-harness-folders-is-zero" "$root" rubric_files=0
+
+  # *-criteria and *-rubric skill names, once across two roots.
+  root="$(new_root)"
+  skill_md "$root/.claude/skills/code-criteria/SKILL.md" code-criteria "Checks."
+  skill_md "$root/.cursor/skills/code-criteria/SKILL.md" code-criteria "Checks."
+  skill_md "$root/.agents/skills/ui-rubric/SKILL.md" ui-rubric "Checks."
+  skill_md "$root/.claude/skills/criteria-notes/SKILL.md" criteria-notes "Not a rubric name."
+  expect "rubric_files/criteria-and-rubric-skill-names-once" "$root" rubric_files=2 skill_files=3
+
+  # A rubric folder file and a rubric skill add up.
+  root="$(new_root)"
+  put "$root/.claude/rubrics/judge.md"
+  skill_md "$root/.claude/skills/code-criteria/SKILL.md" code-criteria "Checks."
+  expect "rubric_files/folder-files-plus-skill-names" "$root" rubric_files=2
+}
+
+run_orchestrator_cases() {
+  local root
+
+  root="$(new_root)"
+  skill_md "$root/.claude/skills/a/SKILL.md" a "Launch SUBAGENTS for each task."
+  skill_md "$root/.claude/skills/b/SKILL.md" b "Use the Task Tool."
+  skill_md "$root/.claude/skills/c/SKILL.md" c "It spawns workers."
+  skill_md "$root/.claude/skills/d/SKILL.md" d "Delegates to a sub-agent."
+  skill_md "$root/.claude/skills/e/SKILL.md" e "Formats a changelog."
+  expect "orchestrator_skills/case-insensitive-match-plain-skill-not-counted" "$root" \
+    orchestrator_skills=4 skill_files=5
+
+  # Distinct across roots.
+  root="$(new_root)"
+  skill_md "$root/.claude/skills/runner/SKILL.md" runner "Launches subagents."
+  skill_md "$root/.cursor/skills/runner/SKILL.md" runner "Launches subagents."
+  skill_md "$root/.agents/skills/other/SKILL.md" other "Spawn a helper."
+  expect "orchestrator_skills/distinct-across-roots" "$root" orchestrator_skills=2
+
+  root="$(new_root)"
+  skill_md "$root/.claude/skills/plain/SKILL.md" plain "Formats text."
+  expect "orchestrator_skills/no-words-is-zero" "$root" orchestrator_skills=0
+
+  # An installed copy of orchestration-advisor mentions subagents but is left out.
+  root="$(new_root)"
+  skill_md "$root/.claude/skills/orchestration-advisor/SKILL.md" orchestration-advisor "Recommends subagents and spawn patterns."
+  expect "orchestrator_skills/installed-advisor-copy-is-zero" "$root" orchestrator_skills=0 skill_files=1
+
+  # The exclusion follows the frontmatter name; other skills are still counted.
+  root="$(new_root)"
+  skill_md "$root/.claude/skills/orchestration-advisor/SKILL.md" orchestration-advisor "Recommends subagents."
+  skill_md "$root/.cursor/skills/real-one/SKILL.md" real-one "Spawn subagents."
+  expect "orchestrator_skills/advisor-excluded-others-counted" "$root" orchestrator_skills=1
+}
+
+# A synthetic two-tier orchestration tree. It mirrors
+# tests/orchestration-advisor/fixtures/audit-scenario.md at small scale: a
+# program-level orchestrator skill that launches a feature orchestrator skill,
+# which launches agents (implementer, judge, test writer), with hooks, rules,
+# rubrics, a model-routing config and a goals folder.
+build_two_tier_tree() {
+  local root="$1"
+  mkdir -p "$root"
+  skill_md "$root/.claude/skills/program-orchestrator/SKILL.md" program-orchestrator "Launch a feature orchestrator per work package using subagents."
+  skill_md "$root/.claude/skills/feature-orchestrator/SKILL.md" feature-orchestrator "Spawn the implementer, the judge and the test writer."
+  skill_md "$root/.claude/skills/judge-criteria/SKILL.md" judge-criteria "Checklist the judge loads."
+  skill_md "$root/.claude/skills/changelog-helper/SKILL.md" changelog-helper "Formats a changelog."
+  put "$root/.claude/agents/implementer.md" "$(printf '%s\n' '---' 'name: implementer' 'description: Implements a task' '---')"
+  put "$root/.claude/agents/judge.md" "$(printf '%s\n' '---' 'name: judge' 'description: Judges a diff' '---')"
+  put "$root/.claude/agents/test-writer.md" "$(printf '%s\n' '---' 'name: test-writer' 'description: Writes tests' '---')"
+  put "$root/.claude/settings.json" '{"hooks": {"PreToolUse": [{"matcher": "Edit", "hooks": [{"type": "command"}, {"type": "command"}]}], "Stop": [{"hooks": [{"type": "command"}]}]}}'
+  put "$root/.cursor/hooks.json" '{"hooks": {"preToolUse": [{"command": "a"}, {"command": "b"}]}}'
+  put "$root/.claude/rules/style.md"
+  put "$root/.cursor/rules/edit-guard.mdc"
+  put "$root/.cursor/rules/notes.md"
+  put "$root/.claude/rubrics/judge.md"
+  put "$root/.claude/criteria/qa.md"
+  put "$root/.claude/commands/feature.md"
+  put "$root/.claude/model-routing.json" '{}'
+  put "$root/.pre-commit-config.yaml"
+  put "$root/.husky/pre-commit" "#"
+  put "$root/_memory/goals/g1/goal.md" "# goal"
+  put "$root/_memory/goals/g1/task-01.md" "# task"
+  mkdir -p "$root/tests"
+}
+
+count_nonblank() {
+  printf '%s\n' "$1" | awk 'NF { n++ } END { print n + 0 }'
+}
+
+run_two_tier_cases() {
+  local root hooks_want before after
+
+  root="$(new_root)"
+  build_two_tier_tree "$root"
+  hooks_want="unknown"
+  if have jq; then
+    hooks_want="5"
+  fi
+  # 25 keys, all asserted. tracked_files is unknown: not a git work tree.
+  expect "two-tier-tree/all-25-keys" "$root" \
+    harness_claude=1 harness_cursor=1 harness_copilot=0 harness_codex=0 \
+    agent_kit_installed=0 composer_crews=0 \
+    agent_files=3 claude_agent_files=3 \
+    claude_agent_description_chars=42 claude_agent_description_tokens_est=10 \
+    skill_files=4 mcp_servers=0 test_paths=1 ci_workflows=0 lint_configs=0 \
+    typecheck_configs=0 package_manifests=0 tracked_files=unknown \
+    "harness_hook_entries=$hooks_want" git_hook_files=2 rule_files=2 \
+    rubric_files=3 command_files=1 harness_config_files=1 orchestrator_skills=2
+
+  # The contract has exactly 25 keys, and the run printed all of them.
+  if [ "$(count_nonblank "$KEYS")" -ne 25 ]; then
+    case_fail "two-tier-tree/contract-has-25-keys" "signals.md lists $(count_nonblank "$KEYS") keys"
+  else
+    run_inspect "$root"
+    if [ "$(count_nonblank "$OUT")" -ne 25 ]; then
+      case_fail "two-tier-tree/contract-has-25-keys" "inspect.sh printed $(count_nonblank "$OUT") lines, want 25"
+    else
+      case_pass "two-tier-tree/contract-has-25-keys"
+    fi
+  fi
+
+  before="$(tree_listing "$root")"
+  run_inspect "$root"
+  after="$(tree_listing "$root")"
+  if [ "$before" != "$after" ]; then
+    case_fail "two-tier-tree/read-only" "tree changed"
+  else
+    case_pass "two-tier-tree/read-only"
+  fi
+}
+
+# --- guard: audit-mode content contract --------------------------------------------
+
+# expect_guard_rejects_removed <case> <rel> <text>: a copy of the skill without
+# one file must make the guard exit 1 with <text>.
+expect_guard_rejects_removed() {
+  local name="$1" rel="$2" want="$3"
+  local tmp copy
+  tmp="$(new_root)"
+  copy="$tmp/skills/orchestration-advisor"
+  mkdir -p "$tmp/skills"
+  cp -R "$SKILL_DIR" "$copy"
+  if [ ! -f "$copy/$rel" ]; then
+    case_fail "$name" "precondition: $rel is not in the skill"
+    return 0
+  fi
+  rm -f "${copy:?}/${rel:?}"
+  if [ -e "$copy/$rel" ]; then
+    case_fail "$name" "precondition: $rel was not removed"
+    return 0
+  fi
+  run_guard "$tmp"
+  if [ "$GUARD_RC" -ne 1 ]; then
+    case_fail "$name" "exit $GUARD_RC want 1: $GUARD_OUT"
+  elif ! printf '%s\n' "$GUARD_OUT" | grep -qF -- "$want"; then
+    case_fail "$name" "output does not say '$want': $GUARD_OUT"
+  else
+    case_pass "$name"
+  fi
+}
+
+run_guard_audit_cases() {
+  expect_guard_rejects_removed "guard/fails-when-audit-md-missing" \
+    references/audit.md "missing required path: skills/orchestration-advisor/references/audit.md"
+
+  expect_guard_rejects_removed "guard/fails-when-report-audit-md-missing" \
+    references/report-audit.md "missing required path: skills/orchestration-advisor/references/report-audit.md"
+
+  expect_guard_rejects "guard/fails-when-audit-headings-out-of-order" \
+    audit-headings-swapped references/report-audit.md 0 \
+    "audit report headings are out of order"
+
+  expect_guard_rejects "guard/fails-when-audit-heading-missing" \
+    audit-heading-deleted references/report-audit.md -1 \
+    "missing audit report heading: ## Left alone"
+
+  expect_guard_rejects "guard/fails-when-map-step-heading-missing" \
+    map-step-heading-deleted SKILL.md -1 \
+    "missing procedure step heading: Map"
+
+  expect_guard_rejects "guard/fails-when-decide-and-report-steps-swapped" \
+    decide-report-steps-swapped SKILL.md 0 \
+    "procedure step headings are out of order at: Report"
+
+  expect_guard_rejects "guard/fails-when-audit-rule-name-not-bold" \
+    audit-rule-bold-removed references/audit.md 0 \
+    "missing audit rule: **Tier rule**"
+
+  expect_guard_rejects "guard/fails-when-new-key-row-missing-in-signals-md" \
+    signals-row-hook-entries-deleted references/signals.md -1 \
+    "no table row for signal key: harness_hook_entries"
+
+  expect_guard_rejects "guard/fails-when-new-key-missing-in-inspect-sh" \
+    inspect-key-renamed scripts/inspect.sh 0 \
+    "does not print signal key: rubric_files"
+}
+
 # --- exit trap -------------------------------------------------------------------
 
 # A copy of this suite that stops inside its first case function (an injected
@@ -1524,9 +1972,16 @@ main() {
   run_error_cases
   run_required_tool_cases
   run_whole_tree_cases
+  run_hook_cases
+  run_git_hook_cases
+  run_rule_command_config_cases
+  run_rubric_cases
+  run_orchestrator_cases
+  run_two_tier_cases
   run_guard_cases
   run_guard_mutation_cases
   run_guard_fence_and_link_cases
+  run_guard_audit_cases
   run_abort_cases
 
   print_summary

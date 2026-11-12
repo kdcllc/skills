@@ -1,14 +1,14 @@
 ---
 name: orchestration-advisor
-description: "Inspect a project and its workload and recommend an agent orchestration shape: a single agent plus skills, generator-verifier, orchestrator-subagent, agent teams, message bus, or shared state. Read-only: it counts harness folders, agents, skills, MCP servers, tests and CI, asks six workload questions, and writes a report with evidence, ruled-out shapes, a cost note, and a next step. Use when you ask which orchestration pattern fits, do I need multiple agents, single agent or multi-agent, should I add subagents, should I use agent-kit or agent-composer, or audit my subagents for overlap before adding or removing agents."
+description: "Inspect a project and its workload and either recommend an agent orchestration shape (a single agent plus skills by default, or generator-verifier, orchestrator-subagent, agent teams, message bus, shared state) or audit an existing orchestration system, hooks and other enforcers included, and produce a current-vs-recommended comparison. Read-only: it counts harness folders, agents, skills, hooks, rules, MCP servers, tests and CI, asks six workload questions, and reports evidence, a cost note, and a next step. Use when you ask which orchestration pattern fits, do I need multiple agents, should I add subagents, agent-kit or agent-composer, or audit my agents, orchestrators or hooks for overlap."
 license: MIT
 metadata:
-  version: "0.2.0"
+  version: "0.3.0"
 ---
 
 # Orchestration Advisor
 
-Inspects a project, asks about the workload, and recommends one orchestration shape with the evidence behind it, the shapes it ruled out, and the next step.
+Inspects a project and asks about the workload. It runs in one of two modes. **Design mode** recommends one orchestration shape for a project with little or no orchestration, with the evidence behind it, the shapes it ruled out, and the next step. **Audit mode** reviews an existing orchestration system: it maps each system, accounts for what enforces each gate, and produces a current-vs-recommended comparison.
 
 **Read-only.** This skill creates or changes no file in the user's project. The one exception: it saves its report to a file when the user asks for that. It installs nothing and generates no agents.
 
@@ -16,7 +16,8 @@ Inspects a project, asks about the workload, and recommends one orchestration sh
 
 ## When to use
 
-- You are starting agent work on a project and want to know whether one agent is enough.
+- **Design mode:** you are starting agent work on a project with little or no orchestration and want to know whether one agent is enough.
+- **Audit mode:** the project already has an orchestration system (agents, an `agent-kit` install, crews, orchestrator skills, hooks) and you want it reviewed: what each flow does, what enforces its gates, and what to change or leave alone.
 - You ask "which orchestration pattern", "do I need multiple agents", or "single agent or multi-agent".
 - You already have subagents or a crew and want them audited for overlap, or want to know whether to fold some back into the main agent.
 - You are choosing between `agent-kit`, `agent-composer`, and installing nothing.
@@ -29,7 +30,7 @@ Inspects a project, asks about the workload, and recommends one orchestration sh
 
 ## Requirements
 
-- **bash** for [scripts/inspect.sh](scripts/inspect.sh). The script needs `find`, `awk`, `sort`, `wc` and `tr` on `PATH`. `git` and `jq` are optional; without them two keys report `unknown`. When bash or one of the required tools is unavailable, use the manual fallback in Step 2.
+- **bash** for [scripts/inspect.sh](scripts/inspect.sh). The script needs `find`, `awk`, `sort`, `wc` and `tr` on `PATH`. `git` and `jq` are optional; without them three keys (`mcp_servers`, `tracked_files`, `harness_hook_entries`) can report `unknown`. When bash or one of the required tools is unavailable, use the manual fallback in Step 2.
 - In commands below, **`<skill-dir>`** is the directory containing this `SKILL.md`, and **`<project-root>`** is the root of the user's project.
 
 ## Step 1 — Detect
@@ -40,9 +41,16 @@ Inspects a project, asks about the workload, and recommends one orchestration sh
    - Skills: folders containing `SKILL.md` under `.claude/skills/`, `.cursor/skills/`, `.github/skills/`, `.agents/skills/`, `.codex/skills/`.
    - MCP configuration: `.mcp.json`, `.cursor/mcp.json`, `.vscode/mcp.json`.
    - Existing orchestration: `orchestration-kit.manifest.json` (an `agent-kit` install) and `.agent-composer/*.crew.yaml` (`agent-composer` crews).
-3. For each existing agent, read its description and note two things for Step 4: whether its description overlaps another agent's, and whether it only carries knowledge (no distinct tools, model tier, or isolation need).
+   - Hook configs: `.claude/settings.json`, `.claude/settings.local.json`, `.cursor/hooks.json`.
+   - Git hooks: `.git/hooks`, `.husky/`, lefthook and pre-commit configs.
+   - Rules: `.cursor/rules/`, `.claude/rules/`, `.github/instructions/`.
+   - Rubric or criteria folders.
+   - Command and prompt files: `.claude/commands/`, `.cursor/commands/`, `.github/prompts/`.
+   - Other harness config files (model routing, Codex config).
+   - Entry-point skills that launch agents, and the state folders those entry points read and write (found by reading them).
+3. For each existing agent, read its description and note two things for Step 5: whether its description overlaps another agent's, and whether it only carries knowledge (no distinct tools, model tier, or isolation need).
 
-Tell the user what you found before going on.
+Tell the user what you found before going on. This step does not choose a mode; Step 2 asks.
 
 ## Step 2 — Inspect
 
@@ -64,9 +72,12 @@ A value of `unknown` means the signal could not be computed. Report it as unknow
 - For Claude Code only: the `.md` files in `.claude/agents/` and the total length of their `description:` values, divided by 4 for a token estimate.
 - Distinct skill names across the five skill roots.
 - Server entries in the three MCP configuration files.
+- The seven enforcement and orchestration signals (`harness_hook_entries`, `git_hook_files`, `rule_files`, `rubric_files`, `command_files`, `harness_config_files`, `orchestrator_skills`), counted per their definitions in signals.md. `orchestrator_skills` leaves out this skill itself.
 - Test directories near the root, CI workflow files, lint and type-check configuration files at the root, and package manifests.
 
 Say in the report that the signals were counted by hand.
+
+**Ask the mode question.** Once the signals are known, ask the user one question and wait for the answer: "Recommend a setup, or audit the existing one?" Pre-select the suggested answer: **audit** when `agent_files` > 0, `agent_kit_installed` = 1, `composer_crews` > 0 or `orchestrator_skills` > 0; otherwise **design**. Show those four values as the reason. The signals are evidence, not the decider; the user's answer is. With plain project subagents and no orchestrator skill or command, audit mode treats the main session that delegates to them as the entry point of one system. The chosen mode and the values behind the suggestion go in the report.
 
 ## Step 3 — Ask about the workload
 
@@ -79,9 +90,22 @@ The repository cannot answer these. Ask one round at a time, multiple-choice whe
 5. **Do events or people start the work?** (a person asks / an event such as a webhook, schedule or queue triggers it / both)
 6. **What cost multiple over a single agent is acceptable?** (none / a few times / cost is not the constraint)
 
-Skip a question only when the user already answered it. Record each answer; the report's Evidence section lists them.
+Skip a question only when the user already answered it. In audit mode, ask per system when the answers differ between systems. Record each answer; the report lists them.
 
-## Step 4 — Decide
+## Step 4 — Map
+
+Audit mode only; design mode skips this step. Follow [references/audit.md](references/audit.md) for the procedure. In short:
+
+- Find each separate orchestration system and its entry point.
+- Detect tiers by pattern: a system whose workers are themselves orchestration systems is a higher tier. Map it at its boundary only (what it launches, what it gates) and keep it as its own system.
+- For each system record the phases, the gates, the agents with their role per flow, the shared state, and the loop control (cycle or stuck rules).
+- For each gate record its enforcer: hooks, rubrics, CI, model routing, git hooks, cycle or stuck rules, or "prompt-only" when nothing but the prompt enforces it.
+- Describe each system as a composition of shapes, not one label.
+- On large systems, when the harness supports subagents, launch one read-only subagent per system to build its map section, then merge the results (per audit.md).
+
+## Step 5 — Decide
+
+**Design mode: everything below in this step. Audit mode: skip to the last subsection and apply [references/audit.md](references/audit.md) § Decide.**
 
 ### The default
 
@@ -136,9 +160,20 @@ Pick one. [references/patterns.md](references/patterns.md) has the table: when t
 | Agent teams | A Claude Code feature that is experimental and disabled by default (per Anthropic's Claude Code agent teams documentation, accessed 2026-11-10; see `[9]` in the Sources of [references/patterns.md](references/patterns.md)). Neither `agent-kit` nor `agent-composer` generates it. |
 | Message bus or shared state | Not native in Claude Code, Cursor, GitHub Copilot or Codex (`inferred`: no documentation found, none of the four was checked exhaustively). It needs glue the user writes. |
 
-## Step 5 — Report
+### Audit mode
 
-Give the report in chat. Save it to a file only when the user asks. Use exactly these headings, in this order:
+Apply these six rules; [references/audit.md](references/audit.md) § Decide has the full text of each.
+
+- **Shapes compose.** A system is a composition of shapes; a shape already in use is never listed as ruled out or proposed as new.
+- **Tier rule.** Never change a higher tier, or fold, merge or re-architect across a tier boundary, unless the user opts in.
+- **Per-flow overlap.** Two agents overlap only when the same flow launches them for the same job; judge it from the map, not from descriptions.
+- **Enforcer rule.** Every suggested change names the enforcer that covers the affected gate afterwards; when none does, the change cannot be recommended.
+- **Honesty rule.** When no material change is found, the headline says the current design fits and lists the small fixes; a fold of one or two agents is never the headline unless it is the only material change and is labeled as small.
+- **Material change.** A suggestion is material only when it fixes a failure the owner can see (gate escapes, loops that do not converge, cost, context lost at handoffs, rules enforced only by prompt) and names that failure with evidence; "fewer agents" or "cleaner design" is not a failure.
+
+## Step 6 — Report
+
+**Design mode.** Give the report in chat. Save it to a file only when the user asks. Use exactly these headings, in this order:
 
 ```markdown
 ## Recommendation
@@ -158,12 +193,22 @@ Give the report in chat. Save it to a file only when the user asks. Use exactly 
 - **Next step** — the matching row of the routing table.
 - **How to check this** — a small experiment the user can run: pick about 10 representative tasks (the starting size Anthropic gives in "When to fold subagents into your main agent loop", 2026-10-22), run each more than once on the current setup and on the recommended one, and compare task completion, tokens and wall time. Change one thing at a time and look at which tasks flipped. This recommendation is triage; the experiment decides.
 
+**Audit mode.** Chat gets the short summary defined in [references/report-audit.md](references/report-audit.md) (headline, top suggestions, what was left alone), followed by an offer to save the full report as a markdown file. Write nothing without the user's yes. The full report's structure is in report-audit.md.
+
 ## Quality checklist
 
 - [ ] No file in the user's project was created or changed (other than a report the user asked to save).
+- [ ] The mode question was asked and answered, with the suggested answer and its signal values shown.
 - [ ] All six workload questions were asked or already answered.
-- [ ] A non-default recommendation names at least one of the four reasons, each backed by a signal value or a workload answer.
-- [ ] No recommendation rests on a split by type of work.
+- [ ] Design mode: a non-default recommendation names at least one of the four reasons, each backed by a signal value or a workload answer.
+- [ ] Design mode: no recommendation rests on a split by type of work.
 - [ ] `claude_agent_description_tokens_est` was compared only with Claude Code's 15,000-token warning.
-- [ ] The report has the seven headings in order, one "Ruled out" line per other shape, and every figure with its source and date.
+- [ ] Design mode: the report has the seven headings in order, one "Ruled out" line per other shape, and every figure with its source and date.
 - [ ] Harness statements keep their `inferred` and `not checked` marks.
+- [ ] Audit mode: each system was mapped separately.
+- [ ] Audit mode: every gate has a named enforcer or is marked prompt-only.
+- [ ] Audit mode: higher tiers were mapped at the boundary only and not changed without opt-in.
+- [ ] Audit mode: no shape already in use is listed as ruled out or proposed as new.
+- [ ] Audit mode: every suggestion names its enforcer, evidence, effort and risk.
+- [ ] Audit mode: the Honesty rule was applied.
+- [ ] Audit mode: hook configs counted by Step 2 appear in the map.
