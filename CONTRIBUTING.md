@@ -70,7 +70,7 @@ bash tests/agent-composer/run.sh
 
 ## Working on orchestration-advisor
 
-`scripts/checks/orchestration-advisor.sh` guards orchestration-advisor's files, headings, shape names, and signal keys and runs inside `scripts/validate-skills.sh`. `tests/orchestration-advisor/run.sh` is its fixture suite (bash only; cases that need `jq` or `git` skip when the tool is missing); `.github/workflows/orchestration-advisor.yml` runs it when a push to `master` or a pull request touches `skills/orchestration-advisor/`, `tests/orchestration-advisor/`, the guard, or the workflow. Run it before opening a pull request that touches `skills/orchestration-advisor/`:
+`scripts/checks/orchestration-advisor.sh` guards orchestration-advisor's required files (including `references/audit.md` and `references/report-audit.md`), the six procedure step headings in order, the seven design-mode report headings, the eleven audit report headings in `references/report-audit.md`, the six audit rule names in `references/audit.md`, the shape names, the 25 signal keys, and the absence of concrete model IDs, and runs inside `scripts/validate-skills.sh`. `tests/orchestration-advisor/run.sh` is its fixture suite (bash only; cases that need `jq` or `git` skip when the tool is missing). The folder ships one markdown regression scenario, `fixtures/audit-scenario.md`, and never a `SKILL.md` or a harness folder; fixture trees are built at run time. `.github/workflows/orchestration-advisor.yml` runs it when a push to `master` or a pull request touches `skills/orchestration-advisor/`, `tests/orchestration-advisor/`, the guard, or the workflow. Run it before opening a pull request that touches `skills/orchestration-advisor/`:
 
 ```bash
 bash tests/orchestration-advisor/run.sh

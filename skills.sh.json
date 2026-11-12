@@ -24,7 +24,7 @@
     },
     {
       "title": "Agent orchestration",
-      "description": "The AI Orchestration Kit: an orchestrator/worker/evaluator multi-agent system compiled for Claude Code, Cursor, GitHub Copilot, and Codex; agent-composer interviews you and generates custom multi-agent crews for Claude Code and Cursor; orchestration-advisor inspects a project and its workload and recommends an orchestration shape without changing any file.",
+      "description": "The AI Orchestration Kit: an orchestrator/worker/evaluator multi-agent system compiled for Claude Code, Cursor, GitHub Copilot, and Codex; agent-composer interviews you and generates custom multi-agent crews for Claude Code and Cursor; orchestration-advisor inspects a project and its workload, then recommends an orchestration shape or audits an existing orchestration system, without changing any file.",
       "skills": ["agent-kit", "agent-composer", "orchestration-advisor"]
     },
     {

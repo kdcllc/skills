@@ -3,10 +3,13 @@ set -euo pipefail
 
 # Usage: scripts/checks/orchestration-advisor.sh [repo-root]
 # Content-contract guards for the orchestration-advisor skill: required files,
-# the procedure step headings (real headings, outside fenced blocks), the seven
-# report headings (inside a fenced block, in order), the six shape names (in the
-# body, not the frontmatter), the 18 signal keys in both the contract and the
-# script, and no concrete model IDs in the shipped docs or scripts.
+# the procedure step headings (real headings, outside fenced blocks, in order),
+# the seven design-mode report headings (inside a fenced block, in order), the
+# eleven audit report headings in references/report-audit.md (inside a fenced
+# block, in order), the six audit rule names as bold lead-ins in
+# references/audit.md, the six shape names (in the body, not the frontmatter),
+# the 25 signal keys in both the contract and the script, and no concrete model
+# IDs in the shipped docs or scripts.
 # Run by scripts/validate-skills.sh. Needs only bash, grep and awk.
 # Written for bash 3.2 and POSIX grep and awk; it creates no file in the repository.
 
@@ -26,6 +29,8 @@ REQUIRED_PATHS=(
   "${SKILL_DIR}/CHANGELOG.md"
   "${SKILL_DIR}/references/patterns.md"
   "${SKILL_DIR}/references/signals.md"
+  "${SKILL_DIR}/references/audit.md"
+  "${SKILL_DIR}/references/report-audit.md"
   "${SKILL_DIR}/scripts/inspect.sh"
 )
 
@@ -34,6 +39,7 @@ STEP_NAMES=(
   "Detect"
   "Inspect"
   "Ask about the workload"
+  "Map"
   "Decide"
   "Report"
 )
@@ -48,6 +54,32 @@ REPORT_HEADINGS=(
   "Cost note"
   "Next step"
   "How to check this"
+)
+
+# Audit report headings in references/report-audit.md: whole "## <name>" lines
+# inside a fenced block; the first occurrence of each must come in this order.
+AUDIT_HEADINGS=(
+  "Headline"
+  "Systems and tiers"
+  "Current-state map"
+  "Enforcement"
+  "Current vs recommended"
+  "Suggestions"
+  "Left alone"
+  "Harness notes"
+  "Cost note"
+  "How to check this"
+  "Appendix: shapes in play"
+)
+
+# Audit rule names: each a bold lead-in (**<name>**) in references/audit.md.
+AUDIT_RULES=(
+  "Shapes compose"
+  "Tier rule"
+  "Per-flow overlap"
+  "Enforcer rule"
+  "Honesty rule"
+  "Material change"
 )
 
 # Matched case-insensitively, in the body of SKILL.md only.
@@ -80,14 +112,22 @@ SIGNAL_KEYS=(
   typecheck_configs
   package_manifests
   tracked_files
+  harness_hook_entries
+  git_hook_files
+  rule_files
+  rubric_files
+  command_files
+  harness_config_files
+  orchestrator_skills
 )
 
 MODEL_ID_PATTERN='(claude|gpt|gemini|composer|opus|sonnet|haiku)-[0-9]'
 
-# Prints lines of SKILL.md. One trailing carriage return is removed from every
+# Prints lines of a markdown file (default SKILL.md). One trailing carriage return is removed from every
 # line first, so a file with CRLF line endings reads like one with LF endings.
 # The frontmatter is line 1 through the next line that is exactly "---"; the
-# body is every line after it. With no closing line the body is empty.
+# body is every line after it. With no closing line the body is empty. When the
+# third argument is "nofm", the file has no frontmatter and every line is body.
 # A fence line is a line that has, after optional leading spaces and tabs, three
 # or more backticks or three or more tildes. Outside a block, a fence line opens
 # one.
@@ -100,8 +140,10 @@ MODEL_ID_PATTERN='(claude|gpt|gemini|composer|opus|sonnet|haiku)-[0-9]'
 #   inside  — body lines inside fenced blocks (opening and closing fence lines
 #             excluded)
 skill_lines() {
-  awk -v want="$1" '
+  local file="${2:-${SKILL}/SKILL.md}"
+  awk -v want="$1" -v nofm="${3:-}" '
     { sub(/\r$/, "") }
+    !started && nofm == "nofm" { started = 1 }
     !started { if (NR > 1 && $0 == "---") started = 1; next }
     want == "body" { print; next }
     {
@@ -113,7 +155,7 @@ skill_lines() {
     kind != "" && opened == kind { opened = ""; next }
     want == "inside" && opened != "" { print }
     want == "outside" && opened == "" { print }
-  ' "${SKILL}/SKILL.md"
+  ' "$file"
 }
 
 # Prints the number of the first line on standard input that is exactly the
@@ -133,6 +175,12 @@ check_required_paths() {
   done
 }
 
+# Prints the number of the first line on standard input that is a step heading
+# for the given step name; prints nothing when there is none.
+first_step_line() {
+  awk -v re="^#+ Step [0-9]+ .* $1[ \t\r]*\$" '$0 ~ re { print NR; exit }'
+}
+
 check_headings() {
   local outside inside name at previous
   outside="$(skill_lines outside)"
@@ -141,6 +189,14 @@ check_headings() {
   for name in "${STEP_NAMES[@]}"; do
     grep -qE "^#{1,6} Step [0-9]+ .* ${name}[[:space:]]*\$" <<<"$outside" ||
       fail "SKILL.md missing procedure step heading: ${name}"
+  done
+
+  previous=0
+  for name in "${STEP_NAMES[@]}"; do
+    at="$(first_step_line "$name" <<<"$outside")"
+    [[ -n "$at" && "$at" -gt "$previous" ]] ||
+      fail "SKILL.md procedure step headings are out of order at: ${name}"
+    previous="$at"
   done
 
   # Presence of all seven first, then their order.
@@ -154,6 +210,31 @@ check_headings() {
     at="$(first_line_number "## ${name}" <<<"$inside")"
     [[ "$at" -gt "$previous" ]] || fail "SKILL.md report headings are out of order"
     previous="$at"
+  done
+}
+
+check_audit_report() {
+  local inside name at previous
+  inside="$(skill_lines inside "${SKILL}/references/report-audit.md" nofm)"
+
+  for name in "${AUDIT_HEADINGS[@]}"; do
+    at="$(first_line_number "## ${name}" <<<"$inside")"
+    [[ -n "$at" ]] || fail "references/report-audit.md missing audit report heading: ## ${name}"
+  done
+
+  previous=0
+  for name in "${AUDIT_HEADINGS[@]}"; do
+    at="$(first_line_number "## ${name}" <<<"$inside")"
+    [[ "$at" -gt "$previous" ]] || fail "references/report-audit.md audit report headings are out of order"
+    previous="$at"
+  done
+}
+
+check_audit_rules() {
+  local name
+  for name in "${AUDIT_RULES[@]}"; do
+    grep -qF -- "**${name}**" "${SKILL}/references/audit.md" ||
+      fail "references/audit.md missing audit rule: **${name}**"
   done
 }
 
@@ -218,6 +299,8 @@ check_no_concrete_model_ids() {
 
 check_required_paths
 check_headings
+check_audit_report
+check_audit_rules
 check_shapes
 check_signal_keys
 check_no_concrete_model_ids
