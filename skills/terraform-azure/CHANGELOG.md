@@ -6,6 +6,12 @@ Before re-adding with a new tag, read the target version's entry, especially its
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-11-12
+
+### Fixed
+
+- The maintainer release section of `references/using-the-pack.md` now describes the bump-in-pull-request and tag-on-merge flow.
+
 ## [1.0.0] - 2026-10-09
 
 ### Added

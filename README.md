@@ -110,12 +110,13 @@ scripts/validate-skills.sh         # repo, frontmatter, and version checks (also
 scripts/checks/                    # skill-specific content guards, run by validate-skills.sh
 scripts/release-skill.sh           # manual fallback: tag a release the pull request already recorded (bumps too if it did not)
 scripts/tag-released-skills.sh     # tag every recorded skill version that has no tag; run by the tag-on-merge workflow
+scripts/check-skill-versions.sh    # check a pull request carries the version and dated changelog heading of every skill it changes (run in CI on pull requests)
 scripts/agent-kit/                 # agent-kit dogfood installer (self-install.sh)
 docs/agent-kit/                    # agent-kit developer guide (research briefs: _memory/research/) (not shipped)
 tests/agent-kit/                   # agent-kit test suites; run-all.sh runs everything
 tests/agent-composer/              # agent-composer fixture suite (run.sh; python3, plus PyYAML for most cases)
 tests/orchestration-advisor/       # orchestration-advisor inspection-script suite (run.sh; bash only)
-tests/release/                     # suite for the tagging script (run.sh; bash and git only)
+tests/release/                     # suite for the release scripts (tagging, version check and status states; run.sh; bash and git only)
 _memory/                           # agent-kit memory store for this repo (immutable records)
 ```
 
@@ -127,7 +128,7 @@ npx skills add . --list
 claude plugin validate .
 ```
 
-`validate-skills.sh` also runs every guard in `scripts/checks/`. CI runs the same checks plus the reference [`skills-ref`](https://github.com/agentskills/agentskills/tree/main/skills-ref) validator on every push and pull request.
+`validate-skills.sh` also runs every guard in `scripts/checks/`. CI runs the same checks plus the reference [`skills-ref`](https://github.com/agentskills/agentskills/tree/main/skills-ref) validator on every push and pull request. On pull requests CI also runs `scripts/check-skill-versions.sh` against the base branch.
 
 ## Contributing
 

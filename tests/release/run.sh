@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Tests for scripts/tag-released-skills.sh.
+# Tests for scripts/tag-released-skills.sh, scripts/check-skill-versions.sh and
+# skills/skill-versioning/scripts/skill-status.sh.
 #
 # Every case builds a scratch git repository with a skills/ tree, and a bare
 # repository as its remote, under one `mktemp -d` directory that is removed on
@@ -13,6 +14,8 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO="$(cd "$HERE/../.." && pwd)"
 SCRIPT="$REPO/scripts/tag-released-skills.sh"
+CHECK="$REPO/scripts/check-skill-versions.sh"
+STATUS="$REPO/skills/skill-versioning/scripts/skill-status.sh"
 
 PASS=0
 FAIL=0
@@ -165,6 +168,62 @@ run_script() {
   SKILLS_REPO_ROOT="$WORK" bash "$SCRIPT" "$@" >"$out_file" 2>"$err_file" || RC=$?
   OUT="$(cat "$out_file")"
   ERR="$(cat "$err_file")"
+}
+
+# run_check [args...]: runs check-skill-versions.sh against WORK; sets OUT, ERR, RC.
+run_check() {
+  local out_file="$SCRATCH_ROOT/stdout" err_file="$SCRATCH_ROOT/stderr"
+  RC=0
+  SKILLS_REPO_ROOT="$WORK" bash "$CHECK" "$@" >"$out_file" 2>"$err_file" || RC=$?
+  OUT="$(cat "$out_file")"
+  ERR="$(cat "$err_file")"
+}
+
+# mark_base: records the current commit as the comparison base (branch `base`).
+mark_base() { git -C "$WORK" branch -q -f base; }
+
+# write_changelog <name> <unreleased-entry|-> <heading line|->
+write_changelog() {
+  {
+    echo "# Changelog"
+    echo
+    echo "## [Unreleased]"
+    if [ "$2" != "-" ]; then echo; echo "- $2"; fi
+    if [ "$3" != "-" ]; then echo; echo "$3"; echo; echo "- Scratch entry."; fi
+  } >"$WORK/skills/$1/CHANGELOG.md"
+}
+
+expect_out_has() {
+  case "$OUT" in
+    *"$1"*) ;;
+    *) flunk "standard output lacks '$1' (got: $OUT)" ;;
+  esac
+}
+expect_error_lines() {
+  local n
+  n="$(printf '%s\n' "$ERR" | grep -c '^error:' || true)"
+  [ "$n" -eq "$1" ] || flunk "$n error lines, expected $1 (stderr: $ERR)"
+}
+
+# run_status <name> <root>: runs skill-status.sh; sets RC and NEXT (the NEXT
+# column of the skill's row).
+NEXT=""
+run_status() {
+  local out_file="$SCRATCH_ROOT/stdout" err_file="$SCRATCH_ROOT/stderr"
+  RC=0
+  bash "$STATUS" --root "$WORK" "$1" >"$out_file" 2>"$err_file" || RC=$?
+  OUT="$(cat "$out_file")"
+  ERR="$(cat "$err_file")"
+  NEXT="$(awk -v n="$1" '$1 == n' "$out_file" | sed -E 's/^([^ ]+ +){6}//')"
+}
+expect_next() {
+  [ "$NEXT" = "$1" ] || flunk "NEXT is '$NEXT', expected '$1'"
+}
+expect_next_starts() {
+  case "$NEXT" in
+    "$1"*) ;;
+    *) flunk "NEXT is '$NEXT', expected it to start with '$1'" ;;
+  esac
 }
 
 local_tags() { git -C "$WORK" tag --list | sort | tr '\n' ' ' | sed 's/ $//'; }
@@ -399,6 +458,306 @@ run_script --push
 expect_out "aaa/v1.0.0"
 expect_err_has "rejected by the suite hook: refs/tags/bbb/v2.0.0"
 expect_remote_tags "aaa/v1.0.0"
+finish
+
+# --- check-skill-versions.sh ----------------------------------------------------
+
+begin "check/no-argument-exits-2"
+new_repo
+add_skill demo 1.0.0
+commit_all "demo"
+run_check
+expect_rc 2
+expect_out ""
+expect_err_has "usage:"
+finish
+
+begin "check/unknown-base-ref-exits-1"
+new_repo
+add_skill demo 1.0.0
+commit_all "demo"
+run_check no-such-ref
+expect_rc 1
+expect_out ""
+expect_err_has "error: base ref does not resolve"
+finish
+
+begin "check/no-skill-folder-changed"
+new_repo
+add_skill demo 1.0.0
+commit_all "demo"
+mark_base
+run_check base
+expect_rc 0
+expect_out "no skill folder changed"
+[ -z "$ERR" ] || flunk "standard error is not empty: $ERR"
+finish
+
+begin "check/version-not-raised-fails"
+new_repo
+add_skill demo 1.0.0
+commit_all "demo"
+mark_base
+echo "more" >>"$WORK/skills/demo/SKILL.md"
+commit_all "change without bump"
+run_check base
+expect_rc 1
+expect_err_has "error: demo: metadata.version 1.0.0 is not greater than 1.0.0"
+expect_error_lines 1
+finish
+
+begin "check/missing-dated-heading-fails"
+new_repo
+add_skill demo 1.0.0
+commit_all "demo"
+mark_base
+add_skill demo 1.0.1 -
+commit_all "bump without heading"
+run_check base
+expect_rc 1
+expect_err_has "error: demo: CHANGELOG.md first release heading"
+expect_out ""
+finish
+
+begin "check/entry-under-unreleased-fails"
+new_repo
+add_skill demo 1.0.0
+commit_all "demo"
+mark_base
+add_skill demo 1.0.1
+write_changelog demo "left behind" "## [1.0.1] - 2026-02-02"
+commit_all "bump with open entry"
+run_check base
+expect_rc 1
+expect_err_has "error: demo: CHANGELOG.md has 1 entry line(s) under ## [Unreleased]"
+expect_out ""
+finish
+
+begin "check/numeric-bump-1.0.9-to-1.0.10-passes"
+new_repo
+add_skill demo 1.0.9
+commit_all "demo"
+mark_base
+add_skill demo 1.0.10
+commit_all "bump"
+run_check base
+expect_rc 0
+expect_out "ok: demo 1.0.9 -> 1.0.10"
+expect_error_lines 0
+finish
+
+begin "check/lowered-version-fails"
+new_repo
+add_skill demo 1.2.0
+commit_all "demo"
+mark_base
+add_skill demo 1.1.0
+commit_all "lower"
+run_check base
+expect_rc 1
+expect_err_has "error: demo: metadata.version 1.1.0 is not greater than 1.2.0"
+expect_out ""
+finish
+
+begin "check/new-skill-passes"
+new_repo
+add_skill old 1.0.0
+commit_all "old"
+mark_base
+add_skill fresh 0.1.0
+commit_all "fresh"
+run_check base
+expect_rc 0
+expect_out "ok: fresh new -> 0.1.0"
+expect_error_lines 0
+finish
+
+begin "check/two-violations-two-error-lines"
+new_repo
+add_skill aaa 1.0.0
+add_skill bbb 2.0.0
+commit_all "aaa, bbb"
+mark_base
+echo "more" >>"$WORK/skills/aaa/SKILL.md"
+add_skill bbb 2.0.1 -
+commit_all "aaa unbumped, bbb without heading"
+run_check base
+expect_rc 1
+expect_error_lines 2
+expect_err_has "error: aaa:"
+expect_err_has "error: bbb:"
+finish
+
+begin "check/removed-skill-is-skipped"
+new_repo
+add_skill gone 1.0.0
+add_skill kept 1.0.0
+commit_all "gone, kept"
+mark_base
+git -C "$WORK" rm -q -r skills/gone
+commit_all "remove gone"
+run_check base
+expect_rc 0
+expect_out "skip: gone removed"
+expect_error_lines 0
+finish
+
+begin "check/change-outside-skills-only"
+new_repo
+add_skill demo 1.0.0
+commit_all "demo"
+mark_base
+echo "more" >>"$WORK/README.md"
+commit_all "readme"
+run_check base
+expect_rc 0
+expect_out "no skill folder changed"
+expect_error_lines 0
+finish
+
+begin "check/moved-file-flags-source-skill"
+new_repo
+add_skill a 1.0.0
+add_skill b 1.0.0
+echo "shared" >"$WORK/skills/a/extra.md"
+commit_all "a with extra, b"
+mark_base
+git -C "$WORK" mv skills/a/extra.md skills/b/extra.md
+add_skill b 1.0.1
+commit_all "move extra to b, bump b only"
+run_check base
+expect_rc 1
+expect_err_has "error: a:"
+expect_out_has "ok: b 1.0.0 -> 1.0.1"
+expect_error_lines 1
+finish
+
+begin "check/undated-heading-fails"
+new_repo
+add_skill demo 1.0.0
+commit_all "demo"
+mark_base
+add_skill demo 1.0.1
+write_changelog demo - "## [1.0.1]"
+commit_all "bump with undated heading"
+run_check base
+expect_rc 1
+expect_err_has "error: demo: CHANGELOG.md first release heading"
+expect_out ""
+finish
+
+begin "check/malformed-date-heading-fails"
+new_repo
+add_skill demo 1.0.0
+commit_all "demo"
+mark_base
+add_skill demo 1.0.1
+write_changelog demo - "## [1.0.1] - soon"
+commit_all "bump with malformed date"
+run_check base
+expect_rc 1
+expect_err_has "error: demo: CHANGELOG.md first release heading"
+expect_out ""
+finish
+
+# --- skill-status.sh ------------------------------------------------------------
+
+begin "status/release-prepared"
+new_repo
+add_skill demo 1.0.0
+commit_all "demo"
+git -C "$WORK" tag demo/v1.0.0
+add_skill demo 1.1.0
+commit_all "prepare 1.1.0"
+run_status demo
+expect_rc 0
+expect_next "release prepared (tag demo/v1.1.0 pending)"
+finish
+
+begin "status/changed-after-tag-records-under-unreleased"
+new_repo
+add_skill demo 1.0.0
+commit_all "demo"
+git -C "$WORK" tag demo/v1.0.0
+echo "more" >>"$WORK/skills/demo/SKILL.md"
+commit_all "change after tag"
+run_status demo
+expect_rc 0
+expect_next "record changes under Unreleased"
+finish
+
+begin "status/entries-under-unreleased-ready-to-release"
+new_repo
+add_skill demo 1.0.0
+commit_all "demo"
+git -C "$WORK" tag demo/v1.0.0
+write_changelog demo "new work" "## [1.0.0] - 2026-01-01"
+commit_all "entry"
+run_status demo
+expect_rc 0
+expect_next "ready to release (pick the bump from Unreleased)"
+finish
+
+begin "status/no-tag-first-release"
+new_repo
+add_skill demo 0.1.0
+commit_all "demo"
+run_status demo
+expect_rc 0
+expect_next "tag first release demo/v0.1.0"
+finish
+
+begin "status/tag-equal-nothing-changed-up-to-date"
+new_repo
+add_skill demo 1.0.0
+commit_all "demo"
+git -C "$WORK" tag demo/v1.0.0
+run_status demo
+expect_rc 0
+expect_next "up to date"
+finish
+
+begin "status/version-below-tag-mismatch"
+new_repo
+add_skill demo 1.0.0
+commit_all "demo"
+git -C "$WORK" tag demo/v1.0.0
+add_skill demo 0.9.0
+commit_all "lower"
+run_status demo
+expect_rc 0
+expect_next_starts "mismatch:"
+finish
+
+begin "status/version-above-tag-old-heading-mismatch"
+new_repo
+add_skill demo 1.0.0
+commit_all "demo"
+git -C "$WORK" tag demo/v1.0.0
+add_skill demo 1.1.0 1.0.0
+commit_all "version raised, heading not"
+run_status demo
+expect_rc 0
+expect_next_starts "mismatch:"
+finish
+
+begin "status/no-version-adopt-versioning"
+new_repo
+add_skill demo -
+commit_all "demo without version"
+run_status demo
+expect_rc 0
+expect_next "adopt versioning (add metadata.version and CHANGELOG.md)"
+finish
+
+begin "status/no-changelog-adopt-versioning"
+new_repo
+add_skill demo 1.0.0
+rm "$WORK/skills/demo/CHANGELOG.md"
+commit_all "demo without changelog"
+run_status demo
+expect_rc 0
+expect_next "adopt versioning (add metadata.version and CHANGELOG.md)"
 finish
 
 begin "tag/real-repository-dry-run"

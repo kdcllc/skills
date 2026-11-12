@@ -4,6 +4,12 @@ All notable changes to the `skill-versioning` skill. Format: [Keep a Changelog](
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-11-12
+
+### Fixed
+
+- A skill whose version was raised and recorded in its changelog but not yet tagged now shows `release prepared (tag <name>/vX.Y.Z pending)` in the status script's `NEXT` column instead of the misleading `record changes under Unreleased`.
+
 ## [0.1.1] - 2026-10-27
 
 ### Fixed

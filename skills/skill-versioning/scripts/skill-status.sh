@@ -46,6 +46,26 @@ unreleased_entries() {
   ' "$1"
 }
 
+first_released_heading() {
+  awk '
+    /^## \[Unreleased\]/ { on = 1; next }
+    on && /^## \[/ { print; exit }
+  ' "$1"
+}
+
+# True when $1 (MAJOR.MINOR.PATCH) is strictly greater than $2, comparing numerically.
+version_gt() {
+  local a b i
+  [[ "$1" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ && "$2" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || return 1
+  IFS=. read -r -a a <<<"$1"
+  IFS=. read -r -a b <<<"$2"
+  for i in 0 1 2; do
+    (( 10#${a[i]} > 10#${b[i]} )) && return 0
+    (( 10#${a[i]} < 10#${b[i]} )) && return 1
+  done
+  return 1
+}
+
 latest_tag() {
   git -C "$root" tag --list "$1/v*" --sort=-v:refname | head -n 1
 }
@@ -79,12 +99,17 @@ for name in "${names[@]}"; do
     next="ready to release (pick the bump from Unreleased)"
   elif [[ -z "$tag" ]]; then
     next="tag first release ${name}/v${version}"
-  elif [[ "$changed" != "0" || "$dirty" == "yes" ]]; then
-    next="record changes under Unreleased"
-  elif [[ "$tag" != "${name}/v${version}" ]]; then
-    next="mismatch: metadata.version ${version} but latest tag is ${tag}"
+  elif [[ "$tag" == "${name}/v${version}" ]]; then
+    if [[ "$changed" != "0" || "$dirty" == "yes" ]]; then
+      next="record changes under Unreleased"
+    else
+      next="up to date"
+    fi
+  elif version_gt "$version" "${tag#"${name}"/v}" \
+    && [[ "$(first_released_heading "$changelog")" == "## [${version}]"* ]]; then
+    next="release prepared (tag ${name}/v${version} pending)"
   else
-    next="up to date"
+    next="mismatch: metadata.version ${version} but latest tag is ${tag}"
   fi
 
   printf '%-28s %-9s %-34s %-8s %-6s %-10s %s\n' "$name" "${version:--}" "${tag:--}" "$changed" "$dirty" "$entries" "$next"
