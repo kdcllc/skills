@@ -4,6 +4,15 @@ All notable changes to the `agent-composer` skill. Format: [Keep a Changelog](ht
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-12
+
+### Added
+
+- An agent can set `run: inline` in the crew spec. A knowledge-only worker then runs inside the orchestrator, which follows a generated role file at `<skill folder>/roles/<agent-id>.md` with its own tools, instead of spawning a subagent. No agent file is written for it, and a gate's re-run of an inline step runs inline again.
+- Spec checks `S041` to `S043` reject an inline agent that is not a worker, has a tier other than `inherit`, or sits in `parallel` or `dispatch.workers`. `S044` warns about a knowledge-only worker that runs as a subagent and suggests `run: inline`.
+- Tree check `T014` reports a leftover agent file for an agent that switched to `run: inline`. The tree checks also expect each role file and apply the marker, leftover-token and collision checks to it.
+- The interview asks, for each worker role, whether it needs its own tools, model tier or isolation, and proposes `run: inline` when it does not. `references/writing-agents.md` says when a role should stay a subagent.
+
 ## [0.2.1] - 2026-11-11
 
 ### Fixed

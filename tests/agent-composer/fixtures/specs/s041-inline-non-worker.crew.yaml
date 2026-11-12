@@ -1,0 +1,23 @@
+schema: 1
+name: s041-inline-non-worker
+description: "Inline on an evaluator."
+pattern: pipeline
+harnesses: [claude-code]
+agents:
+  - id: w
+    description: "Worker."
+    instructions: Work.
+  - id: ev
+    description: "Evaluator marked inline."
+    kind: evaluator
+    run: inline
+    instructions: Check.
+steps:
+  - id: s1
+    agent: w
+  - id: s2
+    agent: ev
+    needs: [s1]
+    gate:
+      on_fail: s1
+      max_cycles: 1

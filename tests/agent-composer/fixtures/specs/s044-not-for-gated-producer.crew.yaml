@@ -1,0 +1,22 @@
+schema: 1
+name: s044-not-for-gated-producer
+description: "Knowledge-only gate producer."
+pattern: evaluator-optimizer
+harnesses: [claude-code]
+agents:
+  - id: fix
+    description: "Knowledge-only producer retried by the gate."
+    instructions: Answer.
+  - id: ev
+    description: "Evaluator."
+    kind: evaluator
+    instructions: Check.
+steps:
+  - id: s1
+    agent: fix
+  - id: s2
+    agent: ev
+    needs: [s1]
+    gate:
+      on_fail: s1
+      max_cycles: 2

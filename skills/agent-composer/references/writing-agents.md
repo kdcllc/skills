@@ -38,6 +38,17 @@ Evaluators (and any agent without `edit`) must **not** list `outputs` in the spe
 - The orchestrator creates the run folder; agents must not assume paths outside the declared lists.
 - Agent ids and step ids are **separate namespaces** (**S008** applies within each list only). A step may reuse its agent’s id (for example step `triage` with `agent: triage`) when that keeps the graph readable.
 
+## Inline or subagent
+
+Set `run: inline` when the role needs no tools, model tier or isolation of its own and only brings knowledge: a style guide, a glossary, a domain checklist. The orchestrator reads its role file and performs the step in the main session, so the agent costs no extra context window and no agent file. An inline role uses `tier: inherit` and is not scheduled in `parallel` or `dispatch`.
+
+Keep a role a subagent when it is:
+
+- an evaluator, router or planner;
+- in need of its own model tier or isolation (a separate context, restricted tools);
+- scheduled in a `parallel` step or as a `dispatch` worker;
+- a gated producer whose re-runs should not see its earlier attempts or the evaluator's findings (an inline step shares the orchestrator's context).
+
 ## Choosing tiers
 
 | Tier | Use for |

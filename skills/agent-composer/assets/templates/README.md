@@ -11,9 +11,12 @@ Fill these templates when generating a crew from `.agent-composer/<name>.crew.ya
 | `{{claude_tools}}` | Agent `tools` mapped to comma-separated Claude Code tool names | claude-agent.md.tmpl |
 | `{{claude_model}}` | Agent `tier` → `models.claude-code.<tier>` or `inherit` | claude-agent.md.tmpl |
 | `{{cursor_model}}` | Agent `tier` → unquoted `models.cursor.<tier>` or `inherit` | cursor-agent.md.tmpl |
-| `{{instructions}}` | Agent `instructions` (role-prompt body) | claude-agent.md.tmpl, cursor-agent.md.tmpl |
-| `{{crew_name}}` | Spec `name` | all `.tmpl` files |
-| `{{step_id}}` | Step `id` for this agent's scheduled step | claude-agent.md.tmpl, cursor-agent.md.tmpl |
+| `{{instructions}}` | Agent `instructions` (role-prompt body) | claude-agent.md.tmpl, cursor-agent.md.tmpl, role.md.tmpl |
+| `{{crew_name}}` | Spec `name` | all `.tmpl` files, including role.md.tmpl |
+| `{{step_id}}` | Step `id` for this agent's scheduled step | claude-agent.md.tmpl, cursor-agent.md.tmpl, role.md.tmpl (report path) |
+| `{{role_tools}}` | Agent `tools` in plain words, comma-separated: `read` → read files, `search` → search files, `edit` → edit and write files, `shell` → run shell commands, `web` → fetch and search the web | role.md.tmpl |
+| `{{role_inputs}}` | Agent `inputs` as comma-separated backticked `<workdir>/<run-id>/<file>` paths, or the literal `none` | role.md.tmpl |
+| `{{role_outputs}}` | Agent `outputs` as comma-separated backticked `<workdir>/<run-id>/<file>` paths, or the literal `none` | role.md.tmpl |
 | `{{workdir}}` | Spec `workdir` (default `_crew/<name>`) | orchestrator-skill.md.tmpl; referenced in agent bodies |
 | `{{max_dispatch_tasks}}` | Step `dispatch.max_tasks` for the planner step | claude-agent.md.tmpl, cursor-agent.md.tmpl (planner block only) |
 | `{{crew_description}}` | Spec `description`, emitted inside double quotes with `\` and `"` escaped | orchestrator-skill.md.tmpl |
@@ -26,7 +29,7 @@ Fill these templates when generating a crew from `.agent-composer/<name>.crew.ya
 Emit a numbered list with **one entry per step** in topological order of `needs` (ties broken by spec order). Each entry must name:
 
 - the step `id`
-- its agent id, or `parallel` member ids, or the dispatch planner and `dispatch.workers`
+- its agent id (for a step whose agent has `run: inline`, write `inline — role file roles/<agent-id>.md` in place of the agent id), or `parallel` member ids, or the dispatch planner and `dispatch.workers`
 - `needs` (or `none`)
 - input files and output files under `<workdir>/<run-id>/` (from the scheduled agent(s)' `inputs` / `outputs`)
 - the report path (single-agent, parallel per-member, or dispatch per-task form)
@@ -40,6 +43,10 @@ Emit a numbered list with **one entry per step** in topological order of `needs`
 
 (`topic.md` is the only root input — listed in agent `inputs` but not in any agent `outputs`.)
 
+## Role files
+
+A `run: inline` agent is generated from `role.md.tmpl` into `<skill folder>/roles/<agent-id>.md` (the orchestrator skill's folder) and gets no agent file.
+
 ## Block ids
 
 Optional sections use HTML comment delimiters in the template sources only. The generator **keeps** a block (and removes the delimiter lines) when the condition holds; otherwise it deletes the whole block including delimiters.
@@ -49,9 +56,10 @@ Optional sections use HTML comment delimiters in the template sources only. The 
 | `disable_model_invocation` | Spec `invocation` is `manual` (default) | orchestrator-skill.md.tmpl |
 | `readonly` | Agent `tools` lists neither `edit` nor `shell` | cursor-agent.md.tmpl |
 | `shell_without_edit` | Agent has `shell` but not `edit` | cursor-agent.md.tmpl |
-| `no_edit` | Agent `tools` omits `edit` | claude-agent.md.tmpl, cursor-agent.md.tmpl |
+| `no_edit` | Agent `tools` omits `edit` | claude-agent.md.tmpl, cursor-agent.md.tmpl, role.md.tmpl |
 | `router` | Agent templates: agent `kind` is `router`. orchestrator-skill.md.tmpl: spec `pattern` is `router` | claude-agent.md.tmpl, cursor-agent.md.tmpl, orchestrator-skill.md.tmpl (pattern notes) |
 | `routes` | Any step declares `routes` | orchestrator-skill.md.tmpl (step-scheduling skip clause, agent-report `ROUTE:` read, router steps protocol) |
+| `inline_steps` | Any agent has `run: inline` | orchestrator-skill.md.tmpl |
 | `evaluator` | Agent templates: agent `kind` is `evaluator`. orchestrator-skill.md.tmpl: any step declares `gate` | claude-agent.md.tmpl, cursor-agent.md.tmpl, orchestrator-skill.md.tmpl |
 | `planner` | Agent `kind` is `planner` | claude-agent.md.tmpl, cursor-agent.md.tmpl |
 | `parallel` | Any step declares `parallel` | orchestrator-skill.md.tmpl |
@@ -71,4 +79,4 @@ After tokens are substituted and optional blocks are kept or removed, apply this
 
 ## Generated-by marker
 
-Immediately after frontmatter in every generated file, emit the generated-by marker exactly as defined in [spec-schema.md](../../references/spec-schema.md) (Generated-by marker section), with the crew `name` in place of `<name>`. Every `.tmpl` file embeds that line using the `{{crew_name}}` token.
+Immediately after frontmatter in every generated file (or, in a role file, on line 1), emit the generated-by marker exactly as defined in [spec-schema.md](../../references/spec-schema.md) (Generated-by marker section), with the crew `name` in place of `<name>`. Every `.tmpl` file embeds that line using the `{{crew_name}}` token.

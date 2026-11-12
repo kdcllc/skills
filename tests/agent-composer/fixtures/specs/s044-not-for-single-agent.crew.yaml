@@ -1,0 +1,12 @@
+schema: 1
+name: s044-not-for-single-agent
+description: "One knowledge-only agent."
+pattern: pipeline
+harnesses: [claude-code]
+agents:
+  - id: k
+    description: "Only agent, knowledge-only."
+    instructions: Answer.
+steps:
+  - id: s1
+    agent: k

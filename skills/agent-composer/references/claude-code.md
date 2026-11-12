@@ -21,6 +21,12 @@ This reference maps a crew spec ([spec-schema.md](spec-schema.md)) to generated 
 
 **Read-only enforcement:** There is no separate `readonly` flag. Restrict writes by omitting edit tools from `tools` (see Tool mapping). Agents whose spec `tools` omit `edit` must declare empty `outputs` (**S039**); they return results in their completion report and write no files—the orchestrator saves each report under `<workdir>/<run-id>/` per [spec-schema.md § Agent reports](spec-schema.md) (for example `<step-id>.report.md`). Evaluators must not list edit-capable tools (**S024** / **T008**).
 
+## Role files
+
+**Path:** `.claude/skills/<name>/roles/<agent-id>.md`, one per agent with `run: inline`. `roles/` is this skill's folder name for role files.
+
+A role file has no frontmatter; its first line is the [generated-by marker](spec-schema.md). It is a reference file of the orchestrator skill, not a skill and not a command (no `/` entry). The Claude Code skills documentation ([skills](https://code.claude.com/docs/en/skills)) describes any file in a skill folder other than `SKILL.md` as a supporting file that the skill's instructions may point to, so a role file does not load as a skill or subagent. The orchestrator reads it and the main session follows it with its own tools and model; no agent file is written for the agent.
+
 ## Tool mapping
 
 Spec tool tokens map to Claude Code built-in tool names in the agent `tools` frontmatter (comma-separated string):
@@ -85,19 +91,20 @@ The orchestrator skill runs in the **main Claude Code session** (user invokes `/
 - **Model substitution:** Blocked or unknown models may be replaced per org allowlist and model-config rules; check subagent reports for fallback notices.
 - **Concurrent limit:** Default cap on concurrent subagents (documented on the sub-agents page); exceeding it errors (`Concurrent subagent limit reached`) — parallel fan-out should stay within reasonable batch size or serialize.
 - **Name collisions:** Duplicate `name` values under the same `.claude/agents/` tree are undefined; only one definition loads.
-- **Skills vs agents:** Orchestrator is a skill; workers are subagents. Do not add `model` to the skill frontmatter.
+- **Skills vs agents:** Orchestrator is a skill; workers are subagents, except inline workers (`run: inline`), whose role files the orchestrator follows itself. Do not add `model` to the skill frontmatter.
 
 ## Validator rules
 
 Checks enforced by `validate.sh tree` for the Claude Code harness (codes from [spec-schema.md](spec-schema.md)):
 
-1. Every expected `.claude/agents/<id>.md` and `.claude/skills/<name>/SKILL.md` for the spec exists — **T001**.
-2. YAML frontmatter in each generated file parses — **T002**.
+1. Every expected `.claude/agents/<id>.md`, every expected `.claude/skills/<name>/roles/<id>.md` (role files, for `run: inline` agents), and `.claude/skills/<name>/SKILL.md` for the spec exists — **T001**.
+2. YAML frontmatter in each generated agent and skill file parses — **T002** (role files have no frontmatter; T002 does not apply to them).
 3. Each agent file's `name` matches its stem; orchestrator skill `name` matches crew `name` — **T003**.
 4. Every agent file has exactly the keys `name`, `description`, `tools`, `model` (a missing key, including `model`, or any other key → **T004**); orchestrator skill frontmatter has only the allowed orchestrator keys — **T004**.
 5. Each agent `model` value matches the spec tier mapping for `models.claude-code`, including tier `inherit` (`model: inherit`) — **T007**.
 6. Evaluator agents do not grant `Edit`/`Write` via `tools` — **T008**.
 7. No leftover `{{` tokens or `<!-- block:` / `<!-- /block:` delimiter lines — **T009**.
-8. Generated-by marker line present immediately after frontmatter — **T010**.
+8. Generated-by marker line present immediately after frontmatter — **T010** (in a role file, on line 1).
 9. Expected paths that exist without this crew's marker and manifest entry are collisions — **T012**.
 10. Orchestrator `SKILL.md` body length ≤ 500 lines — **T013**.
+11. No agent file `.claude/agents/<id>.md` carrying this crew's marker exists for a `run: inline` agent — **T014**.

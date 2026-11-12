@@ -55,6 +55,7 @@ Unknown top-level keys are errors.
 | `instructions` | yes | string | — | Non-empty role prompt body. |
 | `inputs` | no | list | `[]` | Workdir-relative file names this agent reads. |
 | `outputs` | no | list | `[]` | Workdir-relative file names this agent writes. Must be empty when `edit` is not in `tools` (**S039**); the orchestrator persists the agent report instead. |
+| `run` | no | enum | `subagent` | `subagent` or `inline`. `subagent` generates an agent file and the orchestrator spawns it. `inline` generates a role file inside the orchestrator skill folder instead of an agent file, and the orchestrator performs that agent's steps itself by following the role file. |
 
 Unknown agent keys are errors.
 
@@ -67,6 +68,15 @@ Agent ids and step ids are **separate namespaces**: **S008** applies within the 
 - Every agent must appear in at least one step via `agent`, `parallel`, or `dispatch.workers`.
 - Agents referenced in a step's `parallel` list or in `dispatch.workers` must have `kind: worker` (**S038**).
 - More than six agents in the crew is a warning.
+
+### Inline agents (run: inline)
+
+- `run: inline` is allowed only on `kind: worker` (**S041**).
+- `run: inline` requires `tier: inherit` (**S042**). The step runs in the main session on the main session's model, so no per-agent model applies.
+- A `run: inline` agent must not appear in a step's `parallel` list or in `dispatch.workers`, because an inline step cannot run concurrently (**S043**).
+- `tools`, `inputs`, `outputs` and `instructions` keep their meaning and rules (**S026** and **S039** still apply). The tools are the main-session tools the step uses and are listed in the role file body.
+- Choose `inline` when the role has no distinct tools, model tier or isolation need of its own (a knowledge-only role). Evaluator, router and planner roles stay subagents. An inline step shares the orchestrator's context, so a gated producer that runs inline sees the evaluator's findings and its earlier attempts.
+- A `kind: worker` agent that looks knowledge-only but still runs as a subagent gets the warning **S044**: `run` absent or `subagent`, `tier: inherit`, tools a subset of `[read, search]` (the default included), no `outputs`, not in any step's `parallel` list or `dispatch.workers`, not the agent of a step named in any gate's `on_fail` (a gated producer), and the crew has more than one agent (a one-agent crew is better as a plain skill, so the hint does not apply). The message suggests `run: inline`. Warnings do not change the exit code.
 
 ## Step object
 
@@ -204,9 +214,13 @@ Evaluator agents print exactly one line `VERDICT: PASS` or `VERDICT: FAIL`, foll
 
 Planner agents write `<workdir>/<run-id>/tasks.yaml`: a YAML list of at most `dispatch.max_tasks` items, each `{id, title, worker, inputs, outputs}` where `worker` is one of `dispatch.workers`. The orchestrator spawns one worker per item and runs items with disjoint `outputs` in parallel.
 
+### Inline steps
+
+At a step whose agent has `run: inline`, the orchestrator does not spawn. It reads `roles/<agent-id>.md` in its own skill folder and performs the step itself, then saves its report verbatim and writes the outputs exactly as **Agent reports** says for a spawned agent. A gate's `on_fail` re-run of an inline step is performed inline again.
+
 ### Orchestrator role
 
-The orchestrator never does a worker's, router's, planner's, or evaluator's job itself.
+The orchestrator never does a worker's, router's, planner's, or evaluator's job itself, except a step whose agent has `run: inline`, which it performs by following that agent's role file (§ Inline steps).
 
 ### Run report
 
@@ -223,7 +237,7 @@ Findings use stable codes. Spec-mode validation uses `S###`; generated-tree vali
 | S003 | error | Unknown agent key | `error: S003 agents[0]: unknown key 'model'` |
 | S004 | error | Unknown step key | `error: S004 steps[1]: unknown key 'when'` |
 | S005 | error | Missing required key | `error: S005 agents[0]: missing required key 'instructions'` |
-| S006 | error | Wrong type or enum value | `error: S006 pattern: must be one of pipeline, router, ...` |
+| S006 | error | Wrong type or enum value (including an invalid `run` value) | `error: S006 pattern: must be one of pipeline, router, ...` |
 | S007 | error | Bad name or id regex | `error: S007 name: must match ^[a-z0-9]+(-[a-z0-9]+)*$` |
 | S008 | error | Duplicate id within `agents` or within `steps` (separate namespaces) | `error: S008 agents: duplicate id 'writer'` |
 | S009 | error | Unknown agent reference | `error: S009 steps[0].agent: unknown agent 'missing'` |
@@ -257,10 +271,14 @@ Findings use stable codes. Spec-mode validation uses `S###`; generated-tree vali
 | S038 | error | Non-worker in `parallel` or `dispatch.workers` | `error: S038 agents[1]: agent 'checker' used in parallel must be kind worker` |
 | S039 | error | Agent declares `outputs` without `edit` in `tools` (including `kind: planner` without `edit`) | `error: S039 agents[0].outputs: outputs require edit in tools` |
 | S040 | warn | Placeholder model ID under `models.<harness>` | `warn: S040 models.claude-code.light: placeholder value; verify the model ID live and replace it` |
+| S041 | error | `run: inline` on an agent that is not `kind: worker` | `error: S041 agents[1].run: run inline is allowed only on kind worker` |
+| S042 | error | `run: inline` on an agent whose `tier` is not `inherit` | `error: S042 agents[0].run: run inline requires tier inherit` |
+| S043 | error | `run: inline` agent used in a step's `parallel` list or in `dispatch.workers` | `error: S043 agents[0].run: inline agent 'glossary' cannot be used in parallel or dispatch.workers` |
+| S044 | warn | Knowledge-only worker that runs as a subagent (hint to use `run: inline`) | `warn: S044 agents[0]: agent 'glossary' looks knowledge-only; consider run: inline` |
 
 | Code | Severity | Meaning | Example |
 | --- | --- | --- | --- |
-| T001 | error | Generated file missing | `error: T001 .claude/agents/writer.md: expected file missing` |
+| T001 | error | Generated file missing (an agent file, a role file, an orchestrator skill file, or the Cursor rule) | `error: T001 .claude/skills/foo/roles/glossary.md: expected file missing` |
 | T002 | error | Frontmatter parse failure | `error: T002 .cursor/agents/writer.md: invalid frontmatter` |
 | T003 | error | Frontmatter `name` mismatch: an agent file's `name` differs from its file stem, or the orchestrator `SKILL.md`'s `name` differs from the crew `name` | `error: T003 .claude/agents/writer.md: name must match file stem 'writer'` |
 | T004 | error | Disallowed or missing frontmatter key (including a Claude Code agent file without `model:`) | `error: T004 .claude/agents/writer.md: missing required frontmatter key 'model'` |
@@ -268,11 +286,14 @@ Findings use stable codes. Spec-mode validation uses `S###`; generated-tree vali
 | T006 | error | Cursor agent file contains `tools:` | `error: T006 .cursor/agents/writer.md: Cursor agents must not declare tools:` |
 | T007 | error | `model` differs from spec tier mapping (every tier, including `inherit`) | `error: T007 .claude/agents/checker.md: model does not match spec tier mapping` |
 | T008 | error | Evaluator agent grants write tools | `error: T008 .claude/agents/checker.md: evaluator must not grant edit/write tools` |
-| T009 | error | Leftover template syntax: a `{{` token anywhere, or a line starting with `<!-- block:` or `<!-- /block:` | `error: T009 .claude/skills/foo/SKILL.md: contains {{ or block delimiter comment` |
-| T010 | error | Generated-by marker missing | `error: T010 .claude/agents/writer.md: missing generated-by marker line` |
+| T009 | error | Leftover template syntax in a generated file (including a role file): a `{{` token anywhere, or a line starting with `<!-- block:` or `<!-- /block:` | `error: T009 .claude/skills/foo/SKILL.md: contains {{ or block delimiter comment` |
+| T010 | error | Generated-by marker missing in a generated file (including a role file, where it is the first line) | `error: T010 .claude/agents/writer.md: missing generated-by marker line` |
 | T011 | error | Cursor rule invalid | `error: T011 .cursor/rules/foo.mdc: requires alwaysApply true and .mdc extension` |
-| T012 | error | Name collision: an expected path exists, is not listed in this crew's manifest, and does not carry this crew's generated-by marker | `error: T012 .claude/agents/writer.md: collides with existing file not in manifest and without this crew's marker` |
+| T012 | error | Name collision (applies to role files too): an expected path exists, is not listed in this crew's manifest, and does not carry this crew's generated-by marker | `error: T012 .claude/agents/writer.md: collides with existing file not in manifest and without this crew's marker` |
 | T013 | error | Orchestrator skill too long | `error: T013 .claude/skills/foo/SKILL.md: exceeds 500 lines` |
+| T014 | error | An agent file `.claude/agents/<agent-id>.md` or `.cursor/agents/<agent-id>.md` exists for a `run: inline` agent and carries this crew's generated-by marker (left over from a subagent run; delete it) | `error: T014 .claude/agents/glossary.md: stale agent file for inline agent 'glossary'; delete it` |
+
+T002–T008, T011 and T013 do not apply to role files, which have no frontmatter. A file at an agent path without this crew's marker is not reported by T014.
 
 ## CLI contract
 
@@ -336,8 +357,14 @@ Paths are relative to the project root.
 
 | Harness | Generated paths |
 | --- | --- |
-| Claude Code | `.claude/agents/<agent-id>.md`, `.claude/skills/<name>/SKILL.md` |
-| Cursor | `.cursor/agents/<agent-id>.md`, `.cursor/skills/<name>/SKILL.md`, and `.cursor/rules/<name>.mdc` only when `cursor_rule: true` |
+| Claude Code | `.claude/agents/<agent-id>.md` (subagent agents), `.claude/skills/<name>/roles/<agent-id>.md` (inline agents), `.claude/skills/<name>/SKILL.md` |
+| Cursor | `.cursor/agents/<agent-id>.md` (subagent agents), `.cursor/skills/<name>/roles/<agent-id>.md` (inline agents), `.cursor/skills/<name>/SKILL.md`, and `.cursor/rules/<name>.mdc` only when `cursor_rule: true` |
+
+An agent with `run: inline` produces the role file and no `.claude/agents/<agent-id>.md` / `.cursor/agents/<agent-id>.md`. Agents with `run: subagent` (the default) are unchanged.
+
+### Role files
+
+A role file has no frontmatter. Its first line is the generated-by marker. It then holds the agent's `instructions`, the tools it uses, its `inputs` and `outputs` under `<workdir>/<run-id>/`, and the report protocol of **Agent reports**. It is a reference file of the orchestrator skill, not a skill and not a command.
 
 ### Generated-by marker
 
@@ -347,7 +374,7 @@ Every generated file carries, on the first line after its frontmatter, exactly:
 <!-- generated by agent-composer from .agent-composer/<name>.crew.yaml — edit the spec and re-run; manual edits are detected -->
 ```
 
-Replace `<name>` with the crew `name`. Templates and the validator use this text verbatim.
+Replace `<name>` with the crew `name`. Templates and the validator use this text verbatim. In a file without frontmatter (a role file) the marker is the first line.
 
 ### Tier to model mapping
 

@@ -1,0 +1,21 @@
+schema: 1
+name: s043-inline-dispatch
+description: "Inline agent in dispatch workers."
+pattern: orchestrator-workers
+harnesses: [claude-code]
+agents:
+  - id: p
+    description: "Planner."
+    kind: planner
+    tools: [read, search, edit]
+    instructions: Plan.
+  - id: w
+    description: "Inline worker in dispatch."
+    run: inline
+    instructions: Work.
+steps:
+  - id: plan
+    agent: p
+    dispatch:
+      workers: [w]
+      max_tasks: 1

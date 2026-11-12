@@ -1,0 +1,18 @@
+schema: 1
+name: s042-inline-tier
+description: "Inline worker with a non-inherit tier."
+pattern: pipeline
+harnesses: [claude-code]
+models:
+  claude-code:
+    fast: fake-fast-1
+    verified: "2026-11-05 — test"
+agents:
+  - id: w
+    description: "Inline worker with a tier."
+    run: inline
+    tier: fast
+    instructions: Work.
+steps:
+  - id: s1
+    agent: w

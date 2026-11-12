@@ -1,0 +1,13 @@
+schema: 1
+name: s006-bad-run
+description: "Worker with a bad run value."
+pattern: pipeline
+harnesses: [claude-code]
+agents:
+  - id: w
+    description: "Worker."
+    run: maybe
+    instructions: Work.
+steps:
+  - id: s1
+    agent: w

@@ -1,0 +1,22 @@
+schema: 1
+name: s043-inline-parallel
+description: "Inline agent in parallel."
+pattern: fan-out
+harnesses: [claude-code]
+agents:
+  - id: a
+    description: "Inline worker in parallel."
+    run: inline
+    instructions: One.
+  - id: b
+    description: "Subagent worker in parallel."
+    instructions: Two.
+  - id: j
+    description: "Joins."
+    instructions: Merge.
+steps:
+  - id: par
+    parallel: [a, b]
+  - id: merge
+    agent: j
+    needs: [par]

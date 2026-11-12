@@ -28,6 +28,7 @@ REQUIRED_PATHS=(
   "${SKILL_DIR}/assets/templates/cursor-agent.md.tmpl"
   "${SKILL_DIR}/assets/templates/orchestrator-skill.md.tmpl"
   "${SKILL_DIR}/assets/templates/cursor-rule.mdc.tmpl"
+  "${SKILL_DIR}/assets/templates/role.md.tmpl"
   "${SKILL_DIR}/assets/examples/coding-crew.crew.yaml"
   "${SKILL_DIR}/assets/examples/content-crew.crew.yaml"
   "${SKILL_DIR}/assets/examples/triage-crew.crew.yaml"
