@@ -17,12 +17,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
 
       - name: Repo layout, frontmatter, and marketplaces
         run: bash scripts/validate-skills.sh
 
-      - name: Release tagging script
+      - name: Release scripts
         run: bash tests/release/run.sh
+
+      - name: Skill versions carried by the pull request
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: bash scripts/check-skill-versions.sh "origin/${BASE_REF}"
 
       - name: Count skills
         id: skills

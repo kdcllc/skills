@@ -10,7 +10,7 @@ description: >-
   a skill, tag a skill release, or check which skills need a release.
 license: MIT
 metadata:
-  version: "0.1.1"
+  version: "0.1.2"
 ---
 
 # Skill Versioning
@@ -41,7 +41,7 @@ bash <this-skill>/scripts/skill-status.sh            # every skill
 bash <this-skill>/scripts/skill-status.sh my-skill   # one skill
 ```
 
-`<this-skill>` is this skill's folder. Its `NEXT` column says what each skill needs: record changes, release, tag a first release, adopt versioning, or nothing.
+`<this-skill>` is this skill's folder. Its `NEXT` column says what each skill needs: record changes, release, tag a first release, adopt versioning, nothing, a release that is recorded and waits for its tag (`release prepared`), or a `mismatch` between the version and the latest tag.
 
 ## Workflow 1: record a change (always, after editing a skill)
 

@@ -150,9 +150,11 @@ When skills link to each other (like the four `terraform-azure*` skills), a chan
 
    One bump per skill per pull request: later commits add their notes under the same heading and raise the bump only if they add an entry with a higher impact. If another pull request released the same skill first, rebase and pick the next version again.
 
-   After the bump, `bash skills/skill-versioning/scripts/skill-status.sh` shows the new VERSION ahead of LAST_TAG, UNRELEASED 0, and the NEXT text `record changes under Unreleased`. Here that means the release is prepared and waits for its tag, not that notes are missing.
+   After the bump, `bash skills/skill-versioning/scripts/skill-status.sh` shows the new VERSION ahead of LAST_TAG, UNRELEASED 0, and the NEXT text `release prepared (tag <name>/vX.Y.Z pending)`.
+
+   `.github/workflows/validate.yml` runs `scripts/check-skill-versions.sh` against the base branch on every pull request and fails it when a changed skill folder lacks a higher version, the matching dated heading or an empty Unreleased section. Run the same check locally with `bash scripts/check-skill-versions.sh origin/master`.
 3. Merge to `master`. [.github/workflows/tag-on-merge.yml](.github/workflows/tag-on-merge.yml) then creates and pushes the tag `<name>/vX.Y.Z` for each newly recorded version and starts `release.yml` for it. There is no manual step.
-4. Fallback, only when the workflow did not run or failed: on an up-to-date, clean `master`, run
+4. Fallback, when the tag does not exist yet (the workflow did not run, or failed before pushing it): on an up-to-date, clean `master`, run
 
    ```bash
    bash scripts/release-skill.sh <name> X.Y.Z
@@ -161,13 +163,15 @@ When skills link to each other (like the four `terraform-azure*` skills), a chan
 
    Because `X.Y.Z` already is the recorded version, the script only validates and creates the annotated tag. It never pushes, and it stops if the tag already exists. A tag pushed by a person starts `release.yml` by itself.
 
+   When the tag was pushed but its release was not started, the script stops on "tag already exists". Start the release with `gh workflow run release.yml --ref <name>/vX.Y.Z`.
+
    If a pull request was merged without a bump, the same command bumps as well: it promotes `## [Unreleased]` to `## [X.Y.Z] - <today>`, sets `metadata.version`, runs the validator, commits `release: <name> vX.Y.Z`, and creates the tag. Push the commit and the tag together, as the script prints:
 
    ```bash
    git push origin master <name>/vX.Y.Z
    ```
 
-The tag-on-merge workflow runs on every push to `master` that touches `skills/`, and can be started by hand on `master`. It runs `scripts/tag-released-skills.sh --push`, and its job summary lists the tags it created and, for a release that was not started, the command to start it. `tests/release/run.sh` is the suite for that script (bash and git only); it runs in `.github/workflows/validate.yml`. Run it after changing the script:
+The tag-on-merge workflow runs on every push to `master` that touches `skills/`, and can be started by hand on `master`. It runs `scripts/tag-released-skills.sh --push`, and its job summary lists the tags it created and, for a release that was not started, the command to start it. `tests/release/run.sh` is the suite for `scripts/tag-released-skills.sh`, `scripts/check-skill-versions.sh` and the `skill-status.sh` states (bash and git only); it runs in `.github/workflows/validate.yml`. Run it after changing any of them:
 
 ```bash
 bash tests/release/run.sh
