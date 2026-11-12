@@ -1,0 +1,21 @@
+schema: 1
+name: inline-mini
+description: "Pipeline with one inline knowledge role and one subagent worker. Use in tests only."
+pattern: pipeline
+harnesses: [claude-code, cursor]
+agents:
+  - id: k
+    description: "Knowledge-only role the orchestrator performs itself."
+    run: inline
+    instructions: Answer from the brief.
+  - id: w
+    description: "Writes the deliverable."
+    tools: [read, search, edit]
+    outputs: [out.md]
+    instructions: Write out.md.
+steps:
+  - id: s1
+    agent: k
+  - id: s2
+    agent: w
+    needs: [s1]

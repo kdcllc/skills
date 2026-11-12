@@ -3,7 +3,7 @@ name: agent-composer
 description: "Design a custom multi-agent crew from an interview, write a YAML crew spec, and generate validated Claude Code and Cursor agent files plus an orchestrator skill. Use when you want custom agents, a designed agent team or crew, a generated orchestration workflow, or subagents for Claude Code or Cursor."
 license: MIT
 metadata:
-  version: "0.2.1"
+  version: "0.3.0"
 ---
 
 # Agent Composer
@@ -14,6 +14,7 @@ From one interview you get:
 
 - A crew spec at `.agent-composer/<name>.crew.yaml` (single source of truth)
 - Per targeted harness: agent files, an orchestrator skill at `.claude/skills/<name>/SKILL.md` or `.cursor/skills/<name>/SKILL.md`, and optionally `.cursor/rules/<name>.mdc`
+- For each agent that runs inline (`run: inline`), a role file at `<orchestrator skill folder>/roles/<agent-id>.md` in place of an agent file
 - A manifest at `.agent-composer/<name>.manifest.json` for safe re-runs
 
 Schema, validation codes, generated layout, manifest states, and runtime protocol: [references/spec-schema.md](references/spec-schema.md). Role prompts and boundaries: [references/writing-agents.md](references/writing-agents.md).
@@ -56,6 +57,7 @@ One round at a time; prefer multiple-choice. Cover:
 - **Before roles:** for each agent beyond the first, which of the four reasons justifies it — context pollution, independent parallel units, tool or prompt conflict, or need for an independent verifier ([references/patterns.md](references/patterns.md) § Do you need a crew at all?). A split by type of work (plan, build, test, review) is not a reason. When no reason holds, offer one agent or a skill instead.
 - Roles, handoffs, quality gates (who judges, what PASS means, max cycles, behavior on exhaustion)
 - Tools per role; model tiers (`frontier`, `light`, `fast`, `inherit`)
+- **Per worker role:** does it need its own tools, model tier or isolation? When none of these, propose `run: inline` (a knowledge-only role the orchestrator performs itself from a role file) instead of a subagent ([references/writing-agents.md](references/writing-agents.md) § Inline or subagent).
 
 Recommend a **pattern** from [references/patterns.md](references/patterns.md) by name with a one-line reason. Push back if a crew is unnecessary: if one agent or a single skill would do, say so and offer that instead; **warn above six agents**.
 
@@ -68,7 +70,7 @@ Recommend a **pattern** from [references/patterns.md](references/patterns.md) by
 
 ## Step 4 — Generate
 
-For each target harness, fill [assets/templates/](assets/templates/) per [assets/templates/README.md](assets/templates/README.md) and [references/claude-code.md](references/claude-code.md) / [references/cursor.md](references/cursor.md). Compute `{{root_inputs}}` and `{{steps_procedure}}` per the README and apply the blank-line rule to every generated file. Write exactly the paths in spec-schema **Generated layout**. Cursor `model` values stay **unquoted**. Emit the generated-by marker verbatim.
+For each target harness, fill [assets/templates/](assets/templates/) per [assets/templates/README.md](assets/templates/README.md) and [references/claude-code.md](references/claude-code.md) / [references/cursor.md](references/cursor.md). Compute `{{root_inputs}}` and `{{steps_procedure}}` per the README and apply the blank-line rule to every generated file. Generate each `run: inline` agent from `role.md.tmpl` into `roles/<agent-id>.md` in the orchestrator skill folder, not from the agent templates; it gets no agent file. Write exactly the paths in spec-schema **Generated layout**. Cursor `model` values stay **unquoted**. Emit the generated-by marker verbatim.
 
 - Ask before adding the crew `workdir` to `.gitignore`.
 - Never overwrite a path not listed for this crew’s manifest, or where `manifest.sh status` shows **`edited`**, without asking.
@@ -114,7 +116,7 @@ Check spec rules first, then generated tree rules. Each item names its code; ful
 - **S024** — Evaluator lists `edit`.
 - **S025** — Evaluator lists `shell` (warning).
 - **S026** — Unknown tool (including `spawn`).
-- **S027** — Missing `models` tier mapping for a used non-inherit tier.
+- **S027** — Missing `models` tier mapping for a used non-inherit tier (not beside **S042**).
 - **S028** — More than six agents (warning).
 - **S029** — Spec basename ≠ top-level `name`.
 - **S030** — Step must set exactly one of `agent` or `parallel`.
@@ -127,11 +129,15 @@ Check spec rules first, then generated tree rules. Each item names its code; ful
 - **S038** — Non-worker in `parallel` or `dispatch.workers`.
 - **S039** — `outputs` without `edit` in `tools` (including planner without `edit`).
 - **S040** — Placeholder value under `models.<harness>` (contains `<` and `>`).
+- **S041** — `run: inline` on an agent that is not `kind: worker`.
+- **S042** — `run: inline` on an agent whose `tier` is not `inherit`.
+- **S043** — `run: inline` agent used in `parallel` or `dispatch.workers`.
+- **S044** — Knowledge-only worker that runs as a subagent (warning; hint to use `run: inline`; skips agents a gate re-runs and duplicate ids).
 
 **Generated tree (`validate.sh tree`) — T codes** — check each target harness against its own list: [references/claude-code.md](references/claude-code.md) and [references/cursor.md](references/cursor.md) (§ Validator rules); T005, T006, T011 apply to Cursor only.
 
-- **T001** — Expected generated file missing.
-- **T002** — Frontmatter does not parse.
+- **T001** — Expected generated file missing (agent file, role file, orchestrator skill, or Cursor rule).
+- **T002** — Frontmatter does not parse (agent and skill files only; role files have no frontmatter).
 - **T003** — Frontmatter `name` mismatch (agent stem or orchestrator skill name).
 - **T004** — Disallowed or missing frontmatter key (Claude Code agents: exactly `name`, `description`, `tools`, `model`; Cursor agents: `name`, `description`, `model`, optional `readonly`; orchestrator skill: `name`, `description`, optional `disable-model-invocation`).
 - **T005** — Cursor `model` value is quoted.
@@ -139,15 +145,17 @@ Check spec rules first, then generated tree rules. Each item names its code; ful
 - **T007** — `model` does not match spec tier mapping (including `inherit`).
 - **T008** — Evaluator grants write tools (Claude Code: `Edit` or `Write` in `tools`; Cursor: missing `readonly: true` when the spec's tools omit `shell`).
 - **T009** — Leftover `{{` or block delimiter comments.
-- **T010** — Missing generated-by marker line.
+- **T010** — Missing generated-by marker line (in a role file, line 1).
 - **T011** — Cursor rule invalid (`.mdc`, `alwaysApply`).
 - **T012** — Path collides with foreign file (not in manifest, no marker).
 - **T013** — Orchestrator skill exceeds 500 lines.
+- **T014** — Stale agent file with this crew's marker for a `run: inline` agent (delete it).
+- **T015** — Role file is not valid UTF-8.
 
 ## Step 6 — Report
 
 - List every file written.
-- Walk through one run: “When you run `/<name>`, …” — describe only behavior present in the generated orchestrator skill: run id and run folder, writing the user's request into each root input (and empty-request handling), passing that request in spawn context for steps with empty `needs`, each step in scheduling order with its agent (and parallel/dispatch/gate behavior only when the generated files include those sections), report paths, gate cycle report renaming when applicable, and where the orchestrator writes the run report (`<workdir>/<run-id>/run-report.md`).
+- Walk through one run: “When you run `/<name>`, …” — describe only behavior present in the generated orchestrator skill: run id and run folder, writing the user's request into each root input (and empty-request handling), passing that request in spawn context for steps with empty `needs` (an inline step with empty `needs` uses it directly), each step in scheduling order with its agent (and parallel/dispatch/gate behavior only when the generated files include those sections), report paths, gate cycle report renaming when applicable, and where the orchestrator writes the run report (`<workdir>/<run-id>/run-report.md`).
 - When the crew targets both harnesses, tell the user Cursor may list two identical `/<name>` skills (the `.cursor/skills/` and `.claude/skills/` copies have identical bodies); see [references/cursor.md](references/cursor.md).
 - Tell the user how to change the crew: edit `.agent-composer/<name>.crew.yaml`, then re-run this skill.
 
@@ -160,7 +168,8 @@ Check spec rules first, then generated tree rules. Each item names its code; ful
    - **`unchanged`** / **`missing`** — regenerate safely.
    - **`edited`** — show the user; choose keep, overwrite, or merge before writing.
    - **`new`** — run collision checks like Step 1.
-   - **`orphan`** — list paths the new spec no longer produces; delete only after user agrees.
+   - **`orphan`** — list paths the new spec no longer produces; delete only after user agrees. An agent that switched back from `inline` to `subagent` leaves its role file as `orphan`.
+   - An agent that switched to `run: inline` leaves its marked agent file behind, which triggers **T014**. Ask the user to delete it; tree validation fails until it is gone, so a user who wants to keep the file sets the agent back to `run: subagent`.
 4. Regenerate, then `validate.sh tree` until exit **0**, then `manifest.sh write`.
 
 ## Quality checklist

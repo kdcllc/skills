@@ -1,0 +1,14 @@
+schema: 1
+name: s027-not-with-s042
+description: "Inline worker with a tier and no models entry reports S042, not S027."
+pattern: pipeline
+harnesses: [claude-code]
+agents:
+  - id: w
+    description: "Inline worker with a tier."
+    run: inline
+    tier: frontier
+    instructions: Work.
+steps:
+  - id: s1
+    agent: w

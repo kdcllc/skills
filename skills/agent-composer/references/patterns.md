@@ -285,7 +285,7 @@ Multiple `dispatch` steps (**S022** / pattern rules). Non-worker ids in `dispatc
 
 ## Patterns this skill does not generate
 
-The five patterns above all have one orchestrator that spawns every agent and passes work through files in the run workdir. Three other coordination patterns fall outside that model. The harness statements below were checked on 2026-11-10.
+The five patterns above all have one orchestrator that spawns every agent, or runs an inline agent's step itself (`run: inline`), and passes work through files in the run workdir. Three other coordination patterns fall outside that model. The harness statements below were checked on 2026-11-10.
 
 **Agent teams.** Long-running peer agents work independent units in parallel and coordinate among themselves. You would want this when the units are large, take many steps each, and need little from one another. Agent teams are an experimental Claude Code feature, disabled by default (Claude Code agent teams documentation, checked 2026-11-10). This skill does not generate them because an experimental feature can change under a generated crew, and because no equivalent was found for Cursor (inferred on 2026-11-10: not checked exhaustively), so one crew spec could not produce the same behavior on both harnesses. If the units are small and known up front, `fan-out` or `orchestrator-workers` covers the need.
 

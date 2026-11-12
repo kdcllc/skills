@@ -50,8 +50,9 @@ TOP_KEYS = frozenset(
     }
 )
 AGENT_KEYS = frozenset(
-    {"id", "description", "kind", "tier", "tools", "instructions", "inputs", "outputs"}
+    {"id", "description", "kind", "tier", "tools", "instructions", "inputs", "outputs", "run"}
 )
+RUNS = frozenset({"subagent", "inline"})
 STEP_KEYS = frozenset(
     {"id", "agent", "parallel", "needs", "routes", "gate", "dispatch"}
 )
@@ -769,6 +770,34 @@ def validate_spec_file(spec_path: Path) -> Tuple[List[Finding], Optional[dict]]:
                     tier = "inherit"
                 else:
                     tier = tier_val
+            if "run" in ag:
+                run_val = ag["run"]
+                if check_string_enum(
+                    findings,
+                    spec_str,
+                    f"{prefix}.run",
+                    run_val,
+                    RUNS,
+                    f"must be one of {', '.join(sorted(RUNS))}",
+                ) and run_val == "inline":
+                    if kind != "worker":
+                        findings.append(
+                            Finding(
+                                "error",
+                                "S041",
+                                spec_loc(spec_str, f"{prefix}.run"),
+                                "run inline is allowed only on kind worker",
+                            )
+                        )
+                    if tier != "inherit":
+                        findings.append(
+                            Finding(
+                                "error",
+                                "S042",
+                                spec_loc(spec_str, f"{prefix}.run"),
+                                "run inline requires tier inherit",
+                            )
+                        )
             tools = ag.get("tools", ["read", "search"])
             if "tools" in ag:
                 if not isinstance(tools, list):
@@ -995,6 +1024,15 @@ def validate_spec_file(spec_path: Path) -> Tuple[List[Finding], Optional[dict]]:
                         else:
                             ai = aid_map[pid]
                             ag = agents_raw[ai] if isinstance(agents_raw, list) else {}
+                            if isinstance(ag, dict) and ag.get("run") == "inline":
+                                findings.append(
+                                    Finding(
+                                        "error",
+                                        "S043",
+                                        spec_loc(spec_str, f"agents[{ai}].run"),
+                                        f"inline agent '{pid}' cannot be used in parallel or dispatch.workers",
+                                    )
+                                )
                             if isinstance(ag, dict) and ag.get("kind", "worker") != "worker":
                                 findings.append(
                                     Finding(
@@ -1318,6 +1356,15 @@ def validate_spec_file(spec_path: Path) -> Tuple[List[Finding], Optional[dict]]:
                             else:
                                 ai = aid_map[wid]
                                 ag = agents_raw[ai] if isinstance(agents_raw, list) else {}
+                                if isinstance(ag, dict) and ag.get("run") == "inline":
+                                    findings.append(
+                                        Finding(
+                                            "error",
+                                            "S043",
+                                            spec_loc(spec_str, f"agents[{ai}].run"),
+                                            f"inline agent '{wid}' cannot be used in parallel or dispatch.workers",
+                                        )
+                                    )
                                 if isinstance(ag, dict) and ag.get("kind", "worker") != "worker":
                                     findings.append(
                                         Finding(
@@ -1391,6 +1438,72 @@ def validate_spec_file(spec_path: Path) -> Tuple[List[Finding], Optional[dict]]:
                     )
                 )
 
+    # S044 knowledge-only worker that still runs as a subagent
+    if isinstance(agents_raw, list) and isinstance(steps_raw, list) and len(agents_raw) > 1:
+        blocked: Set[str] = set()
+        on_fail_steps: Set[str] = set()
+        rerun_steps: Set[str] = set()
+        for st in steps_raw:
+            if not isinstance(st, dict):
+                continue
+            par = st.get("parallel")
+            if isinstance(par, list):
+                blocked.update(x for x in par if isinstance(x, str))
+            disp = st.get("dispatch")
+            if isinstance(disp, dict) and isinstance(disp.get("workers"), list):
+                blocked.update(x for x in disp["workers"] if isinstance(x, str))
+            gate = st.get("gate")
+            if isinstance(gate, dict) and isinstance(gate.get("on_fail"), str):
+                on_fail_steps.add(gate["on_fail"])
+                fail_id = gate["on_fail"]
+                gate_id = st.get("id")
+                if fail_id in sid_map and isinstance(gate_id, str) and gate_id in sid_map:
+                    gate_needs = transitive_needs(gate_id, steps_raw, sid_map)
+                    for other in steps_raw:
+                        oid = other.get("id") if isinstance(other, dict) else None
+                        if (
+                            isinstance(oid, str)
+                            and oid in gate_needs
+                            and fail_id in transitive_needs(oid, steps_raw, sid_map)
+                        ):
+                            rerun_steps.add(oid)
+        for st in steps_raw:
+            if (
+                isinstance(st, dict)
+                and (st.get("id") in on_fail_steps or st.get("id") in rerun_steps)
+                and isinstance(st.get("agent"), str)
+            ):
+                blocked.add(st["agent"])
+        id_counts: Dict[str, int] = {}
+        for ag in agents_raw:
+            if isinstance(ag, dict) and isinstance(ag.get("id"), str):
+                id_counts[ag["id"]] = id_counts.get(ag["id"], 0) + 1
+        for i, ag in enumerate(agents_raw):
+            if not isinstance(ag, dict):
+                continue
+            aid = ag.get("id")
+            tools_v = ag.get("tools", ["read", "search"])
+            outs_v = ag.get("outputs")
+            if (
+                isinstance(aid, str)
+                and aid not in blocked
+                and id_counts.get(aid, 0) == 1
+                and ag.get("kind", "worker") == "worker"
+                and ag.get("run", "subagent") == "subagent"
+                and ag.get("tier", "inherit") == "inherit"
+                and isinstance(tools_v, list)
+                and all(t in ("read", "search") for t in tools_v)
+                and not outs_v
+            ):
+                findings.append(
+                    Finding(
+                        "warn",
+                        "S044",
+                        spec_loc(spec_str, f"agents[{i}]"),
+                        f"agent '{aid}' looks knowledge-only; consider run: inline",
+                    )
+                )
+
     # S027 missing models tiers
     if isinstance(agents_raw, list) and harness_list:
         for i, ag in enumerate(agents_raw):
@@ -1399,6 +1512,8 @@ def validate_spec_file(spec_path: Path) -> Tuple[List[Finding], Optional[dict]]:
             tier = ag.get("tier", "inherit")
             if not isinstance(tier, str) or tier not in TIERS or tier == "inherit":
                 continue
+            if ag.get("run") == "inline":
+                continue  # S042 already reports the tier
             for harness in harness_list:
                 hmap = models_map.get(harness) if isinstance(models_map, dict) else None
                 if not isinstance(hmap, dict) or tier not in hmap:
@@ -1558,6 +1673,15 @@ def validate_pattern(
             )
 
 
+def inline_agent_ids(data: dict) -> List[str]:
+    agents = data.get("agents") if isinstance(data.get("agents"), list) else []
+    return [
+        a["id"]
+        for a in agents
+        if isinstance(a, dict) and isinstance(a.get("id"), str) and a.get("run") == "inline"
+    ]
+
+
 def expected_generated_paths(data: dict) -> List[str]:
     if not isinstance(data, dict):
         return []
@@ -1569,18 +1693,25 @@ def expected_generated_paths(data: dict) -> List[str]:
         return []
     agents = data.get("agents") if isinstance(data.get("agents"), list) else []
     agent_ids_list = [
-        a["id"] for a in agents if isinstance(a, dict) and isinstance(a.get("id"), str)
+        a["id"]
+        for a in agents
+        if isinstance(a, dict) and isinstance(a.get("id"), str) and a.get("run") != "inline"
     ]
+    inline_ids_list = inline_agent_ids(data)
     paths: List[str] = []
     cursor_rule = bool(data.get("cursor_rule", False))
     for h in harnesses:
         if h == "claude-code":
             for aid in agent_ids_list:
                 paths.append(f".claude/agents/{aid}.md")
+            for aid in inline_ids_list:
+                paths.append(f".claude/skills/{name}/roles/{aid}.md")
             paths.append(f".claude/skills/{name}/SKILL.md")
         elif h == "cursor":
             for aid in agent_ids_list:
                 paths.append(f".cursor/agents/{aid}.md")
+            for aid in inline_ids_list:
+                paths.append(f".cursor/skills/{name}/roles/{aid}.md")
             paths.append(f".cursor/skills/{name}/SKILL.md")
             if cursor_rule:
                 paths.append(f".cursor/rules/{name}.mdc")
@@ -1704,6 +1835,11 @@ def validate_tree(root: Path, spec_path: Path, data: dict) -> Tuple[List[Finding
 
     expected = expected_generated_paths(data)
     exp_set = set(expected)
+    role_paths = {
+        f".{h_dir}/skills/{crew_name}/roles/{aid}.md"
+        for h_dir in ("claude", "cursor")
+        for aid in inline_agent_ids(data)
+    }
 
     for rel in expected:
         path = root / rel
@@ -1722,6 +1858,20 @@ def validate_tree(root: Path, spec_path: Path, data: dict) -> Tuple[List[Finding
         except OSError:
             findings.append(
                 Finding("error", "T001", rel, "expected file missing")
+            )
+            continue
+        if rel in role_paths:
+            try:
+                role_text = raw_bytes.decode("utf-8")
+            except UnicodeDecodeError:
+                findings.append(Finding("error", "T015", rel, "not valid UTF-8"))
+                continue
+            check_role_file(
+                findings,
+                rel,
+                role_text,
+                crew_name,
+                rel in manifest_files,
             )
             continue
         try:
@@ -1794,9 +1944,77 @@ def validate_tree(root: Path, spec_path: Path, data: dict) -> Tuple[List[Finding
             stem = Path(rel).stem
             validate_cursor_agent(findings, rel, fm, fm_raw, content, data, stem, agents_list)
 
+    # T014 stale agent file for an inline agent
+    for aid in inline_agent_ids(data):
+        stale: List[str] = []
+        if "claude-code" in harnesses:
+            stale.append(f".claude/agents/{aid}.md")
+        if "cursor" in harnesses:
+            stale.append(f".cursor/agents/{aid}.md")
+        for rel in stale:
+            path = root / rel
+            if not path.is_file():
+                continue
+            try:
+                text = path.read_bytes().decode("utf-8", errors="replace")
+            except OSError:
+                continue
+            if marker_crew_of(text) == crew_name:
+                findings.append(
+                    Finding(
+                        "error",
+                        "T014",
+                        rel,
+                        f"stale agent file for inline agent '{aid}'; delete it",
+                    )
+                )
+
     # T011 when cursor_rule expected but file missing handled by T001 on expected path
 
     return findings, None
+
+
+def marker_crew_of(content: str) -> Optional[str]:
+    """Crew named by the generated-by marker: first line, or first line after frontmatter."""
+    text = content
+    if text.startswith("---"):
+        end = text.find("\n---", 3)
+        if end < 0:
+            return None
+        text = text[end + 4 :]
+        if text.startswith("\n"):
+            text = text[1:]
+    first = text.split("\n", 1)[0] if text else ""
+    m = MARKER_RE.match(first.strip())
+    return m.group(1) if m else None
+
+
+def check_role_file(
+    findings: List[Finding], rel: str, content: str, crew_name: str, in_manifest: bool
+) -> None:
+    """Role files have no frontmatter; the marker is line 1. Only T010, T009, T012 apply."""
+    marker_crew = marker_crew_of(content)
+    if not in_manifest and marker_crew != crew_name:
+        findings.append(
+            Finding(
+                "error",
+                "T012",
+                rel,
+                "collides with existing file not in manifest and without this crew's marker",
+            )
+        )
+    first = content.split("\n", 1)[0].strip()
+    if first != marker_line(crew_name):
+        findings.append(
+            Finding("error", "T010", rel, "missing generated-by marker line")
+        )
+    leftover = "{{" in content or any(
+        ln.strip().startswith(("<!-- block:", "<!-- /block:")) for ln in content.splitlines()
+    )
+    if leftover:
+        findings.append(
+            Finding("error", "T009", rel, "contains {{ or block delimiter comment")
+        )
 
 
 def validate_orchestrator_skill(

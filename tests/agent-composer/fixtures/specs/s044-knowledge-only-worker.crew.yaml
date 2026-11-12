@@ -1,0 +1,20 @@
+schema: 1
+name: s044-knowledge-only-worker
+description: "Knowledge-only worker still a subagent."
+pattern: pipeline
+harnesses: [claude-code]
+agents:
+  - id: k
+    description: "Knowledge-only worker."
+    instructions: Answer.
+  - id: w
+    description: "Writer."
+    tools: [read, edit]
+    outputs: [o.md]
+    instructions: Write.
+steps:
+  - id: s1
+    agent: k
+  - id: s2
+    agent: w
+    needs: [s1]

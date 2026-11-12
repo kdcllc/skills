@@ -14,7 +14,7 @@ SCHEMA="$SKILL_DIR/references/spec-schema.md"
 PASS=0
 FAIL=0
 SKIP=0
-declare -A CODES_HIT=()
+CODES_HIT=' '
 SCRATCH_DIRS=()
 SCRATCH_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/agent-composer.XXXXXX")"
 SCRATCH_DIRS+=("$SCRATCH_ROOT")
@@ -52,7 +52,7 @@ record_codes() {
   while IFS= read -r line; do
     if [[ "$line" =~ ^(error|warn):\ (S[0-9]{3}|T[0-9]{3})\  ]]; then
       code="${BASH_REMATCH[2]}"
-      CODES_HIT["$code"]=1
+      case "$CODES_HIT" in *" $code "*) ;; *) CODES_HIT="$CODES_HIT$code " ;; esac
     fi
   done <<<"$out"
 }
@@ -674,13 +674,242 @@ PY
   run_validate_tree "marker/exact-marker-passes" "$proj" "$spec" 0
 }
 
+tree_project_inline() {
+  local proj spec
+  proj="$(mktemp_project)"
+  spec="$(install_spec "$proj" "$FIXTURES/specs/inline-mini.crew.yaml")"
+  materialize_tree "$FIXTURES/trees/inline-mini" "$proj"
+  printf '%s\n.agent-composer/inline-mini.crew.yaml' "$proj"
+}
+
+# Runs validate spec; sets SPEC_OUT and SPEC_RC. Returns 1 (after case_fail) on crash or missing summary.
+spec_output_or_fail() {
+  local name="$1" spec_path="$2"
+  SPEC_RC=0
+  SPEC_OUT="$($VALIDATE spec "$spec_path" 2>&1)" || SPEC_RC=$?
+  record_codes "$SPEC_OUT"
+  if ! assert_no_crash "$SPEC_OUT" || ! assert_summary_last "$SPEC_OUT"; then
+    case_fail "$name" "internal error or missing validate summary"
+    return 1
+  fi
+  return 0
+}
+
+# Passes when exit code is want_rc and S044 placement matches: no S044 line at all, or (with loc_regex) none at those
+# locations; with yes_regex (fifth argument), at least one S044 line must be at those locations.
+run_validate_spec_no_s044() {
+  local name="$1" spec_path="$2" want_rc="$3" loc_regex="${4:-}" yes_regex="${5:-}"
+  need_yaml_or_skip "$name" || return 0
+  spec_output_or_fail "$name" "$spec_path" || return 0
+  if [[ "$SPEC_RC" -ne "$want_rc" ]]; then
+    case_fail "$name" "exit $SPEC_RC want $want_rc"
+    return 0
+  fi
+  if [[ -z "$loc_regex" ]] && grep -qE '^warn: S044 ' <<<"$SPEC_OUT"; then
+    case_fail "$name" "unexpected S044 warning"
+    return 0
+  fi
+  if [[ -n "$loc_regex" ]] && grep -qE "^warn: S044 .*:${loc_regex}:" <<<"$SPEC_OUT"; then
+    case_fail "$name" "unexpected S044 warning at $loc_regex"
+    return 0
+  fi
+  if [[ -n "$yes_regex" ]] && ! grep -qE "^warn: S044 .*:${yes_regex}:" <<<"$SPEC_OUT"; then
+    case_fail "$name" "no S044 warning at $yes_regex"
+    return 0
+  fi
+  case_pass "$name"
+}
+
+# Portable in-place edit (BSD and GNU sed): sed_inplace <file> <sed args...>
+sed_inplace() {
+  local f="$1" tmp
+  shift
+  tmp="$f.tmp.$$"
+  if sed "$@" "$f" > "$tmp"; then
+    cat "$tmp" > "$f" || { rm -f "$tmp"; return 1; }
+    rm -f "$tmp"
+  else
+    rm -f "$tmp"
+    return 1
+  fi
+}
+
+# Passes when exit code is want_rc, every code in `present` has a line and no code in `absent` has a line.
+run_validate_spec_codes() {
+  local name="$1" spec_path="$2" want_rc="$3" present="$4" absent="${5:-}" c
+  need_yaml_or_skip "$name" || return 0
+  spec_output_or_fail "$name" "$spec_path" || return 0
+  if [[ "$SPEC_RC" -ne "$want_rc" ]]; then
+    case_fail "$name" "exit $SPEC_RC want $want_rc"
+    return 0
+  fi
+  for c in $present; do
+    if ! grep -qE "^(error|warn): $c " <<<"$SPEC_OUT"; then
+      case_fail "$name" "missing $c"
+      return 0
+    fi
+  done
+  for c in $absent; do
+    if grep -qE "^(error|warn): $c " <<<"$SPEC_OUT"; then
+      case_fail "$name" "unexpected $c"
+      return 0
+    fi
+  done
+  case_pass "$name"
+}
+
+run_inline_spec_cases() {
+  local p="$FIXTURES/specs" ex bad=""
+  run_validate_spec "spec/S041-inline-non-worker" "$p/s041-inline-non-worker.crew.yaml" 1 S041
+  run_validate_spec "spec/S042-inline-tier" "$p/s042-inline-tier.crew.yaml" 1 S042
+  run_validate_spec "spec/S043-inline-parallel" "$p/s043-inline-parallel.crew.yaml" 1 S043
+  run_validate_spec "spec/S043-inline-dispatch" "$p/s043-inline-dispatch.crew.yaml" 1 S043
+  run_validate_spec "spec/S044-knowledge-only-worker" "$p/s044-knowledge-only-worker.crew.yaml" 0 S044
+  if need_yaml_or_skip "spec/S044-knowledge-only-worker-is-warn"; then
+    spec_output_or_fail "spec/S044-knowledge-only-worker-is-warn" "$p/s044-knowledge-only-worker.crew.yaml" && \
+      if grep -qE '^warn: S044 .*agent .k. looks knowledge-only' <<<"$SPEC_OUT"; then
+        case_pass "spec/S044-knowledge-only-worker-is-warn"
+      else
+        case_fail "spec/S044-knowledge-only-worker-is-warn" "no 'warn: S044' line for agent k"
+      fi
+  fi
+  run_validate_spec_no_s044 "spec/S044-not-for-parallel-member" "$p/fanout-mini.crew.yaml" 0 'agents\[[01]\]'
+  run_validate_spec_no_s044 "spec/S044-not-for-single-agent" "$p/s044-not-for-single-agent.crew.yaml" 0
+  run_validate_spec_no_s044 "spec/S044-not-for-gated-producer" "$p/s044-not-for-gated-producer.crew.yaml" 0 'agents\[0\]' 'agents\[2\]'
+  run_validate_spec_no_s044 "spec/S044-not-for-gate-rerun-step" "$p/s044-not-for-gate-rerun-step.crew.yaml" 0 'agents\[[01]\]' 'agents\[3\]'
+  run_validate_spec_codes "spec/S044-not-for-duplicate-id" "$p/s044-not-for-duplicate-id.crew.yaml" 1 S008 S044
+  run_validate_spec_codes "spec/S027-not-with-S042" "$p/s027-not-with-s042.crew.yaml" 1 S042 S027
+  run_validate_spec_codes "spec/S043-with-S038" "$p/s043-with-s038.crew.yaml" 1 "S043 S038" "S044"
+  run_validate_spec "spec/S006-bad-run" "$p/s006-bad-run.crew.yaml" 1 S006
+  run_validate_spec_no_s044 "spec/inline-positive" "$p/inline-mini.crew.yaml" 0
+  if need_yaml_or_skip "example/no-S044"; then
+    for ex in coding-crew content-crew triage-crew; do
+      spec_output_or_fail "example/no-S044" "$SKILL_DIR/assets/examples/$ex.crew.yaml" || return 0
+      if grep -qE '^warn: S044 ' <<<"$SPEC_OUT"; then bad="$bad $ex"; fi
+    done
+    if [[ -z "$bad" ]]; then
+      case_pass "example/no-S044"
+    else
+      case_fail "example/no-S044" "S044 printed for:$bad"
+    fi
+  fi
+}
+
+run_inline_tree_cases() {
+  local proj spec mk out rc mf
+  read -r proj spec <<<"$(tree_project_inline | tr '\n' ' ')"
+  need_yaml_or_skip "tree/inline-valid" || return 0
+  rc=0
+  out="$($VALIDATE tree "$proj" "$proj/$spec" 2>&1)" || rc=$?
+  record_codes "$out"
+  if [[ "$rc" -eq 0 ]] && assert_no_crash "$out" && grep -qxF 'validate: 0 error(s), 0 warning(s)' <<<"$out"; then
+    case_pass "tree/inline-valid"
+  else
+    case_fail "tree/inline-valid" "rc=$rc out=$(tr '\n' '|' <<<"$out")"
+  fi
+
+  read -r proj spec <<<"$(tree_project_inline | tr '\n' ' ')"
+  rm "$proj/.cursor/skills/inline-mini/roles/k.md"
+  run_validate_tree "tree/T001-role-file-missing" "$proj" "$spec" 1 T001
+
+  read -r proj spec <<<"$(tree_project_inline | tr '\n' ' ')"
+  sed_inplace "$proj/.claude/skills/inline-mini/roles/k.md" '1d'
+  run_validate_tree "tree/T010-role-file-marker" "$proj" "$spec" 1 T010
+
+  mk="$(marker_line inline-mini)"
+  read -r proj spec <<<"$(tree_project_inline | tr '\n' ' ')"
+  printf '%s\n\nstale\n' "$mk" > "$proj/.claude/agents/k.md"
+  run_validate_tree "tree/T014-stale-agent-file" "$proj" "$spec" 1 T014
+
+  read -r proj spec <<<"$(tree_project_inline | tr '\n' ' ')"
+  printf 'hand-written agent\n' > "$proj/.cursor/agents/k.md"
+  rc=0
+  out="$($VALIDATE tree "$proj" "$proj/$spec" 2>&1)" || rc=$?
+  record_codes "$out"
+  if [[ "$rc" -eq 0 ]] && assert_no_crash "$out" && ! grep -qE '(error|warn): T014 ' <<<"$out"; then
+    case_pass "tree/T014-unmarked-agent-file-ok"
+  else
+    case_fail "tree/T014-unmarked-agent-file-ok" "rc=$rc or unexpected T014"
+  fi
+
+  read -r proj spec <<<"$(tree_project_inline | tr '\n' ' ')"
+  echo '{{x}}' >> "$proj/.cursor/skills/inline-mini/roles/k.md"
+  run_validate_tree "tree/T009-role-file-token" "$proj" "$spec" 1 T009
+
+  read -r proj spec <<<"$(tree_project_inline | tr '\n' ' ')"
+  mk="$(marker_line other-crew)"
+  sed_inplace "$proj/.claude/skills/inline-mini/roles/k.md" "1s|.*|$mk|"
+  rm -f "$proj/.agent-composer/inline-mini.manifest.json"
+  run_validate_tree "tree/T012-role-file-collision" "$proj" "$spec" 1 T012
+
+  read -r proj spec <<<"$(tree_project_inline | tr '\n' ' ')"
+  if need_yaml_or_skip "manifest/inline-write-status"; then
+    rc=0
+    out="$($MANIFEST write "$proj" "$proj/$spec" 2>&1)" || rc=$?
+    mf="$proj/.agent-composer/inline-mini.manifest.json"
+    if [[ "$rc" -ne 0 ]]; then
+      case_fail "manifest/inline-write-status" "write rc=$rc"
+    elif ! grep -qF '.claude/skills/inline-mini/roles/k.md' "$mf" || ! grep -qF '.cursor/skills/inline-mini/roles/k.md' "$mf"; then
+      case_fail "manifest/inline-write-status" "manifest lacks role file paths"
+    elif grep -qF '.claude/agents/k.md' "$mf"; then
+      case_fail "manifest/inline-write-status" "manifest lists an agent file for the inline agent"
+    else
+      rc=0
+      out="$($MANIFEST status "$proj" "$proj/$spec" 2>&1)" || rc=$?
+      if [[ "$rc" -eq 0 ]] && assert_no_crash "$out" && grep -qF 'unchanged .claude/skills/inline-mini/roles/k.md' <<<"$out" && ! grep -qE '^(new|edited|missing|orphan|spec-changed) ' <<<"$out"; then
+        case_pass "manifest/inline-write-status"
+      else
+        case_fail "manifest/inline-write-status" "status rc=$rc out=$(tr '\n' '|' <<<"$out")"
+      fi
+    fi
+  fi
+
+  read -r proj spec <<<"$(tree_project_inline | tr '\n' ' ')"
+  printf '\377\376' >> "$proj/.claude/skills/inline-mini/roles/k.md"
+  run_validate_tree "tree/T015-role-file-not-utf8" "$proj" "$spec" 1 T015
+
+  mk="$(marker_line inline-mini)"
+  read -r proj spec <<<"$(tree_project_inline | tr '\n' ' ')"
+  printf '%s\n\nstale\n' "$mk" > "$proj/.cursor/agents/k.md"
+  need_yaml_or_skip "tree/T014-stale-cursor-agent-file" && {
+    rc=0
+    out="$($VALIDATE tree "$proj" "$proj/$spec" 2>&1)" || rc=$?
+    record_codes "$out"
+    if [[ "$rc" -eq 1 ]] && assert_no_crash "$out" && grep -qE '^error: T014 \.cursor/agents/k\.md:' <<<"$out" && ! grep -qE '^error: T014 \.claude/agents/' <<<"$out"; then
+      case_pass "tree/T014-stale-cursor-agent-file"
+    else
+      case_fail "tree/T014-stale-cursor-agent-file" "rc=$rc out=$(tr '\n' '|' <<<"$out")"
+    fi
+  }
+
+  read -r proj spec <<<"$(tree_project_inline | tr '\n' ' ')"
+  if need_yaml_or_skip "manifest/orphan-role-file-after-switch-back"; then
+    rc=0
+    out="$($MANIFEST write "$proj" "$proj/$spec" 2>&1)" || rc=$?
+    if [[ "$rc" -ne 0 ]]; then
+      case_fail "manifest/orphan-role-file-after-switch-back" "write rc=$rc"
+    else
+      sed_inplace "$proj/$spec" 's/^    run: inline$/    run: subagent/'
+      sed 's/^name: w$/name: k/' "$proj/.claude/agents/w.md" > "$proj/.claude/agents/k.md"
+      sed 's/^name: w$/name: k/' "$proj/.cursor/agents/w.md" > "$proj/.cursor/agents/k.md"
+      rc=0
+      out="$($MANIFEST status "$proj" "$proj/$spec" 2>&1)" || rc=$?
+      if assert_no_crash "$out" && grep -qxF 'orphan .claude/skills/inline-mini/roles/k.md' <<<"$out" && grep -qxF 'orphan .cursor/skills/inline-mini/roles/k.md' <<<"$out"; then
+        case_pass "manifest/orphan-role-file-after-switch-back"
+      else
+        case_fail "manifest/orphan-role-file-after-switch-back" "status rc=$rc out=$(tr '\n' '|' <<<"$out")"
+      fi
+    fi
+  fi
+}
+
 run_coverage_case() {
   need_yaml_or_skip "coverage/all-codes-exercised" || return 0
   local missing=() code
   while IFS= read -r code; do
     [[ -z "$code" ]] && continue
     [[ "$code" == S034 ]] && continue
-    if [[ -z "${CODES_HIT[$code]:-}" ]]; then
+    if [[ "$CODES_HIT" != *" $code "* ]]; then
       missing+=("$code")
     fi
   done < <(grep -oE '(S|T)[0-9]{3}' "$SCHEMA" | sort -u)
@@ -711,6 +940,8 @@ main() {
   run_contract_cases
   run_bytes_cases
   run_marker_cases
+  run_inline_spec_cases
+  run_inline_tree_cases
   run_coverage_case
   run_guard_model_ids
   echo "PASS: $PASS FAIL: $FAIL SKIP: $SKIP"

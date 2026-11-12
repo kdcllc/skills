@@ -25,6 +25,12 @@ The generator never writes `tools:` for Cursor agents.
 
 **Rules:** Optional crew pointer at `.cursor/rules/<crew-name>.mdc` when `cursor_rule: true`. Project rules **must** use the `.mdc` extension; a plain `.md` file in `.cursor/rules/` is **ignored** by the rules system.
 
+## Role files
+
+**Path:** `.cursor/skills/<name>/roles/<agent-id>.md`, one per agent with `run: inline`. `roles/` is this skill's folder name for role files.
+
+A role file has no frontmatter; its first line is the [generated-by marker](spec-schema.md). It is a reference file of the orchestrator skill, not a skill and not a command (no `/` entry). The Cursor skills documentation ([skills](https://cursor.com/docs/context/skills)) describes a skill folder as `SKILL.md` plus supporting files the skill may reference, so a role file does not load as a skill or subagent. The orchestrator reads it and the parent agent session follows it with its own tools and model; no agent file is written for the agent.
+
 ## Tool mapping
 
 Cursor subagents inherit the parent's tool surface; the generator does not emit a `tools:` list. Document intent in the agent body and use `readonly` when neither edit nor shell is allowed.
@@ -102,8 +108,8 @@ The orchestrator skill runs in the **parent Agent session** (manual `/crew-name`
 
 Checks enforced by `validate.sh tree` for the Cursor harness (codes from [spec-schema.md](spec-schema.md)):
 
-1. Expected `.cursor/agents/<id>.md`, `.cursor/skills/<name>/SKILL.md`, and optional `.cursor/rules/<name>.mdc` exist — **T001**.
-2. Frontmatter parses — **T002**.
+1. Expected `.cursor/agents/<id>.md`, `.cursor/skills/<name>/roles/<id>.md` (role files, for `run: inline` agents), `.cursor/skills/<name>/SKILL.md`, and optional `.cursor/rules/<name>.mdc` exist — **T001**.
+2. Frontmatter parses in agent and skill files — **T002** (role files have no frontmatter; T002 does not apply to them).
 3. Agent `name` matches stem; orchestrator skill `name` matches crew `name` — **T003**.
 4. Allowed frontmatter keys only (agents: `name`, `description`, `model`, `readonly`; skills: orchestrator keys including `disable-model-invocation`) — **T004**.
 5. Cursor agent `model` values are unquoted scalars — **T005**.
@@ -111,7 +117,9 @@ Checks enforced by `validate.sh tree` for the Cursor harness (codes from [spec-s
 7. Agent `model` matches spec tier mapping for `models.cursor` — **T007**.
 8. Each `kind: evaluator` agent's spec `tools` omits `edit`, and its generated file has `readonly: true` unless the spec lists `shell` — **T008**.
 9. No `{{` or block delimiter comments — **T009**.
-10. Generated-by marker present — **T010**.
+10. Generated-by marker present — **T010** (in a role file, on line 1).
 11. When `cursor_rule: true`, rule file is `.mdc` with required pointer semantics — **T011**.
 12. Paths that collide with foreign unmarked files — **T012**.
 13. Orchestrator `SKILL.md` ≤ 500 lines — **T013**.
+14. No agent file `.cursor/agents/<id>.md` carrying this crew's marker exists for a `run: inline` agent — **T014**.
+15. Every role file is valid UTF-8 — **T015**.
