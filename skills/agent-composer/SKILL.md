@@ -116,7 +116,7 @@ Check spec rules first, then generated tree rules. Each item names its code; ful
 - **S024** — Evaluator lists `edit`.
 - **S025** — Evaluator lists `shell` (warning).
 - **S026** — Unknown tool (including `spawn`).
-- **S027** — Missing `models` tier mapping for a used non-inherit tier.
+- **S027** — Missing `models` tier mapping for a used non-inherit tier (not beside **S042**).
 - **S028** — More than six agents (warning).
 - **S029** — Spec basename ≠ top-level `name`.
 - **S030** — Step must set exactly one of `agent` or `parallel`.

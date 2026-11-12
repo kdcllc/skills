@@ -75,7 +75,7 @@ Agent ids and step ids are **separate namespaces**: **S008** applies within the 
 - `run: inline` requires `tier: inherit` (**S042**). The step runs in the main session on the main session's model, so no per-agent model applies.
 - A `run: inline` agent must not appear in a step's `parallel` list or in `dispatch.workers`, because an inline step cannot run concurrently (**S043**).
 - `tools`, `inputs`, `outputs` and `instructions` keep their meaning and rules (**S026** and **S039** still apply). The tools are the main-session tools the step uses and are listed in the role file body.
-- Choose `inline` when the role has no distinct tools, model tier or isolation need of its own (a knowledge-only role). Evaluator, router and planner roles stay subagents. An inline step shares the orchestrator's context, so an inline step that a gate re-runs sees the evaluator's findings and its earlier attempts.
+- Choose `inline` when the role has no distinct tools, model tier or isolation need of its own (a knowledge-only role). Evaluator, router and planner roles stay subagents. An inline step shares the orchestrator's context, so when a gate re-runs it, it sees the evaluator's findings and its earlier attempts.
 - A `kind: worker` agent that looks knowledge-only but still runs as a subagent gets the warning **S044**: `run` absent or `subagent`, `tier: inherit`, tools a subset of `[read, search]` (the default included), no `outputs`, not in any step's `parallel` list or `dispatch.workers`, not the agent of any step a gate re-runs (the gate's `on_fail` step, and every step that transitively needs the `on_fail` step and is transitively needed by the gated step), not an agent id that appears more than once in `agents` (**S008** already reports it), and the crew has more than one agent (a one-agent crew is better as a plain skill, so the hint does not apply). The message suggests `run: inline`. Warnings do not change the exit code.
 - **S027** is not reported for an agent that gets **S042**: the fix S042 asks for (`tier: inherit`) needs no `models` entry.
 
@@ -217,7 +217,7 @@ Planner agents write `<workdir>/<run-id>/tasks.yaml`: a YAML list of at most `di
 
 ### Inline steps
 
-At a step whose agent has `run: inline`, the orchestrator does not spawn. It reads `roles/<agent-id>.md` in its own skill folder and performs the step itself, then saves its report verbatim and writes the outputs exactly as **Agent reports** says for a spawned agent. A gate's `on_fail` re-run of an inline step is performed inline again. An inline step whose `needs` is empty uses the user's request directly, because there is no spawn context.
+At a step whose agent has `run: inline`, the orchestrator does not spawn. It reads `roles/<agent-id>.md` in its own skill folder and performs the step itself, then saves its report verbatim and writes the outputs exactly as **Agent reports** says for a spawned agent. A gate's `on_fail` re-run of an inline step is performed inline again, using the evaluator's findings directly in the orchestrator's context. An inline step whose `needs` is empty uses the user's request directly, because there is no spawn context.
 
 ### Orchestrator role
 
@@ -259,7 +259,7 @@ Findings use stable codes. Spec-mode validation uses `S###`; generated-tree vali
 | S024 | error | Evaluator with `edit` tool | `error: S024 agents[1].tools: evaluator must not list edit` |
 | S025 | warn | Evaluator with `shell` tool | `warn: S025 agents[1].tools: shell on evaluator is discouraged` |
 | S026 | error | Unknown tool (including `spawn`) | `error: S026 agents[0].tools[2]: unknown tool 'spawn'` |
-| S027 | error | Missing `models` entry for used tier | `error: S027 models.claude-code: missing tier 'light' used by agent checker` |
+| S027 | error | Missing `models` entry for used tier (not reported for an agent that gets **S042**) | `error: S027 models.claude-code: missing tier 'light' used by agent checker` |
 | S028 | warn | More than six agents | `warn: S028 agents: crew has 7 agents (warning above 6)` |
 | S029 | error | Spec filename ≠ crew `name` | `error: S029 .agent-composer/foo.crew.yaml: basename must match name 'bar'` |
 | S030 | error | Step `agent` / `parallel` invalid | `error: S030 steps[1]: set exactly one of agent or parallel` |
