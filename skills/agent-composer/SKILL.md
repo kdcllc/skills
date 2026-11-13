@@ -3,7 +3,7 @@ name: agent-composer
 description: "Design a custom multi-agent crew from an interview, write a YAML crew spec, and generate validated Claude Code and Cursor agent files plus an orchestrator skill. Use when you want custom agents, a designed agent team or crew, a generated orchestration workflow, or subagents for Claude Code or Cursor."
 license: MIT
 metadata:
-  version: "0.3.1"
+  version: "0.3.2"
 ---
 
 # Agent Composer

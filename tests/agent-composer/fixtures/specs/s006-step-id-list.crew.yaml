@@ -1,0 +1,25 @@
+schema: 1
+name: s006-step-id-list
+description: "A step id that is a YAML list must report S006, not crash the S044 re-run check."
+pattern: evaluator-optimizer
+harnesses: [claude-code]
+agents:
+  - id: p
+    description: "Producer retried by the gate."
+    instructions: Answer.
+  - id: e
+    description: "Evaluator."
+    kind: evaluator
+    instructions: Check.
+steps:
+  - id: s1
+    agent: p
+  - id: []
+    agent: p
+    needs: [s1]
+  - id: s3
+    agent: e
+    needs: [s1]
+    gate:
+      on_fail: s1
+      max_cycles: 2

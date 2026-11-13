@@ -4,6 +4,12 @@ All notable changes to the `agent-composer` skill. Format: [Keep a Changelog](ht
 
 ## [Unreleased]
 
+## [0.3.2] - 2026-11-13
+
+### Fixed
+
+- `validate spec` no longer stops with an internal `TypeError` when a step `id` is a list or mapping in a spec with more than one agent. It now reports the step-id finding (`S006`).
+
 ## [0.3.1] - 2026-11-13
 
 ### Fixed

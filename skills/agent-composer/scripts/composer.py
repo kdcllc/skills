@@ -1468,9 +1468,12 @@ def validate_spec_file(spec_path: Path) -> Tuple[List[Finding], Optional[dict]]:
                         ):
                             rerun_steps.add(oid)
         for st in steps_raw:
+            if not isinstance(st, dict):
+                continue
+            sid = st.get("id")
             if (
-                isinstance(st, dict)
-                and (st.get("id") in on_fail_steps or st.get("id") in rerun_steps)
+                isinstance(sid, str)
+                and (sid in on_fail_steps or sid in rerun_steps)
                 and isinstance(st.get("agent"), str)
             ):
                 blocked.add(st["agent"])
