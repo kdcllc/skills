@@ -781,6 +781,19 @@ run_inline_spec_cases() {
   run_validate_spec_codes "spec/S027-not-with-S042" "$p/s027-not-with-s042.crew.yaml" 1 S042 S027
   run_validate_spec_codes "spec/S043-with-S038" "$p/s043-with-s038.crew.yaml" 1 "S043 S038" "S044"
   run_validate_spec "spec/S006-bad-run" "$p/s006-bad-run.crew.yaml" 1 S006
+  local kind
+  for kind in list mapping; do
+    if need_yaml_or_skip "spec/S006-step-id-$kind"; then
+      spec_output_or_fail "spec/S006-step-id-$kind" "$p/s006-step-id-$kind.crew.yaml" || continue
+      if [[ "$SPEC_RC" -ne 1 ]]; then
+        case_fail "spec/S006-step-id-$kind" "exit $SPEC_RC want 1"
+      elif grep -qE '^error: S006 .*:steps\[1\]\.id: must be a string' <<<"$SPEC_OUT"; then
+        case_pass "spec/S006-step-id-$kind"
+      else
+        case_fail "spec/S006-step-id-$kind" "no 'error: S006' line at steps[1].id"
+      fi
+    fi
+  done
   run_validate_spec_no_s044 "spec/inline-positive" "$p/inline-mini.crew.yaml" 0
   if need_yaml_or_skip "example/no-S044"; then
     for ex in coding-crew content-crew triage-crew; do
