@@ -1,0 +1,121 @@
+{
+ "cases": {
+  "empty": [],
+  "float_qty": [
+   [
+    "half",
+    0.5,
+    3.0
+   ],
+   [
+    "many",
+    100000,
+    1.0
+   ]
+  ],
+  "long_name": [
+   [
+    "extraordinarily-long-name",
+    12,
+    0.99
+   ],
+   [
+    "exactly12chr",
+    1,
+    100
+   ]
+  ],
+  "non_string_name": [
+   [
+    42,
+    2,
+    2.5
+   ],
+   [
+    "",
+    1,
+    1.0
+   ]
+  ],
+  "one": [
+   [
+    "pen",
+    3,
+    1.5
+   ]
+  ],
+  "rounding": [
+   [
+    "a",
+    3,
+    0.335
+   ],
+   [
+    "b",
+    1,
+    2.675
+   ],
+   [
+    "c",
+    1000,
+    1234.567
+   ]
+  ],
+  "wide_values": [
+   [
+    "big",
+    123456789,
+    98765.4321
+   ]
+  ],
+  "zero_and_negative": [
+   [
+    "refund",
+    -2,
+    9.99
+   ],
+   [
+    "none",
+    0,
+    5.0
+   ],
+   [
+    "x",
+    7,
+    0
+   ]
+  ]
+ },
+ "expected": {
+  "inventory_report": {
+   "empty": "INVENTORY\n---------------------------\nSTOCK VALUE            0.00",
+   "float_qty": "INVENTORY\n---------------------------\nhalf          0.5      1.50\nmany        100000 100000.00\nSTOCK VALUE       100001.50",
+   "long_name": "INVENTORY\n---------------------------\nextraordinar   12     11.88\nexactly12chr    1    100.00\nSTOCK VALUE          111.88",
+   "non_string_name": "INVENTORY\n---------------------------\n42              2      5.00\n                1      1.00\nSTOCK VALUE            6.00",
+   "one": "INVENTORY\n---------------------------\npen             3      4.50\nSTOCK VALUE            4.50",
+   "rounding": "INVENTORY\n---------------------------\na               3      1.01\nb               1      2.67\nc            10001234567.00\nSTOCK VALUE      1234570.68",
+   "wide_values": "INVENTORY\n---------------------------\nbig         12345678912193263111263.53\nSTOCK VALUE      12193263111263.53",
+   "zero_and_negative": "INVENTORY\n---------------------------\nrefund         -2    -19.98\nnone            0      0.00\nx               7      0.00\nSTOCK VALUE          -19.98"
+  },
+  "payroll_report": {
+   "empty": "PAYROLL\n---------------------------\nTOTAL PAY              0.00",
+   "float_qty": "PAYROLL\n---------------------------\nhalf          0.5      1.50\nmany        100000 100000.00\nTOTAL PAY         100001.50",
+   "long_name": "PAYROLL\n---------------------------\nextraordinar   12     11.88\nexactly12chr    1    100.00\nTOTAL PAY            111.88",
+   "non_string_name": "PAYROLL\n---------------------------\n42              2      5.00\n                1      1.00\nTOTAL PAY              6.00",
+   "one": "PAYROLL\n---------------------------\npen             3      4.50\nTOTAL PAY              4.50",
+   "rounding": "PAYROLL\n---------------------------\na               3      1.01\nb               1      2.67\nc            10001234567.00\nTOTAL PAY        1234570.68",
+   "wide_values": "PAYROLL\n---------------------------\nbig         12345678912193263111263.53\nTOTAL PAY        12193263111263.53",
+   "zero_and_negative": "PAYROLL\n---------------------------\nrefund         -2    -19.98\nnone            0      0.00\nx               7      0.00\nTOTAL PAY            -19.98"
+  },
+  "sales_report": {
+   "empty": "SALES\n---------------------------\nTOTAL                  0.00",
+   "float_qty": "SALES\n---------------------------\nhalf          0.5      1.50\nmany        100000 100000.00\nTOTAL             100001.50",
+   "long_name": "SALES\n---------------------------\nextraordinar   12     11.88\nexactly12chr    1    100.00\nTOTAL                111.88",
+   "non_string_name": "SALES\n---------------------------\n42              2      5.00\n                1      1.00\nTOTAL                  6.00",
+   "one": "SALES\n---------------------------\npen             3      4.50\nTOTAL                  4.50",
+   "rounding": "SALES\n---------------------------\na               3      1.01\nb               1      2.67\nc            10001234567.00\nTOTAL            1234570.68",
+   "wide_values": "SALES\n---------------------------\nbig         12345678912193263111263.53\nTOTAL            12193263111263.53",
+   "zero_and_negative": "SALES\n---------------------------\nrefund         -2    -19.98\nnone            0      0.00\nx               7      0.00\nTOTAL                -19.98"
+  }
+ }
+}

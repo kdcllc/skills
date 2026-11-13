@@ -34,6 +34,7 @@ readonly -a EXPECTED_SUITE=(
   autonomous-loop.md
   agents-and-models.md
   evaluation-system.md
+  outcome-evals.md
   contributing.md
   memory.md
 )

@@ -1,0 +1,74 @@
+{
+  "schema": 1,
+  "projectName": "eval-project",
+  "harnesses": [
+    "claude-code"
+  ],
+  "primary": "claude-code",
+  "flags": {
+    "research": false,
+    "loop": false,
+    "greenfield": false,
+    "lint": false,
+    "typecheck": false,
+    "models_pinned": true
+  },
+  "forge": {
+    "kind": "none"
+  },
+  "tokens": {
+    "PROJECT_NAME": "eval-project",
+    "STACK_SUMMARY": "A small Python 3 project that uses only the standard library. Source code lives in a package at the project root and tests live in `tests/`, run with `python3 -m unittest discover -s tests -t .` from the project root. There is no build step and no third-party dependency.",
+    "EXECUTION_LAYERS": "package modules -> tests/",
+    "GROUND_TRUTH_DOC": "README.md",
+    "QA_SURFACES": "- **Command-line and library behaviour** - the functions and scripts the project exposes. Evidence: test output and a short run of the changed behaviour.",
+    "SETUP_COMMANDS": "# none - Python 3 standard library only",
+    "TARGETED_TEST_COMMAND": "python3 -m unittest discover -s tests -t .",
+    "FULL_TEST_COMMAND": "python3 -m unittest discover -s tests -t .",
+    "TEST_FRAMEWORKS": "unittest (Python 3 standard library)",
+    "EVALUATOR_AUTO_FAIL_TRIGGERS": "- A test in tests/ that fails, or a test removed to make the suite pass.\n- A change to files unrelated to the requested work.",
+    "QA_AUTO_FAIL_TRIGGERS": "- The project's tests fail when run with the full test command."
+  },
+  "models": {
+    "claude-code": {
+      "frontier": "claude-opus-5-5",
+      "light": "claude-sonnet-5-5",
+      "fast": "claude-haiku-5-5",
+      "alt_family": "claude-opus-5-5",
+      "frontier_alt_family": "claude-opus-5-5",
+      "arbiter_same_family": true
+    }
+  },
+  "bootstrap": {
+    "models-map-caveats": "- **Claude Code env overrides**: `CLAUDE_CODE_SUBAGENT_MODEL` and\n  `CLAUDE_CODE_EFFORT_LEVEL` override frontmatter; org `availableModels` allowlists can\n  cause pins to be ignored.\n- **Claude Code is single-provider (Anthropic only)**: `ANTHROPIC_BASE_URL` changes the\n  endpoint, not the model family — a different-family arbiter is unreachable natively\n  (see **Same-family arbiter** in this file).\n- **Claude Code aliases resolve per provider**: an alias such as `opus` maps to a\n  different model on Microsoft Foundry, Bedrock, or Google Cloud than on the Anthropic\n  API — prefer full IDs. Minimum Claude Code versions for these pins: Opus 5.5 ≥\n  v2.1.280, Sonnet 5.5 ≥ v2.1.284, Haiku 5.5 ≥ v2.1.293.\n- **Claude Code usage-credit aliases**: headless loop runs must never resolve to\n  `best`/`fable` (they bill usage credits without asking); emit rejects them in a loop\n  chain.\n- Model values: Claude aliases or full IDs are both valid; `inherit` is the frontmatter\n  default if a tier is deliberately unpinned.",
+    "fallback-chains": "| Tier | Chain (first available wins) |\n|------|------------------------------|\n| `frontier` | `claude-opus-5-5` → `claude-sonnet-5-5` → (omit pin — harness default) |\n| `light` | `claude-sonnet-5-5` → `claude-haiku-5-5` → (omit pin — harness default) |\n| `fast` | `claude-haiku-5-5` → `claude-sonnet-5-5` → (omit pin — harness default) |",
+    "frontier-alt-family": "| Ladder step | Model pin |\n|-------------|-----------|\n| Diagnosis-driven implementation attempt (rung 4) | `claude-opus-5-5` |\n| Evaluator arbitration mode (rung 5) | `claude-opus-5-5` - same-family arbiter (reduced independence) |",
+    "models-map-fix-cycle": "| Fix cycle | Implementer model |\n|-----------|-------------------|\n| 1 | `claude-sonnet-5-5` (normal) |\n| 2 | `claude-opus-5-5` |\n| 3 | `claude-opus-5-5` with effort `xhigh` |",
+    "models-map-effort": "Reasoning-effort pins: evaluators (`evaluator`, `qa-evaluator`) `high`,\n`diagnostician` `xhigh`, `implementer`/`test-writer`/`evidence-collector` `medium`, `terminal` `low` — Claude\nCode `effort:` frontmatter. Never quote the YAML `model:` value — a quoted or unresolvable value silently falls back to the parent model.",
+    "models-map-live-check": "Model IDs in this map are the values the eval harness pins; the harness does not re-verify them against a live list.",
+    "models-map-title": "# Model Map (resolved — Claude Code, eval project)",
+    "loop-fallback": "Not used: the loop extra is not installed in this project.",
+    "auto-fail-sins-evaluator": "- A test in tests/ that fails, or a test removed or weakened to make the suite pass.\n- A change to files unrelated to the requested work.\n- A requirement of the task that is not met.",
+    "auto-fail-sins-qa": "- The project's tests fail when run with the full test command.",
+    "auto-fail-triggers": "- A test in tests/ that fails, or a test removed to make the suite pass.\n- A change to files unrelated to the requested work.",
+    "critical-reference-rows": "",
+    "doc-buckets": "",
+    "domain-skill-rows": "",
+    "execution-layers": "package modules → tests/",
+    "existing-agents": "",
+    "full-suite-commands": "python3 -m unittest discover -s tests -t .",
+    "greenfield-practices": "",
+    "layer-skill-map": "",
+    "mock-boundary": "The project has no network or service access; tests use plain unittest and the standard library only.",
+    "path-test-conventions": "| Changed path | First impacted files |\n|--------------|----------------------|\n| a source module | the test module in `tests/` named for it |\n| a file in `tests/` | that test file |",
+    "preflight-extra": "",
+    "qa-evaluator-surfaces": "- **Command-line and library behaviour** - the functions and scripts the project exposes. Evidence: test output and a short run of the changed behaviour.",
+    "qa-surfaces": "- **Command-line and library behaviour** - the functions and scripts the project exposes. Evidence: test output and a short run of the changed behaviour.",
+    "qa-surfaces-keep": "### Command-line and library behaviour\n\n- The changed functions and scripts behave as the request describes, shown by test output and a short run.",
+    "quality-check-commands": "python3 -m unittest discover -s tests -t .",
+    "rendered-siblings": "",
+    "shared-libs": "",
+    "skills-tree": "",
+    "stack-note": ""
+  }
+}
