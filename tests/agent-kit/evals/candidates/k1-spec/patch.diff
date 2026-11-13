@@ -1,0 +1,104 @@
+diff -ruN a/templates/agents/test-writer.md b/templates/agents/test-writer.md
+--- a/templates/agents/test-writer.md	2026-11-13 09:37:09.833737663 -0500
++++ b/templates/agents/test-writer.md	2026-11-13 09:43:36.317073510 -0500
+@@ -13,6 +13,11 @@
+ 
+ ## Rules
+ 
++- **Black-box only.** Write tests from the task file, its acceptance criteria and the
++  interface brief named in Files to Read (the signatures, docstrings and public types of
++  the code under test). Do not read the modules under test. Exception: after your tests
++  are written, read a function body only to make the injected edit a regression proof
++  needs (`test-ladder` § Regression proof), and only that edit.
+ - **Coverage is the requirement.** For each unit in scope: the happy path, every
+   documented error path (auth failures, not-found, invalid input), and edge cases
+   (empty results, pagination boundaries, malformed responses).
+@@ -33,8 +38,8 @@
+   command and the result you want back (where the harness lets this agent spawn —
+   not Copilot).
+ - **Write fence — fail loud.** You may create or modify ONLY the paths listed in the
+-  task's `writes` set (your test files); the `reads` list — including the modules under
+-  test — is read-only interface briefs. If a test can only pass by editing an
++  task's `writes` set (your test files); the `reads` list is read-only interface briefs; the
++  modules under test reach you only through the interface brief. If a test can only pass by editing an
+   out-of-fence file (a source fix, a shared fixture or config you do not own), DO NOT
+   edit it — stop and report an escalation naming the exact path and why; the
+   orchestrator re-plans ownership. Rewrite owned files wholesale when the task declares
+diff -ruN a/templates/ORCHESTRATION.md b/templates/ORCHESTRATION.md
+--- a/templates/ORCHESTRATION.md	2026-11-13 09:37:09.833737663 -0500
++++ b/templates/ORCHESTRATION.md	2026-11-13 09:37:26.552786104 -0500
+@@ -1135,7 +1135,7 @@
+ ├── skills/
+ │   ├── feature/       # Feature coordination
+ │   │   ├── SKILL.md
+-│   │   ├── reference/{continuation-ladder.md,preflight.md,ready-groups.md,degraded-mode.md,memory-protocol.md,progress-line.md,memory-capture.md,resume.md,goal-revisions.md,corrective-tasks.md,fix-cycles.md}
++│   │   ├── reference/{continuation-ladder.md,preflight.md,ready-groups.md,degraded-mode.md,memory-protocol.md,progress-line.md,memory-capture.md,resume.md,goal-revisions.md,test-task.md,corrective-tasks.md,fix-cycles.md}
+ │   │   └── templates/{goal.md,task.md,progress.md}
+ │   │
+ │   ├── memory-capture/SKILL.md       # Session transcript distillation
+@@ -1197,7 +1197,7 @@
+ ├── skills/
+ │   ├── feature/       # Feature coordination
+ │   │   ├── SKILL.md
+-│   │   ├── reference/{continuation-ladder.md,preflight.md,ready-groups.md,degraded-mode.md,memory-protocol.md,progress-line.md,memory-capture.md,resume.md,goal-revisions.md,corrective-tasks.md,fix-cycles.md}
++│   │   ├── reference/{continuation-ladder.md,preflight.md,ready-groups.md,degraded-mode.md,memory-protocol.md,progress-line.md,memory-capture.md,resume.md,goal-revisions.md,test-task.md,corrective-tasks.md,fix-cycles.md}
+ │   │   └── templates/{goal.md,task.md,progress.md}
+ │   │
+ │   ├── memory-capture/SKILL.md       # Session transcript distillation
+@@ -1254,7 +1254,7 @@
+ ├── skills/
+ │   ├── feature/       # Feature coordination
+ │   │   ├── SKILL.md
+-│   │   ├── reference/{continuation-ladder.md,preflight.md,ready-groups.md,degraded-mode.md,memory-protocol.md,progress-line.md,memory-capture.md,resume.md,goal-revisions.md,corrective-tasks.md,fix-cycles.md}
++│   │   ├── reference/{continuation-ladder.md,preflight.md,ready-groups.md,degraded-mode.md,memory-protocol.md,progress-line.md,memory-capture.md,resume.md,goal-revisions.md,test-task.md,corrective-tasks.md,fix-cycles.md}
+ │   │   └── templates/{goal.md,task.md,progress.md}
+ │   │
+ │   ├── memory-capture/SKILL.md       # Session transcript distillation
+@@ -1311,7 +1311,7 @@
+ ├── skills/
+ │   ├── feature/       # Feature coordination
+ │   │   ├── SKILL.md
+-│   │   ├── reference/{continuation-ladder.md,preflight.md,ready-groups.md,degraded-mode.md,memory-protocol.md,progress-line.md,memory-capture.md,resume.md,goal-revisions.md,corrective-tasks.md,fix-cycles.md}
++│   │   ├── reference/{continuation-ladder.md,preflight.md,ready-groups.md,degraded-mode.md,memory-protocol.md,progress-line.md,memory-capture.md,resume.md,goal-revisions.md,test-task.md,corrective-tasks.md,fix-cycles.md}
+ │   │   └── templates/{goal.md,task.md,progress.md}
+ │   │
+ │   ├── memory-capture/SKILL.md       # Session transcript distillation
+diff -ruN a/templates/skills/feature/reference/test-task.md b/templates/skills/feature/reference/test-task.md
+--- a/templates/skills/feature/reference/test-task.md	1969-12-31 19:00:00.000000000 -0500
++++ b/templates/skills/feature/reference/test-task.md	2026-11-13 09:43:36.317073510 -0500
+@@ -0,0 +1,23 @@
++# Test task package (Phase 4 step 1)
++
++Read this before launching `test-writer` for the test task.
++
++The test task is black-box: `test-writer` writes tests from the task spec and the public
++interface of the code under test, never from its implementation.
++
++Before the launch, write `_memory/work/goals/[goal]/briefs/NN-interfaces.md` (NN = the
++test task's number): for every module under test, its exported signatures, docstrings and
++public types, extracted with a definitions search (for example
++`rg -n '^(def|class|export|func|public) '` plus the docstring lines that follow), never
++whole function bodies.
++
++`## Files to Read` for the test task lists:
++
++- that brief file, the test task file with its `## Acceptance Criteria`, and the
++  implementation tasks' acceptance criteria;
++- existing tests, fixtures and the test-framework configuration, to match conventions;
++- matching path-scoped rule files and `{{IDE_DIR}}/skills/test-ladder/SKILL.md`.
++
++It lists no module path. The `## Rules` section of the package states: `test-writer`
++reads no module under test, except after its tests are written, to read a function body
++only to make the injected edit a regression proof needs.
+diff -ruN a/templates/skills/feature/SKILL.template.md b/templates/skills/feature/SKILL.template.md
+--- a/templates/skills/feature/SKILL.template.md	2026-11-13 09:37:09.834737665 -0500
++++ b/templates/skills/feature/SKILL.template.md	2026-11-13 09:37:26.544786079 -0500
+@@ -97,7 +97,7 @@
+ 
+ For each ready group (`reference/ready-groups.md`; `parallel: false` → one task at a time), in dependency order:
+ 
+-1. Launch `implementer` (`test-writer` for the test task) with a full context package.
++1. Launch `implementer` (`test-writer`: test task, `reference/test-task.md`) with a full context package.
+ 2. **Silent-success check**: empty/missing report ⇒ verify artifacts: present ⇒ done
+    ("report lost, files verified"); absent ⇒ failed, respawn once. Never re-run when artifacts exist.
+ 3. Launch `evaluator` with task file, report, matching rule files, `{{IDE_DIR}}/skills/task-criteria/SKILL.md`; if read-only (evaluator.md `readonly` or refused shell), first spawn `terminal` per acceptance-criterion command and, when the task has guarding tests, one regression proof, attach output.

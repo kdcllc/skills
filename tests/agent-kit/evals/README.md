@@ -219,6 +219,14 @@ When `EVAL_STUB_PROBE` (a file path) is set, the stub writes it with these lines
 - `sleep` with `--timeout 1` gives `timed_out` true (when `timeout` exists).
 - A usage error exits 2.
 - No `SKILL.md` file and no `.claude`, `.cursor`, `.agents` or `.github` folder exists in the tree.
+- Candidate checks (added by the candidates goal; see "Candidates" and "compare.sh"):
+  - `compare.sh --check` passes for every candidate: the marker is present in the patched emit and absent in the stock emit.
+  - A candidate whose patch does not apply gives exit 3.
+  - A candidate whose marker is also in the stock emit gives `check <name>: FAIL …`.
+  - The `--plan` line and its arithmetic.
+  - Usage errors exit 2: an unknown flag, an unknown `--cand` name, and `--plan` together with `--check`.
+  - `--with-baseline` adds a `baseline` row.
+  - A stub-CLI run of `compare.sh --cand <one> --runs 1 --tasks 01-trivial-fix` writes rows labelled `kit` and the candidate, and prints a `vs kit:` line.
 
 The summary line is `PASS: <p> FAIL: <f> SKIP: <s>`, matching the format `tests/agent-kit/run-all.sh` recognizes. The self-test needs no network and no `claude` binary.
 
@@ -246,3 +254,82 @@ Limits and flags:
 - `--permission-mode acceptEdits` with an explicit `--allowedTools` list lets the agent edit and run commands inside scratch without a user. `--dangerously-skip-permissions` is not used because it would remove every permission check, including ones that keep the run from touching files outside scratch.
 - `--setting-sources project` loads only the scratch project's settings, `--strict-mcp-config` loads no MCP servers, and `--no-session-persistence` leaves no session behind. The environment cleanup and git isolation in the per-run procedure keep the run away from the launching session and from this repository.
 - At 10 tasks and 3 runs per task the results are noisy; read the caveat that `report.sh` prints.
+
+## Candidates
+
+A candidate is a proposed change to the kit that is measured before it is adopted. Each candidate is a directory `candidates/<name>/` (the name uses lowercase letters, digits and hyphens) that holds `patch.diff` and `README.md`. Nothing under `skills/` changes while a candidate is measured.
+
+Patch format: a unified diff relative to the kit directory (paths like `a/templates/...`), applied with `git apply -p1` inside a copy of `skills/agent-kit/`. A patch may touch only files under `templates/`.
+
+Candidate README sections, in this order: `## Hypothesis`, `## Change`, `## Expected effect`, `## Marker`, `## Files touched`. They are listed inline here, not shown as a fenced example, so this README has no extra `## ` heading lines.
+
+Marker rule: `## Marker` holds exactly one line, and the whole content of that line is a backticked fixed string. The string is taken from the new instruction text the patch adds, not from a comment or a tag added only to be found. It must occur in the patched emitted `.claude/` tree and must not occur in the stock emitted `.claude/` tree.
+
+Candidates are temporary. A later goal adopts each one (moves the change into `skills/agent-kit/` with a version bump) or deletes it. A patch that no longer applies fails the self-test and must be regenerated or deleted.
+
+Budget rule: a patched kit keeps `templates/skills/feature/SKILL.template.md` at or below 11264 bytes (`tests/agent-kit/templates/skill-slimming.sh`, check (f)). Detail beyond that goes into a `templates/skills/feature/reference/*.md` file with a one-line pointer. `compare.sh --check` enforces it.
+
+The four candidates:
+
+- `k1-fold`: the test task goes to `implementer`, with no `test-writer` spawn.
+- `k1-spec`: `test-writer` writes black-box tests from the task spec and the public signatures, not from module bodies.
+- `k2-rightsize`: a deterministic, logged size rubric before Phase 1 routes small requests to a lite path.
+- `k4-criteria`: evaluator task verdicts carry one row per acceptance criterion (met, unmet or unverified, with evidence), and PASS only when every row is met.
+
+K4's "no new findings for N cycles" stop rule is not a candidate. The nearest existing rule is the section "Early ladder entry" in `skills/agent-kit/templates/skills/feature/reference/fix-cycles.md` (line 135): under `ladder: auto` a repeated `[structural]` key ends fix cycles early and starts the continuation ladder, which is more work, not a stop. The stop rule is left for a later candidate.
+
+## compare.sh
+
+```
+bash tests/agent-kit/evals/compare.sh [--plan|--check] [--cand NAME]... [--with-baseline] [--tasks …] [--runs N] [--model ID] [--budget-usd X] [--timeout S] [--out DIR] [--keep]
+```
+
+Defaults:
+
+- `--cand`: every directory under `candidates/` that holds a `patch.diff`, sorted.
+- `--with-baseline`: off.
+- `--out`: `_memory/work/evals/compare-<UTC YYYYmmddTHHMMSSZ>/` under the repo root.
+- `--tasks`, `--runs`, `--model`, `--budget-usd`, `--timeout`: passed to `run.sh` unchanged, so `run.sh`'s own defaults apply.
+
+An unknown `--cand` name, an unknown flag, or `--plan` together with `--check` prints usage on stderr and exits 2. `--plan` validates `--runs` (an integer of at least 1) and `--budget-usd` (a positive number) itself and exits 2 otherwise. Under `--check` the `run.sh` options are accepted and ignored.
+
+Locations:
+
+- Candidates are read from `EVAL_CANDIDATES_DIR`. Default: `<evals dir>/candidates`, where the evals dir is the script's own directory.
+- The stock kit (`<repo>/skills/agent-kit`) and `<repo>/tests/agent-kit/lib/fixture-root.sh` resolve from the repository root, three levels above the script. A copy of `compare.sh` therefore works only inside a repo-shaped tree: `<S>/skills/agent-kit`, `<S>/tests/agent-kit/lib/` and `<S>/tests/agent-kit/evals/`.
+- `EVAL_CLI` and `EVAL_TASKS_DIR` pass through to `run.sh`.
+
+`--plan` uses `run.sh`'s defaults when an option is absent: 3 runs, budget 5, and every task directory under `EVAL_TASKS_DIR` (default `<evals dir>/tasks`). The `arms:` line lists labels in run order: `kit`, then the selected candidates in name order, then `baseline` when `--with-baseline` is given.
+
+`--keep` is passed to every `run.sh` call and also keeps compare.sh's own `FIXTURE_TMPDIR` (the kit copies). `--out` and `--keep` are accepted and ignored under `--check` and `--plan`, except that `--check` with `--keep` keeps its scratch.
+
+An unknown `--cand` name is a name with no directory under `EVAL_CANDIDATES_DIR`, or a directory without `patch.diff`; both exit 2. The names `kit` and `baseline` are reserved: a candidate directory with either name exits 2 with a message.
+
+The answers file for every emit is `<evals dir>/answers.json`.
+
+Exit codes:
+
+- 0: `--plan` printed, every `--check` passed, or every `run.sh` call exited 0.
+- 1: `--check` found at least one failing candidate (or the stock kit failed to emit), or, in a full run, `run.sh`'s own exit 1 passed through. After argument parsing, sourcing `fixture-root.sh` (or creating the run-level temp directory) can also fail with exit 1.
+- 2: usage error.
+- 3: a patch did not apply. The message names the candidate and nothing is run.
+- Otherwise (a full run): the first non-zero `run.sh` exit code, after the remaining arms still ran.
+
+### compare.sh procedure
+
+0. Source `fixture-root.sh` with a run-level `FIXTURE_TMPDIR` under `mktemp -d`. All scratch lives inside it. It is removed at exit unless `--keep` is given.
+1. For each selected candidate, copy `skills/agent-kit/` to `<FIXTURE_TMPDIR>/kits/<name>/` and apply the patch there with `git apply -p1`. A failure prints a message naming the candidate, exits 3, and runs nothing.
+2. `--check`: emit the stock kit and each patched kit into scratch git repos with `answers.json`, calling `assert_fixture_repo` after each `git init`. Each candidate needs emit exit 0, the marker rule and the budget rule from "Candidates". Print `check <name>: ok` or `check <name>: FAIL <reason>` per candidate. Exit 0 when all are ok, otherwise 1. `run.sh` is never called.
+3. `--plan`: print one line, `plan: <arms> arms × <tasks> tasks × <runs> runs = <n> runs; upper cost bound $<n × budget, two decimals>` (for example `plan: 2 arms × 1 tasks × 2 runs = 4 runs; upper cost bound $20.00`), then one line `arms: <labels, space-separated>`. Exit 0. `run.sh` is never called.
+4. Otherwise, a full run:
+   - `run.sh --arm kit --label kit --out <out>/kit` with the stock kit (the default `--kit-src`).
+   - `run.sh --arm kit --kit-src <copy> --label <name> --out <out>/<name>` for each candidate.
+   - With `--with-baseline`, `run.sh --arm baseline --label baseline --out <out>/baseline`.
+   - The `run.sh` options are passed through.
+   - Then print the `report.sh` output over the arm directories that hold a `results.jsonl`, stock kit first, so the `vs kit:` win, loss and tie lines compare each candidate with the stock kit. An arm whose `run.sh` exited before writing a row is named on stderr and left out.
+
+Under `--check`, if the stock kit fails to emit, print `check stock: FAIL <reason>` and exit 1 without checking candidates.
+
+When no arm wrote a row, compare.sh prints `compare.sh: no results to report` on stderr and exits with the first non-zero `run.sh` exit code (or 1 when every `run.sh` exited 0). When the stock `kit` arm wrote no row but candidates did, compare.sh still runs `report.sh` and prints one stderr line saying the comparisons are not against the stock kit.
+
+Output layout: `<out>/kit/`, `<out>/<name>/` for each candidate and, with `--with-baseline`, `<out>/baseline/`, each holding what `run.sh --out` writes.

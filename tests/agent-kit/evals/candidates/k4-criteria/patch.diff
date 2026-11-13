@@ -1,0 +1,39 @@
+diff -ruN a/templates/agents/evaluator.md b/templates/agents/evaluator.md
+--- a/templates/agents/evaluator.md	2026-11-13 09:36:39.822666142 -0500
++++ b/templates/agents/evaluator.md	2026-11-13 09:36:47.735683027 -0500
+@@ -148,6 +148,11 @@
+ ### What I verified
+ - [claim] → [✅ Verified | ⚠️ Unverified | ❌ Contradicted | 🔍 Needs investigation] — [how: file:line, test output, command run]
+ 
++### Criteria
++| # | Criterion (short) | Result (met / unmet / unverified) | Evidence (command output, file:line or report section) |
++|---|---|---|---|
++| AC1 | [short name] | [met / unmet / unverified] | [how: command output, file:line or report section] |
++
+ ### Issues found
+ 1. **[severity: blocker/major/minor]** <citation or "uncited"> `location` — [what is wrong and why it matters]
+ 
+@@ -165,6 +170,8 @@
+ 
+ Citations apply **only** to Phase 4 task evaluations, ladder re-evaluations and Phase 5 audits. Every other mode (Phase 3 goal evaluation, Phase 6 doc evaluations and the doc audit, arbitration) writes issues as `[file:line] — …` and fixes as `- [ ] [specific, actionable fix]` followed by the tags, with no citation.
+ 
++**Criteria table** — a Phase 4 task evaluation or ladder re-evaluation carries `### Criteria` before `### Issues found`, with one row per acceptance criterion of the task file. A row is `met` only when you verified it by the method on its line; otherwise `unmet` or `unverified`. The verdict is `PASS` or `PASS (with notes)` only when every row is `met`; each `unmet` row is cited by a blocking issue (`AC<n>`) and `unverified` rows block too. The table changes the verdict's shape, not the gate. Every other mode omits it.
++
+ Footprint is a self-estimate: count the files you opened and sum their sizes (round
+ to the nearest thousand chars); count shell commands you ran. Never omit the block —
+ write `files_read: 0 (~0 chars)` if you read nothing.
+diff -ruN a/templates/skills/task-criteria/SKILL.template.md b/templates/skills/task-criteria/SKILL.template.md
+--- a/templates/skills/task-criteria/SKILL.template.md	2026-11-13 09:36:39.824666146 -0500
++++ b/templates/skills/task-criteria/SKILL.template.md	2026-11-13 09:36:47.736683029 -0500
+@@ -74,6 +74,11 @@
+ ladder the same way as requirements. An unaddressed or unverified acceptance criterion
+ caps the verdict at NEEDS FIXES.
+ 
++Record the walk as the verdict's `### Criteria` table (evaluator **Verdict format**): one row per
++acceptance criterion with its result (met / unmet / unverified) and evidence. PASS and
++PASS (with notes) need every row `met`; an `unmet` row is cited by a blocking issue and
++an `unverified` row blocks.
++
+ ## Light evaluation rubric (`eval_depth: light`)
+ 
+ Only when the task file's `eval_depth` is `light` (orchestrator-set, stated reason —
