@@ -6,9 +6,9 @@ The kit's other tests check that templates and emitters produce the right files.
 
 Measuring outcomes is what makes it possible to judge a kit change on evidence. A change that tightens a gate, trims a prompt, or swaps a model tier can be run as a candidate kit and compared with the current kit and with no kit at all.
 
-Three candidate changes to the kit wait for this eval set so their effect can be measured (they are named K1, K2 and K4 in the coordination-patterns research brief): K1, changing the test-writer, which today reads the modules under test, by folding it into the implementer or pointing it at the task spec; K2, a right-sizing gate before `/feature` so small work does not pay the full orchestration cost; and K4, verifier additions, namely per-criterion structured verdicts and a stop after cycles with no new findings. Each would be built as a candidate kit and run as the third arm described below.
+Three candidate changes to the kit wait for this eval set so their effect can be measured (they are named K1, K2 and K4 in the coordination-patterns research brief): K1, changing the test-writer, which today reads the modules under test, by folding it into the implementer or pointing it at the task spec; K2, a right-sizing gate before `/feature` so small work does not pay the full orchestration cost; and K4, verifier additions, namely per-criterion structured verdicts and a stop after cycles with no new findings. Each would be built as a candidate kit and run as the third arm described below. Four such candidates now exist and are described under [Comparing candidate kits](#comparing-candidate-kits).
 
-The full contract (task format, grader interface, runner procedure, result rows, report format, stub CLI, self-test cases) is in [`tests/agent-kit/evals/README.md`](../../../tests/agent-kit/evals/README.md). This page summarizes it and does not copy it; when the two disagree, the README wins.
+The full contract (task format, grader interface, runner procedure, result rows, report format, stub CLI, self-test cases, candidate kits and `compare.sh`) is in [`tests/agent-kit/evals/README.md`](../../../tests/agent-kit/evals/README.md). This page summarizes it and does not copy it; when the two disagree, the README wins.
 
 ## The arms
 
@@ -88,13 +88,55 @@ With two or more labels it prints one line per further label in the form `vs <fi
 
 The report always ends with a caveat line, and the caveat is the reading rule: at 10 tasks × 3 runs, differences below roughly 25 percentage points are within noise (K3: even a 24-task, three-run design hides differences under about 10 points); there are no pass/fail thresholds. Read the cost and duration columns next to the pass rate, and treat a gap smaller than the noise band as no gap.
 
+## Comparing candidate kits
+
+A candidate is a proposed change to the kit, stored as a patch under `tests/agent-kit/evals/candidates/<name>/` (`patch.diff` and a `README.md` with the hypothesis, the change, the expected effect and a marker string). It is temporary: nothing under `skills/` changes while it is measured, and a later goal either adopts it into the kit with a version bump or deletes it. The four candidates are:
+
+- `k1-fold` (K1): the test task goes to `implementer`, with no `test-writer` spawn.
+- `k1-spec` (K1): `test-writer` writes black-box tests from the task spec and the public signatures, not from module bodies.
+- `k2-rightsize` (K2): a deterministic, logged size rubric before Phase 1 routes small requests to a lite path.
+- `k4-criteria` (K4): evaluator task verdicts carry one row per acceptance criterion (met, unmet or unverified, with evidence), and PASS needs every row met.
+
+`compare.sh` runs the stock kit and the candidates over the same tasks and prints one report with the stock kit first. Two modes cost nothing and never call the CLI:
+
+```bash
+# apply each patch, emit each kit, and check the marker and the size budget
+bash tests/agent-kit/evals/compare.sh --check
+
+# print the number of runs and the upper cost bound without running anything
+bash tests/agent-kit/evals/compare.sh --plan --runs 1 --with-baseline
+```
+
+A real comparison costs money, so the maintainer runs it in three stages, each larger than the last. Stop at any stage whose result looks wrong.
+
+1. **Smoke check.** Run one baseline run and one kit run on the trivial task, to see that the runner, the CLI and the grader work end to end. The bound is 2 runs at the default budget of 5 dollars, so 2 × 5 = 10 dollars.
+
+   ```bash
+   bash tests/agent-kit/evals/run.sh --arm baseline --tasks 01-trivial-fix --runs 1
+   bash tests/agent-kit/evals/run.sh --arm kit --tasks 01-trivial-fix --runs 1
+   ```
+
+2. **Screening.** One run of every task for the stock kit, all four candidates and the baseline. `--plan` with the same flags prints `plan: 6 arms × 10 tasks × 1 runs = 60 runs; upper cost bound $300.00`.
+
+   ```bash
+   bash tests/agent-kit/evals/compare.sh --runs 1 --with-baseline
+   ```
+
+3. **Contenders.** Three runs of every task for the stock kit and the candidates that looked promising. For example, `--plan` for the two below prints `plan: 3 arms × 10 tasks × 3 runs = 90 runs; upper cost bound $450.00`.
+
+   ```bash
+   bash tests/agent-kit/evals/compare.sh --cand k1-spec --cand k2-rightsize --runs 3
+   ```
+
+Reading the result works as in the previous section, with the stock kit as the first label. Each candidate gets a line `vs kit: <candidate> wins <w>, losses <l>, ties <t>`, counted per task. One run per task (stage 2) shows only which candidates are worth a closer look, since a single run can pass or fail by chance. Even at three runs the caveat applies: a gap smaller than the noise band is no gap. Judge `k2-rightsize` mainly on the cost and duration columns, because its goal is cheaper work at an unchanged pass rate; for the others, read pass rate first and cost and duration next to it.
+
 ## Adding a task
 
 1. Create `tests/agent-kit/evals/tasks/NN-slug/` with `task.md`, `seed/`, `solution/` and `grade/grade.sh`. The format is in the README's task format section: a metadata list (`id`, `category`, `size`), a `## Prompt` section given to both arms, and a `## Decisions` section of Phase 1 answers for the kit arm. Decisions answer process questions only and must not add a requirement the prompt lacks.
 2. Make the seed a Python 3 standard-library project whose own tests pass.
 3. Make `solution/` an overlay that turns the seed into a passing project (a `solution/.delete` file lists paths to remove).
 4. Write the grader to the interface `bash grade/grade.sh <project-dir>`: one `CHECK pass <name>` or `CHECK fail <name>` line per check, then `GRADE pass` or `GRADE fail`, exit 0, 1 or 2. Include the no-regression check, judge only seed-relative paths, and never rely on git history.
-5. Run `bash tests/agent-kit/evals/selftest.sh`. It grades every seed and expects a failure (a true negative), grades every solution and expects a pass (a true positive), and runs both arms against a stub CLI, all offline. A task whose seed already passes, or whose solution does not, fails the self-test.
+5. Run `bash tests/agent-kit/evals/selftest.sh`. It grades every seed and expects a failure (a true negative), grades every solution and expects a pass (a true positive), runs both arms against a stub CLI, and checks the candidate patches and `compare.sh`, all offline. A task whose seed already passes, or whose solution does not, fails the self-test.
 
 The self-test is in the default `run-all.sh` list and is skipped by `--quick`. It needs no network and no `claude` binary, and it ends with the summary line `PASS: <p> FAIL: <f> SKIP: <s>`.
 
@@ -107,8 +149,9 @@ The self-test is in the default `run-all.sh` list and is skipped by `--quick`. I
 
 ## Sources
 
-- [`tests/agent-kit/evals/README.md`](../../../tests/agent-kit/evals/README.md) — the frozen contract: layout, task format, grader interface, runner options and procedure, result rows, report, stub CLI, self-test
+- [`tests/agent-kit/evals/README.md`](../../../tests/agent-kit/evals/README.md) — the frozen contract: layout, task format, grader interface, runner options and procedure, result rows, report, stub CLI, self-test, candidates and `compare.sh`
 - [`tests/agent-kit/evals/run.sh`](../../../tests/agent-kit/evals/run.sh) — the runner and its options
 - [`tests/agent-kit/evals/report.sh`](../../../tests/agent-kit/evals/report.sh) — the report format and caveat line
+- [`tests/agent-kit/evals/compare.sh`](../../../tests/agent-kit/evals/compare.sh) — the candidate comparison, its `--check` and `--plan` modes
 - [`tests/agent-kit/evals/selftest.sh`](../../../tests/agent-kit/evals/selftest.sh) — the offline self-test
 - [`docs/agent-kit/guide/README.md`](README.md) — frozen conventions and document map

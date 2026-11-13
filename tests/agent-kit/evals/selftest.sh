@@ -302,6 +302,69 @@ mkdir -p "$ST/emptyreport"
 bash "$REPORT" "$ST/emptyreport" > "$ST/o/er.log" 2>&1
 expect_eq "report/empty-dir-exit-2" "$?" "2"
 
+# --- compare.sh and the candidates ----------------------------------------------------------
+COMPARE="$HERE/compare.sh"
+CANDS_DIR="$HERE/candidates"
+first_cand=""
+for d in "$CANDS_DIR"/*/; do
+  [ -d "$d" ] || continue
+  d="${d%/}"
+  [ -f "$d/patch.diff" ] || continue
+  [ -n "$first_cand" ] || first_cand="${d##*/}"
+  cn="${d##*/}"
+  cout="$(bash "$COMPARE" --check --cand "$cn" 2>&1)"; crc=$?
+  if [ "$crc" -eq 0 ] && printf '%s\n' "$cout" | grep -qx "check $cn: ok"; then
+    ok "candidates/$cn/check"
+  else
+    bad "candidates/$cn/check" "rc=$crc, output '$(printf '%s\n' "$cout" | tail -2 | tr '\n' ' ')'"
+  fi
+done
+
+bash "$COMPARE" --plan --cand no-such-cand > "$ST/o/c1.log" 2>&1
+expect_eq "compare/unknown-cand-exit-2" "$?" "2"
+bash "$COMPARE" --no-such-flag > "$ST/o/c2.log" 2>&1
+expect_eq "compare/unknown-flag-exit-2" "$?" "2"
+bash "$COMPARE" --plan --check > "$ST/o/c3.log" 2>&1
+expect_eq "compare/plan-check-exclusive-exit-2" "$?" "2"
+
+# hand-made candidates in a scratch EVAL_CANDIDATES_DIR
+SC="$ST/cands"
+mkdir -p "$SC/badpatch" "$SC/stockmark"
+printf -- '--- a/templates/no-such-file.md\n+++ b/templates/no-such-file.md\n@@ -1,1 +1,1 @@\n-nothing here\n+something else\n' > "$SC/badpatch/patch.diff"
+printf '## Marker\n\n`zzz-never-matches`\n' > "$SC/badpatch/README.md"
+cout="$(EVAL_CANDIDATES_DIR="$SC" bash "$COMPARE" --check --cand badpatch 2>&1)"; crc=$?
+if [ "$crc" -eq 3 ] && printf '%s\n' "$cout" | grep -q "badpatch"; then ok "compare/patch-not-applying-exit-3"; else bad "compare/patch-not-applying-exit-3" "rc=$crc, output '$(printf '%s\n' "$cout" | tail -1)'"; fi
+cout="$(EVAL_CANDIDATES_DIR="$SC" bash "$COMPARE" --plan --cand badpatch --tasks "$T01,t2,t3" --runs 2 --budget-usd 2.5 2>&1)"; crc=$?
+want_plan="$(printf 'plan: 2 arms × 3 tasks × 2 runs = 12 runs; upper cost bound $30.00\narms: kit badpatch')"
+if [ "$crc" -eq 0 ] && [ "$cout" = "$want_plan" ]; then ok "compare/plan-line"; else bad "compare/plan-line" "rc=$crc, got '$(printf '%s\n' "$cout" | tr '\n' '|')'"; fi
+if [ -n "$first_cand" ]; then
+  cp "$CANDS_DIR/$first_cand/patch.diff" "$SC/stockmark/patch.diff"
+  printf '## Marker\n\n`evaluator`\n' > "$SC/stockmark/README.md"
+  cout="$(EVAL_CANDIDATES_DIR="$SC" bash "$COMPARE" --check --cand stockmark 2>&1)"; crc=$?
+  if [ "$crc" -eq 1 ] && printf '%s\n' "$cout" | grep -q '^check stockmark: FAIL .*marker also present in the stock emit'; then ok "compare/marker-in-stock-fails"; else bad "compare/marker-in-stock-fails" "rc=$crc, output '$(printf '%s\n' "$cout" | tail -1)'"; fi
+
+  CO="$ST/o/cmp"
+  EVAL_CLI="bash $STUBCP" EVAL_TASKS_DIR="$TT" EVAL_STUB_MODE=noop EVAL_STUB_SOLUTION="$TT/$T01/solution" \
+    bash "$COMPARE" --cand "$first_cand" --tasks "$T01" --runs 1 --out "$CO" > "$ST/o/cmp.log" 2>&1
+  cmp_rc=$?
+  expect_eq "compare/stub-run-labels" "$cmp_rc/$(jf "$CO/kit/results.jsonl" label)/$(jf "$CO/$first_cand/results.jsonl" label)" "0/\"kit\"/\"$first_cand\""
+  if grep -qx "vs kit: $first_cand wins 0, losses 0, ties 1" "$ST/o/cmp.log"; then ok "compare/stub-run-vs-line"; else bad "compare/stub-run-vs-line" "no 'vs kit: $first_cand wins 0, losses 0, ties 1' line; tail '$(tail -3 "$ST/o/cmp.log" | tr '\n' '|')'"; fi
+
+  CB="$ST/o/cmpb"
+  EVAL_CLI="bash $STUBCP" EVAL_TASKS_DIR="$TT" EVAL_STUB_MODE=noop EVAL_STUB_SOLUTION="$TT/$T01/solution" \
+    bash "$COMPARE" --cand "$first_cand" --with-baseline --tasks "$T01" --runs 1 --out "$CB" > "$ST/o/cmpb.log" 2>&1
+  cb_rc=$?
+  if [ "$cb_rc" -eq 0 ] && [ "$(jf "$CB/baseline/results.jsonl" label)" = '"baseline"' ] && grep -qx 'vs kit: baseline wins 0, losses 0, ties 1' "$ST/o/cmpb.log"; then
+    ok "compare/with-baseline-row"
+  else
+    bad "compare/with-baseline-row" "rc=$cb_rc, baseline label $(jf "$CB/baseline/results.jsonl" label), tail '$(tail -3 "$ST/o/cmpb.log" | tr '\n' '|')'"
+  fi
+else
+  for c in compare/marker-in-stock-fails compare/stub-run-labels compare/stub-run-vs-line compare/with-baseline-row; do
+    skipcase "$c" "no candidate directory"
+  done
+fi
+
 # --- tree -----------------------------------------------------------------------------------
 off="$(tree_offenders "$HERE")"
 if [ -z "$off" ]; then ok "tree/no-skill-md-or-agent-folders"; else bad "tree/no-skill-md-or-agent-folders" "$(printf '%s\n' "$off" | head -3 | tr '\n' ' ')"; fi

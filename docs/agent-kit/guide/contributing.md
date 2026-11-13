@@ -308,7 +308,7 @@ Install and user-side usage topics belong in [getting-started.md](getting-starte
 | Behavioral tests | `bash tests/agent-kit/loop-harness/run.sh` |
 | Structural template guards | `bash tests/agent-kit/templates/escalation-ladder.sh` (and siblings) |
 | Guide suite integrity | `bash tests/agent-kit/docs-link-check.sh` |
-| Outcome eval self-test (graders against seed and solution, stub-CLI runs of both arms, report lines; offline, no claude binary; the eval set itself is described in [outcome-evals.md](outcome-evals.md)) | `bash tests/agent-kit/evals/selftest.sh` |
+| Outcome eval self-test (graders against seed and solution, stub-CLI runs of both arms, report lines, candidate patch checks, compare.sh; offline, no claude binary; the eval set itself is described in [outcome-evals.md](outcome-evals.md)) | `bash tests/agent-kit/evals/selftest.sh` |
 | Full kit suite | `bash tests/agent-kit/run-all.sh` |
 | Fast subset of the kit suite | `bash tests/agent-kit/run-all.sh --quick` |
 | Bash 3.2 Docker check | `docker pull bash:3.2`, then `AGENT_KIT_DOCKER=1 bash tests/agent-kit/templates/emit-portability.sh` |

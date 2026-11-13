@@ -1,0 +1,148 @@
+diff -ruN a/templates/agents/test-writer.md b/templates/agents/test-writer.md
+--- a/templates/agents/test-writer.md	2026-11-13 09:37:09.823737636 -0500
++++ b/templates/agents/test-writer.md	2026-11-13 09:43:36.224072706 -0500
+@@ -1,6 +1,6 @@
+ ---
+ name: test-writer
+-description: {{OPT_IN_AGENT_PREFIX}}Coverage-obsessed test writer for {{PROJECT_NAME}}. Launch for the dedicated test task of a goal, with the list of implemented modules/functions. Writes outcome-verifying tests with all external services mocked.
++description: {{OPT_IN_AGENT_PREFIX}}Coverage-obsessed test writer for {{PROJECT_NAME}}. Not spawned by the feature skill (the test task goes to `implementer`); launch only on an explicit request, with the list of modules/functions to test. Writes outcome-verifying tests with all external services mocked.
+ model: {{MODEL_LIGHT}}
+ effort: medium
+ ---
+diff -ruN a/templates/ORCHESTRATION.md b/templates/ORCHESTRATION.md
+--- a/templates/ORCHESTRATION.md	2026-11-13 09:37:09.822737633 -0500
++++ b/templates/ORCHESTRATION.md	2026-11-13 09:37:16.082755064 -0500
+@@ -81,7 +81,7 @@
+ ```mermaid
+ flowchart LR
+     Orch["Orchestrator\n(session running the feature skill)"]
+-    Workers["Workers\n(implementer / test-writer / evidence-collector)"]
++    Workers["Workers\n(implementer / evidence-collector)"]
+     Evals["Evaluators\n(evaluator / qa-evaluator)"]
+ 
+     Orch -->|"context package"| Workers
+@@ -110,7 +110,7 @@
+ 
+ Exception for re-checks: the evaluator is resumed with a delta prompt listing the applied fixes (Phase 4/5 deltas list the applied fixes plus every earlier required-fixes list); Phase 3 deltas quote newly written passages and Phase 3 attempt 3 is a fresh spawn per `reference/goal-revisions.md`. The implementer may be resumed for fix cycle 1 only (cycles 2–3
+ are fresh spawns) except a line-patch-only NEEDS FIXES verdict (every required fix
+-tagged `[line-patch]`) resumes the same executor (`implementer`/`test-writer`) in
++tagged `[line-patch]`) resumes the same executor (`implementer`) in
+ apply-verbatim mode on any cycle without model rotation, still counting toward the
+ 3-cycle limit and always re-evaluated. Fresh context remains the rule for first spawns.
+ 
+@@ -291,7 +291,7 @@
+ | `qa-evaluator` | Skeptical, user-perspective | Behavioral QA of user-facing surfaces | frontier, effort high |
+ | `evidence-collector` | Evidence-only gatherer | Smoke + optional visual QA index (no verdicts) | light, effort medium |
+ | `implementer` | Focused, checklist-driven | Implementation + fixes | light, effort medium |
+-| `test-writer` | Coverage-obsessed | Test creation, all external services mocked | light, effort medium |
++| `test-writer` | Coverage-obsessed | Test creation, all external services mocked (not spawned by the feature skill) | light, effort medium |
+ | `terminal` | Compact command runner | Runs only the Bash or PowerShell command in its spawn prompt, under the harness's normal approval and sandbox settings — returns only the result the caller asked for | fast, effort low |
+ | `diagnostician` | Analytical, diagnosis-only | Root-cause analysis after fix-cycle exhaustion — no code writes | frontier, effort xhigh |
+ <!-- ENDIF models_pinned -->
+@@ -302,7 +302,7 @@
+ | `qa-evaluator` | Skeptical, user-perspective | Behavioral QA of user-facing surfaces |
+ | `evidence-collector` | Evidence-only gatherer | Smoke + optional visual QA index (no verdicts) |
+ | `implementer` | Focused, checklist-driven | Implementation + fixes |
+-| `test-writer` | Coverage-obsessed | Test creation, all external services mocked |
++| `test-writer` | Coverage-obsessed | Test creation, all external services mocked (not spawned by the feature skill) |
+ | `terminal` | Compact command runner | Runs only the Bash or PowerShell command in its spawn prompt, under the harness's normal approval and sandbox settings — returns only the result the caller asked for |
+ | `diagnostician` | Analytical, diagnosis-only | Root-cause analysis after fix-cycle exhaustion — no code writes |
+ <!-- ENDIF !models_pinned -->
+@@ -470,7 +470,7 @@
+ only when read-only and no writer is in flight. The next group starts only after every
+ member reaches task-evaluation PASS or PASS (with notes).
+ 
+-- Step 1: Launch implementer (or test-writer for the test task) — the context
++- Step 1: Launch implementer (also for the test task; no test-writer spawn) — the context
+   package includes the task file (including its Acceptance Criteria); record the pre-dispatch baseline first (Repository safety item 2)
+ - Step 2: Receive completion report
+ - Step 3: Launch evaluator — guarding tests need a regression proof (test-ladder § Regression proof) and the evaluator re-runs at least one.
+@@ -481,7 +481,7 @@
+   escalation; `escalate` (default) → escalate to the user with the ladder offered as
+   option 1; REJECT → escalate to the user; `criteria-defect` routes at detection (winning over line-patch-only resume) per
+   `reference/continuation-ladder.md`. A line-patch-only verdict (all fixes
+-  `[line-patch]`) resumes the same executor (`implementer`/`test-writer`) in apply-verbatim
++  `[line-patch]`) resumes the same executor (`implementer`) in apply-verbatim
+   mode on any cycle (fresh spawn on the same model when the harness cannot resume), skips
+   rotation, counts
+   toward the limit, and is always re-evaluated; any `[structural]` fix uses the normal
+@@ -613,7 +613,7 @@
+                 │
+                 ▼ (implementation complete)
+                 │
+-            Tests (test-writer; ladder rungs 1–2 only)
++            Tests (implementer; ladder rungs 1–2 only)
+                 │
+                 ▼ (new + impacted tests pass)
+                 │
+diff -ruN a/templates/skills/feature/reference/fix-cycles.md b/templates/skills/feature/reference/fix-cycles.md
+--- a/templates/skills/feature/reference/fix-cycles.md	2026-11-13 09:37:09.824737638 -0500
++++ b/templates/skills/feature/reference/fix-cycles.md	2026-11-13 09:37:16.082755064 -0500
+@@ -17,7 +17,7 @@
+ 
+ ## Line-patch-only
+ 
+-**Line-patch-only** (all `[line-patch]`): resume same executor (`implementer`/`test-writer`) apply-verbatim any cycle (fresh spawn on same model if harness can't resume), no rotation, counts toward 3, re-evaluated; any `[structural]` → normal fix with patches verbatim. `NOT APPLIED` → re-evaluate; next cycle normal.
++**Line-patch-only** (all `[line-patch]`): resume same executor (`implementer`) apply-verbatim any cycle (fresh spawn on same model if harness can't resume), no rotation, counts toward 3, re-evaluated; any `[structural]` → normal fix with patches verbatim. `NOT APPLIED` → re-evaluate; next cycle normal.
+ 
+ ## Criteria-defect and bypass
+ 
+diff -ruN a/templates/skills/feature/SKILL.template.md b/templates/skills/feature/SKILL.template.md
+--- a/templates/skills/feature/SKILL.template.md	2026-11-13 09:37:09.823737636 -0500
++++ b/templates/skills/feature/SKILL.template.md	2026-11-13 09:37:16.080755059 -0500
+@@ -9,7 +9,7 @@
+ # Feature (Feature Orchestrator)
+ 
+ You are the **orchestrator**. You coordinate; you never execute. Implementation goes
+-to `implementer`/`test-writer`; verification to `evaluator`. Read
++to `implementer`; verification to `evaluator`. Read
+ `{{IDE_DIR}}/ORCHESTRATION.md` by **current-phase section**, never whole.
+ 
+ **Iron rules:**
+@@ -29,7 +29,7 @@
+ Spawn `terminal` for **Bash or PowerShell commands** whose raw output should not
+ land here — pass the exact command, shell (`bash` or `pwsh`), and the result needed;
+ it returns **only** that result. Never run `{{FULL_TEST_COMMAND}}` yourself — spawn
+-`terminal` for rung 3. Rungs 1–2 stay with `implementer`/`test-writer` when output is
++`terminal` for rung 3. Rungs 1–2 stay with `implementer` when output is
+ small; they may spawn `terminal` for noisy commands where the harness allows. Exception: `_kit/log-spawn.*` is run
+ inline by the orchestrator (single-line output), never via `terminal`.
+ 
+@@ -97,7 +97,7 @@
+ 
+ For each ready group (`reference/ready-groups.md`; `parallel: false` → one task at a time), in dependency order:
+ 
+-1. Launch `implementer` (`test-writer` for the test task) with a full context package.
++1. Launch `implementer` (also for the test task; no `test-writer` spawn) with a full context package.
+ 2. **Silent-success check**: empty/missing report ⇒ verify artifacts: present ⇒ done
+    ("report lost, files verified"); absent ⇒ failed, respawn once. Never re-run when artifacts exist.
+ 3. Launch `evaluator` with task file, report, matching rule files, `{{IDE_DIR}}/skills/task-criteria/SKILL.md`; if read-only (evaluator.md `readonly` or refused shell), first spawn `terminal` per acceptance-criterion command and, when the task has guarding tests, one regression proof, attach output.
+diff -ruN a/templates/skills/feature/templates/task.md b/templates/skills/feature/templates/task.md
+--- a/templates/skills/feature/templates/task.md	2026-11-13 09:37:09.824737638 -0500
++++ b/templates/skills/feature/templates/task.md	2026-11-13 09:43:36.224072706 -0500
+@@ -21,7 +21,7 @@
+                      #  numerics parse as YAML integers and break id comparisons;
+                      #  corrective tasks use NN<letter> ids (e.g. 09a-fix-api)]
+   - "NN-name"
+-owner: [implementer|test-writer]     # [one writer for every path above]
++owner: implementer                   # [one writer for every path above; the test task too]
+ rewrite_semantics: [whole-file|targeted-insertion]
+ # [whole-file is the default — small single-owner source files: the owner rewrites
+ #  them wholesale and never assumes another agent will reconcile the result.
+diff -ruN a/templates/skills/goal-criteria/SKILL.template.md b/templates/skills/goal-criteria/SKILL.template.md
+--- a/templates/skills/goal-criteria/SKILL.template.md	2026-11-13 09:37:09.824737638 -0500
++++ b/templates/skills/goal-criteria/SKILL.template.md	2026-11-13 09:43:36.224072706 -0500
+@@ -40,10 +40,10 @@
+    task consumes; rewrite semantics stated per owned file (`whole-file` is the default;
+    `targeted-insertion` for large shared documents a task extends rather than rewrites).
+    A block still carrying the template's bracket-literal placeholder values (`[path]`,
+-   `[NN-name]`, `[implementer|test-writer]`) is a pristine block, and a pristine block
++   `[NN-name]`) is a pristine block, and a pristine block
+    counts as UNDECLARED rather than declared — the same fail-closed missing-block remedy
+-   applies (author real values, re-evaluate). `owner` must be one of `implementer` /
+-   `test-writer`; the evaluator additionally cross-checks it against the agent the
++   applies (author real values, re-evaluate). `owner` must be `implementer` (the test task
++   too); the evaluator additionally cross-checks it against the agent the
+    orchestration log shows was dispatched for that task.
+ 2. **Coverage** — the union of all tasks' `writes` equals the set of files the goal
+    intends to change: no orphan edits (a planned change no task owns), no owned path

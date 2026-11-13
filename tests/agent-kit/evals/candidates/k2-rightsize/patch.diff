@@ -1,0 +1,142 @@
+diff -ruN a/templates/ORCHESTRATION.md b/templates/ORCHESTRATION.md
+--- a/templates/ORCHESTRATION.md	2026-11-13 09:42:20.334448666 -0500
++++ b/templates/ORCHESTRATION.md	2026-11-13 09:42:20.428449399 -0500
+@@ -460,7 +460,7 @@
+ verbatim; attempt 3 is a fresh full evaluation on the arbiter model, pinned in that reference).
+ After a Phase 3 PASS, plan amendments are **material** (full pre-flight and Phase 3
+ re-run, cycle reset) or **additive** / **criterion correction** (each: logged rationale, pre-flight checks 1, 2 and 5, then targeted evaluation);
+-renumbering requires `xref-audit.md`. INVARIANT: The ONLY exit to Phase 4 is a PASS verdict from the evaluator subagent.
++renumbering requires `xref-audit.md`. INVARIANT: The ONLY exit to Phase 4 is a PASS verdict from the evaluator subagent (lite route: Phase 3 is skipped; see the feature skill's `reference/size-check.md`).
+ Revisions MUST be re-evaluated.
+ 
+ **Phase 4 — Task execution (mandatory re-evaluate after every fix).** For each ready
+@@ -533,7 +533,7 @@
+ A Quality Checks failure is narrowed first, then classified: flaky (passes on one rerun), local-edits (in or caused by a pre-existing dirty path), pre-existing (also fails on the merge base) or introduced (everything else); the handling per class is under **Quality Checks**.
+ When Phase 5 ends, the open `follow-ups.md` rows go into the PR body's `## Backlog (not fixed here)` (`ship-pr` owns the format), or into the Phase 5 final report when Phase 7 is skipped.
+ INVARIANT: The ONLY exit to Quality Checks is an APPROVED verdict from the audit
+-subagent. Remediations MUST be re-audited.
++subagent (lite route: no separate audit; see the feature skill's `reference/size-check.md`). Remediations MUST be re-audited.
+ 
+ **Phase 6 — Align docs (evaluator-gated doc sync, optional).** Default is
+ `align_docs: false`; enabled by the Phase 1 answer. After Phase 5 Quality
+@@ -1135,7 +1135,7 @@
+ ├── skills/
+ │   ├── feature/       # Feature coordination
+ │   │   ├── SKILL.md
+-│   │   ├── reference/{continuation-ladder.md,preflight.md,ready-groups.md,degraded-mode.md,memory-protocol.md,progress-line.md,memory-capture.md,resume.md,goal-revisions.md,corrective-tasks.md,fix-cycles.md}
++│   │   ├── reference/{continuation-ladder.md,preflight.md,ready-groups.md,degraded-mode.md,memory-protocol.md,progress-line.md,memory-capture.md,resume.md,goal-revisions.md,size-check.md,corrective-tasks.md,fix-cycles.md}
+ │   │   └── templates/{goal.md,task.md,progress.md}
+ │   │
+ │   ├── memory-capture/SKILL.md       # Session transcript distillation
+@@ -1197,7 +1197,7 @@
+ ├── skills/
+ │   ├── feature/       # Feature coordination
+ │   │   ├── SKILL.md
+-│   │   ├── reference/{continuation-ladder.md,preflight.md,ready-groups.md,degraded-mode.md,memory-protocol.md,progress-line.md,memory-capture.md,resume.md,goal-revisions.md,corrective-tasks.md,fix-cycles.md}
++│   │   ├── reference/{continuation-ladder.md,preflight.md,ready-groups.md,degraded-mode.md,memory-protocol.md,progress-line.md,memory-capture.md,resume.md,goal-revisions.md,size-check.md,corrective-tasks.md,fix-cycles.md}
+ │   │   └── templates/{goal.md,task.md,progress.md}
+ │   │
+ │   ├── memory-capture/SKILL.md       # Session transcript distillation
+@@ -1254,7 +1254,7 @@
+ ├── skills/
+ │   ├── feature/       # Feature coordination
+ │   │   ├── SKILL.md
+-│   │   ├── reference/{continuation-ladder.md,preflight.md,ready-groups.md,degraded-mode.md,memory-protocol.md,progress-line.md,memory-capture.md,resume.md,goal-revisions.md,corrective-tasks.md,fix-cycles.md}
++│   │   ├── reference/{continuation-ladder.md,preflight.md,ready-groups.md,degraded-mode.md,memory-protocol.md,progress-line.md,memory-capture.md,resume.md,goal-revisions.md,size-check.md,corrective-tasks.md,fix-cycles.md}
+ │   │   └── templates/{goal.md,task.md,progress.md}
+ │   │
+ │   ├── memory-capture/SKILL.md       # Session transcript distillation
+@@ -1311,7 +1311,7 @@
+ ├── skills/
+ │   ├── feature/       # Feature coordination
+ │   │   ├── SKILL.md
+-│   │   ├── reference/{continuation-ladder.md,preflight.md,ready-groups.md,degraded-mode.md,memory-protocol.md,progress-line.md,memory-capture.md,resume.md,goal-revisions.md,corrective-tasks.md,fix-cycles.md}
++│   │   ├── reference/{continuation-ladder.md,preflight.md,ready-groups.md,degraded-mode.md,memory-protocol.md,progress-line.md,memory-capture.md,resume.md,goal-revisions.md,size-check.md,corrective-tasks.md,fix-cycles.md}
+ │   │   └── templates/{goal.md,task.md,progress.md}
+ │   │
+ │   ├── memory-capture/SKILL.md       # Session transcript distillation
+diff -ruN a/templates/skills/feature/reference/preflight.md b/templates/skills/feature/reference/preflight.md
+--- a/templates/skills/feature/reference/preflight.md	2026-11-13 09:42:20.335448674 -0500
++++ b/templates/skills/feature/reference/preflight.md	2026-11-13 09:42:20.427449391 -0500
+@@ -1,7 +1,7 @@
+-# Pre-flight (before Phase 3 evaluation attempt 1)
++# Pre-flight (before Phase 3 evaluation attempt 1; lite route: before Phase 4)
+ 
+ The orchestrator runs this checklist **once** after Phase 2 goal and task files exist
+-and **before Phase 3 evaluation attempt 1**. Never run it between evaluation attempts.
++and **before Phase 3 evaluation attempt 1** (lite route: before Phase 4). Never run it between evaluation attempts.
+ Pre-flight is **read-only** toward product code: it reads goal/task files and the workspace.
+ It may write goal artifacts under `_memory/work/goals/<goal>/` (`criteria-evidence.md`)
+ and scratch samples outside the repo; other changes stay in goal/task
+diff -ruN a/templates/skills/feature/reference/progress-line.md b/templates/skills/feature/reference/progress-line.md
+--- a/templates/skills/feature/reference/progress-line.md	2026-11-13 09:42:20.335448674 -0500
++++ b/templates/skills/feature/reference/progress-line.md	2026-11-13 09:42:20.426449383 -0500
+@@ -10,7 +10,7 @@
+ 
+ ## Feature metric v1
+ 
+-There is one step per enabled phase — Phases 1–5 always, Phase 6 when `goal.md` `phases:` has `align_docs: true`, and Phase 7 when `pull_request: true` — plus one step per Phase 4 task file. Corrective tasks count too; adding a task raises the total. Phases skipped per `goal.md` are not steps.
++There is one step per enabled phase — Phases 1–5 always, Phase 6 when `goal.md` `phases:` has `align_docs: true`, and Phase 7 when `pull_request: true` — plus one step per Phase 4 task file. Corrective tasks count too; adding a task raises the total. Phases skipped per `goal.md` are not steps; `route: lite` skips Phases 3 and 5, so a lite goal counts Phases 1, 2, 4 and its task, plus Phases 6 and 7 when enabled, and Phase 2 is done when its task file is written.
+ 
+ A step is done at these points:
+ 
+diff -ruN a/templates/skills/feature/reference/size-check.md b/templates/skills/feature/reference/size-check.md
+--- a/templates/skills/feature/reference/size-check.md	1969-12-31 19:00:00.000000000 -0500
++++ b/templates/skills/feature/reference/size-check.md	2026-11-13 09:42:20.432449430 -0500
+@@ -0,0 +1,33 @@
++# Size check (before Phase 1 questions)
++
++Run once per goal, before the Phase 1 MCQs, from the request and the files it names. Never block on it; when unsure, answer `no` and route `full`.
++
++## Rubric
++
++The route is `lite` only when all four hold:
++
++- (a) At most 3 files are expected to change.
++- (b) No new or changed shared interface: exported signature, schema, CLI flag, config key or file format consumed by other modules.
++- (c) No new dependency.
++- (d) No destructive, security or infrastructure surface.
++
++Log the four answers and the route in one line; the line is their only record:
++
++`_kit/log-spawn.sh note --goal [goal] --text "size-check: a=<yes|no> b=<yes|no> c=<yes|no> d=<yes|no> route=<lite|full>"`
++
++Run it once `_memory/work/goals/<goal>/` exists; until then keep the line and log it with the Phase 2 `note`s. `goal.md` records only the route, as a `route: full|lite` key in the `phases:` block.
++
++## Routes
++
++**full** — the phases as written in `SKILL.md`.
++
++**lite** — for a `route: lite` goal this file replaces the Phase 3 gate and the Phase 5 audit. Phase 1 confirmation is as in `SKILL.md`, then:
++
++- Phase 2 writes one task file with `## Acceptance Criteria` and no separate final test task.
++- Pre-flight (`reference/preflight.md`, including trace-lint) runs after Phase 2 and before Phase 4, as on the full route otherwise.
++- No Phase 3 goal evaluation.
++- Phase 4 runs one `implementer` and one `evaluator`. The task's Phase 4 PASS satisfies the iron rule that no phase advances without evaluator approval. Fix cycles, their cap and the continuation ladder apply as on the full route.
++- No separate Phase 5 audit. The task's Phase 4 PASS plus the Quality Checks (rung 3, via spawned `terminal`) is the goal's final approval: run the Quality Checks and, when enabled, the kit-file gate and qa; log `Phase 5 APPROVED (lite route, no separate audit)`; then Archive as in Phase 5.
++- Then read `phases:` for Phase 6 and Phase 7 as in `SKILL.md`.
++
++A lite goal that grows past the rubric during work (a fourth file, a shared interface, a new dependency, a destructive, security or infrastructure surface) switches to `full`: set `route: full` in `goal.md`, log the switch with `_kit/log-spawn.sh note`, and continue with the full phases from the current point (Phase 3 evaluation of the goal and tasks, then Phase 5 audit).
+diff -ruN a/templates/skills/feature/SKILL.template.md b/templates/skills/feature/SKILL.template.md
+--- a/templates/skills/feature/SKILL.template.md	2026-11-13 09:42:20.335448674 -0500
++++ b/templates/skills/feature/SKILL.template.md	2026-11-13 09:42:20.426449383 -0500
+@@ -43,7 +43,7 @@
+ 
+ ## Phase 1 — Alignment (no files)
+ 
+-Ask 5–20 MCQs: problem, layer ({{EXECUTION_LAYERS}}), surfaces, auth, errors, interface,
++Run `reference/size-check.md`; ask 5–20 MCQs: problem, layer ({{EXECUTION_LAYERS}}), surfaces, auth, errors, interface,
+ patterns, priority; Phase 6 default **no** (yes when user-facing docs change), Phase 7 default yes. "My
+ Understanding" + **wait for explicit confirmation** before Phase 2. Record Phase 6/7, `ladder:` (default `escalate`), `qa:` in
+ `goal.md` `phases:`.
+diff -ruN a/templates/skills/feature/templates/goal.md b/templates/skills/feature/templates/goal.md
+--- a/templates/skills/feature/templates/goal.md	2026-11-13 09:42:20.336448682 -0500
++++ b/templates/skills/feature/templates/goal.md	2026-11-13 09:42:20.426449383 -0500
+@@ -33,6 +33,7 @@
+   parallel: true|false       # default true; false runs Phase 4 one task at a time
+   qa: run|skip               # default skip; run → evidence-collector + qa-evaluator after Phase 5 approval
+   trace: planner|blind       # planner (default): the planner-written trace only; blind also runs the consumer-trace evaluator mode before Phase 3, for goals whose surfaces are destructive, security or infra. An absent trace key means planner, so existing goals and loop-created goals behave as today.
++  route: full|lite           # recorded by `reference/size-check.md`; default full; lite skips Phase 3 goal evaluation and the separate Phase 5 audit
+ ```
+ 
+ ## Out of Scope
