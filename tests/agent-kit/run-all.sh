@@ -273,6 +273,7 @@ _build_default_suites() {
     tests/agent-kit/docs-link-check.sh
     tests/agent-kit/research-docs-check.sh
     tests/agent-kit/lib/selftest.sh
+    tests/agent-kit/evals/selftest.sh
   )
   local t
   for t in tests/agent-kit/templates/*.sh; do

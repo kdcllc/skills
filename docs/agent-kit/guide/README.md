@@ -2,7 +2,7 @@
 
 **Who this is for / What you'll learn:** Kit **users** installing the orchestrator/worker/evaluator system into their projects, and kit **contributors** maintaining the canonical templates under `skills/agent-kit/`. Read this index first for orientation, then the task-oriented guides below for how to install, choose a workflow, and operate the system; follow the deep references when you need curated research briefs and maintainer hubs.
 
-**Reading order:** orientation (this document) → [architecture.md](architecture.md) for the structural map (emit pipeline, folder ownership, lifecycles) → task-oriented guides ([getting-started.md](getting-started.md), [decision-guide.md](decision-guide.md), workflow docs) → [memory.md](memory.md) when you need recall, archive, or search → reference depth ([agents-and-models.md](agents-and-models.md), [evaluation-system.md](evaluation-system.md), [contributing.md](contributing.md)).
+**Reading order:** orientation (this document) → [architecture.md](architecture.md) for the structural map (emit pipeline, folder ownership, lifecycles) → task-oriented guides ([getting-started.md](getting-started.md), [decision-guide.md](decision-guide.md), workflow docs) → [memory.md](memory.md) when you need recall, archive, or search → reference depth ([agents-and-models.md](agents-and-models.md), [evaluation-system.md](evaluation-system.md), [outcome-evals.md](outcome-evals.md), [contributing.md](contributing.md)).
 
 ## System map
 
@@ -56,6 +56,7 @@ flowchart TD
 | [memory.md](memory.md) | The `_memory/` store, `prune`, recall/archive per workflow, search CLI, redaction, `check` gate, transcript capture, DATA fence, loop proposals and integrator step 3b, pointers | Record schema and CLI flags ([skills/agent-kit/templates/memory/README.md](../../../skills/agent-kit/templates/memory/README.md)); normative protocol ([memory-protocol.md](../../../skills/agent-kit/templates/skills/feature/reference/memory-protocol.md)) |
 | [agents-and-models.md](agents-and-models.md) | The seven subagent roles and boundaries, model tiers, `models.map.md` anatomy, fallback chains, harness caveats | Evaluation criteria content ([evaluation-system.md](evaluation-system.md)) |
 | [evaluation-system.md](evaluation-system.md) | Verdict vocabulary, confidence ladder, anti-fabrication rules, devil's advocate, acceptance criteria and the consumer trace at planning (Phase 3 validation), `eval_depth`, staged test ladder, orchestration log as audit trail, failure-class taxonomy, arbitration mode | Phase-by-phase orchestration ([feature-workflow.md](feature-workflow.md)) |
+| [outcome-evals.md](outcome-evals.md) | The outcome eval set under `tests/agent-kit/evals/`: what it measures, the baseline, kit and candidate-kit arms, the 10 categories, running it and reading the report, adding a task, limits | The runner contract ([tests/agent-kit/evals/README.md](../../../tests/agent-kit/evals/README.md)); the kit's own gates ([evaluation-system.md](evaluation-system.md)) |
 | [contributing.md](contributing.md) | Repo anatomy (canonical vs instance vs generated), the self-install dogfood loop, editing templates/emitters, harness matrix, `metadata.version` + manifest + upgrades, running the test harness | Usage topics |
 
 ## Conventions
@@ -74,7 +75,7 @@ Every document in this suite follows these rules.
 - Cross-document links **inside the suite** are relative and file-level only — no `#anchor` fragments across files (same-file anchors are allowed).
 - **All link targets** are written as paths resolved from the **linking file's directory**. From `docs/agent-kit/guide/`, `../` reaches `docs/agent-kit/`, `../../` reaches `docs/`, and `../../../` reaches the repo root (for example [`../../../skills/agent-kit/SKILL.md`](../../../skills/agent-kit/SKILL.md)). Never use GitHub-root-style paths without the `../` prefix.
 - Targets **outside** the suite must resolve on disk at writing time.
-- Links to the ten frozen sibling filenames in the document map above are valid once they match this map. Whole-suite resolve-on-disk is verified only at the end by the suite checker (`tests/agent-kit/docs-link-check.sh`), never during a parallel sibling task's evaluation.
+- Links to the eleven frozen sibling filenames in the document map above are valid once they match this map. Whole-suite resolve-on-disk is verified only at the end by the suite checker (`tests/agent-kit/docs-link-check.sh`), never during a parallel sibling task's evaluation.
 
 ### (c) Opener block
 
