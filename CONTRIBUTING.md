@@ -10,9 +10,9 @@ Read [AGENTS.md](AGENTS.md) first. It has the layout and frontmatter rules that 
    bash scripts/new-skill.sh my-new-skill
    ```
 
-   This creates `skills/my-new-skill/SKILL.md` from [templates/SKILL.md.tmpl](templates/SKILL.md.tmpl) with `metadata.version: "0.1.0"`, and `skills/my-new-skill/CHANGELOG.md` from [templates/CHANGELOG.md.tmpl](templates/CHANGELOG.md.tmpl) with a matching `0.1.0` entry. It also prints a README catalog row.
+   This creates `skills/my-new-skill/SKILL.md` from [templates/SKILL.md.tmpl](templates/SKILL.md.tmpl) with `metadata.version: "0.1.0"`, and `skills/my-new-skill/CHANGELOG.md` from [templates/CHANGELOG.md.tmpl](templates/CHANGELOG.md.tmpl) with a matching `0.1.0` entry, and `skills/my-new-skill/README.md` from [templates/README.md.tmpl](templates/README.md.tmpl) with the install commands filled in. It also prints a README catalog row.
 
-2. Write the `description` (what it does and when to use it, at most 1024 characters) and the instructions. Keep `SKILL.md` under 500 lines; move long material into `references/`, executable helpers into `scripts/`, and templates or static files into `assets/`.
+2. Write the `description` (what it does and when to use it, at most 1024 characters) and the instructions, and replace the TODOs in the skill's `README.md` (what it does, example prompts, requirements). Keep its `## Install` section; the validator requires it. Keep `SKILL.md` under 500 lines; move long material into `references/`, executable helpers into `scripts/`, and templates or static files into `assets/`.
 3. Paste the printed row into the Skills table in [README.md](README.md).
 4. Optionally add the skill to a domain bundle (see below) and to a grouping in [skills.sh.json](skills.sh.json).
 5. Validate:

@@ -4,6 +4,12 @@ All notable changes to the `skill-versioning` skill. Format: [Keep a Changelog](
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-11-13
+
+### Fixed
+
+- Install steps were hard to find. The new `README.md` in the skill folder shows what the skill does, how to install it (skills.sh, GitHub CLI, Claude Code and Copilot CLI plugins, pinned releases), example prompts, and requirements. The skill's behavior is unchanged.
+
 ## [0.1.2] - 2026-11-12
 
 ### Fixed

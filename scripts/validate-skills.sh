@@ -3,7 +3,7 @@ set -euo pipefail
 
 # Usage: scripts/validate-skills.sh [repo-root]
 # Checks repo layout, SKILL.md frontmatter, per-skill versions and changelogs,
-# the README catalog, and the Claude Code / Cursor marketplace manifests, then
+# per-skill README install sections, the README catalog, and the Claude Code / Cursor marketplace manifests, then
 # runs every skill-specific guard in scripts/checks/. Requires bash and jq.
 
 ROOT="${1:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
@@ -258,7 +258,17 @@ check_skill() {
   fi
 
   if [[ ! -f "${ROOT}/README.md" ]] || ! grep -qF "skills/${dir_name}/" "${ROOT}/README.md"; then
-    error "${rel}: missing from the Skills table in README.md (link to skills/${dir_name}/SKILL.md)"
+    error "${rel}: missing from the Skills table in README.md (link to skills/${dir_name}/)"
+  fi
+
+  local skill_readme="${dir}/README.md"
+  if [[ ! -f "$skill_readme" ]]; then
+    error "${rel}/: missing README.md (start from templates/README.md.tmpl)"
+  elif ! awk -v cmd="npx skills add kdcllc/skills --skill ${dir_name}" '
+      /^## / { in_install = ($0 ~ /^## Install/) }
+      in_install && index($0, cmd) { found = 1 }
+      END { exit !found }' "$skill_readme"; then
+    error "${rel}/README.md: needs an '## Install' section containing 'npx skills add kdcllc/skills --skill ${dir_name}'"
   fi
 }
 

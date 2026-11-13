@@ -4,7 +4,7 @@ description: "Normalize or equalize MP3 loudness with mp3gain (lossless, no re-e
 license: MIT
 compatibility: GitHub Copilot CLI extension; Node 20+; mp3gain
 metadata:
-  version: "1.0.0"
+  version: "1.0.1"
 ---
 
 # MP3 Normalize (`mp3-normalize`)

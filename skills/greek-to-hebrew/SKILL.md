@@ -3,7 +3,7 @@ name: greek-to-hebrew
 description: "Trace a New Testament Greek word to possible Old Testament Hebrew equivalents through the Septuagint (LXX). Use when studying a NT word, Strong's number, Greek-to-Hebrew bridge, LXX occurrence, first mention, Bible word study, or NT quotation/allusion of the OT."
 license: CC-BY-SA-4.0
 metadata:
-  version: "1.0.0"
+  version: "1.0.1"
   argument-hint: "NT reference and target English or Greek word, e.g. Ephesians 2:8 grace"
 ---
 
