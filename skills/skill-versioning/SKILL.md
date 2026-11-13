@@ -10,7 +10,7 @@ description: >-
   a skill, tag a skill release, or check which skills need a release.
 license: MIT
 metadata:
-  version: "0.1.2"
+  version: "0.1.3"
 ---
 
 # Skill Versioning

@@ -4,6 +4,12 @@ All notable changes to the `agent-composer` skill. Format: [Keep a Changelog](ht
 
 ## [Unreleased]
 
+## [0.3.1] - 2026-11-13
+
+### Fixed
+
+- Install steps were hard to find. The new `README.md` in the skill folder shows what the skill does, how to install it (skills.sh, GitHub CLI, Claude Code and Copilot CLI plugins, pinned releases), example prompts, and requirements. The skill's behavior is unchanged.
+
 ## [0.3.0] - 2026-11-12
 
 ### Added

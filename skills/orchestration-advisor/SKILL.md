@@ -3,7 +3,7 @@ name: orchestration-advisor
 description: "Inspect a project and its workload and either recommend an agent orchestration shape (a single agent plus skills by default, or generator-verifier, orchestrator-subagent, agent teams, message bus, shared state) or audit an existing orchestration system, hooks and other enforcers included, and produce a current-vs-recommended comparison. Read-only: it counts harness folders, agents, skills, hooks, rules, MCP servers, tests and CI, asks six workload questions, and reports evidence, a cost note, and a next step. Use when you ask which orchestration pattern fits, do I need multiple agents, should I add subagents, agent-kit or agent-composer, or audit my agents, orchestrators or hooks for overlap."
 license: MIT
 metadata:
-  version: "0.3.0"
+  version: "0.3.1"
 ---
 
 # Orchestration Advisor

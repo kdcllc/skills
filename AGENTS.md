@@ -4,7 +4,7 @@ This repository is **kdcllc/skills**, a multi-skill pack distributed through [sk
 
 ## Layout rules
 
-- Each skill lives in exactly one folder: `skills/<name>/SKILL.md`, with a `CHANGELOG.md` beside it. Optional subfolders are `scripts/`, `references/`, and `assets/`.
+- Each skill lives in exactly one folder: `skills/<name>/SKILL.md`, with a `CHANGELOG.md` and a user-facing `README.md` beside it. The README's `## Install` section must contain `npx skills add kdcllc/skills --skill <name>` (the validator checks it); start from `templates/README.md.tmpl`. Optional subfolders are `scripts/`, `references/`, and `assets/`.
 - Never put a `SKILL.md` at the repository root. The Skills CLI treats it as a single-skill repo and stops looking.
 - Never commit `.agents/skills/`, `.claude/skills/`, `.cursor/skills/`, `.github/skills/`, or similar agent skill folders at the root. The Skills CLI scans those too and would publish them. The gitignored agent-kit dogfood instance (see below) is the only thing that may exist there.
 - Don't add new top-level folders containing `SKILL.md` files. `templates/SKILL.md.tmpl` is deliberately not named `SKILL.md`.
@@ -38,7 +38,7 @@ This repository is **kdcllc/skills**, a multi-skill pack distributed through [sk
 
 ## When adding, renaming, or removing a skill
 
-1. Scaffold with `bash scripts/new-skill.sh <name>` (don't hand-copy the template). It creates both `SKILL.md` and `CHANGELOG.md`.
+1. Scaffold with `bash scripts/new-skill.sh <name>` (don't hand-copy the template). It creates `SKILL.md`, `CHANGELOG.md`, and `README.md`.
 2. Update the Skills table in `README.md`.
 3. If the skill belongs to a domain bundle in `.claude-plugin/marketplace.json` (for example `kdcllc-azure`), add its `./skills/<name>` path there. The `kdcllc-skills` bundle in both marketplaces picks up every skill automatically.
 4. Add the skill to a grouping in `skills.sh.json`.

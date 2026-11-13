@@ -5,6 +5,19 @@
 
 A single home for the [Agent Skills](https://agentskills.io) published by [King David Consulting LLC](https://kingdavidconsulting.com). Every skill lives in `skills/<name>/` and follows the open `SKILL.md` format, so the same folder installs into Claude Code, Cursor, GitHub Copilot, Codex, Windsurf, Gemini CLI, and any other agent that supports skills.
 
+## Quick start
+
+1. Pick a skill from the [Skills](#skills) table below.
+2. Run its install command in your project folder, for example:
+
+   ```bash
+   npx skills add kdcllc/skills --skill agent-kit
+   ```
+
+3. Ask your agent for the task in plain words, or name the skill ("Use skill agent-kit …").
+
+Each skill name in the table opens that skill's README, which lists every way to install it, example prompts, and what it needs on your machine. The sections below cover installing the whole pack per agent.
+
 ## Install
 
 ### Any agent (skills.sh)
@@ -59,20 +72,20 @@ Open **Customize** in the sidebar, choose **From GitHub Repository**, paste `htt
 
 ## Skills
 
-| Skill | Category | Use when | Install |
+| Skill (opens its README) | Category | Use when | Install |
 | --- | --- | --- | --- |
-| [terraform-azure](skills/terraform-azure/SKILL.md) | Azure Terraform | Operator menu for a consumer Azure Terraform repo: new module, domain stack, pipeline, remote-state bootstrap, Azure OIDC, or module upgrade. Azure CLI only; stops at `terraform plan`. | `npx skills add kdcllc/skills --skill terraform-azure` |
-| [terraform-azure-modules](skills/terraform-azure-modules/SKILL.md) | Azure Terraform | Create or update one reusable module under `modules/<name>/` with `providers.tf` and `organization_name` naming. | `npx skills add kdcllc/skills --skill terraform-azure-modules` |
-| [terraform-azure-pipelines](skills/terraform-azure-pipelines/SKILL.md) | Azure Terraform | Copy GitHub Actions, Azure DevOps, or GitLab templates that run fmt, validate, and plan with OIDC; apply and a gated destroy are opt-in. | `npx skills add kdcllc/skills --skill terraform-azure-pipelines` |
-| [terraform-azure-upgrade](skills/terraform-azure-upgrade/SKILL.md) | Azure Terraform | Inventory existing modules, bump to bounded azurerm 5.x pins, apply the current HashiCorp schema, and stop at `validate`. | `npx skills add kdcllc/skills --skill terraform-azure-upgrade` |
-| [azure-rbac-least-privilege](skills/azure-rbac-least-privilege/SKILL.md) | Azure RBAC | Rank the smallest built-in Azure roles that grant a set of operations, from an offline snapshot; flags roles that can assign roles. | `npx skills add kdcllc/skills --skill azure-rbac-least-privilege` |
-| [greek-to-hebrew](skills/greek-to-hebrew/SKILL.md) | Bible study | Trace a New Testament Greek word through the Septuagint to the Old Testament Hebrew behind it, with free web tools, a first-mention study, and a confidence level. Licensed CC BY-SA 4.0. | `npx skills add kdcllc/skills --skill greek-to-hebrew` |
-| [agent-kit](skills/agent-kit/SKILL.md) | Agent orchestration | Install the orchestrator/worker/evaluator multi-agent system (seven subagents, `/feature` and `/research` workflows, evaluator gates, optional autonomous loop) compiled for Claude Code, Cursor, GitHub Copilot, and Codex. Run `/agent-kit` once per project; re-run to upgrade. | `npx skills add kdcllc/skills --skill agent-kit` |
-| [agent-composer](skills/agent-composer/SKILL.md) | Agent orchestration | Design a custom crew of agents from an interview, write a YAML crew spec, and generate validated Claude Code and Cursor agents plus an orchestrator skill. | `npx skills add kdcllc/skills --skill agent-composer` |
-| [orchestration-advisor](skills/orchestration-advisor/SKILL.md) | Agent orchestration | Inspect a project and its workload in one of two modes: a recommended orchestration shape (single agent plus skills by default), with evidence, ruled-out shapes, and a next step; or an audit of an existing orchestration system with a current-vs-recommended comparison. Read-only; installs nothing. | `npx skills add kdcllc/skills --skill orchestration-advisor` |
-| [skill-versioning](skills/skill-versioning/SKILL.md) | Skill authoring | Keep each skill in a multi-skill repo on its own version and changelog: record changes under Unreleased, pick the bump, and tag `<name>/vX.Y.Z` releases. | `npx skills add kdcllc/skills --skill skill-versioning` |
-| [youtube-download](skills/youtube-download/SKILL.md) | Media | Download YouTube video or audio, metadata, and English transcripts via yt-dlp; Copilot CLI extension with webview UI. | `npx skills add kdcllc/skills --skill youtube-download` |
-| [mp3-normalize](skills/mp3-normalize/SKILL.md) | Media | Lossless MP3 loudness normalization with mp3gain; Copilot CLI extension with webview UI. | `npx skills add kdcllc/skills --skill mp3-normalize` |
+| [terraform-azure](skills/terraform-azure/) | Azure Terraform | Operator menu for a consumer Azure Terraform repo: new module, domain stack, pipeline, remote-state bootstrap, Azure OIDC, or module upgrade. Azure CLI only; stops at `terraform plan`. | `npx skills add kdcllc/skills --skill terraform-azure` |
+| [terraform-azure-modules](skills/terraform-azure-modules/) | Azure Terraform | Create or update one reusable module under `modules/<name>/` with `providers.tf` and `organization_name` naming. | `npx skills add kdcllc/skills --skill terraform-azure-modules` |
+| [terraform-azure-pipelines](skills/terraform-azure-pipelines/) | Azure Terraform | Copy GitHub Actions, Azure DevOps, or GitLab templates that run fmt, validate, and plan with OIDC; apply and a gated destroy are opt-in. | `npx skills add kdcllc/skills --skill terraform-azure-pipelines` |
+| [terraform-azure-upgrade](skills/terraform-azure-upgrade/) | Azure Terraform | Inventory existing modules, bump to bounded azurerm 5.x pins, apply the current HashiCorp schema, and stop at `validate`. | `npx skills add kdcllc/skills --skill terraform-azure-upgrade` |
+| [azure-rbac-least-privilege](skills/azure-rbac-least-privilege/) | Azure RBAC | Rank the smallest built-in Azure roles that grant a set of operations, from an offline snapshot; flags roles that can assign roles. | `npx skills add kdcllc/skills --skill azure-rbac-least-privilege` |
+| [greek-to-hebrew](skills/greek-to-hebrew/) | Bible study | Trace a New Testament Greek word through the Septuagint to the Old Testament Hebrew behind it, with free web tools, a first-mention study, and a confidence level. Licensed CC BY-SA 4.0. | `npx skills add kdcllc/skills --skill greek-to-hebrew` |
+| [agent-kit](skills/agent-kit/) | Agent orchestration | Install the orchestrator/worker/evaluator multi-agent system (seven subagents, `/feature` and `/research` workflows, evaluator gates, optional autonomous loop) compiled for Claude Code, Cursor, GitHub Copilot, and Codex. Run `/agent-kit` once per project; re-run to upgrade. | `npx skills add kdcllc/skills --skill agent-kit` |
+| [agent-composer](skills/agent-composer/) | Agent orchestration | Design a custom crew of agents from an interview, write a YAML crew spec, and generate validated Claude Code and Cursor agents plus an orchestrator skill. | `npx skills add kdcllc/skills --skill agent-composer` |
+| [orchestration-advisor](skills/orchestration-advisor/) | Agent orchestration | Inspect a project and its workload in one of two modes: a recommended orchestration shape (single agent plus skills by default), with evidence, ruled-out shapes, and a next step; or an audit of an existing orchestration system with a current-vs-recommended comparison. Read-only; installs nothing. | `npx skills add kdcllc/skills --skill orchestration-advisor` |
+| [skill-versioning](skills/skill-versioning/) | Skill authoring | Keep each skill in a multi-skill repo on its own version and changelog: record changes under Unreleased, pick the bump, and tag `<name>/vX.Y.Z` releases. | `npx skills add kdcllc/skills --skill skill-versioning` |
+| [youtube-download](skills/youtube-download/) | Media | Download YouTube video or audio, metadata, and English transcripts via yt-dlp; Copilot CLI extension with webview UI. | `npx skills add kdcllc/skills --skill youtube-download` |
+| [mp3-normalize](skills/mp3-normalize/) | Media | Lossless MP3 loudness normalization with mp3gain; Copilot CLI extension with webview UI. | `npx skills add kdcllc/skills --skill mp3-normalize` |
 
 The four Azure Terraform skills link to each other, so install them together:
 

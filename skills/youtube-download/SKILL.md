@@ -4,7 +4,7 @@ description: "Download YouTube video or audio (MP3/M4A/WAV), save metadata and t
 license: MIT
 compatibility: GitHub Copilot CLI extension; Node 20+; yt-dlp (binary, pip, or venv)
 metadata:
-  version: "1.0.0"
+  version: "1.0.1"
 ---
 
 # YouTube Download (`youtube-download`)
